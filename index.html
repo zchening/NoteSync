@@ -20,6 +20,8 @@
   #editor:empty:before{content:attr(data-ph);color:var(--muted);pointer-events:none}
   #editor.dragover{background:#e7f0ff;outline:2px dashed var(--accent);outline-offset:-4px}
   #editor img{max-width:100%;border-radius:8px;margin:4px 0;display:block}
+  #editor a{color:var(--accent);text-decoration:none}
+  #editor a:hover{text-decoration:underline}
   #editor p{margin:0}
   footer{padding:6px 16px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);text-align:right}
   .mask{position:fixed;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;z-index:10}
@@ -233,11 +235,19 @@ editor.addEventListener('paste', e => {
       return;
     }
   }
-  // 文字：强制纯文本
+  // 文字：识别 URL 转链接，其余纯文本
   if (e.clipboardData.getData('text/plain')) {
     e.preventDefault();
     const text = e.clipboardData.getData('text/plain');
-    document.execCommand('insertText', false, text);
+    const urlRegex = /(https?:\/\/[^\s<]+)/g;
+    if (urlRegex.test(text)) {
+      // 含 URL：转为 HTML 插入
+      const html = text.replace(urlRegex, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+      document.execCommand('insertHTML', false, html);
+    } else {
+      // 纯文本
+      document.execCommand('insertText', false, text);
+    }
   }
 });
 
