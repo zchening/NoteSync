@@ -4,7 +4,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>便签 · note.xuyinji.com.cn</title>
-<script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
 <style>
   :root{ --bg:#fafafa; --fg:#1a1a1a; --muted:#888; --line:#e6e6e6; --accent:#2b6cff; }
   *{box-sizing:border-box}
@@ -14,27 +13,16 @@
   header .dot{width:8px;height:8px;border-radius:50%;background:#bbb;flex-shrink:0}
   header .dot.on{background:#2ecc71}
   header .sp{flex:1}
-  header button{font-size:13px;color:var(--muted);background:none;border:1px solid var(--line);border-radius:6px;padding:4px 10px;cursor:pointer;white-space:nowrap}
+  header button{font-size:16px;color:var(--muted);background:none;border:1px solid var(--line);border-radius:6px;padding:4px 8px;cursor:pointer;line-height:1.2}
   header button:hover{color:var(--fg)}
-  header button.active{background:var(--accent);color:#fff;border-color:var(--accent)}
-  #ta{flex:1;width:100%;border:0;outline:0;resize:none;padding:16px;background:transparent;color:var(--fg);font:inherit}
-  #ta.dragover{background:#e7f0ff;outline:2px dashed var(--accent);outline-offset:-4px}
-  #preview{flex:1;overflow-y:auto;padding:16px;display:none}
-  #preview img{max-width:100%;border-radius:8px;margin:8px 0}
-  #preview h1,#preview h2,#preview h3{margin:16px 0 8px}
-  #preview h1{font-size:1.5em}
-  #preview h2{font-size:1.3em}
-  #preview h3{font-size:1.1em}
-  #preview code{background:#eee;padding:2px 6px;border-radius:4px;font-size:0.9em}
-  #preview pre{background:#1a1a1a;color:#eee;padding:12px;border-radius:8px;overflow-x:auto;margin:8px 0}
-  #preview pre code{background:none;padding:0;color:inherit}
-  #preview blockquote{border-left:3px solid var(--accent);padding-left:12px;color:var(--muted);margin:8px 0}
-  #preview ul,#preview ol{padding-left:24px;margin:8px 0}
-  #preview a{color:var(--accent)}
-  #preview table{border-collapse:collapse;width:100%;margin:8px 0}
-  #preview th,#preview td{border:1px solid var(--line);padding:6px 10px}
+  #editor{flex:1;width:100%;border:0;outline:0;resize:none;padding:16px;background:transparent;color:var(--fg);font:inherit;overflow-y:auto;word-wrap:break-word;white-space:pre-wrap;-webkit-user-select:text;user-select:text;contenteditable:true;line-height:1.8}
+  #editor:empty:before{content:attr(data-ph);color:var(--muted);pointer-events:none}
+  #editor.dragover{background:#e7f0ff;outline:2px dashed var(--accent);outline-offset:-4px}
+  #editor img{max-width:100%;border-radius:8px;margin:4px 0;display:block}
+  #editor p{margin:0}
   footer{padding:6px 16px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);text-align:right}
   .mask{position:fixed;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;z-index:10}
+  .mask.hidden{display:none!important}
   .box{background:#fff;border-radius:12px;padding:22px;width:min(92vw,360px);box-shadow:0 8px 30px rgba(0,0,0,.15)}
   .box h1{font-size:17px;margin:0 0 6px}
   .box p{font-size:13px;color:var(--muted);margin:0 0 14px;line-height:1.5}
@@ -50,6 +38,7 @@
   .hidden{display:none!important}
   .upload-status{position:fixed;bottom:50px;left:50%;transform:translateX(-50%);background:#1a1a1a;color:#fff;padding:8px 16px;border-radius:20px;font-size:13px;z-index:20;opacity:0;transition:opacity .3s;pointer-events:none}
   .upload-status.show{opacity:1}
+  #loading{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:5;color:var(--muted);font-size:14px}
 </style>
 </head>
 <body>
@@ -57,22 +46,22 @@
   <span class="dot" id="status"></span>
   <span id="statustext">连接中…</span>
   <span class="sp"></span>
-  <button id="previewBtn" title="切换编辑/预览">📝 编辑</button>
-  <button id="uploadBtn" title="上传图片">🖼</button>
+  <button id="uploadBtn" title="上传图片">📷</button>
   <button id="lock">退出本机</button>
 </header>
-<textarea id="ta" placeholder="开始输入，自动同步到所有设备…&#10;&#10;支持 Markdown：# 标题、- 列表、```代码```、![](图片链接)&#10;粘贴或拖拽图片自动上传" disabled></textarea>
-<div id="preview"></div>
+<div id="editor" data-ph="开始输入，自动同步到所有设备…" contenteditable="true"></div>
 <input type="file" id="fileInput" accept="image/*" style="display:none">
 <footer id="foot">端到端加密 · 仅在你的浏览器内加解密</footer>
 <div class="upload-status" id="uploadStatus"></div>
+
+<div id="loading">加载中…</div>
 
 <div class="home hidden" id="home">
   <h1>NoteSync</h1>
   <p>请在 URL 后加笔记名访问，例如：<br><code>note.xuyinji.com.cn/biji</code></p>
 </div>
 
-<div class="mask" id="mask">
+<div class="mask hidden" id="mask">
   <div class="box">
     <h1>输入访问口令</h1>
     <p>此口令用于在本机派生加密密钥，不会发送到服务器。每台新设备首次打开需输入一次，之后自动记住。</p>
@@ -91,9 +80,6 @@ const UPLOAD_PRESET = 'NoteXCloudinary';
 const CLOUDINARY_URL = 'https://api.cloudinary.com/v1_1/' + CLOUD_NAME + '/image/upload';
 const MAX_IMG_WIDTH = 1920;
 
-// --- Marked 配置 ---
-marked.setOptions({ breaks: true, gfm: true });
-
 const noteId = location.pathname.split('?')[0].replace(/^\/+|\/+$/g, '');
 const NOTE_API = '/api/note/' + encodeURIComponent(noteId);
 const FAIL_API = '/api/fail/' + encodeURIComponent(noteId);
@@ -102,16 +88,20 @@ const PBKDF2_ITER = 200000;
 const FAIL_LIMIT = 10;
 
 const $ = s => document.querySelector(s);
-const ta = $('#ta'), mask = $('#mask'), pw = $('#pw'), err = $('#err');
+const editor = $('#editor'), mask = $('#mask'), pw = $('#pw'), err = $('#err');
 const statusEl = $('#status'), statusText = $('#statustext'), foot = $('#foot');
-const homeEl = $('#home'), previewEl = $('#preview'), previewBtn = $('#previewBtn');
+const homeEl = $('#home'), loadingEl = $('#loading');
 const uploadBtn = $('#uploadBtn'), fileInput = $('#fileInput'), uploadStatus = $('#uploadStatus');
 
 const bufToB64 = b => btoa(String.fromCharCode(...new Uint8Array(b)));
 const b64ToBuf = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 
-let cryptoKey = null, serverSalt = null, localVer = 0, busy = false, lastText = '';
-let previewMode = false;
+let cryptoKey = null, serverSalt = null, localVer = 0, busy = false, lastHtml = '';
+
+function setStatus(on, text) { statusEl.className = 'dot' + (on ? ' on' : ''); statusText.textContent = text; }
+function fmtRetry(sec) { const m = Math.ceil(sec / 60); return m + ' 分钟'; }
+function showUploadStatus(text) { uploadStatus.textContent = text; uploadStatus.classList.add('show'); }
+function hideUploadStatus() { uploadStatus.classList.remove('show'); }
 
 // --- 加解密 ---
 async function deriveKey(pass, saltBuf) {
@@ -130,11 +120,6 @@ async function decryptText(ctB64, ivB64, key) {
   const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64ToBuf(ivB64) }, key, b64ToBuf(ctB64));
   return new TextDecoder().decode(pt);
 }
-
-function setStatus(on, text) { statusEl.className = 'dot' + (on ? ' on' : ''); statusText.textContent = text; }
-function fmtRetry(sec) { const m = Math.ceil(sec / 60); return m + ' 分钟'; }
-function showUploadStatus(text) { uploadStatus.textContent = text; uploadStatus.classList.add('show'); }
-function hideUploadStatus() { uploadStatus.classList.remove('show'); }
 
 // --- API ---
 async function apiGet() {
@@ -174,16 +159,12 @@ async function compressImage(file) {
       canvas.width = w; canvas.height = h;
       const ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0, w, h);
-      canvas.toBlob(blob => {
-        if (!blob) { reject(new Error('compress failed')); return; }
-        resolve(blob);
-      }, 'image/jpeg', 0.85);
+      canvas.toBlob(blob => { if (!blob) { reject(new Error('compress failed')); return; } resolve(blob); }, 'image/jpeg', 0.85);
     };
     img.onerror = reject;
     reader.readAsDataURL(file);
   });
 }
-
 async function uploadToCloudinary(blob) {
   const formData = new FormData();
   formData.append('file', blob);
@@ -194,37 +175,39 @@ async function uploadToCloudinary(blob) {
   return j.secure_url;
 }
 
-function insertAtCursor(textarea, text) {
-  const start = textarea.selectionStart;
-  const end = textarea.selectionEnd;
-  textarea.value = textarea.value.substring(0, start) + text + textarea.value.substring(end);
-  textarea.selectionStart = textarea.selectionEnd = start + text.length;
-  textarea.dispatchEvent(new Event('input'));
+// 在光标处插入图片
+function insertImageAtCursor(url) {
+  editor.focus();
+  const sel = window.getSelection();
+  if (!sel.rangeCount) { editor.innerHTML += '<img src="' + url + '"><br>'; return; }
+  const range = sel.getRangeAt(0);
+  range.deleteContents();
+  const img = document.createElement('img');
+  img.src = url;
+  range.insertNode(img);
+  range.collapse(false);
+  sel.removeAllRanges();
+  sel.addRange(range);
+  editor.dispatchEvent(new Event('input'));
 }
 
 async function handleImageUpload(file) {
   if (!file || !file.type.startsWith('image/')) return;
-  const placeholder = '![上传中…]()';
-  insertAtCursor(ta, placeholder);
   showUploadStatus('📷 正在压缩图片…');
   try {
     const blob = await compressImage(file);
-    showUploadStatus('☁️ 正在上传到 Cloudinary…');
+    showUploadStatus('☁️ 正在上传…');
     const url = await uploadToCloudinary(blob);
-    const md = '![](' + url + ')';
-    ta.value = ta.value.replace(placeholder, md);
-    ta.dispatchEvent(new Event('input'));
+    insertImageAtCursor(url);
     showUploadStatus('✅ 上传成功');
   } catch (e) {
-    ta.value = ta.value.replace(placeholder, '');
-    ta.dispatchEvent(new Event('input'));
     showUploadStatus('❌ 上传失败：' + e.message);
   }
   setTimeout(hideUploadStatus, 2000);
 }
 
-// 粘贴图片
-ta.addEventListener('paste', e => {
+// 粘贴：图片→上传，文字→纯文本
+editor.addEventListener('paste', e => {
   const items = e.clipboardData && e.clipboardData.items;
   if (!items) return;
   for (const item of items) {
@@ -234,14 +217,20 @@ ta.addEventListener('paste', e => {
       return;
     }
   }
+  // 文字：强制纯文本
+  if (e.clipboardData.getData('text/plain')) {
+    e.preventDefault();
+    const text = e.clipboardData.getData('text/plain');
+    document.execCommand('insertText', false, text);
+  }
 });
 
 // 拖拽图片
-ta.addEventListener('dragover', e => { e.preventDefault(); ta.classList.add('dragover'); });
-ta.addEventListener('dragleave', () => ta.classList.remove('dragover'));
-ta.addEventListener('drop', e => {
+editor.addEventListener('dragover', e => { e.preventDefault(); editor.classList.add('dragover'); });
+editor.addEventListener('dragleave', () => editor.classList.remove('dragover'));
+editor.addEventListener('drop', e => {
   e.preventDefault();
-  ta.classList.remove('dragover');
+  editor.classList.remove('dragover');
   const files = e.dataTransfer.files;
   if (files && files.length > 0) handleImageUpload(files[0]);
 });
@@ -251,27 +240,6 @@ uploadBtn.addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', e => {
   if (e.target.files && e.target.files[0]) handleImageUpload(e.target.files[0]);
   e.target.value = '';
-});
-
-// --- 预览模式 ---
-function renderPreview() {
-  previewEl.innerHTML = marked.parse(ta.value || '');
-}
-previewBtn.addEventListener('click', () => {
-  previewMode = !previewMode;
-  if (previewMode) {
-    renderPreview();
-    ta.style.display = 'none';
-    previewEl.style.display = 'block';
-    previewBtn.textContent = '✏️ 预览';
-    previewBtn.classList.add('active');
-  } else {
-    ta.style.display = 'block';
-    previewEl.style.display = 'none';
-    previewBtn.textContent = '📝 编辑';
-    previewBtn.classList.remove('active');
-    ta.focus();
-  }
 });
 
 // --- 解锁 ---
@@ -299,8 +267,8 @@ async function unlock(pass) {
   if (!note.salt) { try { await apiPut({ ct: '', iv: '', salt: bufToB64(serverSalt) }); } catch (e) {} }
   localVer = note.v || 0;
   mask.classList.add('hidden');
-  ta.disabled = false; ta.focus();
-  if (note.ct) { try { lastText = await decryptText(note.ct, note.iv, key); ta.value = lastText; } catch (e) {} }
+  editor.focus();
+  if (note.ct) { try { lastHtml = await decryptText(note.ct, note.iv, key); editor.innerHTML = lastHtml; } catch (e) {} }
   foot.textContent = '已解锁 · 端到端加密';
   startSync();
 }
@@ -316,24 +284,23 @@ async function loadStoredKey() {
 
 // --- 同步 ---
 let saveTimer = null;
-ta.addEventListener('input', () => {
+editor.addEventListener('input', () => {
   if (busy) return;
   clearTimeout(saveTimer);
   saveTimer = setTimeout(saveLocal, 800);
-  if (previewMode) renderPreview();
 });
 
 async function saveLocal() {
-  const text = ta.value;
-  if (text === lastText) return;
+  const html = editor.innerHTML;
+  if (html === lastHtml) return;
   busy = true; setStatus(false, '保存中…');
   try {
-    const { ct, iv } = await encryptText(text, cryptoKey);
+    const { ct, iv } = await encryptText(html, cryptoKey);
     const r = await apiPut({ ct, iv, salt: bufToB64(serverSalt) });
-    localVer = r.v; lastText = text;
+    localVer = r.v; lastHtml = html;
     setStatus(true, '已同步');
   } catch (e) {
-    if (e.locked) { setStatus(false, '已锁定，请稍后'); ta.disabled = true; }
+    if (e.locked) { setStatus(false, '已锁定，请稍后'); editor.contentEditable = false; }
     else { setStatus(false, '保存失败'); }
   }
   finally { busy = false; }
@@ -345,13 +312,13 @@ async function poll() {
     const note = await apiGet();
     setStatus(true, '已同步');
     if ((note.v || 0) > localVer && note.ct) {
-      const text = await decryptText(note.ct, note.iv, cryptoKey);
-      if (text !== ta.value) {
-        lastText = text;
-        const pos = ta.selectionStart;
-        ta.value = text;
-        ta.setSelectionRange(pos, pos);
-        if (previewMode) renderPreview();
+      const html = await decryptText(note.ct, note.iv, cryptoKey);
+      if (html !== editor.innerHTML) {
+        lastHtml = html;
+        const sel = window.getSelection();
+        const wasFocused = document.activeElement === editor;
+        editor.innerHTML = html;
+        if (wasFocused) editor.focus();
       }
       localVer = note.v;
     }
@@ -366,7 +333,7 @@ $('#ok').addEventListener('click', () => unlock(pw.value));
 pw.addEventListener('keydown', e => { if (e.key === 'Enter') unlock(pw.value); });
 $('#lock').addEventListener('click', () => {
   localStorage.removeItem(KEY_STORE); cryptoKey = null;
-  ta.value = ''; ta.disabled = true;
+  editor.innerHTML = ''; editor.contentEditable = false;
   mask.classList.remove('hidden'); pw.value = ''; err.textContent = '';
   foot.textContent = '端到端加密 · 仅在你的浏览器内加解密';
   setStatus(false, '已退出');
@@ -374,8 +341,8 @@ $('#lock').addEventListener('click', () => {
 
 (async function init() {
   if (!noteId) {
-    mask.classList.add('hidden');
-    ta.style.display = 'none';
+    loadingEl.classList.add('hidden');
+    editor.style.display = 'none';
     homeEl.classList.remove('hidden');
     setStatus(true, 'NoteSync');
     return;
@@ -384,23 +351,35 @@ $('#lock').addEventListener('click', () => {
     let note;
     try { note = await apiGet(); }
     catch (e) {
+      loadingEl.classList.add('hidden');
       if (e.locked) {
         setStatus(false, '已锁定');
         mask.classList.remove('hidden');
         err.textContent = '尝试过多，请 ' + fmtRetry(e.retryAfter) + ' 后再试';
         return;
       }
-      setStatus(false, '无法连接'); return;
+      setStatus(false, '无法连接');
+      mask.classList.remove('hidden');
+      pw.focus();
+      return;
     }
     serverSalt = note.salt ? b64ToBuf(note.salt) : null;
-    if (!serverSalt) { mask.classList.remove('hidden'); pw.focus(); return; }
+    if (!serverSalt) {
+      loadingEl.classList.add('hidden');
+      mask.classList.remove('hidden');
+      pw.focus();
+      return;
+    }
     localVer = note.v || 0;
-    mask.classList.add('hidden'); ta.disabled = false; ta.focus();
-    if (note.ct) { try { lastText = await decryptText(note.ct, note.iv, cryptoKey); ta.value = lastText; } catch (e) {} }
+    loadingEl.classList.add('hidden');
+    editor.focus();
+    if (note.ct) { try { lastHtml = await decryptText(note.ct, note.iv, cryptoKey); editor.innerHTML = lastHtml; } catch (e) {} }
     foot.textContent = '已解锁 · 端到端加密';
     startSync();
   } else {
-    mask.classList.remove('hidden'); pw.focus();
+    loadingEl.classList.add('hidden');
+    mask.classList.remove('hidden');
+    pw.focus();
   }
 })();
 </script>
