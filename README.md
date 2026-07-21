@@ -166,7 +166,7 @@ flowchart TD
 | PWA | manifest.json + Service Worker | 可安装到主屏幕，离线可打开 |
 | 后端 | Node.js | 零依赖，单文件 `server.js` |
 | 存储 | JSON 文件 | 每笔记独立 `data/notes/{id}.json` |
-| 反代 | Caddy | 自动 HTTPS（Let's Encrypt），HTTP/2 |
+| 反代 | Caddy | 自动 HTTPS（Let's Encrypt），HTTP/1.1 |
 | 进程管理 | nssm | Windows 服务，开机自启 |
 
 ```mermaid
@@ -281,6 +281,7 @@ bash install.sh
 
 ## 更新历史
 
+- **v3.3**：服务器稳定性修复——停掉宝塔 nginx 解决端口 80 冲突、停掉 deveco/mimo 释放 500MB 内存、Caddy 降级 HTTP/1.1 only 解决 HTTP/2+SSE 兼容性
 - **v3.2**：修复 SSE 连接不稳定（Caddy flush_interval -1 + 服务端 15 秒心跳保活）；URL 自动检测改为 input 事件触发（不依赖 paste，移动端也能识别）
 - **v3.1**：去掉冲突提示恢复自动同步、PWA 支持（可安装到主屏幕）、连接失败自动重试、SSE 断线自动重连、"退出本机"改为"退出"
 - **v3.0**：SSE 实时推送（替代 4 秒轮询）、复制到剪贴板 + 导出为图片、冲突保护（编辑时不覆盖）、上传图标改 📤、关闭 HTTP/3 强制 HTTP/2、nginx CSP 修复、install.sh 域名参数化
