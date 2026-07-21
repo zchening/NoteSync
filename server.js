@@ -191,8 +191,26 @@ const server = http.createServer((req, res) => {
     res.writeHead(200); res.end('ok'); return;
   }
 
-  // --- 前端页面（SPA 风格，所有非 /api/ 的 GET 都返回 index.html）---
+  // --- 静态文件 ---
   if (req.method === 'GET' && !url.startsWith('/api/')) {
+    // manifest.json 和 sw.js 返回对应文件
+    if (url === '/manifest.json') {
+      const f = path.join(APP_DIR, 'manifest.json');
+      if (fs.existsSync(f)) {
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-cache' });
+        fs.createReadStream(f).pipe(res);
+        return;
+      }
+    }
+    if (url === '/sw.js') {
+      const f = path.join(APP_DIR, 'sw.js');
+      if (fs.existsSync(f)) {
+        res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'no-cache' });
+        fs.createReadStream(f).pipe(res);
+        return;
+      }
+    }
+    // SPA：其他都返回 index.html
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     fs.createReadStream(INDEX_FILE).pipe(res);
     return;

@@ -138,7 +138,11 @@ flowchart TD
 
 ### 实时同步
 
-编辑后自动保存，其他设备通过 SSE（Server-Sent Events）亚秒级收到更新。如果正在编辑时有新版本到达，会显示提示条而不是直接覆盖。
+编辑后自动保存，其他设备通过 SSE（Server-Sent Events）亚秒级收到更新并自动加载。连接断开时自动重试 + SSE 自动重连 + 轮询兜底，确保各种网络环境下都能恢复同步。
+
+### PWA 支持
+
+手机浏览器打开后，可"添加到主屏幕"作为独立应用使用，全屏体验、桌面图标、离线可打开缓存页面。
 
 ---
 
@@ -159,6 +163,7 @@ flowchart TD
 | 图片压缩 | Canvas API | 上传前压缩至 1920px，JPEG 85% |
 | 实时同步 | SSE (Server-Sent Events) | 服务端推送更新通知，亚秒级同步 |
 | 截图导出 | html2canvas | 编辑区渲染为 PNG，2x 分辨率 |
+| PWA | manifest.json + Service Worker | 可安装到主屏幕，离线可打开 |
 | 后端 | Node.js | 零依赖，单文件 `server.js` |
 | 存储 | JSON 文件 | 每笔记独立 `data/notes/{id}.json` |
 | 反代 | Caddy | 自动 HTTPS（Let's Encrypt），HTTP/2 |
@@ -276,6 +281,7 @@ bash install.sh
 
 ## 更新历史
 
+- **v3.1**：去掉冲突提示恢复自动同步、PWA 支持（可安装到主屏幕）、连接失败自动重试、SSE 断线自动重连、"退出本机"改为"退出"
 - **v3.0**：SSE 实时推送（替代 4 秒轮询）、复制到剪贴板 + 导出为图片、冲突保护（编辑时不覆盖）、上传图标改 📤、关闭 HTTP/3 强制 HTTP/2、nginx CSP 修复、install.sh 域名参数化
 - **v2.3**：修复桌面端点击超链接进入编辑模式的问题（改用 mousedown 拦截）；index.html 禁止缓存确保始终加载最新版本
 - **v2.2**：点击超链接直接在新标签页打开（不进入编辑模式）

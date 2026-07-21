@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="便签">
+<link rel="manifest" href="/manifest.json">
 <title>便签 · note.xuyinji.com.cn</title>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <style>
@@ -43,8 +47,6 @@
   .upload-status{position:fixed;bottom:50px;left:50%;transform:translateX(-50%);background:var(--upload-bg);color:var(--bg);padding:8px 16px;border-radius:20px;font-size:13px;z-index:20;opacity:0;transition:opacity .3s;pointer-events:none}
   .upload-status.show{opacity:1}
   #loading{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:5;color:var(--muted);font-size:14px}
-  #conflictBar{position:fixed;bottom:50px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;padding:8px 16px;border-radius:8px;font-size:13px;z-index:20;display:none;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.2)}
-  #conflictBar.show{display:block}
 </style>
 </head>
 <body>
@@ -56,13 +58,12 @@
   <button id="uploadBtn" title="上传图片">📤</button>
   <button id="copyBtn" title="复制到剪贴板">⧉</button>
   <button id="exportImgBtn" title="导出为图片并复制">📥</button>
-  <button id="lock">退出本机</button>
+  <button id="lock">退出</button>
 </header>
 <div id="editor" data-ph="开始输入，自动同步到所有设备…" contenteditable="true"></div>
 <input type="file" id="fileInput" accept="image/*" style="display:none">
 <footer id="foot">端到端加密 · 仅在你的浏览器内加解密</footer>
 <div class="upload-status" id="uploadStatus"></div>
-<div id="conflictBar">📥 其他设备有更新，点击加载</div>
 
 <div id="loading">加载中…</div>
 
@@ -103,7 +104,7 @@ const statusEl = $('#status'), statusText = $('#statustext'), foot = $('#foot');
 const homeEl = $('#home'), loadingEl = $('#loading');
 const uploadBtn = $('#uploadBtn'), fileInput = $('#fileInput'), uploadStatus = $('#uploadStatus');
 const themeBtn = $('#themeBtn');
-const copyBtn = $('#copyBtn'), exportImgBtn = $('#exportImgBtn'), conflictBar = $('#conflictBar');
+const copyBtn = $('#copyBtn'), exportImgBtn = $('#exportImgBtn');
 
 // --- 夜间模式 ---
 function applyTheme(dark) {
@@ -146,17 +147,27 @@ async function decryptText(ctB64, ivB64, key) {
   return new TextDecoder().decode(pt);
 }
 
-// --- API ---
+// --- API（含自动重试） ---
+async function fetchRetry(url, opts, retries) {
+  for (let i = 0; i <= retries; i++) {
+    try {
+      const r = await fetch(url, opts);
+      if (r.status === 429) { const j = await r.json(); throw { locked: true, retryAfter: j.retryAfter || 1800 }; }
+      if (!r.ok) throw new Error((opts?.method||'GET') + ' ' + r.status);
+      return r;
+    } catch (e) {
+      if (e.locked) throw e;
+      if (i < retries) { await new Promise(r => setTimeout(r, [1000, 3000, 5000][i] || 5000)); continue; }
+      throw e;
+    }
+  }
+}
 async function apiGet() {
-  const r = await fetch(NOTE_API, { cache: 'no-store' });
-  if (r.status === 429) { const j = await r.json(); throw { locked: true, retryAfter: j.retryAfter || 1800 }; }
-  if (!r.ok) throw new Error('GET ' + r.status);
+  const r = await fetchRetry(NOTE_API, { cache: 'no-store' }, 2);
   return r.json();
 }
 async function apiPut(obj) {
-  const r = await fetch(NOTE_API, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(obj) });
-  if (r.status === 429) { const j = await r.json(); throw { locked: true, retryAfter: j.retryAfter || 1800 }; }
-  if (!r.ok) throw new Error('PUT ' + r.status);
+  const r = await fetchRetry(NOTE_API, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(obj) }, 2);
   return r.json();
 }
 async function reportFail() {
@@ -409,14 +420,22 @@ async function poll() {
     if ((note.v || 0) > localVer && note.ct) {
       const html = await decryptText(note.ct, note.iv, cryptoKey);
       if (html !== editor.innerHTML) {
-        // 冲突保护：编辑器有焦点时不覆盖，显示提示
-        if (document.activeElement === editor) {
-          pendingHtml = html;
-          pendingVer = note.v;
-          conflictBar.classList.add('show');
-        } else {
-          lastHtml = html;
-          editor.innerHTML = html;
+        // 保存光标位置，覆盖后恢复
+        const wasFocused = document.activeElement === editor;
+        let savedOffset = null;
+        if (wasFocused) {
+          const sel = window.getSelection();
+          if (sel.rangeCount > 0) savedOffset = sel.getRangeAt(0).startOffset;
+        }
+        lastHtml = html;
+        editor.innerHTML = html;
+        if (wasFocused) {
+          editor.focus();
+          const sel = window.getSelection();
+          if (savedOffset !== null && sel.rangeCount > 0) {
+            const range = sel.getRangeAt(0);
+            try { range.setStart(editor.firstChild || editor, Math.min(savedOffset, (editor.firstChild?.textContent||'').length)); range.collapse(true); sel.removeAllRanges(); sel.addRange(range); } catch(e) {}
+          }
         }
       }
       localVer = note.v;
@@ -427,38 +446,38 @@ async function poll() {
   }
 }
 
-// SSE 推送 + 轮询兜底
-let pendingHtml = null, pendingVer = 0;
-let sseSource = null, pollTimer = null;
+// SSE 推送 + 断线自动重连 + 轮询兜底
+let sseSource = null, pollTimer = null, sseReconnectTimer = null;
 
-function startSync() {
-  // SSE 连接
+function connectSSE() {
   try {
     sseSource = new EventSource('/api/note/' + encodeURIComponent(noteId) + '/stream');
+    sseSource.onopen = () => {
+      // SSE 连接恢复，清除轮询兜底
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    };
     sseSource.onmessage = e => { poll(); };
     sseSource.onerror = () => {
       if (sseSource) { sseSource.close(); sseSource = null; }
       // 断线兜底：10 秒轮询
       if (!pollTimer) { pollTimer = setInterval(poll, 10000); }
+      // 5 秒后自动重连 SSE
+      if (!sseReconnectTimer) {
+        sseReconnectTimer = setTimeout(() => {
+          sseReconnectTimer = null;
+          connectSSE();
+        }, 5000);
+      }
     };
-    // SSE 正常时不轮询
   } catch (e) {
-    pollTimer = setInterval(poll, 10000);
+    if (!pollTimer) { pollTimer = setInterval(poll, 10000); }
   }
-  poll();
 }
 
-// 冲突提示：点击加载新版本
-conflictBar.addEventListener('click', () => {
-  if (pendingHtml !== null) {
-    lastHtml = pendingHtml;
-    editor.innerHTML = pendingHtml;
-    localVer = pendingVer;
-    pendingHtml = null;
-  }
-  conflictBar.classList.remove('show');
-  editor.focus();
-});
+function startSync() {
+  connectSSE();
+  poll();
+}
 
 $('#ok').addEventListener('click', () => unlock(pw.value));
 pw.addEventListener('keydown', e => { if (e.key === 'Enter') unlock(pw.value); });
@@ -513,6 +532,10 @@ $('#lock').addEventListener('click', () => {
     pw.focus();
   }
 })();
+// PWA Service Worker
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
 </script>
 </body>
 </html>
