@@ -261,8 +261,8 @@ editor.addEventListener('drop', e => {
   if (files && files.length > 0) handleImageUpload(files[0]);
 });
 
-// 点击链接在新标签页打开（不进入编辑）
-editor.addEventListener('click', e => {
+// 点击链接在新标签页打开（mousedown 阶段拦截，防止光标落入编辑）
+editor.addEventListener('mousedown', e => {
   const a = e.target.closest('a');
   if (a) {
     e.preventDefault();
