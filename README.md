@@ -1,11 +1,12 @@
 # NoteSync
 
-> 一个极简的端到端加密便签同步工具。多个设备，同一段文字，几秒自动同步。
+> 一个极简的端到端加密便签同步工具。多个设备，同一段文字和图片，几秒自动同步。
 
 ![端到端加密](https://img.shields.io/badge/加密-端到端-blue)
 ![零依赖](https://img.shields.io/badge/后端-零依赖-green)
 ![自托管](https://img.shields.io/badge/部署-自托管-orange)
 ![自动HTTPS](https://img.shields.io/badge/HTTPS-自动续期-success)
+![夜间模式](https://img.shields.io/badge/主题-深色%2F浅色-purple)
 
 ---
 
@@ -15,9 +16,9 @@
 
 ## 这是什么
 
-我做了一个这样的小工具，用于多个设备自动同步文本。
+我做了一个这样的小工具，用于多个设备自动同步文本和图片。
 
-比如你想要在电脑和手机上同步一段文字。
+比如你想要在电脑和手机上同步一段文字，或者一张截图。
 
 ## 快速开始
 
@@ -112,6 +113,20 @@ flowchart TD
 - 锁住期间谁也进不去（即使口令对了也不行）
 - 所以建议常用笔记用长一点的口令（比如一句话），临时分享用短口令无所谓
 
+### 图片同步
+
+除了文字，也支持图片同步。三种上传方式：
+
+- **粘贴**：Ctrl+V 粘贴截图，自动上传并显示
+- **拖拽**：把图片文件拖进编辑区
+- **按钮**：点 📷 按钮选择图片
+
+图片上传后直接显示在文字中间，可以像文字一样删除、剪切、复制。图片不加密（明文存第三方图床），文字仍端到端加密。
+
+### 夜间模式
+
+右上角 🌙/☀️ 按钮切换深色/浅色模式。首次访问自动跟随系统偏好，之后记住你的选择。
+
 ---
 
 ---
@@ -124,9 +139,11 @@ flowchart TD
 
 | 层 | 技术 | 说明 |
 |----|------|------|
-| 前端 | 原生 HTML/JS | 浏览器 Web Crypto API，无第三方库 |
+| 前端 | 原生 HTML/JS | contenteditable 编辑器，Web Crypto API |
 | 加密 | AES-256-GCM | 对称加密，IV 随机生成 |
 | 密钥派生 | PBKDF2 | 20 万次迭代，SHA-256 |
+| 图片存储 | Cloudinary | 浏览器直传，Unsigned Upload Preset |
+| 图片压缩 | Canvas API | 上传前压缩至 1920px，JPEG 85% |
 | 后端 | Node.js | 零依赖，单文件 `server.js` |
 | 存储 | JSON 文件 | 每笔记独立 `data/notes/{id}.json` |
 | 反代 | Caddy | 自动 HTTPS（Let's Encrypt），HTTP/3 |
@@ -163,6 +180,35 @@ flowchart LR
 ```
 
 **关键点**：口令从不离开浏览器，服务器和管理员都看不到明文。
+
+### 图片同步方案
+
+图片采用第三方图床方案，**不经过你的服务器**，零流量消耗：
+
+```mermaid
+flowchart LR
+    A[浏览器] -->|压缩 1920px| B[Canvas]
+    B -->|直传| C[Cloudinary]
+    C -->|返回 URL| A
+    A -->|URL 存入加密文本| D[你的服务器]
+    D -->|密文| E[其他设备]
+    E -->|解密显示图片| F[从 Cloudinary 拉取]
+    style A fill:#bbf,stroke:#333
+    style C fill:#cfc,stroke:#333
+    style D fill:#fcc,stroke:#333
+    style F fill:#cfc,stroke:#333
+```
+
+| 设计决策 | 选择 | 原因 |
+|---------|------|------|
+| 图片存储 | Cloudinary | 免费额度足够个人用 |
+| 上传方式 | Unsigned Upload Preset | 无需暴露 API Secret |
+| 图片加密 | 不加密 | 能用 Cloudinary 变换，复杂度低 |
+| 服务器流量 | 零 | 浏览器直传 Cloudinary |
+| 压缩 | 1920px / JPEG 85% | 兼顾质量和体积 |
+| 编辑器 | contenteditable | 图片内嵌显示，可删除/剪切 |
+
+自部署需在 `index.html` 中替换 Cloudinary 配置（`CLOUD_NAME` 和 `UPLOAD_PRESET`），并在 Cloudinary 控制台创建 Unsigned Upload Preset。
 
 ### API
 
