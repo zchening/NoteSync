@@ -215,6 +215,14 @@ const server = http.createServer((req, res) => {
         return;
       }
     }
+    if (url === '/favicon.svg') {
+      const f = path.join(APP_DIR, 'favicon.svg');
+      if (fs.existsSync(f)) {
+        res.writeHead(200, { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' });
+        fs.createReadStream(f).pipe(res);
+        return;
+      }
+    }
     // SPA：其他都返回 index.html
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     fs.createReadStream(INDEX_FILE).pipe(res);
