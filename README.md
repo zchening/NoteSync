@@ -5,7 +5,7 @@
 ![端到端加密](https://img.shields.io/badge/加密-端到端-blue)
 ![零依赖](https://img.shields.io/badge/后端-零依赖-green)
 ![自托管](https://img.shields.io/badge/部署-自托管-orange)
-![自动HTTPS](https://img.shields.io/badge/HTTPS-自动续期-success)
+![Cloudflare Tunnel](https://img.shields.io/badge/HTTPS-Cloudflare_Tunnel-success)
 ![夜间模式](https://img.shields.io/badge/主题-深色%2F浅色-purple)
 
 ---
@@ -166,16 +166,21 @@ flowchart TD
 | PWA | manifest.json + Service Worker | 可安装到主屏幕，离线可打开 |
 | 后端 | Node.js | 零依赖，单文件 `server.js` |
 | 存储 | JSON 文件 | 每笔记独立 `data/notes/{id}.json` |
-| 反代 | Caddy | 自动 HTTPS（Let's Encrypt），HTTP/1.1 |
+| 反代 | Caddy | HTTP-only（端口 80），HTTP/1.1 |
+| 隧道 | Cloudflare Tunnel | 出站隧道绕过运营商 SNI 干扰，Cloudflare 负责 HTTPS |
 | 进程管理 | nssm | Windows 服务，开机自启 |
 
 ```mermaid
 flowchart TD
-    Browser[浏览器] -->|HTTPS| Caddy[Caddy :443]
+    Browser[浏览器] -->|HTTPS| CF[Cloudflare 边缘]
+    CF -->|加密隧道| Tunneld[cloudflared 出站]
+    Tunneld -->|HTTP :80| Caddy[Caddy :80]
     Caddy -->|反代| Node[Node.js :8080]
     Node -->|读写| Storage[(data/notes/*.json)]
     Browser -->|加解密| Crypto[Web Crypto API]
     style Browser fill:#bbf,stroke:#333
+    style CF fill:#cfc,stroke:#333
+    style Tunneld fill:#ffd,stroke:#333
     style Caddy fill:#cfc,stroke:#333
     style Node fill:#fcc,stroke:#333
     style Storage fill:#f9f,stroke:#333
@@ -263,7 +268,11 @@ bash install.sh
 1. 安装 [Node.js 20+](https://nodejs.org/) 和 [Caddy](https://caddyserver.com/docs/install)
 2. 部署 `server.js`、`index.html`、`Caddyfile` 到目标目录
 3. 用 [nssm](https://nssm.cc/) 注册 Node 和 Caddy 为 Windows 服务
-4. DNS 解析域名到服务器，Caddy 自动申请 HTTPS 证书
+4. Caddy 配置为 HTTP-only（端口 80），TLS 由 Cloudflare 负责
+5. 安装 [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) 并创建 Cloudflare Tunnel
+6. DNS 创建 CNAME 记录指向 `{tunnel-id}.cfargotunnel.com`（橙云代理）
+
+> **为什么用 Tunnel**：国内服务器直接暴露 443 端口会触发运营商 SNI 检查和 RST 注入，80 端口触发备案拦截。Cloudflare Tunnel 使用出站连接绕过这两层限制。
 
 ### noteId 规则
 
@@ -281,6 +290,7 @@ bash install.sh
 
 ## 更新历史
 
+- **v4.0**：Cloudflare Tunnel 接入——Caddy 改为 HTTP-only（端口 80），cloudflared 出站隧道绕过运营商 SNI 检查/RST 注入和备案拦截；DNS 从 A 记录改为 CNAME 指向 `*.cfargotunnel.com`；Cloudflare SSL 模式 Flexible
 - **v3.3**：服务器稳定性修复——停掉宝塔 nginx 解决端口 80 冲突、停掉 deveco/mimo 释放 500MB 内存、Caddy 降级 HTTP/1.1 only 解决 HTTP/2+SSE 兼容性
 - **v3.2**：修复 SSE 连接不稳定（Caddy flush_interval -1 + 服务端 15 秒心跳保活）；URL 自动检测改为 input 事件触发（不依赖 paste，移动端也能识别）
 - **v3.1**：去掉冲突提示恢复自动同步、PWA 支持（可安装到主屏幕）、连接失败自动重试、SSE 断线自动重连、"退出本机"改为"退出"

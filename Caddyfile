@@ -4,13 +4,18 @@
     }
 }
 
-note.xuyinji.com.cn {
-    reverse_proxy 127.0.0.1:8080 {
-        flush_interval -1
+http://note.xuyinji.com.cn {
+    # SSE streaming optimization
+    reverse_proxy /api/note/*/stream 127.0.0.1:8080 {
         transport http {
-            read_timeout 86400s
+            keepalive off
         }
+        flush_interval -1
     }
+
+    # All other requests
+    reverse_proxy 127.0.0.1:8080
+
     encode gzip
     header {
         Content-Security-Policy "default-src 'self'; script-src 'unsafe-inline' cdn.jsdelivr.net; style-src 'unsafe-inline'; img-src 'self' https://res.cloudinary.com data:; connect-src 'self' https://api.cloudinary.com; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
