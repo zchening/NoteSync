@@ -282,7 +282,7 @@ bash install.sh
 
 ## 限制
 
-- 每个笔记是单编辑区，不支持富文本格式（仅纯文字 + 图片 + 链接）
+- 每个笔记是单编辑区，不支持富文本格式（纯文字 + 图片 + 链接 + 删除线）
 - last-write-wins 合并策略，同时编辑可能覆盖（SSE 实时推送 + 版本号检测）
 - 限流数据存内存，服务重启清零
 - 无口令修改功能（新建 URL 代替）
@@ -290,6 +290,7 @@ bash install.sh
 
 ## 更新历史
 
+- **v4.2**：删除线功能——选中文字点击按钮加删除线，再次点击取消；使用 Bootstrap Icons 图标
 - **v4.1**：UI 优化——自定义 favicon 图标（SVG 笔记本样式）、浏览器标题简化为 "NoteSync"、根路径自动跳转到默认笔记、手机号自动识别为可点击 tel: 链接（移动端点击拨号）
 - **v4.0**：Cloudflare Tunnel 接入——Caddy 改为 HTTP-only（端口 80），cloudflared 出站隧道绕过运营商 SNI 检查/RST 注入和备案拦截；DNS 从 A 记录改为 CNAME 指向 `*.cfargotunnel.com`；Cloudflare SSL 模式 Flexible
 - **v3.3**：服务器稳定性修复——停掉宝塔 nginx 解决端口 80 冲突、停掉 deveco/mimo 释放 500MB 内存、Caddy 降级 HTTP/1.1 only 解决 HTTP/2+SSE 兼容性
