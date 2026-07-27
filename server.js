@@ -223,8 +223,8 @@ const server = http.createServer((req, res) => {
         return;
       }
     }
-    // SPA：其他都返回 index.html
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    // SPA：其他都返回 index.html（必须 no-cache 防止移动端浏览器缓存旧版）
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache, no-store, must-revalidate' });
     fs.createReadStream(INDEX_FILE).pipe(res);
     return;
   }

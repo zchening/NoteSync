@@ -20,9 +20,9 @@
   header .dot{width:8px;height:8px;border-radius:50%;background:#bbb;flex-shrink:0}
   header .dot.on{background:#2ecc71}
   header .sp{flex:1}
-  header button{font-size:16px;color:var(--muted);background:none;border:1px solid var(--line);border-radius:6px;padding:4px 8px;cursor:pointer;line-height:1.2}
+  header button{font-size:16px;color:var(--muted);background:none;border:1px solid var(--line);border-radius:6px;padding:4px 8px;cursor:pointer;line-height:1.2;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
   header button:hover{color:var(--fg)}
-  #editor{flex:1;width:100%;border:0;outline:0;resize:none;padding:16px;background:transparent;color:var(--fg);font:inherit;overflow-y:auto;word-wrap:break-word;white-space:pre-wrap;-webkit-user-select:text;user-select:text;contenteditable:true;line-height:1.8}
+  #editor{flex:1;width:100%;border:0;outline:0;resize:none;padding:16px;background:transparent;color:var(--fg);font:inherit;overflow-y:auto;word-wrap:break-word;white-space:pre-wrap;-webkit-user-select:text;user-select:text;line-height:1.8}
   #editor:empty:before{content:attr(data-ph);color:var(--muted);pointer-events:none}
   #editor.dragover{background:#e7f0ff;outline:2px dashed var(--accent);outline-offset:-4px}
   #editor img{max-width:100%;border-radius:8px;margin:4px 0;display:block}
@@ -57,7 +57,7 @@
   <span id="statustext">连接中…</span>
   <span class="sp"></span>
   <button id="themeBtn" title="切换夜间模式">🌙</button>
-  <button id="strikeBtn" title="删除线"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="vertical-align:middle"><path d="M6.333 5.686c0 .31.083.581.27.814H5.166a2.8 2.8 0 0 1-.099-.76c0-1.627 1.436-2.768 3.48-2.768 1.969 0 3.39 1.175 3.445 2.85h-1.23c-.11-1.08-.964-1.743-2.25-1.743-1.23 0-2.18.602-2.18 1.607zm2.194 7.478c-2.153 0-3.589-1.107-3.705-2.81h1.23c.144 1.06 1.129 1.703 2.544 1.703 1.34 0 2.31-.705 2.31-1.675 0-.827-.547-1.374-1.914-1.675L8.046 8.5H1v-1h14v1h-3.504c.468.437.675.994.675 1.697 0 1.826-1.436 2.967-3.644 2.967"/></svg></button>
+  <button id="strikeBtn" title="删除线"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="vertical-align:middle;pointer-events:none"><path d="M6.333 5.686c0 .31.083.581.27.814H5.166a2.8 2.8 0 0 1-.099-.76c0-1.627 1.436-2.768 3.48-2.768 1.969 0 3.39 1.175 3.445 2.85h-1.23c-.11-1.08-.964-1.743-2.25-1.743-1.23 0-2.18.602-2.18 1.607zm2.194 7.478c-2.153 0-3.589-1.107-3.705-2.81h1.23c.144 1.06 1.129 1.703 2.544 1.703 1.34 0 2.31-.705 2.31-1.675 0-.827-.547-1.374-1.914-1.675L8.046 8.5H1v-1h14v1h-3.504c.468.437.675.994.675 1.697 0 1.826-1.436 2.967-3.644 2.967"/></svg></button>
   <button id="uploadBtn" title="上传图片">📤</button>
   <button id="copyBtn" title="复制到剪贴板">⧉</button>
   <button id="exportImgBtn" title="导出为图片并复制">📥</button>
@@ -111,21 +111,293 @@ const strikeBtn = $('#strikeBtn');
 const copyBtn = $('#copyBtn'), exportImgBtn = $('#exportImgBtn');
 
 // --- 夜间模式 ---
+// 自动切换：04:59 日间，19:05 夜间（北京时间）
+// 每次打开页面按时间自动设置；用户手动切换后本次会话不再自动切换，刷新后恢复
+const THEME_DAY_START = 5 * 60 - 1;   // 04:59 → 299 分钟
+const THEME_NIGHT_START = 19 * 60 + 5; // 19:05 → 1145 分钟
+function shouldBeDark() {
+  const now = new Date();
+  const minutes = now.getHours() * 60 + now.getMinutes();
+  return minutes < THEME_DAY_START || minutes >= THEME_NIGHT_START;
+}
 function applyTheme(dark) {
   document.body.classList.toggle('dark', dark);
   themeBtn.textContent = dark ? '☀️' : '🌙';
-  localStorage.setItem('notesync_theme', dark ? 'dark' : 'light');
 }
-(function initTheme() {
-  const saved = localStorage.getItem('notesync_theme');
-  if (saved) { applyTheme(saved === 'dark'); }
-  else { applyTheme(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches); }
-})();
-themeBtn.addEventListener('click', () => applyTheme(!document.body.classList.contains('dark')));
+// 页面加载时按时间自动设置初始模式
+applyTheme(shouldBeDark());
+// 定时自动切换（用户手动切换后本次会话停止自动）
+let themeAutoMode = true;
+setInterval(() => {
+  if (!themeAutoMode) return;
+  applyTheme(shouldBeDark());
+}, 60000);
+themeBtn.addEventListener('click', () => {
+  applyTheme(!document.body.classList.contains('dark'));
+  themeAutoMode = false; // 用户手动切换后本次会话不再自动
+});
 
-// 删除线：选中文字点击切换
-strikeBtn.addEventListener('mousedown', e => e.preventDefault());
-strikeBtn.addEventListener('click', () => { editor.focus(); document.execCommand('strikeThrough'); });
+// 删除线：纯 DOM Range API 操作，完全弃用 execCommand
+// 根因分析（小米手机+Chrome 不生效）：
+//   1) execCommand('strikeThrough') 在移动端 Chrome 可能返回 true 但不修改 DOM → fallback 永不触发
+//   2) editor.focus() + sel.addRange() 在移动端不可靠 → 恢复的选区对 execCommand 无效
+//   3) touchstart 的 preventDefault 可能来不及阻止选区清除（某些浏览器在 hit-test 阶段就清了）
+// 方案：1) selectionchange 持续保存选区（克隆 Range，与焦点无关）
+//       2) pointerdown/touchstart 最早拦截 + preventDefault
+//       3) 直接用 savedRange 操作 DOM（extractContents/insertNode），不需要恢复焦点/选区
+//       4) HTML 变化检测，确认操作生效
+let lastRange = null;
+let strikeBusy = false;
+
+document.addEventListener('selectionchange', () => {
+  const sel = window.getSelection();
+  if (sel && sel.rangeCount > 0) {
+    const range = sel.getRangeAt(0);
+    if (!range.collapsed && editor.contains(range.commonAncestorContainer)) {
+      lastRange = range.cloneRange();
+    }
+  }
+});
+
+// 以字符偏移量保存/恢复选区：normalize() 合并文本节点后 range 引用会失效，
+// 改用纯文本偏移量定位，不受 DOM 结构变化影响
+function saveSelectionOffsets(root, range) {
+  const pre = document.createRange();
+  pre.selectNodeContents(root);
+  pre.setEnd(range.startContainer, range.startOffset);
+  const start = pre.toString().length;
+  pre.setEnd(range.endContainer, range.endOffset);
+  const end = pre.toString().length;
+  return { start, end };
+}
+
+function restoreSelectionOffsets(root, start, end) {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let pos = 0;
+  let sn = null, so = 0, en = null, eo = 0;
+  while (walker.nextNode()) {
+    const node = walker.currentNode;
+    const len = node.length;
+    if (sn === null && pos + len >= start) { sn = node; so = start - pos; }
+    if (en === null && pos + len >= end)   { en = node; eo = end - pos; }
+    if (sn !== null && en !== null) break;
+    pos += len;
+  }
+  if (sn === null || en === null) return null;
+  const r = document.createRange();
+  r.setStart(sn, so);
+  r.setEnd(en, eo);
+  return r;
+}
+
+function applyStrike() {
+  if (strikeBusy) return;
+  if (!lastRange || lastRange.collapsed) return;
+
+  let startNode = lastRange.startContainer;
+  let endNode = lastRange.endContainer;
+  if (!startNode || !endNode || !editor.contains(startNode) || !editor.contains(endNode)) {
+    lastRange = null;
+    return;
+  }
+
+  strikeBusy = true;
+  setTimeout(() => { strikeBusy = false; }, 300);
+
+  const range = lastRange.cloneRange();
+  const htmlBefore = editor.innerHTML;
+
+  // 在 DOM 操作之前以字符偏移量保存选区位置
+  let savedOffsets = null;
+  try {
+    savedOffsets = saveSelectionOffsets(editor, range);
+  } catch (e) {}
+
+  try {
+    let container = range.commonAncestorContainer;
+    if (container.nodeType === 3) container = container.parentNode;
+    const ancestorInS = !!(container.closest && container.closest('s'));
+    const preview = range.cloneContents();
+    const contentHasS = preview.querySelectorAll('s').length > 0;
+    const hasStrike = ancestorInS || contentHasS;
+
+    if (hasStrike) {
+      removeStrikeFromRange(range);
+    } else {
+      addStrikeToRange(range);
+    }
+
+    editor.querySelectorAll('s').forEach(sTag => {
+      if (!sTag.textContent.trim() && !sTag.querySelector('img')) {
+        const p = sTag.parentNode;
+        while (sTag.firstChild) p.insertBefore(sTag.firstChild, sTag);
+        p.removeChild(sTag);
+      }
+    });
+
+    editor.normalize();
+  } catch (e) {
+    console.error('strike DOM operation failed:', e);
+  }
+
+  if (editor.innerHTML !== htmlBefore) {
+    try {
+      // 用字符偏移量重建选区，避免 normalize() 后 range 引用失效
+      if (savedOffsets) {
+        const newRange = restoreSelectionOffsets(editor, savedOffsets.start, savedOffsets.end);
+        if (newRange) {
+          const sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(newRange);
+          lastRange = newRange.cloneRange();
+        }
+      }
+    } catch (e) {
+      lastRange = null;
+    }
+    editor.dispatchEvent(new Event('input'));
+  }
+}
+
+// 添加删除线：逐个文本节点包裹 <s>，保留 div/br 等块级结构不变
+function addStrikeToRange(range) {
+  const textNodes = [];
+  const walker = document.createTreeWalker(
+    range.commonAncestorContainer,
+    NodeFilter.SHOW_TEXT,
+    {
+      acceptNode: node => {
+        if (!editor.contains(node)) return NodeFilter.FILTER_REJECT;
+        if (node.parentElement && node.parentElement.closest('s')) return NodeFilter.FILTER_REJECT;
+        if (!range.intersectsNode(node)) return NodeFilter.FILTER_SKIP;
+        if (node.length === 0) return NodeFilter.FILTER_SKIP;
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    }
+  );
+  while (walker.nextNode()) textNodes.push(walker.currentNode);
+
+  for (let i = textNodes.length - 1; i >= 0; i--) {
+    const node = textNodes[i];
+    let startOff = 0;
+    let endOff = node.length;
+    if (node === range.startContainer) startOff = range.startOffset;
+    if (node === range.endContainer) endOff = range.endOffset;
+    if (startOff >= endOff) continue;
+
+    let workNode = node;
+    if (endOff < node.length) node.splitText(endOff);
+    if (startOff > 0) {
+      node.splitText(startOff);
+      workNode = node.nextSibling;
+    }
+
+    const s = document.createElement('s');
+    workNode.parentNode.insertBefore(s, workNode);
+    s.appendChild(workNode);
+  }
+}
+
+// 取消删除线：完全覆盖时展平 <s>，部分覆盖时只移出选区内文本
+function removeStrikeFromRange(range) {
+  const sTags = [];
+  const walker = document.createTreeWalker(
+    range.commonAncestorContainer,
+    NodeFilter.SHOW_ELEMENT,
+    {
+      acceptNode: n => (n.tagName === 'S' || n.tagName === 'STRIKE') && range.intersectsNode(n)
+        ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP
+    }
+  );
+  while (walker.nextNode()) sTags.push(walker.currentNode);
+
+  let container = range.commonAncestorContainer;
+  if (container.nodeType === 3) container = container.parentNode;
+  let ancestorS = container;
+  while (ancestorS && ancestorS !== editor) {
+    if (ancestorS.tagName === 'S' || ancestorS.tagName === 'STRIKE') {
+      if (sTags.indexOf(ancestorS) === -1) sTags.unshift(ancestorS);
+      break;
+    }
+    ancestorS = ancestorS.parentNode;
+  }
+
+  for (const sTag of sTags) {
+    const sRange = document.createRange();
+    sRange.selectNodeContents(sTag);
+    const fullyCovered =
+      range.compareBoundaryPoints(Range.START_TO_START, sRange) <= 0 &&
+      range.compareBoundaryPoints(Range.END_TO_END, sRange) >= 0;
+
+    if (fullyCovered) {
+      const p = sTag.parentNode;
+      while (sTag.firstChild) p.insertBefore(sTag.firstChild, sTag);
+      p.removeChild(sTag);
+      continue;
+    }
+
+    const innerTextNodes = [];
+    const innerWalker = document.createTreeWalker(
+      sTag,
+      NodeFilter.SHOW_TEXT,
+      { acceptNode: node => range.intersectsNode(node) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP }
+    );
+    while (innerWalker.nextNode()) innerTextNodes.push(innerWalker.currentNode);
+
+    for (let i = innerTextNodes.length - 1; i >= 0; i--) {
+      const textNode = innerTextNodes[i];
+      let startOff = 0;
+      let endOff = textNode.length;
+      if (textNode === range.startContainer) startOff = range.startOffset;
+      if (textNode === range.endContainer) endOff = range.endOffset;
+      if (startOff >= endOff) continue;
+
+      let workNode = textNode;
+      if (endOff < textNode.length) textNode.splitText(endOff);
+      if (startOff > 0) {
+        textNode.splitText(startOff);
+        workNode = textNode.nextSibling;
+      }
+
+      moveNodeOutOfS(workNode, sTag);
+    }
+  }
+}
+
+// 将节点从 <s> 中移出：首位前移、末位后移、中间位置拆分 <s>
+function moveNodeOutOfS(node, sTag) {
+  const sParent = sTag.parentNode;
+  const isFirst = (node === sTag.firstChild);
+  const isLast = (node === sTag.lastChild);
+
+  if (isFirst && isLast) {
+    sParent.insertBefore(node, sTag);
+    sParent.removeChild(sTag);
+  } else if (isFirst) {
+    sParent.insertBefore(node, sTag);
+  } else if (isLast) {
+    sParent.insertBefore(node, sTag.nextSibling);
+  } else {
+    const newS = document.createElement('s');
+    let sibling = node.nextSibling;
+    while (sibling) {
+      const next = sibling.nextSibling;
+      newS.appendChild(sibling);
+      sibling = next;
+    }
+    sParent.insertBefore(node, sTag.nextSibling);
+    sParent.insertBefore(newS, node.nextSibling);
+  }
+}
+
+// pointerdown：最早触发的事件（Pointer Events 支持的浏览器），在 touchstart/mousedown 之前
+if (window.PointerEvent) {
+  strikeBtn.addEventListener('pointerdown', e => { if (e.button !== 0) return; e.preventDefault(); applyStrike(); });
+}
+// touchstart：移动端真实触摸事件；preventDefault 阻止选区清除 + 阻止后续合成事件
+strikeBtn.addEventListener('touchstart', e => { e.preventDefault(); applyStrike(); }, { passive: false });
+// mousedown：桌面端；preventDefault 阻止焦点转移
+strikeBtn.addEventListener('mousedown', e => { if (e.button !== 0) return; e.preventDefault(); applyStrike(); });
 
 const bufToB64 = b => btoa(String.fromCharCode(...new Uint8Array(b)));
 const b64ToBuf = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
