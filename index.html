@@ -262,8 +262,11 @@ function applyStrike() {
 // 添加删除线：逐个文本节点包裹 <s>，保留 div/br 等块级结构不变
 function addStrikeToRange(range) {
   const textNodes = [];
+  const walkerRoot = range.commonAncestorContainer.nodeType === 3
+    ? range.commonAncestorContainer.parentNode
+    : range.commonAncestorContainer;
   const walker = document.createTreeWalker(
-    range.commonAncestorContainer,
+    walkerRoot,
     NodeFilter.SHOW_TEXT,
     {
       acceptNode: node => {
@@ -301,8 +304,11 @@ function addStrikeToRange(range) {
 // 取消删除线：完全覆盖时展平 <s>，部分覆盖时只移出选区内文本
 function removeStrikeFromRange(range) {
   const sTags = [];
+  const walkerRoot = range.commonAncestorContainer.nodeType === 3
+    ? range.commonAncestorContainer.parentNode
+    : range.commonAncestorContainer;
   const walker = document.createTreeWalker(
-    range.commonAncestorContainer,
+    walkerRoot,
     NodeFilter.SHOW_ELEMENT,
     {
       acceptNode: n => (n.tagName === 'S' || n.tagName === 'STRIKE') && range.intersectsNode(n)
