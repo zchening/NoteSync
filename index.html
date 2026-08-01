@@ -683,40 +683,19 @@ exportImgBtn.addEventListener('click', async () => {
   }
   showUploadStatus('📥 正在生成图片…');
   try {
-    const originalOverflow = editor.style.overflow;
-    editor.style.overflow = 'visible';
-    const canvas = await html2canvas(editor, {
-      backgroundColor: getComputedStyle(document.body).backgroundColor,
+    // 创建临时容器，用简单 CSS 渲染，避免 html2canvas 解析 contenteditable 的缺陷
+    const isDark = document.body.classList.contains('dark');
+    const tmp = document.createElement('div');
+    tmp.style.cssText = 'position:absolute;left:-9999px;top:0;width:' + editor.clientWidth + 'px;padding:16px;background:' + (isDark ? '#1a1a2e' : '#fafafa') + ';color:' + (isDark ? '#e0e0e0' : '#1a1a1a') + ';font:16px/1.8 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;white-space:pre-wrap;word-wrap:break-word';
+    tmp.innerHTML = editor.innerHTML;
+    document.body.appendChild(tmp);
+    const canvas = await html2canvas(tmp, {
+      backgroundColor: isDark ? '#1a1a2e' : '#fafafa',
       scale: 2,
       useCORS: true,
-      logging: false,
-      width: editor.scrollWidth,
-      height: editor.scrollHeight,
-      windowWidth: editor.scrollWidth,
-      windowHeight: editor.scrollHeight,
-      onclone: (doc) => {
-        const cloned = doc.getElementById('editor');
-        cloned.style.whiteSpace = 'normal';
-        cloned.style.lineHeight = '1.6';
-        function replaceNewlines(node) {
-          node.childNodes.forEach(child => {
-            if (child.nodeType === 3 && child.nodeValue.includes('\n')) {
-              const parts = child.nodeValue.split('\n');
-              const frag = doc.createDocumentFragment();
-              parts.forEach((p, i) => {
-                if (p) frag.appendChild(doc.createTextNode(p));
-                if (i < parts.length - 1) frag.appendChild(doc.createElement('br'));
-              });
-              child.parentNode.replaceChild(frag, child);
-            } else if (child.nodeType === 1) {
-              replaceNewlines(child);
-            }
-          });
-        }
-        replaceNewlines(cloned);
-      }
+      logging: false
     });
-    editor.style.overflow = originalOverflow;
+    document.body.removeChild(tmp);
     const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
     if (navigator.clipboard && navigator.clipboard.write && typeof ClipboardItem !== 'undefined') {
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
