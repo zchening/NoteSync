@@ -225,7 +225,7 @@ const server = http.createServer((req, res) => {
     if (url === '/favicon.svg') {
       const f = path.join(APP_DIR, 'favicon.svg');
       if (fs.existsSync(f)) {
-        res.writeHead(200, { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' });
+        res.writeHead(200, { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'no-cache, no-store, must-revalidate' });
         fs.createReadStream(f).pipe(res);
         return;
       }
