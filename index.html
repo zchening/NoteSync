@@ -720,8 +720,8 @@ exportImgBtn.addEventListener('click', async () => {
     return;
   }
   showUploadStatus('正在生成图片…');
+  const originalOverflow = editor.style.overflow;
   try {
-    const originalOverflow = editor.style.overflow;
     editor.style.overflow = 'visible';
     const canvas = await html2canvas(editor, {
       backgroundColor: getComputedStyle(document.body).backgroundColor,
@@ -735,26 +735,37 @@ exportImgBtn.addEventListener('click', async () => {
       onclone: (doc) => {
         const cloned = doc.getElementById('editor');
         cloned.style.whiteSpace = 'normal';
-        cloned.style.lineHeight = '1.6';
-        function replaceNewlines(node) {
-          node.childNodes.forEach(child => {
-            if (child.nodeType === 3 && child.nodeValue.includes('\n')) {
-              const parts = child.nodeValue.split('\n');
-              const frag = doc.createDocumentFragment();
-              parts.forEach((p, i) => {
-                if (p) frag.appendChild(doc.createTextNode(p));
-                if (i < parts.length - 1) frag.appendChild(doc.createElement('br'));
-              });
-              child.parentNode.replaceChild(frag, child);
-            } else if (child.nodeType === 1) {
-              replaceNewlines(child);
-            }
-          });
-        }
-        replaceNewlines(cloned);
+        cloned.style.lineHeight = '1.7';
+        cloned.style.wordBreak = 'break-all';
+        cloned.style.overflowWrap = 'break-word';
+
+        const textNodes = [];
+        const walker = doc.createTreeWalker(cloned, NodeFilter.SHOW_TEXT);
+        while (walker.nextNode()) textNodes.push(walker.currentNode);
+
+        const breakLongWords = s =>
+          s.replace(/(\S{15,})/g, m =>
+            m.replace(/([\/.?:=&#_-])/g, '$1\u200B')
+          );
+
+        textNodes.forEach(textNode => {
+          const text = textNode.nodeValue;
+          if (!text) return;
+
+          if (text.includes('\n')) {
+            const parts = text.split('\n');
+            const frag = doc.createDocumentFragment();
+            parts.forEach((p, i) => {
+              if (p) frag.appendChild(doc.createTextNode(breakLongWords(p)));
+              if (i < parts.length - 1) frag.appendChild(doc.createElement('br'));
+            });
+            textNode.parentNode.replaceChild(frag, textNode);
+          } else {
+            textNode.nodeValue = breakLongWords(text);
+          }
+        });
       }
     });
-    editor.style.overflow = originalOverflow;
     const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
     if (navigator.clipboard && navigator.clipboard.write && typeof ClipboardItem !== 'undefined') {
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
@@ -769,7 +780,10 @@ exportImgBtn.addEventListener('click', async () => {
       showUploadStatus('图片已下载');
     }
   } catch (e) {
-    showUploadStatus('导出失败：' + e.message);
+    const msg = e.name === 'SecurityError' ? '导出失败：可能因外链图片跨域，请使用支持CORS的图床' : '导出失败：' + e.message;
+    showUploadStatus(msg);
+  } finally {
+    editor.style.overflow = originalOverflow;
   }
   setTimeout(hideUploadStatus, 3000);
 });
