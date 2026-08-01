@@ -635,6 +635,7 @@ exportImgBtn.addEventListener('click', async () => {
       onclone: (doc) => {
         const cloned = doc.getElementById('editor');
         cloned.style.whiteSpace = 'normal';
+        cloned.style.lineHeight = '1.6';
         const walker = doc.createTreeWalker(cloned, NodeFilter.SHOW_TEXT);
         const texts = [];
         while (walker.nextNode()) texts.push(walker.currentNode);
