@@ -4,11 +4,11 @@
   "description": "端到端加密的便签同步工具",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#fafafa",
-  "theme_color": "#2b6cff",
+  "background_color": "#FBFBF8",
+  "theme_color": "#8F7126",
   "icons": [
     {
-      "src": "/favicon.svg",
+      "src": "/favicon.svg?v=5.1",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"
