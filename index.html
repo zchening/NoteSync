@@ -631,7 +631,25 @@ exportImgBtn.addEventListener('click', async () => {
       width: editor.scrollWidth,
       height: editor.scrollHeight,
       windowWidth: editor.scrollWidth,
-      windowHeight: editor.scrollHeight
+      windowHeight: editor.scrollHeight,
+      onclone: (doc) => {
+        const cloned = doc.getElementById('editor');
+        cloned.style.whiteSpace = 'normal';
+        const walker = doc.createTreeWalker(cloned, NodeFilter.SHOW_TEXT);
+        const texts = [];
+        while (walker.nextNode()) texts.push(walker.currentNode);
+        texts.forEach(t => {
+          if (t.nodeValue.includes('\n')) {
+            const parts = t.nodeValue.split('\n');
+            const frag = doc.createDocumentFragment();
+            parts.forEach((p, i) => {
+              if (p) frag.appendChild(doc.createTextNode(p));
+              if (i < parts.length - 1) frag.appendChild(doc.createElement('br'));
+            });
+            t.parentNode.replaceChild(frag, t);
+          }
+        });
+      }
     });
     editor.style.overflow = originalOverflow;
     const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
