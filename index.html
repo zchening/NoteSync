@@ -46,12 +46,31 @@
   .home p{color:var(--muted);font-size:14px;line-height:1.8;margin:0}
   .home code{background:#eee;padding:2px 6px;border-radius:4px;font-size:13px}
   .hidden{display:none!important}
+  #landing{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;text-align:center;z-index:30}
+  #landing h1{font-size:28px;margin:0 0 8px}
+  #landing .sub{color:var(--muted);font-size:15px;margin:0 0 24px}
+  #landing .example{color:var(--muted);font-size:14px;margin:0 0 8px;line-height:1.8}
+  #landing code{background:var(--box-bg);border:1px solid var(--line);padding:6px 12px;border-radius:6px;font-size:14px;display:inline-block;margin:0 0 28px}
+  #landing .input-row{display:flex;gap:8px;max-width:360px;width:100%}
+  #landing input{flex:1;padding:10px 14px;border:1px solid var(--line);border-radius:8px;font-size:16px;outline:0;background:var(--box-bg);color:var(--fg)}
+  #landing input:focus{border-color:var(--accent)}
+  #landing button{padding:10px 20px;border:0;border-radius:8px;background:var(--accent);color:#fff;font-size:15px;cursor:pointer;white-space:nowrap}
   .upload-status{position:fixed;bottom:50px;left:50%;transform:translateX(-50%);background:var(--upload-bg);color:var(--bg);padding:8px 16px;border-radius:20px;font-size:13px;z-index:20;opacity:0;transition:opacity .3s;pointer-events:none}
   .upload-status.show{opacity:1}
   #loading{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:5;color:var(--muted);font-size:14px}
 </style>
 </head>
 <body>
+<div id="landing" class="hidden">
+  <h1>📝 NoteSync</h1>
+  <p class="sub">端到端加密的便签同步工具</p>
+  <p class="example">在网址后加笔记名即可使用，例如：</p>
+  <code>note.xuyinji.com.cn/你的笔记名</code>
+  <div class="input-row">
+    <input id="landingInput" placeholder="输入笔记名" autocomplete="off">
+    <button id="landingBtn">打开</button>
+  </div>
+</div>
 <header>
   <span class="dot" id="status"></span>
   <span id="statustext">连接中…</span>
@@ -113,10 +132,10 @@ const strikeBtn = $('#strikeBtn');
 const copyBtn = $('#copyBtn'), exportImgBtn = $('#exportImgBtn');
 
 // --- 夜间模式 ---
-// 自动切换：04:59 日间，19:05 夜间（北京时间）
+// 自动切换：07:00 日间，19:00 夜间（北京时间）
 // 每次打开页面按时间自动设置；用户手动切换后本次会话不再自动切换，刷新后恢复
-const THEME_DAY_START = 5 * 60 - 1;   // 04:59 → 299 分钟
-const THEME_NIGHT_START = 19 * 60 + 5; // 19:05 → 1145 分钟
+const THEME_DAY_START = 7 * 60;      // 07:00 → 420 分钟
+const THEME_NIGHT_START = 19 * 60;   // 19:00 → 1140 分钟
 function shouldBeDark() {
   const now = new Date();
   const minutes = now.getHours() * 60 + now.getMinutes();
@@ -125,6 +144,14 @@ function shouldBeDark() {
 function applyTheme(dark) {
   document.body.classList.toggle('dark', dark);
   themeBtn.textContent = dark ? '☀️' : '🌙';
+  // !important 对抗小米浏览器夜间模式 CSS 注入
+  if (dark) {
+    document.body.style.setProperty('background', '#1a1a2e', 'important');
+    document.body.style.setProperty('color', '#e0e0e0', 'important');
+  } else {
+    document.body.style.setProperty('background', '#fafafa', 'important');
+    document.body.style.setProperty('color', '#1a1a1a', 'important');
+  }
 }
 // 页面加载时按时间自动设置初始模式
 applyTheme(shouldBeDark());
@@ -636,26 +663,38 @@ exportImgBtn.addEventListener('click', async () => {
         const cloned = doc.getElementById('editor');
         cloned.style.whiteSpace = 'normal';
         cloned.style.lineHeight = '1.6';
-        const walker = doc.createTreeWalker(cloned, NodeFilter.SHOW_TEXT);
-        const texts = [];
-        while (walker.nextNode()) texts.push(walker.currentNode);
-        texts.forEach(t => {
-          if (t.nodeValue.includes('\n')) {
-            const parts = t.nodeValue.split('\n');
-            const frag = doc.createDocumentFragment();
-            parts.forEach((p, i) => {
-              if (p) frag.appendChild(doc.createTextNode(p));
-              if (i < parts.length - 1) frag.appendChild(doc.createElement('br'));
-            });
-            t.parentNode.replaceChild(frag, t);
-          }
-        });
+        function replaceNewlines(node) {
+          node.childNodes.forEach(child => {
+            if (child.nodeType === 3 && child.nodeValue.includes('\n')) {
+              const parts = child.nodeValue.split('\n');
+              const frag = doc.createDocumentFragment();
+              parts.forEach((p, i) => {
+                if (p) frag.appendChild(doc.createTextNode(p));
+                if (i < parts.length - 1) frag.appendChild(doc.createElement('br'));
+              });
+              child.parentNode.replaceChild(frag, child);
+            } else if (child.nodeType === 1) {
+              replaceNewlines(child);
+            }
+          });
+        }
+        replaceNewlines(cloned);
       }
     });
     editor.style.overflow = originalOverflow;
     const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-    showUploadStatus('✅ 图片已复制，可直接 Ctrl+V 粘贴');
+    if (navigator.clipboard && navigator.clipboard.write && typeof ClipboardItem !== 'undefined') {
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      showUploadStatus('✅ 图片已复制，可直接 Ctrl+V 粘贴');
+    } else {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'note.png';
+      a.click();
+      URL.revokeObjectURL(url);
+      showUploadStatus('✅ 图片已下载');
+    }
   } catch (e) {
     showUploadStatus('❌ 导出失败：' + e.message);
   }
@@ -854,7 +893,16 @@ $('#lock').addEventListener('click', () => {
 
 (async function init() {
   if (!noteId) {
-    location.replace('/zchening');
+    // 根路径：显示极简首页，不跳转
+    loadingEl.classList.add('hidden');
+    document.getElementById('landing').classList.remove('hidden');
+    document.getElementById('landingBtn').addEventListener('click', () => {
+      const name = document.getElementById('landingInput').value.trim();
+      if (name) location.href = '/' + name;
+    });
+    document.getElementById('landingInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter') document.getElementById('landingBtn').click();
+    });
     return;
   }
   if (await loadStoredKey()) {
