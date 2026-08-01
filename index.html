@@ -46,15 +46,15 @@
   .home p{color:var(--muted);font-size:14px;line-height:1.8;margin:0}
   .home code{background:#eee;padding:2px 6px;border-radius:4px;font-size:13px}
   .hidden{display:none!important}
-  #landing{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;text-align:center;z-index:30}
-  #landing .logo{font-size:48px;margin:0 0 16px}
-  #landing h1{font-size:24px;font-weight:600;margin:0 0 6px}
-  #landing .sub{color:var(--muted);font-size:14px;margin:0 0 32px}
-  #landing .input-row{display:flex;gap:8px;max-width:320px;width:100%}
-  #landing input{flex:1;padding:12px 16px;border:1px solid var(--line);border-radius:10px;font-size:16px;outline:0;background:var(--box-bg);color:var(--fg)}
+  #landing{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;z-index:30}
+  #landing .logo{width:72px;height:72px;margin:0 0 20px}
+  #landing h1{font-size:22px;font-weight:600;margin:0 0 4px;letter-spacing:0.5px}
+  #landing .sub{color:var(--muted);font-size:13px;margin:0 0 36px}
+  #landing .input-row{display:flex;gap:8px;max-width:300px;width:100%}
+  #landing input{flex:1;padding:11px 14px;border:1px solid var(--line);border-radius:8px;font-size:15px;outline:0;background:var(--box-bg);color:var(--fg)}
   #landing input:focus{border-color:var(--accent)}
-  #landing button{padding:12px 20px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-size:15px;cursor:pointer;white-space:nowrap}
-  #landing .hint{color:var(--muted);font-size:12px;margin:20px 0 0}
+  #landing button{padding:11px 18px;border:0;border-radius:8px;background:var(--accent);color:#fff;font-size:15px;cursor:pointer;white-space:nowrap;font-weight:500}
+  #landing .hint{color:var(--muted);font-size:12px;margin:18px 0 0;line-height:1.6}
   .upload-status{position:fixed;bottom:50px;left:50%;transform:translateX(-50%);background:var(--upload-bg);color:var(--bg);padding:8px 16px;border-radius:20px;font-size:13px;z-index:20;opacity:0;transition:opacity .3s;pointer-events:none}
   .upload-status.show{opacity:1}
   #loading{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:5;color:var(--muted);font-size:14px}
@@ -62,7 +62,16 @@
 </head>
 <body>
 <div id="landing" class="hidden">
-  <div class="logo">📝</div>
+  <svg class="logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 500">
+    <rect width="512" height="500" rx="100" fill="#2b6cff"/>
+    <g transform="translate(136,120) scale(1.0)" fill="none" stroke="white" stroke-width="28" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M48 168 L48 208 L88 208"/>
+      <path d="M48 168 L168 48"/>
+      <path d="M88 208 L208 88"/>
+      <path d="M148 28 L188 68"/>
+    </g>
+    <rect x="146" y="330" width="220" height="28" rx="14" fill="white" opacity="0.85"/>
+  </svg>
   <h1>NoteSync</h1>
   <p class="sub">端到端加密 · 多设备同步</p>
   <div class="input-row">
