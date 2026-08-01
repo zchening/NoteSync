@@ -47,14 +47,14 @@
   .home code{background:#eee;padding:2px 6px;border-radius:4px;font-size:13px}
   .hidden{display:none!important}
   #landing{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;text-align:center;z-index:30}
-  #landing h1{font-size:28px;margin:0 0 8px}
-  #landing .sub{color:var(--muted);font-size:15px;margin:0 0 24px}
-  #landing .example{color:var(--muted);font-size:14px;margin:0 0 8px;line-height:1.8}
-  #landing code{background:var(--box-bg);border:1px solid var(--line);padding:6px 12px;border-radius:6px;font-size:14px;display:inline-block;margin:0 0 28px}
-  #landing .input-row{display:flex;gap:8px;max-width:360px;width:100%}
-  #landing input{flex:1;padding:10px 14px;border:1px solid var(--line);border-radius:8px;font-size:16px;outline:0;background:var(--box-bg);color:var(--fg)}
+  #landing .logo{font-size:48px;margin:0 0 16px}
+  #landing h1{font-size:24px;font-weight:600;margin:0 0 6px}
+  #landing .sub{color:var(--muted);font-size:14px;margin:0 0 32px}
+  #landing .input-row{display:flex;gap:8px;max-width:320px;width:100%}
+  #landing input{flex:1;padding:12px 16px;border:1px solid var(--line);border-radius:10px;font-size:16px;outline:0;background:var(--box-bg);color:var(--fg)}
   #landing input:focus{border-color:var(--accent)}
-  #landing button{padding:10px 20px;border:0;border-radius:8px;background:var(--accent);color:#fff;font-size:15px;cursor:pointer;white-space:nowrap}
+  #landing button{padding:12px 20px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-size:15px;cursor:pointer;white-space:nowrap}
+  #landing .hint{color:var(--muted);font-size:12px;margin:20px 0 0}
   .upload-status{position:fixed;bottom:50px;left:50%;transform:translateX(-50%);background:var(--upload-bg);color:var(--bg);padding:8px 16px;border-radius:20px;font-size:13px;z-index:20;opacity:0;transition:opacity .3s;pointer-events:none}
   .upload-status.show{opacity:1}
   #loading{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:5;color:var(--muted);font-size:14px}
@@ -62,14 +62,14 @@
 </head>
 <body>
 <div id="landing" class="hidden">
-  <h1>📝 NoteSync</h1>
-  <p class="sub">端到端加密的便签同步工具</p>
-  <p class="example">在网址后加笔记名即可使用，例如：</p>
-  <code>note.xuyinji.com.cn/你的笔记名</code>
+  <div class="logo">📝</div>
+  <h1>NoteSync</h1>
+  <p class="sub">端到端加密 · 多设备同步</p>
   <div class="input-row">
-    <input id="landingInput" placeholder="输入笔记名" autocomplete="off">
+    <input id="landingInput" placeholder="输入笔记名（英文或数字）" autocomplete="off">
     <button id="landingBtn">打开</button>
   </div>
+  <p class="hint">在网址后加笔记名即可，如 note.xuyinji.com.cn/notes</p>
 </div>
 <header>
   <span class="dot" id="status"></span>
@@ -144,13 +144,39 @@ function shouldBeDark() {
 function applyTheme(dark) {
   document.body.classList.toggle('dark', dark);
   themeBtn.textContent = dark ? '☀️' : '🌙';
-  // !important 对抗小米浏览器夜间模式 CSS 注入
+  // 注入 !important CSS 覆盖小米浏览器夜间模式的 CSS 注入
+  let override = document.getElementById('theme-override');
+  if (!override) {
+    override = document.createElement('style');
+    override.id = 'theme-override';
+    document.head.appendChild(override);
+  }
   if (dark) {
-    document.body.style.setProperty('background', '#1a1a2e', 'important');
-    document.body.style.setProperty('color', '#e0e0e0', 'important');
+    override.textContent = `
+      body{background:#1a1a2e!important;color:#e0e0e0!important}
+      #editor{background:transparent!important;color:#e0e0e0!important}
+      header{background:#1a1a2e!important;color:#888!important;border-color:#333344!important}
+      header button{background:none!important;color:#888!important;border-color:#333344!important}
+      footer{background:#1a1a2e!important;color:#888!important;border-color:#333344!important}
+      .box{background:#252540!important;color:#e0e0e0!important}
+      .box input{background:#252540!important;color:#e0e0e0!important;border-color:#333344!important}
+      #landing{background:#1a1a2e!important;color:#e0e0e0!important}
+      #landing input{background:#252540!important;color:#e0e0e0!important;border-color:#333344!important}
+      #loading{background:#1a1a2e!important;color:#888!important}
+    `;
   } else {
-    document.body.style.setProperty('background', '#fafafa', 'important');
-    document.body.style.setProperty('color', '#1a1a1a', 'important');
+    override.textContent = `
+      body{background:#fafafa!important;color:#1a1a1a!important}
+      #editor{background:transparent!important;color:#1a1a1a!important}
+      header{background:#fafafa!important;color:#888!important;border-color:#e6e6e6!important}
+      header button{background:none!important;color:#888!important;border-color:#e6e6e6!important}
+      footer{background:#fafafa!important;color:#888!important;border-color:#e6e6e6!important}
+      .box{background:#fff!important;color:#1a1a1a!important}
+      .box input{background:#fff!important;color:#1a1a1a!important;border-color:#e6e6e6!important}
+      #landing{background:#fafafa!important;color:#1a1a1a!important}
+      #landing input{background:#fff!important;color:#1a1a1a!important;border-color:#e6e6e6!important}
+      #loading{background:#fafafa!important;color:#888!important}
+    `;
   }
 }
 // 页面加载时按时间自动设置初始模式
