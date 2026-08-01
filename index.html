@@ -95,6 +95,8 @@ const CLOUDINARY_URL = 'https://api.cloudinary.com/v1_1/' + CLOUD_NAME + '/image
 const MAX_IMG_WIDTH = 1920;
 
 const noteId = location.pathname.split('?')[0].replace(/^\/+|\/+$/g, '');
+// 动态 manifest：让每个笔记的 start_url 指向自身路径，Chrome 安装/创建快捷方式时打开正确笔记
+document.querySelector('link[rel="manifest"]').href = '/manifest.json?start=/' + encodeURIComponent(noteId);
 const NOTE_API = '/api/note/' + encodeURIComponent(noteId);
 const FAIL_API = '/api/fail/' + encodeURIComponent(noteId);
 const KEY_STORE = 'notesync_key_' + noteId;

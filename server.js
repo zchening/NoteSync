@@ -202,8 +202,15 @@ const server = http.createServer((req, res) => {
     if (url === '/manifest.json') {
       const f = path.join(APP_DIR, 'manifest.json');
       if (fs.existsSync(f)) {
-        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-cache' });
-        fs.createReadStream(f).pipe(res);
+        // 支持 ?start=/noteId 参数，动态设置 start_url 让每个笔记的快捷方式打开正确页面
+        const query = req.url.split('?')[1] || '';
+        const params = new URLSearchParams(query);
+        const start = params.get('start') || '/';
+        let manifest = JSON.parse(fs.readFileSync(f, 'utf8'));
+        manifest.start_url = start;
+        manifest.id = start;
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-cache, no-store, must-revalidate' });
+        res.end(JSON.stringify(manifest));
         return;
       }
     }
