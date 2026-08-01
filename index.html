@@ -43,11 +43,11 @@
   @media (max-width:560px){ header .brand b{display:none} }
 
   /* ── 编辑器 ─────────────────────────── */
-  #editor{flex:1;width:100%;max-width:720px;margin:0 auto;border:0;outline:0;resize:none;padding:40px 28px 120px;background:transparent;color:var(--fg);font:inherit;font-size:17px;overflow-y:auto;word-wrap:break-word;white-space:pre-wrap;-webkit-user-select:text;user-select:text;line-height:1.9}
+  #editor{flex:1;width:100%;max-width:720px;margin:0 auto;border:0;outline:0;resize:none;padding:40px 28px 120px;background:transparent;color:var(--fg);font:inherit;font-size:17px;overflow-x:hidden;overflow-y:auto;word-wrap:break-word;overflow-wrap:anywhere;word-break:break-all;white-space:pre-wrap;-webkit-user-select:text;user-select:text;line-height:1.9}
   #editor:empty:before{content:attr(data-ph);color:var(--muted);opacity:.75;pointer-events:none}
   #editor.dragover{background:var(--accent-soft);outline:1.5px dashed var(--accent);outline-offset:-8px}
   #editor img{max-width:100%;border-radius:10px;margin:6px 0;display:block;border:1px solid var(--line)}
-  #editor a{color:var(--accent);text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(169,134,60,.35);transition:text-decoration-color .2s}
+  #editor a{color:var(--accent);text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(169,134,60,.35);transition:text-decoration-color .2s;word-break:break-all;overflow-wrap:break-word}
   #editor a:hover{text-decoration-color:var(--accent)}
   #editor s, #editor strike, #editor del{text-decoration:line-through;text-decoration-color:rgba(152,149,138,.7);color:var(--muted)}
   #editor p{margin:0}
@@ -127,12 +127,12 @@
   </span>
   <span class="status"><span class="dot" id="status"></span><span id="statustext">连接中…</span></span>
   <span class="sp"></span>
-  <button id="themeBtn" title="切换夜间模式"></button>
-  <button id="strikeBtn" title="删除线"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4H9a3 3 0 0 0-2.83 4"/><path d="M14 12a4 4 0 0 1 0 8H6"/><line x1="4" x2="20" y1="12" y2="12"/></svg></button>
-  <button id="uploadBtn" title="上传图片"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg></button>
-  <button id="copyBtn" title="复制到剪贴板"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect width="13" height="13" x="9" y="9" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
-  <button id="exportImgBtn" title="导出为图片并复制"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg></button>
-  <button id="lock" title="退出锁定"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="11" x="4" y="11" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></button>
+  <button type="button" id="themeBtn" title="切换夜间模式"></button>
+  <button type="button" id="strikeBtn" title="删除线"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4H9a3 3 0 0 0-2.83 4"/><path d="M14 12a4 4 0 0 1 0 8H6"/><line x1="4" x2="20" y1="12" y2="12"/></svg></button>
+  <button type="button" id="uploadBtn" title="上传图片"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg></button>
+  <button type="button" id="copyBtn" title="复制到剪贴板"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect width="13" height="13" x="9" y="9" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+  <button type="button" id="exportImgBtn" title="导出为图片并复制"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg></button>
+  <button type="button" id="lock" title="退出锁定"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="11" x="4" y="11" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></button>
 </header>
 <div id="editor" data-ph="开始输入，自动同步到所有设备…" contenteditable="true"></div>
 <input type="file" id="fileInput" accept="image/*" style="display:none">
@@ -323,7 +323,7 @@ function applyStrike() {
     if (container.nodeType === 3) container = container.parentNode;
     const ancestorInS = !!(container.closest && container.closest('s'));
     const preview = range.cloneContents();
-    const contentHasS = preview.querySelectorAll('s').length > 0;
+    const contentHasS = Array.from(preview.querySelectorAll('s')).some(s => s.textContent.length > 0);
     const hasStrike = ancestorInS || contentHasS;
 
     if (hasStrike) {
@@ -363,6 +363,16 @@ function applyStrike() {
   }
 }
 
+// rangeIntersectsNode：替代原生 intersectsNode，修复边界恰好等于节点末尾时返回 false 的问题
+// 场景：restoreSelectionOffsets 恢复选区后，边界可能落在文本节点末尾（offset === length），
+// 原生 intersectsNode 此时返回 false，导致 addStrikeToRange 跳过该节点
+function rangeIntersectsNode(range, node) {
+  const nodeRange = document.createRange();
+  nodeRange.selectNodeContents(node);
+  return range.compareBoundaryPoints(Range.START_TO_END, nodeRange) >= 0 &&
+         range.compareBoundaryPoints(Range.END_TO_START, nodeRange) <= 0;
+}
+
 // 添加删除线：逐个文本节点包裹 <s>，保留 div/br 等块级结构不变
 function addStrikeToRange(range) {
   const textNodes = [];
@@ -376,7 +386,7 @@ function addStrikeToRange(range) {
       acceptNode: node => {
         if (!editor.contains(node)) return NodeFilter.FILTER_REJECT;
         if (node.parentElement && node.parentElement.closest('s')) return NodeFilter.FILTER_REJECT;
-        if (!range.intersectsNode(node)) return NodeFilter.FILTER_SKIP;
+        if (!rangeIntersectsNode(range, node)) return NodeFilter.FILTER_SKIP;
         if (node.length === 0) return NodeFilter.FILTER_SKIP;
         return NodeFilter.FILTER_ACCEPT;
       }
@@ -415,7 +425,7 @@ function removeStrikeFromRange(range) {
     walkerRoot,
     NodeFilter.SHOW_ELEMENT,
     {
-      acceptNode: n => (n.tagName === 'S' || n.tagName === 'STRIKE') && range.intersectsNode(n)
+      acceptNode: n => (n.tagName === 'S' || n.tagName === 'STRIKE') && rangeIntersectsNode(range, n)
         ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP
     }
   );
@@ -450,7 +460,7 @@ function removeStrikeFromRange(range) {
     const innerWalker = document.createTreeWalker(
       sTag,
       NodeFilter.SHOW_TEXT,
-      { acceptNode: node => range.intersectsNode(node) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP }
+      { acceptNode: node => rangeIntersectsNode(range, node) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP }
     );
     while (innerWalker.nextNode()) innerTextNodes.push(innerWalker.currentNode);
 
@@ -647,11 +657,12 @@ editor.addEventListener('paste', e => {
   if (e.clipboardData.getData('text/plain')) {
     e.preventDefault();
     const text = e.clipboardData.getData('text/plain');
-    const urlRegex = /(https?:\/\/[^\s<]+)/g;
+    const urlRegex = /((?:https?|file|ftp):\/\/[^\s<]+)/g;
     const phoneRegex = /(?<!\d)(1[3-9]\d{9})(?!\d)/g;
+    const breakSeparators = /([\/.?:=&#_%-])/g;
     if (urlRegex.test(text) || phoneRegex.test(text)) {
       const html = text
-        .replace(urlRegex, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>')
+        .replace(urlRegex, (m) => '<a href="' + m + '" target="_blank" rel="noopener noreferrer">' + m.replace(breakSeparators, '$1\u200B') + '</a>')
         .replace(phoneRegex, '<a href="tel:$1">$1</a>');
       document.execCommand('insertHTML', false, html);
     } else {
@@ -713,58 +724,52 @@ copyBtn.addEventListener('click', async () => {
 });
 
 // --- 导出为图片并复制 ---
-exportImgBtn.addEventListener('click', async () => {
+async function exportImage() {
   if (typeof html2canvas === 'undefined') {
     showUploadStatus('图片导出组件未加载');
     setTimeout(hideUploadStatus, 2000);
     return;
   }
   showUploadStatus('正在生成图片…');
-  const originalOverflow = editor.style.overflow;
+
+  const cs = getComputedStyle(editor);
+  const tmp = document.createElement('div');
+  tmp.style.cssText = 'position:absolute;left:-9999px;top:0;width:' + editor.clientWidth + 'px;padding:' + cs.padding + ';font:' + cs.font + ';line-height:2.2;white-space:pre-wrap;word-break:break-all;overflow-wrap:anywhere;background:' + cs.backgroundColor + ';color:' + cs.color;
+  tmp.innerHTML = editor.innerHTML;
+
+  tmp.querySelectorAll('a').forEach(a => {
+    a.replaceWith(document.createTextNode(a.textContent.replace(/\u200B/g, '')));
+  });
+
+  const breakLongWords = s =>
+    s.replace(/\u200B/g, '')
+     .replace(/(\S{15,})/g, m =>
+       m.replace(/([\/.?:=&#_%-])/g, '$1 ')
+     );
+
+  const textNodes = [];
+  const walker = document.createTreeWalker(tmp, NodeFilter.SHOW_TEXT);
+  while (walker.nextNode()) textNodes.push(walker.currentNode);
+  textNodes.forEach(textNode => {
+    const text = textNode.nodeValue;
+    if (!text) return;
+    textNode.nodeValue = breakLongWords(text);
+  });
+
+  document.body.appendChild(tmp);
+
+  await new Promise(r => setTimeout(r, 50));
+
   try {
-    editor.style.overflow = 'visible';
-    const canvas = await html2canvas(editor, {
+    const canvas = await html2canvas(tmp, {
       backgroundColor: getComputedStyle(document.body).backgroundColor,
       scale: 2,
       useCORS: true,
       logging: false,
-      width: editor.scrollWidth,
-      height: editor.scrollHeight,
-      windowWidth: editor.scrollWidth,
-      windowHeight: editor.scrollHeight,
-      onclone: (doc) => {
-        const cloned = doc.getElementById('editor');
-        cloned.style.whiteSpace = 'normal';
-        cloned.style.lineHeight = '1.7';
-        cloned.style.wordBreak = 'break-all';
-        cloned.style.overflowWrap = 'break-word';
-
-        const textNodes = [];
-        const walker = doc.createTreeWalker(cloned, NodeFilter.SHOW_TEXT);
-        while (walker.nextNode()) textNodes.push(walker.currentNode);
-
-        const breakLongWords = s =>
-          s.replace(/(\S{15,})/g, m =>
-            m.replace(/([\/.?:=&#_-])/g, '$1\u200B')
-          );
-
-        textNodes.forEach(textNode => {
-          const text = textNode.nodeValue;
-          if (!text) return;
-
-          if (text.includes('\n')) {
-            const parts = text.split('\n');
-            const frag = doc.createDocumentFragment();
-            parts.forEach((p, i) => {
-              if (p) frag.appendChild(doc.createTextNode(breakLongWords(p)));
-              if (i < parts.length - 1) frag.appendChild(doc.createElement('br'));
-            });
-            textNode.parentNode.replaceChild(frag, textNode);
-          } else {
-            textNode.nodeValue = breakLongWords(text);
-          }
-        });
-      }
+      width: tmp.scrollWidth,
+      height: tmp.scrollHeight,
+      windowWidth: tmp.scrollWidth,
+      windowHeight: tmp.scrollHeight
     });
     const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
     if (navigator.clipboard && navigator.clipboard.write && typeof ClipboardItem !== 'undefined') {
@@ -783,10 +788,17 @@ exportImgBtn.addEventListener('click', async () => {
     const msg = e.name === 'SecurityError' ? '导出失败：可能因外链图片跨域，请使用支持CORS的图床' : '导出失败：' + e.message;
     showUploadStatus(msg);
   } finally {
-    editor.style.overflow = originalOverflow;
+    document.body.removeChild(tmp);
   }
   setTimeout(hideUploadStatus, 3000);
-});
+}
+
+if (window.PointerEvent) {
+  exportImgBtn.addEventListener('pointerdown', e => { if (e.button !== 0) return; e.preventDefault(); exportImage(); });
+} else {
+  exportImgBtn.addEventListener('touchstart', e => { e.preventDefault(); exportImage(); }, { passive: false });
+}
+exportImgBtn.addEventListener('click', e => { e.preventDefault(); if (!window.PointerEvent) exportImage(); });
 
 // --- 解锁 ---
 async function unlock(pass) {
@@ -836,10 +848,12 @@ function linkifyEditor() {
   if (isLinkifying) return;
   isLinkifying = true;
   try {
-    const urlTest = /https?:\/\/[^\s<]+/;
-    const urlRegex = /(https?:\/\/[^\s<]+)/g;
+    const urlTest = /(?:https?|file|ftp):\/\/[^\s<]+/;
+    const urlRegex = /((?:https?|file|ftp):\/\/[^\s<]+)/g;
+    const longWordTest = /\S{15,}/;
     const phoneTest = /(?<!\d)1[3-9]\d{9}(?!\d)/;
     const phoneRegex = /(?<!\d)(1[3-9]\d{9})(?!\d)/g;
+    const breakSeparators = /([\/.?:=&#_%-])/g;
     const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT, {
       acceptNode: node => {
         let p = node.parentNode;
@@ -847,7 +861,7 @@ function linkifyEditor() {
           if (p.tagName === 'A') return NodeFilter.FILTER_REJECT;
           p = p.parentNode;
         }
-        return (urlTest.test(node.nodeValue) || phoneTest.test(node.nodeValue)) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+        return (urlTest.test(node.nodeValue) || phoneTest.test(node.nodeValue) || longWordTest.test(node.nodeValue)) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
       }
     });
     const targets = [];
@@ -863,8 +877,25 @@ function linkifyEditor() {
       const text = textNode.nodeValue;
       const span = document.createElement('span');
       span.innerHTML = text
-        .replace(urlRegex, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>')
+        .replace(urlRegex, (m) => '<a href="' + m + '" target="_blank" rel="noopener noreferrer">' + m.replace(breakSeparators, '$1\u200B') + '</a>')
         .replace(phoneRegex, '<a href="tel:$1">$1</a>');
+      const tw = document.createTreeWalker(span, NodeFilter.SHOW_TEXT, {
+        acceptNode: node => {
+          let p = node.parentNode;
+          while (p && p !== span) {
+            if (p.tagName === 'A') return NodeFilter.FILTER_REJECT;
+            p = p.parentNode;
+          }
+          return /\S{15,}/.test(node.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+        }
+      });
+      const longNodes = [];
+      while (tw.nextNode()) longNodes.push(tw.currentNode);
+      longNodes.forEach(node => {
+        if (!node.nodeValue.includes('\u200B')) {
+          node.nodeValue = node.nodeValue.replace(breakSeparators, '$1\u200B');
+        }
+      });
       textNode.replaceWith(...span.childNodes);
     }
     if (savedRange && document.activeElement === editor) {
