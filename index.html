@@ -6,97 +6,140 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="NoteSync">
+<meta name="description" content="NoteSync · 端到端加密的多设备同步笔记">
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <title>NoteSync</title>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <style>
-  :root{ --bg:#fafafa; --fg:#1a1a1a; --muted:#888; --line:#e6e6e6; --accent:#2b6cff; --box-bg:#fff; --upload-bg:#1a1a1a; }
-  body.dark{ --bg:#1a1a2e; --fg:#e0e0e0; --muted:#888; --line:#333344; --accent:#5b8def; --box-bg:#252540; --upload-bg:#e0e0e0; }
+  :root{
+    --bg:#FBFBF8; --fg:#1C1C1A; --muted:#98958A; --line:#ECEAE2;
+    --accent:#8F7126; --accent-soft:rgba(143,113,38,.07); --ring:rgba(143,113,38,.16);
+    --box-bg:#FFFFFF; --upload-bg:#1C1C1A; --hover:rgba(28,28,26,.05);
+    --serif:Georgia,"Times New Roman","Songti SC","STSong",serif;
+  }
+  body.dark{
+    --bg:#0F0F11; --fg:#E9E8E3; --muted:#7A786F; --line:#242428;
+    --accent:#D4B068; --accent-soft:rgba(212,176,104,.08); --ring:rgba(212,176,104,.22);
+    --box-bg:#17171A; --upload-bg:#E9E8E3; --hover:rgba(233,232,227,.07);
+  }
   *{box-sizing:border-box}
   html,body{height:100%;margin:0}
   body{background:var(--bg);color:var(--fg);font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;display:flex;flex-direction:column;transition:background .3s,color .3s}
-  header{display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid var(--line);font-size:14px;color:var(--muted)}
-  header .dot{width:8px;height:8px;border-radius:50%;background:#bbb;flex-shrink:0}
-  header .dot.on{background:#2ecc71}
+  ::selection{background:rgba(169,134,60,.22)}
+
+  /* ── 顶栏 ───────────────────────────── */
+  header{display:flex;align-items:center;gap:10px;padding:12px 20px;border-bottom:1px solid var(--line);font-size:12px;color:var(--muted);letter-spacing:.04em}
+  header .brand{display:flex;align-items:center;gap:8px;color:var(--fg);flex-shrink:0}
+  header .brand svg{width:17px;height:17px;color:var(--accent)}
+  header .brand b{font-family:var(--serif);font-weight:500;font-size:13.5px;letter-spacing:.06em}
+  header .status{display:flex;align-items:center;gap:7px}
+  header .dot{width:7px;height:7px;border-radius:50%;background:#C9C7BE;flex-shrink:0;transition:background .3s}
+  header .dot.on{background:#2FA866}
   header .sp{flex:1}
-  header button{font-size:16px;color:var(--muted);background:none;border:1px solid var(--line);border-radius:6px;padding:4px 8px;cursor:pointer;line-height:1.2;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
-  header button:hover{color:var(--fg)}
-  #editor{flex:1;width:100%;border:0;outline:0;resize:none;padding:16px;background:transparent;color:var(--fg);font:inherit;overflow-y:auto;word-wrap:break-word;white-space:pre-wrap;-webkit-user-select:text;user-select:text;line-height:1.8}
-  #editor:empty:before{content:attr(data-ph);color:var(--muted);pointer-events:none}
-  #editor.dragover{background:#e7f0ff;outline:2px dashed var(--accent);outline-offset:-4px}
-  #editor img{max-width:100%;border-radius:8px;margin:4px 0;display:block}
-  #editor a{color:var(--accent);text-decoration:none}
-  #editor a:hover{text-decoration:underline}
-  #editor s, #editor strike, #editor del{text-decoration:line-through;color:var(--muted)}
+  header button{display:flex;align-items:center;justify-content:center;width:31px;height:31px;color:var(--muted);background:none;border:0;border-radius:8px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:color .2s,background .2s}
+  header button:hover{color:var(--fg);background:var(--hover)}
+  header button svg{width:17px;height:17px;pointer-events:none}
+  @media (max-width:560px){ header .brand b{display:none} }
+
+  /* ── 编辑器 ─────────────────────────── */
+  #editor{flex:1;width:100%;max-width:720px;margin:0 auto;border:0;outline:0;resize:none;padding:40px 28px 120px;background:transparent;color:var(--fg);font:inherit;font-size:17px;overflow-y:auto;word-wrap:break-word;white-space:pre-wrap;-webkit-user-select:text;user-select:text;line-height:1.9}
+  #editor:empty:before{content:attr(data-ph);color:var(--muted);opacity:.75;pointer-events:none}
+  #editor.dragover{background:var(--accent-soft);outline:1.5px dashed var(--accent);outline-offset:-8px}
+  #editor img{max-width:100%;border-radius:10px;margin:6px 0;display:block;border:1px solid var(--line)}
+  #editor a{color:var(--accent);text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(169,134,60,.35);transition:text-decoration-color .2s}
+  #editor a:hover{text-decoration-color:var(--accent)}
+  #editor s, #editor strike, #editor del{text-decoration:line-through;text-decoration-color:rgba(152,149,138,.7);color:var(--muted)}
   #editor p{margin:0}
-  footer{padding:6px 16px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);text-align:right}
-  .mask{position:fixed;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;z-index:10}
+  #editor::-webkit-scrollbar{width:8px}
+  #editor::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
+  @media (max-width:560px){ #editor{padding:24px 18px 100px;font-size:16px} }
+
+  /* ── 页脚 ───────────────────────────── */
+  footer{padding:10px 16px;border-top:1px solid var(--line);font-size:11px;color:var(--muted);text-align:center;letter-spacing:.14em}
+
+  /* ── 解锁弹窗 ───────────────────────── */
+  .mask{position:fixed;inset:0;background:rgba(20,20,18,.42);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:center;z-index:10}
   .mask.hidden{display:none!important}
-  .box{background:var(--box-bg);border-radius:12px;padding:22px;width:min(92vw,360px);box-shadow:0 8px 30px rgba(0,0,0,.15);transition:background .3s}
-  .box h1{font-size:17px;margin:0 0 6px}
-  .box p{font-size:13px;color:var(--muted);margin:0 0 14px;line-height:1.5}
-  .box input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font-size:15px;outline:0}
-  .box input:focus{border-color:var(--accent)}
-  .box .err{color:#e74c3c;font-size:13px;min-height:18px;margin:8px 0}
-  .box button{width:100%;padding:10px;border:0;border-radius:8px;background:var(--accent);color:#fff;font-size:15px;cursor:pointer}
-  .box button:active{opacity:.9}
+  .box{background:var(--box-bg);border:1px solid var(--line);border-radius:18px;padding:34px 30px 28px;width:min(90vw,380px);box-shadow:0 24px 70px rgba(20,20,18,.16);transition:background .3s;animation:rise .5s cubic-bezier(.2,.7,.3,1) both}
+  .box .mark{width:40px;height:40px;color:var(--accent);margin-bottom:16px}
+  .box h1{font-size:18px;font-weight:600;margin:0 0 8px;letter-spacing:.02em}
+  .box p{font-size:13px;color:var(--muted);margin:0 0 20px;line-height:1.7}
+  .box input{width:100%;padding:0 14px;height:46px;border:1px solid var(--line);border-radius:10px;font-size:15px;outline:0;background:var(--bg);color:var(--fg);transition:border-color .2s,box-shadow .2s}
+  .box input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--ring)}
+  .box .err{color:#C0453E;font-size:13px;min-height:20px;margin:10px 0 6px}
+  .box button{width:100%;height:46px;border:0;border-radius:10px;background:var(--fg);color:var(--bg);font-size:15px;font-weight:500;letter-spacing:.08em;cursor:pointer;transition:opacity .2s}
+  .box button:hover{opacity:.85}
+  .box button:active{opacity:.75}
+
+  /* ── 根路径说明 ─────────────────────── */
   .home{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;text-align:center}
-  .home h1{font-size:20px;margin:0 0 10px}
-  .home p{color:var(--muted);font-size:14px;line-height:1.8;margin:0}
-  .home code{background:#eee;padding:2px 6px;border-radius:4px;font-size:13px}
+  .home h1{font-family:var(--serif);font-weight:500;font-size:24px;margin:0 0 12px;letter-spacing:.04em}
+  .home p{color:var(--muted);font-size:14px;line-height:1.9;margin:0}
+  .home code{background:var(--accent-soft);color:var(--accent);padding:3px 8px;border-radius:6px;font-size:13px}
   .hidden{display:none!important}
-  #landing{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;z-index:30}
-  #landing .logo{width:72px;height:72px;margin:0 0 20px}
-  #landing h1{font-size:22px;font-weight:600;margin:0 0 4px;letter-spacing:0.5px}
-  #landing .sub{color:var(--muted);font-size:13px;margin:0 0 36px}
-  #landing .input-row{display:flex;gap:8px;max-width:300px;width:100%}
-  #landing input{flex:1;padding:11px 14px;border:1px solid var(--line);border-radius:8px;font-size:15px;outline:0;background:var(--box-bg);color:var(--fg)}
-  #landing input:focus{border-color:var(--accent)}
-  #landing button{padding:11px 18px;border:0;border-radius:8px;background:var(--accent);color:#fff;font-size:15px;cursor:pointer;white-space:nowrap;font-weight:500}
-  #landing .hint{color:var(--muted);font-size:12px;margin:18px 0 0;line-height:1.6}
-  .upload-status{position:fixed;bottom:50px;left:50%;transform:translateX(-50%);background:var(--upload-bg);color:var(--bg);padding:8px 16px;border-radius:20px;font-size:13px;z-index:20;opacity:0;transition:opacity .3s;pointer-events:none}
+
+  /* ── 落地页 ─────────────────────────── */
+  #landing{position:fixed;inset:0;background:radial-gradient(ellipse 720px 480px at 50% 30%,var(--accent-soft),transparent),var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;z-index:30}
+  #landing>*{animation:rise .7s cubic-bezier(.2,.7,.3,1) both}
+  #landing>*:nth-child(2){animation-delay:.06s}
+  #landing>*:nth-child(3){animation-delay:.12s}
+  #landing>*:nth-child(4){animation-delay:.18s}
+  #landing>*:nth-child(5){animation-delay:.24s}
+  #landing .logo{width:56px;height:56px;margin:0 0 22px;color:var(--accent)}
+  #landing h1{font-family:var(--serif);font-size:34px;font-weight:500;margin:0 0 10px;letter-spacing:.05em}
+  #landing .sub{color:var(--muted);font-size:13px;margin:0 0 44px;letter-spacing:.32em;padding-left:.32em}
+  #landing .input-row{display:flex;gap:10px;max-width:340px;width:100%}
+  #landing input{flex:1;height:46px;padding:0 16px;border:1px solid var(--line);border-radius:10px;font-size:15px;outline:0;background:var(--box-bg);color:var(--fg);transition:border-color .2s,box-shadow .2s}
+  #landing input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--ring)}
+  #landing button{height:46px;padding:0 24px;border:0;border-radius:10px;background:var(--fg);color:var(--bg);font-size:15px;font-weight:500;letter-spacing:.06em;cursor:pointer;white-space:nowrap;transition:opacity .2s}
+  #landing button:hover{opacity:.85}
+  #landing .hint{color:var(--muted);font-size:12px;margin:26px 0 0;line-height:1.7;letter-spacing:.05em;opacity:.8}
+  @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+
+  /* ── 提示气泡 / 加载 ────────────────── */
+  .upload-status{position:fixed;bottom:44px;left:50%;transform:translateX(-50%);background:var(--upload-bg);color:var(--bg);padding:10px 20px;border-radius:999px;font-size:13px;letter-spacing:.03em;z-index:20;opacity:0;transition:opacity .3s;pointer-events:none;box-shadow:0 10px 30px rgba(20,20,18,.2)}
   .upload-status.show{opacity:1}
-  #loading{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:5;color:var(--muted);font-size:14px}
+  #loading{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:5;color:var(--muted);font-size:13px;letter-spacing:.2em}
 </style>
 </head>
 <body>
 <div id="landing" class="hidden">
-  <svg class="logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 500">
-    <rect width="512" height="500" rx="100" fill="#2b6cff"/>
-    <g transform="translate(136,120) scale(1.0)" fill="none" stroke="white" stroke-width="28" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M48 168 L48 208 L88 208"/>
-      <path d="M48 168 L168 48"/>
-      <path d="M88 208 L208 88"/>
-      <path d="M148 28 L188 68"/>
-    </g>
-    <rect x="146" y="330" width="220" height="28" rx="14" fill="white" opacity="0.85"/>
+  <svg class="logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M38.5 21.5A15 15 0 0 0 13 13.6"/>
+    <path d="M12.5 6.5v7.5H20"/>
+    <path d="M9.5 26.5A15 15 0 0 0 35 34.4"/>
+    <path d="M35.5 41.5V34H28"/>
+    <line x1="17.5" y1="24" x2="30.5" y2="24"/>
   </svg>
   <h1>NoteSync</h1>
   <p class="sub">端到端加密 · 多设备同步</p>
   <div class="input-row">
-    <input id="landingInput" placeholder="输入笔记名（英文或数字）" autocomplete="off">
+    <input id="landingInput" placeholder="笔记名（英文或数字）" autocomplete="off">
     <button id="landingBtn">打开</button>
   </div>
   <p class="hint">在网址后加笔记名即可，如 note.xuyinji.com.cn/notes</p>
 </div>
 <header>
-  <span class="dot" id="status"></span>
-  <span id="statustext">连接中…</span>
+  <span class="brand">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M38.5 21.5A15 15 0 0 0 13 13.6"/><path d="M12.5 6.5v7.5H20"/><path d="M9.5 26.5A15 15 0 0 0 35 34.4"/><path d="M35.5 41.5V34H28"/><line x1="17.5" y1="24" x2="30.5" y2="24"/></svg>
+    <b>NoteSync</b>
+  </span>
+  <span class="status"><span class="dot" id="status"></span><span id="statustext">连接中…</span></span>
   <span class="sp"></span>
-  <button id="themeBtn" title="切换夜间模式">🌙</button>
-  <button id="strikeBtn" title="删除线"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="vertical-align:middle;pointer-events:none"><path d="M6.333 5.686c0 .31.083.581.27.814H5.166a2.8 2.8 0 0 1-.099-.76c0-1.627 1.436-2.768 3.48-2.768 1.969 0 3.39 1.175 3.445 2.85h-1.23c-.11-1.08-.964-1.743-2.25-1.743-1.23 0-2.18.602-2.18 1.607zm2.194 7.478c-2.153 0-3.589-1.107-3.705-2.81h1.23c.144 1.06 1.129 1.703 2.544 1.703 1.34 0 2.31-.705 2.31-1.675 0-.827-.547-1.374-1.914-1.675L8.046 8.5H1v-1h14v1h-3.504c.468.437.675.994.675 1.697 0 1.826-1.436 2.967-3.644 2.967"/></svg></button>
-  <button id="uploadBtn" title="上传图片">📤</button>
-  <button id="copyBtn" title="复制到剪贴板">⧉</button>
-  <button id="exportImgBtn" title="导出为图片并复制">📥</button>
-  <button id="lock">退出</button>
+  <button id="themeBtn" title="切换夜间模式"></button>
+  <button id="strikeBtn" title="删除线"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4H9a3 3 0 0 0-2.83 4"/><path d="M14 12a4 4 0 0 1 0 8H6"/><line x1="4" x2="20" y1="12" y2="12"/></svg></button>
+  <button id="uploadBtn" title="上传图片"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg></button>
+  <button id="copyBtn" title="复制到剪贴板"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect width="13" height="13" x="9" y="9" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+  <button id="exportImgBtn" title="导出为图片并复制"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg></button>
+  <button id="lock" title="退出锁定"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="11" x="4" y="11" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></button>
 </header>
 <div id="editor" data-ph="开始输入，自动同步到所有设备…" contenteditable="true"></div>
 <input type="file" id="fileInput" accept="image/*" style="display:none">
 <footer id="foot">端到端加密 · 仅在你的浏览器内加解密</footer>
 <div class="upload-status" id="uploadStatus"></div>
 
-<div id="loading">加载中…</div>
+<div id="loading">加载中</div>
 
 <div class="home hidden" id="home">
   <h1>NoteSync</h1>
@@ -105,11 +148,12 @@
 
 <div class="mask hidden" id="mask">
   <div class="box">
+    <svg class="mark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M38.5 21.5A15 15 0 0 0 13 13.6"/><path d="M12.5 6.5v7.5H20"/><path d="M9.5 26.5A15 15 0 0 0 35 34.4"/><path d="M35.5 41.5V34H28"/><line x1="17.5" y1="24" x2="30.5" y2="24"/></svg>
     <h1>输入访问口令</h1>
     <p>此口令用于在本机派生加密密钥，不会发送到服务器。每台新设备首次打开需输入一次，之后自动记住。</p>
     <input id="pw" type="password" autocomplete="off" autofocus>
     <div class="err" id="err"></div>
-    <button id="ok">解锁</button>
+    <button id="ok">解 锁</button>
   </div>
 </div>
 
@@ -145,6 +189,8 @@ const copyBtn = $('#copyBtn'), exportImgBtn = $('#exportImgBtn');
 // 每次打开页面按时间自动设置；用户手动切换后本次会话不再自动切换，刷新后恢复
 const THEME_DAY_START = 7 * 60;      // 07:00 → 420 分钟
 const THEME_NIGHT_START = 19 * 60;   // 19:00 → 1140 分钟
+const ICON_MOON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+const ICON_SUN = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4.5"/><line x1="12" y1="19.5" x2="12" y2="22"/><line x1="4.2" y1="4.2" x2="6" y2="6"/><line x1="18" y1="18" x2="19.8" y2="19.8"/><line x1="2" y1="12" x2="4.5" y2="12"/><line x1="19.5" y1="12" x2="22" y2="12"/><line x1="4.2" y1="19.8" x2="6" y2="18"/><line x1="18" y1="6" x2="19.8" y2="4.2"/></svg>';
 function shouldBeDark() {
   const now = new Date();
   const minutes = now.getHours() * 60 + now.getMinutes();
@@ -152,7 +198,7 @@ function shouldBeDark() {
 }
 function applyTheme(dark) {
   document.body.classList.toggle('dark', dark);
-  themeBtn.textContent = dark ? '☀️' : '🌙';
+  themeBtn.innerHTML = dark ? ICON_SUN : ICON_MOON;
   // 注入 !important CSS 覆盖小米浏览器夜间模式的 CSS 注入
   let override = document.getElementById('theme-override');
   if (!override) {
@@ -162,29 +208,33 @@ function applyTheme(dark) {
   }
   if (dark) {
     override.textContent = `
-      body{background:#1a1a2e!important;color:#e0e0e0!important}
-      #editor{background:transparent!important;color:#e0e0e0!important}
-      header{background:#1a1a2e!important;color:#888!important;border-color:#333344!important}
-      header button{background:none!important;color:#888!important;border-color:#333344!important}
-      footer{background:#1a1a2e!important;color:#888!important;border-color:#333344!important}
-      .box{background:#252540!important;color:#e0e0e0!important}
-      .box input{background:#252540!important;color:#e0e0e0!important;border-color:#333344!important}
-      #landing{background:#1a1a2e!important;color:#e0e0e0!important}
-      #landing input{background:#252540!important;color:#e0e0e0!important;border-color:#333344!important}
-      #loading{background:#1a1a2e!important;color:#888!important}
+      body{background:#0F0F11!important;color:#E9E8E3!important}
+      #editor{background:transparent!important;color:#E9E8E3!important}
+      header{background:#0F0F11!important;color:#7A786F!important;border-color:#242428!important}
+      header button{background:none!important;color:#7A786F!important}
+      footer{background:#0F0F11!important;color:#7A786F!important;border-color:#242428!important}
+      .box{background:#17171A!important;color:#E9E8E3!important;border-color:#242428!important}
+      .box input{background:#0F0F11!important;color:#E9E8E3!important;border-color:#242428!important}
+      .box button{background:#E9E8E3!important;color:#0F0F11!important}
+      #landing{background:#0F0F11!important;color:#E9E8E3!important}
+      #landing input{background:#17171A!important;color:#E9E8E3!important;border-color:#242428!important}
+      #landing button{background:#E9E8E3!important;color:#0F0F11!important}
+      #loading{background:#0F0F11!important;color:#7A786F!important}
     `;
   } else {
     override.textContent = `
-      body{background:#fafafa!important;color:#1a1a1a!important}
-      #editor{background:transparent!important;color:#1a1a1a!important}
-      header{background:#fafafa!important;color:#888!important;border-color:#e6e6e6!important}
-      header button{background:none!important;color:#888!important;border-color:#e6e6e6!important}
-      footer{background:#fafafa!important;color:#888!important;border-color:#e6e6e6!important}
-      .box{background:#fff!important;color:#1a1a1a!important}
-      .box input{background:#fff!important;color:#1a1a1a!important;border-color:#e6e6e6!important}
-      #landing{background:#fafafa!important;color:#1a1a1a!important}
-      #landing input{background:#fff!important;color:#1a1a1a!important;border-color:#e6e6e6!important}
-      #loading{background:#fafafa!important;color:#888!important}
+      body{background:#FBFBF8!important;color:#1C1C1A!important}
+      #editor{background:transparent!important;color:#1C1C1A!important}
+      header{background:#FBFBF8!important;color:#98958A!important;border-color:#ECEAE2!important}
+      header button{background:none!important;color:#98958A!important}
+      footer{background:#FBFBF8!important;color:#98958A!important;border-color:#ECEAE2!important}
+      .box{background:#FFFFFF!important;color:#1C1C1A!important;border-color:#ECEAE2!important}
+      .box input{background:#FBFBF8!important;color:#1C1C1A!important;border-color:#ECEAE2!important}
+      .box button{background:#1C1C1A!important;color:#FBFBF8!important}
+      #landing{background:#FBFBF8!important;color:#1C1C1A!important}
+      #landing input{background:#FFFFFF!important;color:#1C1C1A!important;border-color:#ECEAE2!important}
+      #landing button{background:#1C1C1A!important;color:#FBFBF8!important}
+      #loading{background:#FBFBF8!important;color:#98958A!important}
     `;
   }
 }
@@ -202,14 +252,6 @@ themeBtn.addEventListener('click', () => {
 });
 
 // 删除线：纯 DOM Range API 操作，完全弃用 execCommand
-// 根因分析（小米手机+Chrome 不生效）：
-//   1) execCommand('strikeThrough') 在移动端 Chrome 可能返回 true 但不修改 DOM → fallback 永不触发
-//   2) editor.focus() + sel.addRange() 在移动端不可靠 → 恢复的选区对 execCommand 无效
-//   3) touchstart 的 preventDefault 可能来不及阻止选区清除（某些浏览器在 hit-test 阶段就清了）
-// 方案：1) selectionchange 持续保存选区（克隆 Range，与焦点无关）
-//       2) pointerdown/touchstart 最早拦截 + preventDefault
-//       3) 直接用 savedRange 操作 DOM（extractContents/insertNode），不需要恢复焦点/选区
-//       4) HTML 变化检测，确认操作生效
 let lastRange = null;
 let strikeBusy = false;
 
@@ -271,7 +313,6 @@ function applyStrike() {
   const range = lastRange.cloneRange();
   const htmlBefore = editor.innerHTML;
 
-  // 在 DOM 操作之前以字符偏移量保存选区位置
   let savedOffsets = null;
   try {
     savedOffsets = saveSelectionOffsets(editor, range);
@@ -306,7 +347,6 @@ function applyStrike() {
 
   if (editor.innerHTML !== htmlBefore) {
     try {
-      // 用字符偏移量重建选区，避免 normalize() 后 range 引用失效
       if (savedOffsets) {
         const newRange = restoreSelectionOffsets(editor, savedOffsets.start, savedOffsets.end);
         if (newRange) {
@@ -579,15 +619,15 @@ function insertImageAtCursor(url) {
 
 async function handleImageUpload(file) {
   if (!file || !file.type.startsWith('image/')) return;
-  showUploadStatus('📷 正在压缩图片…');
+  showUploadStatus('正在压缩图片…');
   try {
     const blob = await compressImage(file);
-    showUploadStatus('☁️ 正在上传…');
+    showUploadStatus('正在上传…');
     const url = await uploadToCloudinary(blob);
     insertImageAtCursor(url);
-    showUploadStatus('✅ 上传成功');
+    showUploadStatus('上传成功');
   } catch (e) {
-    showUploadStatus('❌ 上传失败：' + e.message);
+    showUploadStatus('上传失败：' + e.message);
   }
   setTimeout(hideUploadStatus, 2000);
 }
@@ -610,13 +650,11 @@ editor.addEventListener('paste', e => {
     const urlRegex = /(https?:\/\/[^\s<]+)/g;
     const phoneRegex = /(?<!\d)(1[3-9]\d{9})(?!\d)/g;
     if (urlRegex.test(text) || phoneRegex.test(text)) {
-      // 含 URL 或手机号：转为 HTML 插入
       const html = text
         .replace(urlRegex, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>')
         .replace(phoneRegex, '<a href="tel:$1">$1</a>');
       document.execCommand('insertHTML', false, html);
     } else {
-      // 纯文本
       document.execCommand('insertText', false, text);
     }
   }
@@ -662,13 +700,13 @@ copyBtn.addEventListener('click', async () => {
       'text/plain': new Blob([text], { type: 'text/plain' })
     });
     await navigator.clipboard.write([item]);
-    showUploadStatus('✅ 已复制到剪贴板');
+    showUploadStatus('已复制到剪贴板');
   } catch (e) {
     try {
       await navigator.clipboard.writeText(editor.innerText);
-      showUploadStatus('✅ 已复制文字');
+      showUploadStatus('已复制文字');
     } catch (e2) {
-      showUploadStatus('❌ 复制失败');
+      showUploadStatus('复制失败');
     }
   }
   setTimeout(hideUploadStatus, 2000);
@@ -677,29 +715,50 @@ copyBtn.addEventListener('click', async () => {
 // --- 导出为图片并复制 ---
 exportImgBtn.addEventListener('click', async () => {
   if (typeof html2canvas === 'undefined') {
-    showUploadStatus('❌ 图片导出组件未加载');
+    showUploadStatus('图片导出组件未加载');
     setTimeout(hideUploadStatus, 2000);
     return;
   }
-  showUploadStatus('📥 正在生成图片…');
+  showUploadStatus('正在生成图片…');
   try {
-    // 创建临时容器，用简单 CSS 渲染，避免 html2canvas 解析 contenteditable 的缺陷
-    const isDark = document.body.classList.contains('dark');
-    const tmp = document.createElement('div');
-    tmp.style.cssText = 'position:absolute;left:-9999px;top:0;width:' + editor.clientWidth + 'px;padding:16px;background:' + (isDark ? '#1a1a2e' : '#fafafa') + ';color:' + (isDark ? '#e0e0e0' : '#1a1a1a') + ';font:16px/1.8 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;white-space:pre-wrap;word-wrap:break-word';
-    tmp.innerHTML = editor.innerHTML;
-    document.body.appendChild(tmp);
-    const canvas = await html2canvas(tmp, {
-      backgroundColor: isDark ? '#1a1a2e' : '#fafafa',
+    const originalOverflow = editor.style.overflow;
+    editor.style.overflow = 'visible';
+    const canvas = await html2canvas(editor, {
+      backgroundColor: getComputedStyle(document.body).backgroundColor,
       scale: 2,
       useCORS: true,
-      logging: false
+      logging: false,
+      width: editor.scrollWidth,
+      height: editor.scrollHeight,
+      windowWidth: editor.scrollWidth,
+      windowHeight: editor.scrollHeight,
+      onclone: (doc) => {
+        const cloned = doc.getElementById('editor');
+        cloned.style.whiteSpace = 'normal';
+        cloned.style.lineHeight = '1.6';
+        function replaceNewlines(node) {
+          node.childNodes.forEach(child => {
+            if (child.nodeType === 3 && child.nodeValue.includes('\n')) {
+              const parts = child.nodeValue.split('\n');
+              const frag = doc.createDocumentFragment();
+              parts.forEach((p, i) => {
+                if (p) frag.appendChild(doc.createTextNode(p));
+                if (i < parts.length - 1) frag.appendChild(doc.createElement('br'));
+              });
+              child.parentNode.replaceChild(frag, child);
+            } else if (child.nodeType === 1) {
+              replaceNewlines(child);
+            }
+          });
+        }
+        replaceNewlines(cloned);
+      }
     });
-    document.body.removeChild(tmp);
+    editor.style.overflow = originalOverflow;
     const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
     if (navigator.clipboard && navigator.clipboard.write && typeof ClipboardItem !== 'undefined') {
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-      showUploadStatus('✅ 图片已复制，可直接 Ctrl+V 粘贴');
+      showUploadStatus('图片已复制，可直接 Ctrl+V 粘贴');
     } else {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -707,10 +766,10 @@ exportImgBtn.addEventListener('click', async () => {
       a.download = 'note.png';
       a.click();
       URL.revokeObjectURL(url);
-      showUploadStatus('✅ 图片已下载');
+      showUploadStatus('图片已下载');
     }
   } catch (e) {
-    showUploadStatus('❌ 导出失败：' + e.message);
+    showUploadStatus('导出失败：' + e.message);
   }
   setTimeout(hideUploadStatus, 3000);
 });
@@ -781,7 +840,6 @@ function linkifyEditor() {
     let n;
     while (n = walker.nextNode()) targets.push(n);
     if (targets.length === 0) return;
-    // 保存光标位置
     const sel = window.getSelection();
     let savedRange = null;
     if (sel.rangeCount > 0) {
@@ -795,7 +853,6 @@ function linkifyEditor() {
         .replace(phoneRegex, '<a href="tel:$1">$1</a>');
       textNode.replaceWith(...span.childNodes);
     }
-    // 恢复光标
     if (savedRange && document.activeElement === editor) {
       try { sel.removeAllRanges(); sel.addRange(savedRange); } catch(e) {}
     }
@@ -806,7 +863,6 @@ editor.addEventListener('input', () => {
   if (busy) return;
   clearTimeout(saveTimer);
   saveTimer = setTimeout(saveLocal, 800);
-  // 延迟 linkify，避免打断输入
   clearTimeout(linkifyTimer);
   linkifyTimer = setTimeout(linkifyEditor, 500);
 });
@@ -835,7 +891,6 @@ async function poll() {
     if ((note.v || 0) > localVer && note.ct) {
       const html = await decryptText(note.ct, note.iv, cryptoKey);
       if (html !== editor.innerHTML) {
-        // 保存光标位置，覆盖后恢复
         const wasFocused = document.activeElement === editor;
         let savedOffset = null;
         if (wasFocused) {
@@ -869,15 +924,12 @@ function connectSSE() {
   try {
     sseSource = new EventSource('/api/note/' + encodeURIComponent(noteId) + '/stream');
     sseSource.onopen = () => {
-      // SSE 连接恢复，清除轮询兜底
       if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
     };
     sseSource.onmessage = e => { poll(); };
     sseSource.onerror = () => {
       if (sseSource) { sseSource.close(); sseSource = null; }
-      // 断线兜底：10 秒轮询
       if (!pollTimer) { pollTimer = setInterval(poll, 10000); }
-      // 5 秒后自动重连 SSE
       if (!sseReconnectTimer) {
         sseReconnectTimer = setTimeout(() => {
           sseReconnectTimer = null;
