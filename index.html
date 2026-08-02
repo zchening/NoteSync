@@ -184,6 +184,9 @@ const themeBtn = $('#themeBtn');
 const strikeBtn = $('#strikeBtn');
 const copyBtn = $('#copyBtn'), exportImgBtn = $('#exportImgBtn');
 
+// 回车换行统一产出 <div> 块，与 cleanupLeadingTrailingBreaks / currentBlock 对块结构的预期一致
+try { document.execCommand('defaultParagraphSeparator', false, 'div'); } catch (e) {}
+
 // --- 夜间模式 ---
 // 自动切换：07:00 日间，19:00 夜间（北京时间）
 // 每次打开页面按时间自动设置；用户手动切换后本次会话不再自动切换，刷新后恢复
@@ -884,19 +887,65 @@ async function loadStoredKey() {
 let saveTimer = null, linkifyTimer = null, isLinkifying = false;
 
 // URL 和手机号自动检测：扫描文本节点，转为 <a> 标签
+// 修复：1) 支持裸域名（www.baidu.com / example.com），不再要求 http(s):// 方案前缀；
+//       2) 合并被拆成多段的 URL（逐字输入 "http://" + "www.baidu.com" 合成一条链接）；
+//       3) 选区改用"块内偏移"恢复，避免回车后光标跳到上一行（见下方说明）。
+const FILE_EXT_DENY = new Set(['md','markdown','txt','csv','tsv','json','jsonl','yaml','yml','toml','xml','html','htm','php','js','jsx','ts','tsx','css','scss','less','py','rb','go','rs','java','c','cpp','h','hpp','sh','bash','zsh','ps1','sql','db','sqlite','git','log','ini','cfg','conf','env','dat','bak','tmp','pdf','doc','docx','xls','xlsx','ppt','pptx','zip','rar','7z','tar','gz','tgz','bz2','exe','dll','apk','dmg','iso','img','bin','png','jpg','jpeg','gif','svg','webp','bmp','ico','mp3','mp4','mov','avi','mkv','webm','wav','flac','ttf','otf','woff','woff2','eot','pem','key','crt','cer','lock','map']);
+// 裸域名（无 http:// 或 www. 前缀）必须命中已知 TLD 才当网址，
+// 否则 "1.Introduction" / "etc.Then" / "a.b" 这类普通文字会被误判成链接。
+const TLD_ALLOW = new Set(['com','cn','net','org','io','co','me','dev','app','gov','edu','info','xyz','top','vip','cc','tv','ai','so','biz','pro','site','online','shop','club','work','link','live','fun','store','tech','space','website','email','wiki','blog','news','art','design','group','ltd','plus','run','fit','ren','red','wang','xin','中国','公司','网络']);
+function normalizeHref(m) {
+  return /^[a-z]+:\/\//i.test(m) ? m : 'https://' + m;
+}
+// 是否应拒绝把这段匹配当作链接
+// 关键：带 http(s):// 或 www. 前缀的，一律是网址，绝不能因为路径以 .md/.pdf/.js 结尾就毙掉
+// （否则 https://github.com/a/b/README.md、cdn.jsdelivr.net/npm/vue.js 都不再是链接）。
+function denyAsUrl(m) {
+  if (/^(?:https?:\/\/|www\.)/i.test(m)) return false;
+  const host = m.split('/')[0];                 // 只看 host 段，不看路径
+  const tld = host.split('.').pop().toLowerCase();
+  if (FILE_EXT_DENY.has(tld)) return true;      // README.md / file.txt 等文件名
+  if (!TLD_ALLOW.has(tld)) return true;         // 裸域名必须是已知 TLD
+  return false;
+}
 function linkifyEditor(opts) {
   const keepSelection = opts ? opts.keepSelection !== false : true;
   if (isLinkifying) return;
   isLinkifying = true;
   try {
-    const urlTest = /(?:https?|file|ftp):\/\/[^\s<]+/;
-    const urlRegex = /((?:https?|file|ftp):\/\/[^\s<]+)/g;
+    // 方案 URL、www. 域名、裸域名（带常见 TLD）均视为网址
+    // 前置 (?<![@\w.-]) 排除邮箱域名段（x@y.com）和版本号中段（v1.2.3）被单独截出来当链接
+    const urlTest = /(?:https?:\/\/|www\.)[^\s<]+|(?:[a-z0-9-]+\.)+[a-z]{2,}/i;
+    const urlRegex = /(?<![@\w.-])((?:https?:\/\/|www\.)[^\s<]+|(?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/[^\s<]*)?)/gi;
     const longWordTest = /\S{15,}/;
     const phoneTest = /(?<!\d)1[3-9]\d{9}(?!\d)/;
     const phoneRegex = /(?<!\d)(1[3-9]\d{9})(?!\d)/g;
     const breakSeparators = /([\/.?:=&#_%-])/g;
+
+    // 1) 先把所有自动生成的 <a data-url="1"> 拆回纯文本，再统一重新识别。
+    //    修复：a) 链接文字被改动后 href 陈旧（旧 walker 直接跳过 <a> 内部文本，href 一旦生成永不更新）；
+    //          b) 链接中间回车拆分、再合并回来时结尾段(def)丢失（测试 C1）；
+    //          c) 跨文本节点边界的 URL 拼接（逐字输入 / 合并后段落）。
+    //    只拆自动链接（data-url="1"），手动创建的链接不受影响。
+    const autoLinks = Array.from(editor.querySelectorAll('a[data-url="1"]'));
+    autoLinks.forEach(a => {
+      const t = document.createTextNode(a.textContent.replace(/\u200B/g, ''));
+      a.replaceWith(t);
+    });
+    // 2) 把浏览器在块合并/格式保留时自动插入的纯 <span> 包装层拍平（应用本身从不创建 span，
+    //    这些 span 无语义）。否则像上方 C1 场景里 "def end" 被包进 <span> 后，无法与前面的
+    //    URL 文本相邻合并，导致结尾段丢失。只拍平 <span>，不动 <s>(删除线) 等语义标签。
+    const straySpans = Array.from(editor.querySelectorAll('span'));
+    straySpans.forEach(s => {
+      while (s.firstChild) s.parentNode.insertBefore(s.firstChild, s);
+      s.remove();
+    });
+    // 3) 合并相邻文本节点，消除因拆链接/编辑产生的文本边界，让跨节点的 URL 片段能被一次正则匹配到。
+    editor.normalize();
+
     const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT, {
       acceptNode: node => {
+        // 手动链接（无 data-url）内部不处理，避免破坏用户手动设置的链接
         let p = node.parentNode;
         while (p && p !== editor) {
           if (p.tagName === 'A') return NodeFilter.FILTER_REJECT;
@@ -910,20 +959,26 @@ function linkifyEditor(opts) {
     while (n = walker.nextNode()) targets.push(n);
     if (targets.length === 0) return;
     const sel = window.getSelection();
-    // 用字符偏移保存选区，而非 cloneRange：linkify 会 replaceWith 替换文本节点，
+    // 用"块内字符偏移"保存选区，而非 cloneRange：linkify 会 replaceWith 替换文本节点，
     // 旧 Range 指向的节点被 detach 后恢复必失败、选区丢失（见 BUG_CHECKLIST A7）。
-    let savedOffsets = null;
+    // 块内作用域可避免跨块边界时把光标放到上一行末尾（bug 3：回车后光标跳到上一行右侧）。
+    let saved = null;
     if (keepSelection && sel.rangeCount > 0) {
       const r = sel.getRangeAt(0);
       if (editor.contains(r.commonAncestorContainer)) {
-        try { savedOffsets = saveSelectionOffsets(editor, r); } catch (e) {}
+        try { saved = saveSelectionBlocked(editor, r); } catch (e) {}
       }
     }
     for (const textNode of targets) {
+      // 清理旧断行符，交由本次重新生成（避免 href 里混入 \u200B）
+      textNode.nodeValue = textNode.nodeValue.replace(/\u200B/g, '');
       const text = textNode.nodeValue;
       const span = document.createElement('span');
       span.innerHTML = text
-        .replace(urlRegex, (m) => '<a href="' + m + '" target="_blank" rel="noopener noreferrer">' + m.replace(breakSeparators, '$1\u200B') + '</a>')
+        .replace(urlRegex, m => {
+          if (denyAsUrl(m)) return m; // 文件名/非域名的普通文字，保持纯文本
+          return '<a href="' + normalizeHref(m) + '" target="_blank" rel="noopener noreferrer" data-url="1">' + m.replace(breakSeparators, '$1\u200B') + '</a>';
+        })
         .replace(phoneRegex, '<a href="tel:$1">$1</a>');
       const tw = document.createTreeWalker(span, NodeFilter.SHOW_TEXT, {
         acceptNode: node => {
@@ -944,10 +999,23 @@ function linkifyEditor(opts) {
       });
       textNode.replaceWith(...span.childNodes);
     }
-    if (savedOffsets && document.activeElement === editor) {
+    if (saved && document.activeElement === editor) {
       try {
-        const newRange = restoreSelectionOffsets(editor, savedOffsets.start, savedOffsets.end);
-        if (newRange) { sel.removeAllRanges(); sel.addRange(newRange); }
+        const newRange = restoreSelectionInBlock(editor, saved);
+        if (newRange) {
+          sel.removeAllRanges();
+          sel.addRange(newRange);
+        } else {
+          // 兜底：把光标放到起始块末尾，保证光标不消失（bug 1）
+          const fb = placeInBlock(saved.startBlock, 1e9);
+          if (fb) {
+            const r = document.createRange();
+            r.setStart(fb.node, fb.offset);
+            r.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(r);
+          }
+        }
       } catch (e) {}
     }
   } finally { isLinkifying = false; }
@@ -965,23 +1033,195 @@ function isBlankBlock(n) {
   }
   return false;
 }
+// 程序化派发 input 时，若本次不希望触发首尾空行清理，先置为 true（一次性）
+let skipCleanupOnce = false;
+// 光标是否落在某节点内 —— 用于保护"用户主动创建/正在编辑的空行"不被 cleanup 吞掉
+function caretInsideNode(n) {
+  if (!n) return false;
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return false;
+  const c = sel.getRangeAt(0).commonAncestorContainer;
+  return n === c || (n.nodeType === 1 && n.contains(c));
+}
+// 光标是否落在节点 n 之后（即 n 在光标前面）。
+// 删 n 会让光标前面的内容上移、吞掉用户有意保留的首行空块（backspace 把后续行合并上来后，
+// 最前面的孤立空行不应被 cleanup 误删，否则内容"上移"成一行）。
+function caretAfterNode(n) {
+  if (!n) return false;
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return false;
+  const c = sel.getRangeAt(0).startContainer;
+  if (n === c || (n.nodeType === 1 && n.contains(c))) return false;
+  return (n.compareDocumentPosition(c) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+}
 function cleanupLeadingTrailingBreaks() {
-  while (editor.firstChild && isBlankBlock(editor.firstChild) && editor.firstChild.nextSibling) editor.firstChild.remove();
-  while (editor.lastChild && isBlankBlock(editor.lastChild) && editor.lastChild.previousSibling) editor.lastChild.remove();
+  // 只清理"删除多行选区"后残留的首/尾孤立空行（E3）。
+  // 【重要】本函数只能在删除类输入后调用（见 input 监听器的 inputType 门控）：
+  // 若每次 input 都跑，会把用户按回车刚创建的空行立刻删掉 → 表现为"按回车没反应"(bug 4)。
+  // 额外用 caretInsideNode 保护光标所在的空块，避免删掉用户正要写字的那一行。
+  while (editor.firstChild && isBlankBlock(editor.firstChild) && editor.firstChild.nextSibling && !caretInsideNode(editor.firstChild) && !caretAfterNode(editor.firstChild)) editor.firstChild.remove();
+  while (editor.lastChild && isBlankBlock(editor.lastChild) && editor.lastChild.previousSibling && !caretInsideNode(editor.lastChild)) editor.lastChild.remove();
   let f = editor.firstChild;
   if (f && f.nodeType === 3 && f.nodeValue.startsWith('\n') && f.nodeValue.length > 1) f.nodeValue = f.nodeValue.slice(1);
   let l = editor.lastChild;
   if (l && l.nodeType === 3 && l.nodeValue.endsWith('\n') && l.nodeValue.length > 1) l.nodeValue = l.nodeValue.slice(0, -1);
 }
 
-editor.addEventListener('input', () => {
+editor.addEventListener('input', (e) => {
   if (busy) return;
-  cleanupLeadingTrailingBreaks();
+  // 只有删除类输入（以及粘贴/程序化派发）才做首尾空行清理。
+  // 插入类输入尤其是回车(insertParagraph/insertLineBreak)绝不清理，
+  // 否则刚换出来的空行会被立刻删掉，用户看到的就是"回车无反应"(bug 4)。
+  const it = (e && e.inputType) || '';
+  const needCleanup = it.indexOf('delete') === 0 || it === 'insertFromPaste' ||
+    it === 'historyUndo' || it === 'historyRedo' || (it === '' && !skipCleanupOnce);
+  skipCleanupOnce = false;
+  if (needCleanup) cleanupLeadingTrailingBreaks();
   clearTimeout(saveTimer);
   saveTimer = setTimeout(saveLocal, 800);
   clearTimeout(linkifyTimer);
   linkifyTimer = setTimeout(linkifyEditor, 500);
 });
+
+// ── 回车处理：空块/空编辑器也能正常换行 ─────────────────────────────
+// contenteditable 在空块（仅 <br>）里按回车常常"什么都不做"，无法连续空行。
+// 仅在当前块为空时拦截并手动插入一个新空块；非空块交给浏览器默认换行
+// （linkify 的块内选区恢复会把光标留在正确位置，见 bug 3 修复）。
+function currentBlock(node) {
+  let n = node;
+  while (n && n !== editor) {
+    if (n.nodeType === 1 && (n.tagName === 'DIV' || n.tagName === 'P')) return n;
+    n = n.parentNode;
+  }
+  return editor;
+}
+function isBlockEmpty(block) {
+  if (block === editor) {
+    return editor.textContent.replace(/\u200B/g, '').trim() === '' && !editor.querySelector('img,a,s');
+  }
+  if (block.querySelector('img')) return false;
+  return block.textContent.replace(/\u200B/g, '').trim() === '';
+}
+function placeCaretInBlock(block) {
+  const sel = window.getSelection();
+  const r = document.createRange();
+  r.setStart(block, 0);
+  r.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(r);
+}
+// 在链接文本中间回车时，insertParagraph 会把一个 <a> 劈成两个 href 相同的链接，
+// 于是第二行的链接文字与 href 对不上（显示 "def"，href 却是完整 URL），
+// 且在其中间继续打字会被吞进链接里。检测到"相邻同 href 的拆分链接"就展平成纯文本，
+// 交给 500ms 后的 linkify 按新文本重建正确的链接。
+function flattenSplitLink() {
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return;
+  const blk = currentBlock(sel.getRangeAt(0).startContainer);
+  if (!blk || blk === editor) return;
+  const head = blk.firstChild;
+  if (!head || head.nodeType !== 1 || head.tagName !== 'A' || !head.dataset || head.dataset.url !== '1') return;
+  const href = head.getAttribute('href');
+  // 找前一段：可能是上一个块的最后一个子节点，也可能是同级紧邻的 <a>（首行不带 div 时）
+  let prevA = null;
+  const prev = blk.previousSibling;
+  if (prev && prev.nodeType === 1) {
+    if (prev.tagName === 'A') prevA = prev;
+    else {
+      const lc = prev.lastChild;
+      if (lc && lc.nodeType === 1 && lc.tagName === 'A') prevA = lc;
+    }
+  }
+  if (!prevA || !prevA.dataset || prevA.dataset.url !== '1' || prevA.getAttribute('href') !== href) return;
+  // 确认是拆分产物才动手，避免误伤两条恰好同 href 的独立链接
+  const t1 = document.createTextNode(prevA.textContent.replace(/\u200B/g, ''));
+  prevA.replaceWith(t1);
+  const t2 = document.createTextNode(head.textContent.replace(/\u200B/g, ''));
+  head.replaceWith(t2);
+  const r = document.createRange();
+  r.setStart(t2, 0);
+  r.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(r);
+}
+editor.addEventListener('keydown', e => {
+  if (e.key !== 'Enter' || e.isComposing || e.metaKey || e.ctrlKey) return;
+  if (e.shiftKey) return; // 软换行 <br>，交给浏览器
+  e.preventDefault();
+  // 用 insertParagraph 可靠换行：contenteditable 内部换行本就走它，能正确处理
+  // 空行、行内元素(<a>/<s>)拆分、跨块边界，避免"空编辑器/行尾按回车无反应"(bug 4)。
+  // 它会派发带 inputType='insertParagraph' 的原生 input 事件，故这里不再手动 dispatch，
+  // 否则 inputType 为空会误触发首尾空行清理，把刚换出来的行删掉。
+  let ok = false;
+  try { ok = document.execCommand('insertParagraph'); } catch (err) {}
+  if (ok) { try { flattenSplitLink(); } catch (err) {} }
+  if (!ok) {
+    // 兜底：手动插入空块（极少数不支持 execCommand 的环境）
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return;
+    const block = currentBlock(sel.getRangeAt(0).startContainer);
+    const nb = document.createElement('div');
+    nb.innerHTML = '<br>';
+    if (block === editor) editor.appendChild(nb); else block.after(nb);
+    placeCaretInBlock(nb);
+    skipCleanupOnce = true;
+    editor.dispatchEvent(new Event('input'));
+  }
+});
+
+// ── 块内偏移保存/恢复（linkify 专用）──────────────────────────────────
+// 以"块元素（DIV/P 或编辑器根）"为作用域保存/恢复光标，避免全局偏移在跨块边界时
+// 把光标落到上一行末尾（bug 3：回车后光标跳到上一行右侧）。块元素在 linkify 重建
+// 文本节点时引用不变，故可作为稳定的恢复锚点。
+function blockOf(node, root) {
+  let n = node;
+  while (n && n !== root) {
+    if (n.nodeType === 1 && (n.tagName === 'DIV' || n.tagName === 'P')) return n;
+    n = n.parentNode;
+  }
+  return root;
+}
+function localOffsetInBlock(block, container, offset) {
+  const pre = document.createRange();
+  pre.selectNodeContents(block);
+  try { pre.setEnd(container, offset); } catch (e) { return 0; }
+  return visibleLen(pre.toString());
+}
+function saveSelectionBlocked(root, range) {
+  const sb = blockOf(range.startContainer, root);
+  const eb = blockOf(range.endContainer, root);
+  return {
+    startBlock: sb, endBlock: eb,
+    start: localOffsetInBlock(sb, range.startContainer, range.startOffset),
+    end: localOffsetInBlock(eb, range.endContainer, range.endOffset)
+  };
+}
+function placeInBlock(block, localOff) {
+  const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
+  let pos = 0, node = null, off = 0;
+  while (walker.nextNode()) {
+    const n = walker.currentNode;
+    const vlen = visibleLen(n.nodeValue);
+    if (pos + vlen >= localOff) {
+      node = n;
+      off = visibleToRealOffset(n, localOff - pos);
+      break;
+    }
+    pos += vlen;
+  }
+  if (node) return { node, offset: off };
+  if (block.nodeType === 1) return { node: block, offset: 0 };
+  return null;
+}
+function restoreSelectionInBlock(root, saved) {
+  const s = placeInBlock(saved.startBlock, saved.start);
+  const e = placeInBlock(saved.endBlock, saved.end);
+  if (!s || !e) return null;
+  const r = document.createRange();
+  try { r.setStart(s.node, s.offset); r.setEnd(e.node, e.offset); }
+  catch (err) { return null; }
+  return r;
+}
 
 async function saveLocal() {
   const html = editor.innerHTML;

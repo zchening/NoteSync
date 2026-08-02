@@ -329,6 +329,95 @@
 
 ---
 
+### F1 | 按回车没反应：cleanup 把刚换出来的空行立刻删掉
+- **版本**: v5.3
+- **现象**: 没输入任何字符时按回车期望换行，结果毫无反应；在已有文字行尾按回车同样不换行
+- **根因**: `input` 监听器**每次**都调 `cleanupLeadingTrailingBreaks()`。回车（无论浏览器默认行为还是 `execCommand('insertParagraph')`）产生的新块是"尾部空块且有前兄弟"，正好命中 cleanup 的删除条件，在同一个 input 事件里被立刻移除，DOM 回到回车前的状态。表现为"回车无效"。实测 `execCommand` 返回 `true` 但 `innerHTML` 不变，即是被 cleanup 回滚
+- **修复**:
+  1. `input` 监听器改用 `e.inputType` 门控：只有**删除类**输入（`delete*`）以及 `insertFromPaste` / `historyUndo` / `historyRedo` / 程序化派发（空 inputType）才调 cleanup；插入类尤其 `insertParagraph`/`insertLineBreak` 一律不清理
+  2. cleanup 内新增 `caretInsideNode()` 守卫，不删光标所在的空块（保护用户主动创建、正准备输入的空行）
+  3. 新增 Enter keydown 处理器：`preventDefault()` + `execCommand('insertParagraph')`（contenteditable 内部换行本就走它，能正确处理空块/行内元素拆分/跨块边界）；仅在 `execCommand` 返回 false 时走手动兜底，兜底路径置 `skipCleanupOnce = true` 后再 dispatch input
+  4. `execCommand('defaultParagraphSeparator', false, 'div')`，与 cleanup/isBlankBlock 对块结构的预期一致
+- **关联文件**: index.html → input 事件 / cleanupLeadingTrailingBreaks() / caretInsideNode() / keydown Enter 处理器
+- **核对要点**:
+  - [ ] 空编辑器连按两次回车 → 出现空行，光标不消失，空行上能正常输入
+  - [ ] 有文字时行尾按回车 → 真的换行（`hello` → `hello<div><br></div>`）
+  - [ ] 文字 + 回车 + 回车 + 输入 → 中间空行被保留（共 3 行）
+  - [ ] **E3 不回归**：删除多行选区后仍无首/尾残留空行，光标停第一行最左侧
+  - [ ] 用户主动创建的空行，在别处删字符后不被吃掉
+  - [ ] 改 cleanup 触发条件时，务必确认没有漏掉某个删除类 inputType（否则残留空行回归）
+
+### F2 | 裸域名网址不自动识别成可点击链接
+- **版本**: v5.3
+- **现象**: 复制粘贴 / 输入的网址没有变成可点击状态
+- **根因**: `linkifyEditor()` 的 URL 正则只匹配带方案前缀的 `(?:https?|file|ftp)://...`。日常复制的 `www.baidu.com`、`example.com` 这类裸域名不含 `://`，`urlTest.test()` 直接为 false，TreeWalker 连节点都不接受，自然不链接
+- **修复**: 扩展 URL 识别支持裸域名（`www.` 前缀或"域名.顶级域"形式），href 自动补 `http://`；同时加文件扩展名黑名单，避免 `README.md`、`file.txt` 这类被误判成链接；并把 linkify 反复运行时被拆成多段的同一条 URL 合并回一个 `<a>`
+- **关联文件**: index.html → linkifyEditor()
+- **核对要点**:
+  - [ ] `www.baidu.com` / `example.com` 自动变链接，href 补上 `http://`
+  - [ ] `README.md`、`file.txt`、`3.14`、`v1.2.3` 不被误识别成链接
+  - [ ] 逐字输入 `http://www.baidu.com` 只生成**一个** `<a>`，不拆成两段
+  - [ ] 已是链接的文本不被重复包裹
+
+### F3 | 回车后光标瞬间跳到上一行末尾
+- **版本**: v5.3
+- **现象**: 输入"一二三四五六"，把光标移到"四"前按回车。光标先正确停在"四"左侧，随即快速跳到"三"右侧（上一行末尾）
+- **根因**: 回车后 500ms 防抖的 `linkifyEditor()` 用**全局字符偏移**（`saveSelectionOffsets`/`restoreSelectionOffsets`，以 editor 根为作用域）保存/恢复光标。回车把内容拆成两个块后，"第二行开头（偏移 3）"与"第一行末尾（偏移 3）"在全局偏移上完全等价，恢复时落到了上一行末尾。纯文本不复现，因为没有 URL/长词就不会触发 linkify 重建节点
+- **修复**: 新增 `blockOf()` 等块内偏移函数，linkify 改为以**块元素**（DIV/P 或编辑器根）为锚点保存/恢复光标。块元素在 linkify 重建文本节点时引用不变，可作为稳定锚点，跨块边界不再歧义
+- **关联文件**: index.html → linkifyEditor() / blockOf()
+- **核对要点**:
+  - [ ] "一二三四五六 + URL"在"四"前回车 → 光标停"四"左侧，等 1 秒后仍不跳走
+  - [ ] 含多条 URL 的行中间回车再输入 → 光标不丢、字落在正确位置
+  - [ ] 删除线（A1-A7）仍正常：这套偏移机制与删除线共用，改动后需回归
+
+### F4 | 光标偶发消失（linkify 重建 DOM 后选区恢复失败）
+- **版本**: v5.3
+- **现象**: 编辑过程中光标偶尔整体消失，无法继续输入（与 E1 的远端覆盖不同，本条由本机 linkify 触发）
+- **根因**: linkify 用 `replaceWith` 重排文本节点、给长词插 `\u200B`，全局偏移恢复在越界/跨块时返回 null，选区未恢复即丢失
+- **修复**: 同 F3 改块内锚点恢复，并在恢复失败时兜底把光标放回原块，不留空选区
+- **关联文件**: index.html → linkifyEditor()
+- **核对要点**:
+  - [ ] 输入长 URL 后光标仍在
+  - [ ] 回车 + 继续输入，光标稳定不丢
+  - [ ] 页面无 JS 报错（`pageerror`）
+
+### F5 | 链接文字改动后 href 陈旧 / 链接中间回车拆分再合并结尾段丢失
+- **版本**: v5.4
+- **现象**:
+  1. 一个自动链接（如 `http://example.com/abcdef`）的文字被改动后，href 仍是旧值、不随之刷新（stale href）；
+  2. 在链接**中间**回车把它拆成两行，再按 Backspace 合并回来时，结尾段（如 `def`）丢失，只剩前半段 `http://example.com/abc` 且 href 不对
+- **根因**: `linkifyEditor()` 的 TreeWalker 在父节点是 `<a>` 时直接 `FILTER_REJECT`，导致**已生成的 `<a>` 内部文本永不被重新扫描**。于是：a) 链接文字改了、href 永远陈旧；b) 回车拆分后 Chromium 在合并时把后半段包进一个无语义 `<span>`（带 `background-color:transparent` 等重置样式），而 `normalize()` 只合并相邻*文本*节点、跨不过 `<span>`，URL 前后两段无法拼回
+- **修复**: 在 linkify 开头统一"先拆后建"——
+  1. 先把所有自动链接 `<a data-url="1">` 拆回纯文本（只拆自动链接，手动链接不受影响）；
+  2. 再把 Chromium 自动插入的纯 `<span>` 包装层拍平（应用本身从不创建 span，这些无语义）；
+  3. `editor.normalize()` 合并相邻文本节点；
+  4. 最后从文本重新识别 URL / 手机号，重新生成 `<a>`（href 完全由当前文本推导，永不过时）。
+  旧"合并紧邻前后 `<a>`"逻辑因此冗余，已删除（由 normalize 统一处理跨节点拼接）
+- **关联文件**: index.html → linkifyEditor()
+- **核对要点**:
+  - [ ] 改长链接文字 → 重新 linkify 后 href 与文字一致（stale-href 修复）
+  - [ ] 链接中间回车 → 拆出的两行各自 `<a>` 的 href 与文本一致（不出现 `def` 配 `http://...abc`）
+  - [ ] 拆出后按 Backspace 合并 → 还原成单个 `<a>`，href=完整 URL（C1 场景）
+  - [ ] 删除线 B3/B4 后再 linkify 不破坏内容（`<s>` 不被拍平）
+  - [ ] 邮箱/版本号/裸文件名仍不误判（P1 不受影响）
+  - [ ] 逐字输入 `http://www.baidu.com` 仍只生成一个 `<a>`
+
+### F6 | backspace 合并后续行时，首行空块被 cleanup 误删（内容上移）
+- **版本**: v5.5
+- **现象**: 笔记为 `第一行:""` / `第二行:"一"` / `第三行:"二"`，光标置于第三行"二"左侧按 Backspace。
+  - **期望**: 第三行合并到第二行 → `第一行:""` / `第二行:"一二"`
+  - **实际**: 首行空块被删，内容"上移"成 `第一行:"一二"`
+- **根因**: `cleanupLeadingTrailingBreaks()` 首部删除分支只检查 `caretInsideNode(首部空块)`（光标是否落在该空块内）。本场景 backspace 先把第三行"二"合并进第二行（Chromium 还会把"二"包进一个无语义 `<span style="background-color:transparent">`），首行空块仍在最前，但光标此时落在合并后的第二行内（不在首行空块内）→ `caretInsideNode` 拦不住 → 首行空块被误删，后续内容整体"上移"一行
+- **修复**: 新增 `caretAfterNode(n)` 守卫（光标落在 n 之后，即 n 在光标前面）。首部删除分支改为 `!caretInsideNode(首部) && !caretAfterNode(首部)`——只要光标在被删空块之后就不删，避免吞掉用户有意保留的首行空行。尾部分支保持不动（仍只护光标所在末尾块）
+- **关联文件**: index.html → cleanupLeadingTrailingBreaks() / caretAfterNode()
+- **核对要点**:
+  - [ ] 首行空块 + 任意后续行，在后续行行首按 Backspace 合并 → 首行空块保留（不丢、不上移）
+  - [ ] 用户主动创建的空行，在别处删字后仍保留（E3-4 不回归）
+  - [ ] 删除多行选区后无残留多余空行（E3-1/2/3 不回归）
+  - [ ] 仍有意删末尾多余空行时不误留（尾部逻辑未动）
+
+---
+
 ## 版本与 bug 对应速查
 
 | 版本 | 涉及 bug 编号 |
@@ -340,3 +429,6 @@
 | v5.0 | B1, B2, C1, C2, C3 |
 | v5.1 | A5, A6, A7, B3, B4, B5, B6, B7, D3 |
 | v5.2 | E1, E2, E3 |
+| v5.3 | F1, F2, F3, F4 |
+| v5.4 | F5 |
+| v5.5 | F6 |

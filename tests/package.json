@@ -1,0 +1,15 @@
+{
+  "name": "notesync-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "NoteSync 自动化测试：jsdom 单元/DOM 测试 + Playwright E2E，固化 A/B 类核心路径",
+  "scripts": {
+    "test": "node --test unit/*.test.js",
+    "test:e2e": "node --test e2e/*.test.js",
+    "test:all": "node --test unit/*.test.js && node --test e2e/*.test.js"
+  },
+  "devDependencies": {
+    "jsdom": "^24.1.0",
+    "playwright": "^1.44.0"
+  }
+}
