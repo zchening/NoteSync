@@ -953,16 +953,25 @@ function linkifyEditor(opts) {
   } finally { isLinkifying = false; }
 }
 
-// 删除多行选区后，contenteditable 常残留首/尾孤立换行（<br> 或纯 \n 文本节点），
+// 删除多行选区后，contenteditable 常残留首/尾空白块（<br>、空 <div>、纯空白文本节点），
 // 导致光标落到第二行、或末尾多一个空行。仅在“存在后续内容”时清理，
 // 避免误删空白编辑器的唯一 <br> 使光标消失（见 BUG_CHECKLIST E3）。
+function isBlankBlock(n) {
+  if (!n) return false;
+  if (n.nodeType === 3) return n.nodeValue.length > 0 && n.nodeValue.replace(/\s/g, '').length === 0;
+  if (n.nodeType === 1) {
+    if (n.tagName === 'BR') return true;
+    if (n.tagName === 'DIV') return (n.textContent || '').replace(/\s/g, '').length === 0;
+  }
+  return false;
+}
 function cleanupLeadingTrailingBreaks() {
-  let first = editor.firstChild;
-  if (first && first.nodeType === 1 && first.tagName === 'BR' && first.nextSibling) first.remove();
-  else if (first && first.nodeType === 3 && first.nodeValue.startsWith('\n') && first.nodeValue.length > 1) first.nodeValue = first.nodeValue.slice(1);
-  let last = editor.lastChild;
-  if (last && last.nodeType === 1 && last.tagName === 'BR' && last.previousSibling) last.remove();
-  else if (last && last.nodeType === 3 && last.nodeValue.endsWith('\n') && last.nodeValue.length > 1) last.nodeValue = last.nodeValue.slice(0, -1);
+  while (editor.firstChild && isBlankBlock(editor.firstChild) && editor.firstChild.nextSibling) editor.firstChild.remove();
+  while (editor.lastChild && isBlankBlock(editor.lastChild) && editor.lastChild.previousSibling) editor.lastChild.remove();
+  let f = editor.firstChild;
+  if (f && f.nodeType === 3 && f.nodeValue.startsWith('\n') && f.nodeValue.length > 1) f.nodeValue = f.nodeValue.slice(1);
+  let l = editor.lastChild;
+  if (l && l.nodeType === 3 && l.nodeValue.endsWith('\n') && l.nodeValue.length > 1) l.nodeValue = l.nodeValue.slice(0, -1);
 }
 
 editor.addEventListener('input', () => {
