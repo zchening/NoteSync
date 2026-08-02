@@ -170,7 +170,7 @@ flowchart TD
 | PWA | manifest.json + Service Worker | 可安装到主屏幕，离线可打开 |
 | 后端 | Node.js | 零依赖，单文件 `server.js` |
 | 存储 | JSON 文件 | 每笔记独立 `data/notes/{id}.json` |
-| 反代 | Caddy | HTTP-only（端口 80），HTTP/1.1 |
+| 反代 | nginx | HTTP-only（端口 80），HTTP/1.1 |
 | 隧道 | Cloudflare Tunnel | 出站隧道绕过运营商 SNI 干扰，Cloudflare 负责 HTTPS |
 | 进程管理 | nssm | Windows 服务，开机自启 |
 
@@ -178,14 +178,14 @@ flowchart TD
 flowchart TD
     Browser[浏览器] -->|HTTPS| CF[Cloudflare 边缘]
     CF -->|加密隧道| Tunneld[cloudflared 出站]
-    Tunneld -->|HTTP :80| Caddy[Caddy :80]
-    Caddy -->|反代| Node[Node.js :8080]
+    Tunneld -->|HTTP :80| Nginx[nginx :80]
+    Nginx -->|反代| Node[Node.js :8080]
     Node -->|读写| Storage[(data/notes/*.json)]
     Browser -->|加解密| Crypto[Web Crypto API]
     style Browser fill:#bbf,stroke:#333
     style CF fill:#cfc,stroke:#333
     style Tunneld fill:#ffd,stroke:#333
-    style Caddy fill:#cfc,stroke:#333
+    style Nginx fill:#cfc,stroke:#333
     style Node fill:#fcc,stroke:#333
     style Storage fill:#f9f,stroke:#333
     style Crypto fill:#bbf,stroke:#333
@@ -269,10 +269,10 @@ bash install.sh
 
 ### Windows（手动）
 
-1. 安装 [Node.js 20+](https://nodejs.org/) 和 [Caddy](https://caddyserver.com/docs/install)
-2. 部署 `server.js`、`index.html`、`Caddyfile` 到目标目录
-3. 用 [nssm](https://nssm.cc/) 注册 Node 和 Caddy 为 Windows 服务
-4. Caddy 配置为 HTTP-only（端口 80），TLS 由 Cloudflare 负责
+1. 安装 [Node.js 20+](https://nodejs.org/) 和 [nginx](https://nginx.org/en/docs/windows.html)
+2. 部署 `server.js`、`index.html`、`nginx.conf`（或站点配置）到目标目录
+3. 用 [nssm](https://nssm.cc/) 注册 Node 为 Windows 服务（服务名 `NoteSync`）
+4. nginx 配置为 HTTP-only（端口 80），TLS 由 Cloudflare 负责
 5. 安装 [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) 并创建 Cloudflare Tunnel
 6. DNS 创建 CNAME 记录指向 `{tunnel-id}.cfargotunnel.com`（橙云代理）
 
