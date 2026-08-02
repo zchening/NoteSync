@@ -7,6 +7,13 @@
 
 ## 使用方法
 
+> **第 0 步（必做，先于人工核对）：先跑自动化测试。**
+> 仓库 `tests/` 目录已固化 A/B 类核心路径用例，改完代码、提交前必须全绿：
+> - jsdom 单元/DOM 测试（A1-A7 核心）：`cd tests && npm test`
+> - Playwright 真实浏览器 E2E（A7 选区+500ms linkify、B3 不刷新、B6 overflow 恢复）：`cd tests && npm run test:e2e`
+> 自动化测试覆盖了人工最易漏的"删除线 DOM 手术 / 选区偏移 / 导出"回归点，比人工核对更可靠。
+> 自动化全绿后，再进入下面的人工/子代理清单核对。
+
 1. 改完代码后，测试子代理的第一步是读取本文件
 2. 根据修改的功能，找到对应分类（A/B/C/D）
 3. 逐项核对每个 bug 的「核对要点」复选框
@@ -21,6 +28,7 @@
 | B | 导出图片 | 7 | 修改 exportImage / exportImgBtn 事件 / html2canvas 调用 / 临时 div 渲染 |
 | C | 缓存与图标 | 3 | 修改 favicon / manifest.json / Cache-Control 头 |
 | D | PWA 与移动端 | 3 | 修改 manifest.json / 触摸事件 / 夜间模式 CSS |
+| E | 选区与同步 | 3 | 修改 editor 输入/粘贴处理 / linkifyEditor / saveSelectionOffsets·restoreSelectionOffsets / cleanupLeadingTrailingBreaks / insertNodeAtCaret / 删除逻辑 / poll 远端合并 |
 
 ---
 
@@ -275,6 +283,11 @@
 ---
 
 ## E. 选区与同步
+
+> **2026-8-2 复现/状态记录**：用户于备案前在线上 `note.xuyinji.com.cn/cs1`（口令 1）复现了 E1/E2/E3 全部三条，并于 15:12 要求"记录、待备案通过开解析后再修"。
+> 但经核对项目日志：这三条**已在今日 13:27 修复并部署上线**（commit 132332c，本地 Playwright 验证 + 公网 `https://note.xuyinji.com.cn/` 含修复标记均通过）。`index.html` 源码修复函数为 `insertNodeAtCaret`（666 行）、`cleanupLeadingTrailingBreaks`（968 行，input 内调用）、`poll` 内 `restoreSelectionOffsets`（1033 行）+ `dirty` 守卫（1009-1012 行）。
+> 故用户看到的应是 **13:27 之前的旧版本**现象，或浏览器/CDN 缓存未刷新（server.js 已发 no-cache，但 Cloudflare/nginx 层可能仍缓存）。
+> 结论：**无需再写代码**。备案通过→重新开启域名解析后的动作是「硬刷新（绕过缓存）验证 v5.2 修复仍在 → 若仍复现，再排查回归/缓存，必要时重部署当前 index.html」。域名解析恢复前无法线上验证。
 
 ### E1 | 光标消失：聚焦时远端更新覆盖编辑器导致光标丢失
 - **版本**: v5.2
