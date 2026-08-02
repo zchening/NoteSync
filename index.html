@@ -40,6 +40,8 @@
   header button{display:flex;align-items:center;justify-content:center;width:31px;height:31px;color:var(--muted);background:none;border:0;border-radius:8px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:color .2s,background .2s}
   header button:hover{color:var(--fg);background:var(--hover)}
   header button svg{width:17px;height:17px;pointer-events:none}
+  #versionToast{position:fixed;top:54px;left:50%;transform:translateX(-50%);z-index:60;padding:7px 14px;font-size:12px;letter-spacing:.04em;color:var(--fg);background:var(--hover);border:1px solid var(--line);border-radius:20px;opacity:0;pointer-events:none;transition:opacity .35s;box-shadow:0 4px 16px rgba(0,0,0,.12)}
+  #versionToast.show{opacity:1}
   @media (max-width:560px){ header .brand b{display:none} }
 
   /* ── 编辑器 ─────────────────────────── */
@@ -174,6 +176,10 @@ const FAIL_API = '/api/fail/' + encodeURIComponent(noteId);
 const KEY_STORE = 'notesync_key_' + noteId;
 const PBKDF2_ITER = 200000;
 const FAIL_LIMIT = 10;
+
+// --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
+const APP_VERSION = '5.6';
+const BUILD_DATE = '2026-08-03';
 
 const $ = s => document.querySelector(s);
 const editor = $('#editor'), mask = $('#mask'), pw = $('#pw'), err = $('#err');
@@ -550,6 +556,29 @@ function setStatus(on, text) { statusEl.className = 'dot' + (on ? ' on' : ''); s
 function fmtRetry(sec) { const m = Math.ceil(sec / 60); return m + ' 分钟'; }
 function showUploadStatus(text) { uploadStatus.textContent = text; uploadStatus.classList.add('show'); }
 function hideUploadStatus() { uploadStatus.classList.remove('show'); }
+
+// --- 版本号彩蛋：连点标题栏 logo 7 次浮出气泡；?about 常显；加载即 console 日志 ---
+(function setupVersionBadge() {
+  const brandIcon = document.querySelector('header .brand svg');
+  let tapCount = 0, tapTimer = null, toastEl = null;
+  function showVersionToast(sticky) {
+    if (!toastEl) { toastEl = document.createElement('div'); toastEl.id = 'versionToast'; document.body.appendChild(toastEl); }
+    toastEl.textContent = 'NoteSync V' + APP_VERSION + ' · 构建 ' + BUILD_DATE;
+    toastEl.classList.add('show');
+    clearTimeout(toastEl._hide);
+    if (!sticky) toastEl._hide = setTimeout(() => toastEl.classList.remove('show'), 3000);
+  }
+  if (brandIcon) {
+    brandIcon.addEventListener('click', () => {
+      tapCount++;
+      clearTimeout(tapTimer);
+      tapTimer = setTimeout(() => { tapCount = 0; }, 2000);
+      if (tapCount >= 7) { tapCount = 0; clearTimeout(tapTimer); showVersionToast(); }
+    });
+  }
+  if (location.search.indexOf('about') !== -1) showVersionToast(true);
+  console.log('%cNoteSync v' + APP_VERSION + ' · 构建 ' + BUILD_DATE, 'color:#c0392b;font-weight:bold');
+})();
 
 // --- 加解密 ---
 async function deriveKey(pass, saltBuf) {
@@ -1083,13 +1112,19 @@ function cleanupLeadingTrailingBreaks() {
 // 或某些浏览器在合并/输入后留下的结构），contenteditable 视为非法结构，Chromium 可能不绘制光标（F7）。
 // 这里把所有根下子节点收进一个 <div>，还原成浏览器原生输入的正常块结构。
 function ensureBlockWrapped() {
-  const kids = Array.from(editor.childNodes);
-  const hasBlock = kids.some(k => k.nodeType === 1 && (k.tagName === 'DIV' || k.tagName === 'P'));
-  if (hasBlock) return; // 已有块级结构，无需处理
-  if (kids.length === 0) return;
-  const div = document.createElement('div');
-  while (editor.firstChild) div.appendChild(editor.firstChild);
-  editor.appendChild(div);
+  // 编辑器根下每个直接子节点都必须是块级(<div>/<p>)。
+  // 逐个检查：裸文本节点或裸元素(非 div/p，如浏览器合并产生的 span)都各自包进一个 <div>。
+  // 不能"只要存在一个块就整体跳过"——否则当裸文本节点恰好和 <div> 做兄弟时
+  // (逐字输两行后的第一行、或粘贴到非空编辑器)，它永远不会被包，根下出现裸文本节点
+  // → contenteditable 视为非法结构、Chromium 不绘制光标(F7 残留 / 用户报的"光标不显示")。
+  // 此处处于 linkifyEditor 的 500ms 防抖内，结构整理安全，不破坏正在进行的逐字输入；
+  // 且 linkify 用全局可见字符偏移保存/恢复选区，包裹不会让光标跳位。
+  Array.from(editor.childNodes).forEach(k => {
+    if (k.nodeType === 1 && (k.tagName === 'DIV' || k.tagName === 'P')) return;
+    const div = document.createElement('div');
+    editor.insertBefore(div, k);
+    div.appendChild(k); // 裸节点(文本或元素)整体移入新 div
+  });
 }
 
 editor.addEventListener('input', (e) => {
