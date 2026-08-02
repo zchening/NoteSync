@@ -661,7 +661,28 @@ async function handleImageUpload(file) {
   setTimeout(hideUploadStatus, 2000);
 }
 
-// 粘贴：图片→上传，文字→纯文本
+// 在光标处插入节点：基于 Selection/Range，不依赖已废弃的 execCommand，
+// 避免 execCommand 在光标异常时插入失败 / 退化为纯文本（见 BUG_CHECKLIST E2）。
+function insertNodeAtCaret(node) {
+  editor.focus();
+  const sel = window.getSelection();
+  let range;
+  if (sel.rangeCount > 0) {
+    range = sel.getRangeAt(0);
+    range.deleteContents();
+  } else {
+    range = document.createRange();
+    range.selectNodeContents(editor);
+    range.collapse(false);
+  }
+  range.insertNode(node);
+  range.collapse(false);
+  sel.removeAllRanges();
+  sel.addRange(range);
+  editor.dispatchEvent(new Event('input'));
+}
+
+// 粘贴：图片→上传，文字→纯文本（URL/手机号自动转链接）
 editor.addEventListener('paste', e => {
   const items = e.clipboardData && e.clipboardData.items;
   if (!items) return;
@@ -672,21 +693,21 @@ editor.addEventListener('paste', e => {
       return;
     }
   }
-  // 文字：识别 URL 和手机号转链接，其余纯文本
-  if (e.clipboardData.getData('text/plain')) {
-    e.preventDefault();
-    const text = e.clipboardData.getData('text/plain');
-    const urlRegex = /((?:https?|file|ftp):\/\/[^\s<]+)/g;
-    const phoneRegex = /(?<!\d)(1[3-9]\d{9})(?!\d)/g;
-    const breakSeparators = /([\/.?:=&#_%-])/g;
-    if (urlRegex.test(text) || phoneRegex.test(text)) {
-      const html = text
-        .replace(urlRegex, (m) => '<a href="' + m + '" target="_blank" rel="noopener noreferrer">' + m.replace(breakSeparators, '$1\u200B') + '</a>')
-        .replace(phoneRegex, '<a href="tel:$1">$1</a>');
-      document.execCommand('insertHTML', false, html);
-    } else {
-      document.execCommand('insertText', false, text);
-    }
+  // 文字：优先 text/plain，回退到 text/uri-list（部分环境复制链接只有 uri-list）
+  const text = e.clipboardData.getData('text/plain') || e.clipboardData.getData('text/uri-list') || '';
+  if (!text) return;
+  e.preventDefault();
+  const urlRegex = /((?:https?|file|ftp):\/\/[^\s<]+)/g;
+  const phoneRegex = /(?<!\d)(1[3-9]\d{9})(?!\d)/g;
+  const breakSeparators = /([\/.?:=&#_%-])/g;
+  if (urlRegex.test(text) || phoneRegex.test(text)) {
+    const html = text
+      .replace(urlRegex, (m) => '<a href="' + m + '" target="_blank" rel="noopener noreferrer">' + m.replace(breakSeparators, '$1\u200B') + '</a>')
+      .replace(phoneRegex, '<a href="tel:$1">$1</a>');
+    const frag = document.createRange().createContextualFragment(html);
+    insertNodeAtCaret(frag);
+  } else {
+    insertNodeAtCaret(document.createTextNode(text));
   }
 });
 
@@ -932,8 +953,21 @@ function linkifyEditor(opts) {
   } finally { isLinkifying = false; }
 }
 
+// 删除多行选区后，contenteditable 常残留首/尾孤立换行（<br> 或纯 \n 文本节点），
+// 导致光标落到第二行、或末尾多一个空行。仅在“存在后续内容”时清理，
+// 避免误删空白编辑器的唯一 <br> 使光标消失（见 BUG_CHECKLIST E3）。
+function cleanupLeadingTrailingBreaks() {
+  let first = editor.firstChild;
+  if (first && first.nodeType === 1 && first.tagName === 'BR' && first.nextSibling) first.remove();
+  else if (first && first.nodeType === 3 && first.nodeValue.startsWith('\n') && first.nodeValue.length > 1) first.nodeValue = first.nodeValue.slice(1);
+  let last = editor.lastChild;
+  if (last && last.nodeType === 1 && last.tagName === 'BR' && last.previousSibling) last.remove();
+  else if (last && last.nodeType === 3 && last.nodeValue.endsWith('\n') && last.nodeValue.length > 1) last.nodeValue = last.nodeValue.slice(0, -1);
+}
+
 editor.addEventListener('input', () => {
   if (busy) return;
+  cleanupLeadingTrailingBreaks();
   clearTimeout(saveTimer);
   saveTimer = setTimeout(saveLocal, 800);
   clearTimeout(linkifyTimer);
@@ -963,22 +997,41 @@ async function poll() {
     setStatus(true, '已同步');
     if ((note.v || 0) > localVer && note.ct) {
       const html = await decryptText(note.ct, note.iv, cryptoKey);
+      // 本机有未保存改动时（editor.innerHTML !== lastHtml 且正聚焦），不覆盖编辑器，
+      // 否则会丢失正在输入的内容、并导致光标消失（见 BUG_CHECKLIST E1）。
+      const dirty = document.activeElement === editor && editor.innerHTML !== lastHtml;
+      if (dirty) { localVer = note.v; return; }
       if (html !== editor.innerHTML) {
         const wasFocused = document.activeElement === editor;
-        let savedOffset = null;
+        // 用字符偏移保存光标，而非 cloneRange：替换 innerHTML 后旧 Range 指向的节点被 detach，
+        // 用 sel.rangeCount>0 判断恢复会失败（选区已空），必须用偏移重建（见 BUG_CHECKLIST E1）。
+        let savedOffsets = null;
         if (wasFocused) {
           const sel = window.getSelection();
-          if (sel.rangeCount > 0) savedOffset = sel.getRangeAt(0).startOffset;
+          if (sel.rangeCount > 0) {
+            const r = sel.getRangeAt(0);
+            if (editor.contains(r.commonAncestorContainer)) {
+              try { savedOffsets = saveSelectionOffsets(editor, r); } catch (e) {}
+            }
+          }
         }
         lastHtml = html;
         editor.innerHTML = html;
         linkifyEditor({ keepSelection: false });
-        if (wasFocused) {
+        if (wasFocused && savedOffsets) {
           editor.focus();
           const sel = window.getSelection();
-          if (savedOffset !== null && sel.rangeCount > 0) {
-            const range = sel.getRangeAt(0);
-            try { range.setStart(editor.firstChild || editor, Math.min(savedOffset, (editor.firstChild?.textContent||'').length)); range.collapse(true); sel.removeAllRanges(); sel.addRange(range); } catch(e) {}
+          const newRange = restoreSelectionOffsets(editor, savedOffsets.start, savedOffsets.end);
+          if (newRange) {
+            sel.removeAllRanges();
+            sel.addRange(newRange);
+          } else {
+            // 兜底：远端内容比本机短时偏移越界，把光标放到内容末尾，避免丢失
+            const r = document.createRange();
+            r.selectNodeContents(editor);
+            r.collapse(false);
+            sel.removeAllRanges();
+            sel.addRange(r);
           }
         }
       }
