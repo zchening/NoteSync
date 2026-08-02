@@ -17,7 +17,7 @@
 
 | 分类 | 功能 | 条目数 | 触发核对的条件 |
 |------|------|--------|----------------|
-| A | 删除线 | 6 | 修改 strikeBtn / addStrikeToRange / removeStrikeFromRange / rangeIntersectsNode / contentHasS |
+| A | 删除线 | 7 | 修改 strikeBtn / addStrikeToRange / removeStrikeFromRange / rangeIntersectsNode / contentHasS / linkifyEditor |
 | B | 导出图片 | 7 | 修改 exportImage / exportImgBtn 事件 / html2canvas 调用 / 临时 div 渲染 |
 | C | 缓存与图标 | 3 | 修改 favicon / manifest.json / Cache-Control 头 |
 | D | PWA 与移动端 | 3 | 修改 manifest.json / 触摸事件 / 夜间模式 CSS |
@@ -93,7 +93,23 @@
 - **核对要点**:
   - [ ] 加删除线 → 取消 → 再加，每次都有效
   - [ ] 连续多次加/取消同一区域，不残留空标签
-  - [ ] DOM 中不残留 `<s></s>` 空标签（F12 检查）
+    - [ ] DOM 中不残留 `<s></s>` 空标签（F12 检查）
+
+### A7 | 删除线后选区丢失（光标跳开头 / 选中态消失）
+- **版本**: v5.2
+- **现象**: 选中一段文字后点击"添加删除线"或"取消删除线"，操作成功后原选中文字不再被选中——光标跳到笔记最前（或不选中任何文字）。期望：无论加/取消删除线，之前选中的文字选中态原样保留。
+- **根因**: linkifyEditor() 在每次 input 事件后防抖 500ms 运行，会对长连续文本/URL/手机号识别并用 `textNode.replaceWith(...span.childNodes)` 把原始文本节点整个替换成新节点。（一层）删除线操作结束后 applyStrike 用字符偏移恢复了选区，但 500ms 后 linkify 重排 DOM，选区指向的旧文本节点被 detach；linkify 原先用 `sel.getRangeAt(0).cloneRange()` 保存、重排后 `addRange(savedRange)` 恢复，detached 的 Range 恢复抛异常被吞掉，选区塌缩。（二层）linkify 会在长词中插入零宽空格 `\u200B` 断行（如 `15.34`→`15.​34`），若偏移把 `\u200B` 计为一个字符，则 save(插入前) 与 restore(插入后) 时点不一致，选区终点按选区内 `\u200B` 个数往前漂移，导致丢尾字、且取消删除线时 `lastRange` 偏短走部分覆盖分支而残留 `<s>`。
+- **修复**: linkifyEditor 改用字符偏移保存/恢复选区（复用 saveSelectionOffsets / restoreSelectionOffsets）；并让偏移计数**无视 `\u200B`**（新增 visibleLen / visibleToRealOffset，只计可见字符），使 `\u200B` 插入前后偏移一致，选区精确落在同一段可见文字上、不漂移。applyStrike 内偏移恢复保留不变（负责 500ms 内的即时反馈）。poll() 远程更新路径传 `{ keepSelection: false }` 走自身光标恢复，不与 linkify 打架。
+- **关联文件**: index.html → linkifyEditor() / applyStrike() / poll() / saveSelectionOffsets() / restoreSelectionOffsets() / visibleLen() / visibleToRealOffset()
+- **核对要点**:
+  - [ ] 选中中间文字 → 点添加删除线 → 选中文字不变
+  - [ ] 选中已加删除线文字 → 点取消删除线 → 选中文字不变
+  - [ ] 选区内含长数字（如 15.34、743.42，linkify 会插 `\u200B` 断行）→ 加/取消后选区仍精确覆盖原文字、不丢尾字
+  - [ ] 取消删除线后不残留 `<s>`（如 `<s>余元</s>`）
+  - [ ] 跨行选中加/取消 → 选中态保留
+  - [ ] 部分选中（同行正常文字 + 删除线文字）加/取消 → 选中态保留
+  - [ ] 连续多次加/取消同一区域 → 每次选中态都保留
+  - [ ] 操作后光标不跳到笔记最前
 
 ---
 
@@ -268,3 +284,4 @@
 | v4.5 | D2 |
 | v5.0 | B1, B2, C1, C2, C3 |
 | v5.1 | A5, A6, B3, B4, B5, B6, B7, D3 |
+| v5.2 | A7 |

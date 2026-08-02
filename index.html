@@ -266,14 +266,33 @@ document.addEventListener('selectionchange', () => {
 });
 
 // 以字符偏移量保存/恢复选区：normalize() 合并文本节点后 range 引用会失效，
-// 改用纯文本偏移量定位，不受 DOM 结构变化影响
+// 改用纯文本偏移量定位，不受 DOM 结构变化影响。
+// 偏移计数无视零宽空格 \u200B：linkifyEditor 会在长词中插入 \u200B 做断行，
+// 若把 \u200B 算作一个字符，save(插入前)/restore(插入后) 时点不同会导致选区漂移（见 BUG_CHECKLIST A7）。
+const ZWSP = '​';
+function visibleLen(s) {
+  let n = 0;
+  for (let i = 0; i < s.length; i++) if (s[i] !== ZWSP) n++;
+  return n;
+}
+// 把"可见偏移"(不计 \u200B) 换算回文本节点内的真实字符偏移(含 \u200B)
+function visibleToRealOffset(node, visOff) {
+  let n = 0;
+  const len = node.length;
+  for (let i = 0; i < len; i++) {
+    if (n === visOff) return i;
+    if (node.nodeValue[i] !== ZWSP) n++;
+  }
+  return len;
+}
+
 function saveSelectionOffsets(root, range) {
   const pre = document.createRange();
   pre.selectNodeContents(root);
   pre.setEnd(range.startContainer, range.startOffset);
-  const start = pre.toString().length;
+  const start = visibleLen(pre.toString());
   pre.setEnd(range.endContainer, range.endOffset);
-  const end = pre.toString().length;
+  const end = visibleLen(pre.toString());
   return { start, end };
 }
 
@@ -283,11 +302,11 @@ function restoreSelectionOffsets(root, start, end) {
   let sn = null, so = 0, en = null, eo = 0;
   while (walker.nextNode()) {
     const node = walker.currentNode;
-    const len = node.length;
-    if (sn === null && pos + len >= start) { sn = node; so = start - pos; }
-    if (en === null && pos + len >= end)   { en = node; eo = end - pos; }
+    const vlen = visibleLen(node.nodeValue);
+    if (sn === null && pos + vlen >= start) { sn = node; so = visibleToRealOffset(node, start - pos); }
+    if (en === null && pos + vlen >= end)   { en = node; eo = visibleToRealOffset(node, end - pos); }
     if (sn !== null && en !== null) break;
-    pos += len;
+    pos += vlen;
   }
   if (sn === null || en === null) return null;
   const r = document.createRange();
@@ -844,7 +863,8 @@ async function loadStoredKey() {
 let saveTimer = null, linkifyTimer = null, isLinkifying = false;
 
 // URL 和手机号自动检测：扫描文本节点，转为 <a> 标签
-function linkifyEditor() {
+function linkifyEditor(opts) {
+  const keepSelection = opts ? opts.keepSelection !== false : true;
   if (isLinkifying) return;
   isLinkifying = true;
   try {
@@ -869,9 +889,14 @@ function linkifyEditor() {
     while (n = walker.nextNode()) targets.push(n);
     if (targets.length === 0) return;
     const sel = window.getSelection();
-    let savedRange = null;
-    if (sel.rangeCount > 0) {
-      savedRange = sel.getRangeAt(0).cloneRange();
+    // 用字符偏移保存选区，而非 cloneRange：linkify 会 replaceWith 替换文本节点，
+    // 旧 Range 指向的节点被 detach 后恢复必失败、选区丢失（见 BUG_CHECKLIST A7）。
+    let savedOffsets = null;
+    if (keepSelection && sel.rangeCount > 0) {
+      const r = sel.getRangeAt(0);
+      if (editor.contains(r.commonAncestorContainer)) {
+        try { savedOffsets = saveSelectionOffsets(editor, r); } catch (e) {}
+      }
     }
     for (const textNode of targets) {
       const text = textNode.nodeValue;
@@ -898,8 +923,11 @@ function linkifyEditor() {
       });
       textNode.replaceWith(...span.childNodes);
     }
-    if (savedRange && document.activeElement === editor) {
-      try { sel.removeAllRanges(); sel.addRange(savedRange); } catch(e) {}
+    if (savedOffsets && document.activeElement === editor) {
+      try {
+        const newRange = restoreSelectionOffsets(editor, savedOffsets.start, savedOffsets.end);
+        if (newRange) { sel.removeAllRanges(); sel.addRange(newRange); }
+      } catch (e) {}
     }
   } finally { isLinkifying = false; }
 }
@@ -944,7 +972,7 @@ async function poll() {
         }
         lastHtml = html;
         editor.innerHTML = html;
-        linkifyEditor();
+        linkifyEditor({ keepSelection: false });
         if (wasFocused) {
           editor.focus();
           const sel = window.getSelection();
