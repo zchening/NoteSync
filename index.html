@@ -678,6 +678,14 @@ function insertNodeAtCaret(node) {
     range.selectNodeContents(editor);
     range.collapse(false);
   }
+  // 纯文本直接插入到编辑器根（空编辑器粘贴）时，包进 <div> 以匹配浏览器原生输入结构。
+  // 否则编辑器根下出现裸文本节点，contenteditable 视为非法结构，Chromium 会不绘制光标
+  // （粘贴"一二三"→选中按空格后光标不可见，F7）。块内/段中插入不改变结构，不包。
+  if (node.nodeType === 3 && range.startContainer === editor) {
+    const div = document.createElement('div');
+    div.appendChild(node);
+    node = div;
+  }
   range.insertNode(node);
   range.collapse(false);
   sel.removeAllRanges();
@@ -940,6 +948,10 @@ function linkifyEditor(opts) {
       while (s.firstChild) s.parentNode.insertBefore(s.firstChild, s);
       s.remove();
     });
+    // 2.5) 确保编辑器根下是块级结构（<div>/<p>）。粘贴到空编辑器等场景可能在根下留下裸文本/裸元素
+    // 节点（contenteditable 视为非法结构，Chromium 不绘制光标，见 F7）。此处（input 后 500ms 防抖内）
+    // 整理是安全的——不与正在进行的按键输入竞争，避免同步改 DOM 破坏逐字输入。
+    ensureBlockWrapped();
     // 3) 合并相邻文本节点，消除因拆链接/编辑产生的文本边界，让跨节点的 URL 片段能被一次正则匹配到。
     editor.normalize();
 
@@ -1065,6 +1077,19 @@ function cleanupLeadingTrailingBreaks() {
   if (f && f.nodeType === 3 && f.nodeValue.startsWith('\n') && f.nodeValue.length > 1) f.nodeValue = f.nodeValue.slice(1);
   let l = editor.lastChild;
   if (l && l.nodeType === 3 && l.nodeValue.endsWith('\n') && l.nodeValue.length > 1) l.nodeValue = l.nodeValue.slice(0, -1);
+}
+
+// 编辑器根下必须是块级子元素（<div>/<p>）。若出现裸文本/裸元素子节点（如粘贴到空编辑器、
+// 或某些浏览器在合并/输入后留下的结构），contenteditable 视为非法结构，Chromium 可能不绘制光标（F7）。
+// 这里把所有根下子节点收进一个 <div>，还原成浏览器原生输入的正常块结构。
+function ensureBlockWrapped() {
+  const kids = Array.from(editor.childNodes);
+  const hasBlock = kids.some(k => k.nodeType === 1 && (k.tagName === 'DIV' || k.tagName === 'P'));
+  if (hasBlock) return; // 已有块级结构，无需处理
+  if (kids.length === 0) return;
+  const div = document.createElement('div');
+  while (editor.firstChild) div.appendChild(editor.firstChild);
+  editor.appendChild(div);
 }
 
 editor.addEventListener('input', (e) => {
