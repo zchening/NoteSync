@@ -178,7 +178,7 @@ const PBKDF2_ITER = 200000;
 const FAIL_LIMIT = 10;
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '5.10';
+const APP_VERSION = '5.11';
 const BUILD_DATE = '2026-08-03';
 
 const $ = s => document.querySelector(s);
@@ -1224,6 +1224,27 @@ function repaintCaret() {
 function relocateCaretToVisible(range) {
   if (!range || !editor) return;
   const sel = window.getSelection();
+  // F13 回归修复：刚回车产生的「空块」里，Chromium 的 getClientRects() 对空块
+  // 折叠光标返回 0（但光标位置完全合法，只是 API 怪癖，实际能画出光标）。
+  // 若光标所在块没有任何「非空文本」→ 这是「空块光标」，不是「坏偏移」，
+  // 绝不应 relocate，否则会跨块把它拽到相邻有字的地方（如第一行），
+  // 违背浏览器原生落点。F12 原场景的块含「四五六」→ 非空 → 仍走 relocate。
+  const blk0 = (range.startContainer.nodeType === 1)
+    ? range.startContainer
+    : (range.startContainer.parentElement || null);
+  let blockEl = blk0;
+  while (blockEl && blockEl !== editor &&
+         blockEl.tagName !== 'DIV' && blockEl.tagName !== 'P') {
+    blockEl = blockEl.parentElement;
+  }
+  if (blockEl && blockEl !== editor) {
+    const tw = document.createTreeWalker(blockEl, NodeFilter.SHOW_TEXT);
+    let hasVisible = false;
+    while (tw.nextNode()) {
+      if (tw.currentNode.nodeValue && tw.currentNode.nodeValue.trim()) { hasVisible = true; break; }
+    }
+    if (!hasVisible) return; // 空块光标 → 保持原生落点，不 relocate
+  }
   // 从当前起点开始，在编辑器内广度优先搜索一个 getClientRects()>0 的折叠位置
   const container = range.startContainer;
   const offset = range.startOffset;
