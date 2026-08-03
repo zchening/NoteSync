@@ -646,24 +646,9 @@
   - [ ] 输入任意口令 → 按钮立即可点
   - [ ] **禁用态在真机/计算样式下确实弱化**（computed `background === var(--line)` 米白、`color === var(--muted)`、非启用深色）——本 bug 核心价值点
   - [ ] 禁用态在深色/浅色主题下都正确跟随（不再被主题 `!important` 压穿）
-  - [ ] 指纹按钮 `#bioBtn` 在 PRF 不支持时隐藏（H4 联动）
 
 ### H4 | 手机端指纹解锁（WebAuthn PRF）【已彻底移除于 v5.15】
-> **【v5.15 移除】** 用户实测 v5.14 指纹在大陆 Android Chrome 上不可用（WebAuthn PRF 本质是通行密钥/平台凭证，常需 GMS/翻墙），且退出后仍弹"是否开启指纹"提示、失败甩一长串错误码。用户明确"彻底移除指纹功能"。v5.15 整段删除该能力（前端零残留：`supportsWebAuthnPRF`/`enrollBiometric`/`unlockWithBiometric`/`updateBioUI`/`offerBiometricEnrollment`/`BIO_STORE`/`bioBtn`/`bio-banner` 全清除，grep 命中 0），仅保留口令解锁。以下核对要点仅供历史追溯，当前版本不再适用。
-- **版本**: v5.14（首次引入）；v5.15 移除
-- **现象**: 手机 Chrome 用户希望用指纹/面容解锁笔记，免去每次输口令
-- **约束**: 端到端加密笔记主密钥由口令派生，绝不能把密钥交给服务器——方案必须纯前端
-- **修复**: 纯前端 **WebAuthn PRF 扩展**（不碰后端、不破坏 E2E 加密）：
-  - 注册 `enrollBiometric`：建平台凭证（prf 扩展）→ 取 assertion 拿 PRF 输出 → HKDF-SHA256 派生 KEK → AES-GCM 包裹主密钥存 `localStorage BIO_STORE`
-  - 解锁 `unlockWithBiometric`：取 assertion（prf eval 用注册时存的盐）→ 解包 → `importKey` → `applyUnlocked`
-  - 口令始终为兜底；`supportsWebAuthnPRF` 探测，iOS 不支持 PRF 时自动隐藏 `#bioBtn`
-- **关联文件**: index.html → `supportsWebAuthnPRF` / `deriveBiometricKEK` / `aesGcmWrapBytes` / `aesGcmUnwrap` / `enrollBiometric` / `unlockWithBiometric` / `updateBioUI` / `offerBiometricEnrollment`
-- **核对要点**:
-  - [ ] `supportsWebAuthnPRF=false`（如 iOS）→ `#bioBtn` 隐藏，仅口令解锁
-  - [ ] 注册成功后将**包裹**密钥写入 `BIO_STORE`，明文主密钥不落盘
-  - [ ] 解锁走 PRF 派生 KEK → 解包主密钥 → 成功进入（HKDF/AES-GCM 往返 headless 不可测，靠 crypto round-trip + UI 守卫验证）
-  - [ ] PRF 不可用 / 用户取消时优雅回退口令，无异常
-   - [ ] 口令兜底路径不受影响（H3 联动）
+> **【v5.15 移除】** 用户实测 v5.14 指纹在大陆 Android Chrome 上不可用（WebAuthn PRF 本质是通行密钥/平台凭证，常需 GMS/翻墙），且退出后仍弹"是否开启指纹"提示、失败甩一长串错误码。用户明确"彻底移除指纹功能"。v5.15 整段删除该能力（前端零残留：`supportsWebAuthnPRF`/`enrollBiometric`/`unlockWithBiometric`/`updateBioUI`/`offerBiometricEnrollment`/`BIO_STORE`/`bioBtn`/`bio-banner` 全清除，grep 命中 0），仅保留口令解锁。历史实现细节（PRF 注册/解包、BIO_STORE、iOS 隐藏等）与对应核对要点已不再适用，故从检查清单移除，仅保留本移除记录。
 
 ### H5 | 落地页笔记名输入框禁止中文输入（前端过滤 + 后端再收紧）
 - **版本**: v5.15
