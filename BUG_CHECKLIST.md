@@ -31,7 +31,7 @@
 | E | 选区与同步 | 4 | 修改 editor 输入/粘贴处理 / linkifyEditor / saveSelectionOffsets·restoreSelectionOffsets / cleanupLeadingTrailingBreaks / insertNodeAtCaret / 删除逻辑 / poll 远端合并 / selectionchange 钳制 |
 | F | 光标与编辑 | 13 | 修改 Enter 处理 / cleanupLeadingTrailingBreaks / caretInsideNode / linkifyEditor 块内偏移 / ensureBlockWrapped / ensureCaret / repaintCaret / relocateCaretToVisible / isComposing |
 | G | 撤销栈 | 1 | 修改 自建撤销栈 / captureState / applyState / recordIfChanged / syncCurrentState / undo / redo / keydown 拦截 Ctrl+Z/Y |
-| H | 落地页/解锁/路由/图标/指纹 | 4 | 修改 landing 路由(ID_RE/extractId/导航) / 打开按钮禁用 / 解锁按钮禁用态样式 / 指纹 WebAuthn PRF 逻辑 |
+| H | 落地页/解锁/路由/图标/指纹 | 6 | 修改 landing 路由(ID_RE/extractId/导航) / 打开按钮禁用 / 解锁按钮禁用态样式 / 退出锁定禁用态 / 落地页中文输入过滤 / 指纹 WebAuthn PRF 逻辑（v5.15 起彻底移除） |
 
 ---
 
@@ -245,18 +245,18 @@
   - [ ] 更新后提示用户卸载重装 PWA
   - [ ] 新安装的 PWA 显示新图标
 
-### C4 | PWA 自适应图标透明底被填黑（手机 Chrome 添加快捷方式图标黑底）
-- **版本**: v5.14
-- **现象**: 手机 Chrome「添加到主屏幕」后，PWA 图标底层是黑色背景，难看；原 manifest 用透明 `favicon.svg` 作图标（且 purpose 含 "any maskable"），Android 自适应图标会把透明区域填成黑色。
-- **根因**: 透明 SVG 在 Android 自适应图标（maskable）场景下，透明像素被系统填充为黑色，没有实底。
-- **修复**: 新增米白实底(#FBFBF8)金 logo 的 `icon-maskable-192.png` / `icon-maskable-512.png`（Pillow 生成，金线 sync 弧 + 圆角），manifest 改为这两个 PNG 且 `purpose:"maskable"`（带 `?v=5.14` 版本号）；同时给 `favicon.svg` 加 `<rect width="48" height="48" fill="#FBFBF8" rx="10"/>` 兜底，避免 "any" 用法也出现黑底。`server.js` 新增 `/icon-maskable-192.png` `/icon-maskable-512.png` 路由（image/png、no-cache）。
+### C4 | PWA 自适应图标实底（v5.14 米白底 → v5.15 恢复黑底）
+- **版本**: v5.14（首次加米白实底）/ v5.15（用户嫌米白不好看，恢复黑底）
+- **现象**: 手机 Chrome「添加到主屏幕」后，PWA 图标底层是黑色背景——这其实是 Android 自适应图标(maskable)把透明区填黑。v5.14 改为米白实底(#FBFBF8)金 logo，用户实测"还是之前那个底层黑色背景的好看"，v5.15 反转回黑底。
+- **根因**: 透明 SVG 在 maskable 场景被系统填黑；v5.14 为规避而改米白实底，但用户审美偏好黑底。
+- **修复（v5.15 当前态）**: `favicon.svg` `<rect width="48" height="48" fill="#0F0F11" rx="10"/>`（黑底兜底）；两张 `icon-maskable-192.png` / `icon-maskable-512.png` 重新渲染为**黑底(#0F0F11)金 logo**（Chromium 渲染 favicon.svg 后截图栅格化，矢量精确）；`manifest.json` `background_color` 改回 `#0F0F11`、图标 `?v=5.15` 且 `purpose:"maskable"`；`server.js` 已有 `/icon-maskable-192.png` `/icon-maskable-512.png` 路由（image/png、no-cache）。
 - **关联文件**: manifest.json / favicon.svg / icon-maskable-192.png / icon-maskable-512.png / server.js（图标路由）
 - **核对要点**:
-  - [ ] manifest.json 的 maskable 图标 src 含版本号 `?v=5.14`
-  - [ ] 图标为米白实底，无透明/黑底
-  - [ ] `favicon.svg` 含 `fill="#FBFBF8"` 矩形兜底
-  - [ ] `/icon-maskable-192.png` `/icon-maskable-512.png` 以 image/png 返回、正文非 trivial
-  - [ ] 手机 Chrome 添加快捷方式后图标为米白底金 logo（真机验证）
+  - [ ] manifest.json 的 maskable 图标 src 含版本号 `?v=5.15`
+  - [ ] 图标为黑实底(#0F0F11)金 logo，无透明
+  - [ ] `favicon.svg` 含 `fill="#0F0F11"` 矩形兜底
+  - [ ] `/icon-maskable-192.png` `/icon-maskable-512.png` 以 image/png 返回、正文非 trivial（黑底非 trivial）
+  - [ ] 手机 Chrome 添加快捷方式后图标为黑底金 logo（真机验证）
 
 ---
 
@@ -648,8 +648,9 @@
   - [ ] 禁用态在深色/浅色主题下都正确跟随（不再被主题 `!important` 压穿）
   - [ ] 指纹按钮 `#bioBtn` 在 PRF 不支持时隐藏（H4 联动）
 
-### H4 | 手机端指纹解锁（WebAuthn PRF）
-- **版本**: v5.14
+### H4 | 手机端指纹解锁（WebAuthn PRF）【已彻底移除于 v5.15】
+> **【v5.15 移除】** 用户实测 v5.14 指纹在大陆 Android Chrome 上不可用（WebAuthn PRF 本质是通行密钥/平台凭证，常需 GMS/翻墙），且退出后仍弹"是否开启指纹"提示、失败甩一长串错误码。用户明确"彻底移除指纹功能"。v5.15 整段删除该能力（前端零残留：`supportsWebAuthnPRF`/`enrollBiometric`/`unlockWithBiometric`/`updateBioUI`/`offerBiometricEnrollment`/`BIO_STORE`/`bioBtn`/`bio-banner` 全清除，grep 命中 0），仅保留口令解锁。以下核对要点仅供历史追溯，当前版本不再适用。
+- **版本**: v5.14（首次引入）；v5.15 移除
 - **现象**: 手机 Chrome 用户希望用指纹/面容解锁笔记，免去每次输口令
 - **约束**: 端到端加密笔记主密钥由口令派生，绝不能把密钥交给服务器——方案必须纯前端
 - **修复**: 纯前端 **WebAuthn PRF 扩展**（不碰后端、不破坏 E2E 加密）：
@@ -662,7 +663,32 @@
   - [ ] 注册成功后将**包裹**密钥写入 `BIO_STORE`，明文主密钥不落盘
   - [ ] 解锁走 PRF 派生 KEK → 解包主密钥 → 成功进入（HKDF/AES-GCM 往返 headless 不可测，靠 crypto round-trip + UI 守卫验证）
   - [ ] PRF 不可用 / 用户取消时优雅回退口令，无异常
-  - [ ] 口令兜底路径不受影响（H3 联动）
+   - [ ] 口令兜底路径不受影响（H3 联动）
+
+### H5 | 落地页笔记名输入框禁止中文输入（前端过滤 + 后端再收紧）
+- **版本**: v5.15
+- **现象**: v5.14 的 H1 曾"放宽 ID_RE 接受中文"，但用户实测中文笔记名能跳转、却**无论设什么口令都进不去**——中文经 URL 编码后路由/密钥派生错位，属于"能打开却永远解不开"的半吊子。用户改口"干脆笔记名输入框就不支持输入中文"
+- **根因**: 中文笔记名在端到端加密模型下本就不该出现（口令派生与 noteId 强绑定 ASCII）；v5.14 为"支持中文"放宽前后端，反而制造了打不开的体验
+- **修复**: 前端 `#landingInput` 的 `input` + `compositionend` 监听过滤非 `[A-Za-z0-9]`（拼音组字期间不误删），下方提示「仅支持英文和数字」；后端 `server.js` `ID_RE` **收回** `/^[A-Za-z0-9]{1,64}$/`（与前端禁止双保险，1–64 位 ASCII），含中文/特殊字符的 PUT/stream 直接 400
+- **关联文件**: index.html（landing 过滤+提示）/ server.js（ID_RE 收紧）
+- **核对要点**:
+  - [ ] 输入框输入中文 → 被实时过滤掉，只留英文/数字
+  - [ ] 输入"我的MyNote123" → 余 "MyNote123"，并提示「仅支持英文和数字」
+  - [ ] 符号（空格/!@# 等）被过滤，不残留
+  - [ ] 纯英文/数字笔记名 → 正常「打开」导航 `/<name>` 并解锁
+  - [ ] 后端：含中文笔记名 PUT/GET 返回 400 bad id（ID_RE 收紧）
+  - [ ] 仍拒绝非法字符 `/ \ ? # %` 与控制符（v5.14 H1 的拒绝项保留）
+
+### H6 | 退出锁定后解锁按钮未回到禁用态
+- **版本**: v5.15
+- **现象**: 登录一次 → 点"退出"(#lock) → 还没输口令时，解锁按钮仍是启用态，可误点（与 H3"口令为空禁用"诉求不一致）
+- **根因**: `#lock` 处理只清了口令框值和错误文案，没把解锁按钮 `#ok` 重置为 `disabled`
+- **修复**: `#lock` 处理内清空口令后显式 `$('#ok').disabled = true`（退出锁定：清空口令后解锁按钮必须回到禁用态）
+- **关联文件**: index.html → `#lock` 处理器
+- **核对要点**:
+  - [ ] 解锁进入后点"退出" → 口令框清空、`#ok` 为 `disabled`、不可点
+  - [ ] 退出后重新输入口令 → 按钮立即可点（H3 不回归）
+  - [ ] 退出后未输入时按钮确为禁用态（无"空口令也能点"的窗口期）
 
 ---
 
@@ -688,4 +714,5 @@
 | v5.11 | F13 |
 | v5.12 | G1 |
 | v5.13 | E4 |
+| v5.15 | H4(移除), H5, H6, C4(黑底恢复) |
 | v5.14 | H1, H2, H3, H4, C4 |
