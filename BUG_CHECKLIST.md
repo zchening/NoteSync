@@ -448,6 +448,25 @@
   - [ ] 粘贴"一二三"到空编辑器 → 选中+空格 → `<div> </div>`，光标可见（F7 原场景不回归）
   - [ ] 字面复现探针 `tests/e2e/_probe_blockwrap.js` 全绿（逐字输两行→选中+空格→继续输入→Ctrl+Z，11/11）
 
+### F10 | 解锁后 / 选中+空格后"无光标、无法输入或粘贴"（选区失效）
+- **版本**: v5.8
+- **现象**（用户精确复现，Chrome 151 真实浏览器，headless 难复现）：
+  1. 打开隧道、输密码 1 解锁 → 笔记页面**没有光标、无法输入也无法粘贴**；刷新网页后光标才出现。
+  2. 粘贴"一二三/四五六"→ 选中第一行"一二三"按空格（行变" "，吞行已被 F8 修好）→ 同样**没有光标、无法输入/粘贴**。
+  - 用户明确诉求：**除"文字处于被选中状态"外，任何时刻笔记页面都应常驻光标**。
+- **根因**: 解锁/加载内容（`editor.innerHTML = lastHtml`）、linkify 规范化（`ensureBlockWrapped`/`normalize` 移动或合并节点）、`cleanupLeadingTrailingBreaks` 删除空白块等任何改动 DOM 的操作，都可能让 `window.getSelection()` 指向**已被销毁/移动的节点**而失效。选区失效后 Chromium 不绘制光标，且因无有效插入点，input/paste 均无响应。刷新之所以恢复，是走了不同的焦点就绪时机。headless Playwright Chromium **不能复现**该真实浏览器行为（headless 下选区始终保持合法），故本 fix 靠"显式重建合法折叠光标"兜底，无法靠 headless 断言 100% 验证，需真实浏览器确认。
+- **修复**: 新增 `ensureCaret()` 兜底函数——**仅当"当前选区非法"（rangeCount=0 / 起点节点已脱离文档 / 不在 editor 内）时才在末尾显式重建一个折叠光标（聚焦 editor + 建 Range + `addRange`，优先落在最后一个文本节点内）**；合法选区（含用户主动选中的文本）一律不动。挂点：
+  - `unlock()`：解密内容载入后（先 `innerHTML=`，再 `ensureBlockWrapped`，再 `linkifyEditor`，最后 `ensureCaret()`），并补 `editor.contentEditable = true`。
+  - `init()` 自动加载路径：同上。
+  - `linkifyEditor()` 的 `finally`：规范化收尾兜底重建（覆盖"选中+空格后无 URL 提前 return"这条路径）。
+  - 注意：移除原 `unlock`/`init` 里"先 `editor.focus()` 再 `innerHTML=`"的顺序——先 focus 空编辑器再整体替换 innerHTML 会让焦点/选区失联，改为"先设内容、再聚焦、再显式建光标"。
+- **关联文件**: index.html → ensureCaret() / unlock() / init() / linkifyEditor()
+- **核对要点**:
+  - [ ] 解锁后：编辑器有合法折叠光标（activeElement=editor、rangeCount=1、起点节点 isConnected、位于内容末尾），可继续输入/粘贴。
+  - [ ] 选中第一行+空格后：光标仍合法、可继续输入（不再"无光标/无法输入"）。
+  - [ ] 用户主动选中文本时：光标不被 `ensureCaret` 打扰（选中态保留）。
+  - [ ] 字面复现探针 `tests/e2e/_probe_blockwrap.js` 仍全绿（F8 不回归）。
+
 ---
 
 ## 版本与 bug 对应速查
@@ -466,3 +485,4 @@
 | v5.5 | F6 |
 | v5.6 | F7 |
 | v5.7 | F8 |
+| v5.8 | F10 |

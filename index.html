@@ -178,7 +178,7 @@ const PBKDF2_ITER = 200000;
 const FAIL_LIMIT = 10;
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '5.7';
+const APP_VERSION = '5.8';
 const BUILD_DATE = '2026-08-03';
 
 const $ = s => document.querySelector(s);
@@ -905,8 +905,11 @@ async function unlock(pass) {
   if (!note.salt) { try { await apiPut({ ct: '', iv: '', salt: bufToB64(serverSalt) }); } catch (e) {} }
   localVer = note.v || 0;
   mask.classList.add('hidden');
-  editor.focus();
-  if (note.ct) { try { lastHtml = await decryptText(note.ct, note.iv, key); editor.innerHTML = lastHtml; linkifyEditor(); } catch (e) {} }
+  editor.contentEditable = true;
+  if (note.ct) { try { lastHtml = await decryptText(note.ct, note.iv, key); editor.innerHTML = lastHtml; } catch (e) {} }
+  ensureBlockWrapped();
+  if (note.ct) { try { linkifyEditor(); } catch (e) {} }
+  ensureCaret(); // 关键：解密内容载入后显式重建合法折叠光标（避免“解锁后无光标/无法输入”）
   foot.textContent = '已解锁 · 端到端加密';
   startSync();
 }
@@ -1059,7 +1062,12 @@ function linkifyEditor(opts) {
         }
       } catch (e) {}
     }
-  } finally { isLinkifying = false; }
+  } finally {
+    isLinkifying = false;
+    // 链接规范化可能移动/合并节点（如 <div> </div> 场景），导致选区失效 → 此处兜底重建合法光标。
+    // 仅在选区已失效时动作，合法选区（含用户选中态）不动。
+    try { ensureCaret(); } catch (e) {}
+  }
 }
 
 // 删除多行选区后，contenteditable 常残留首/尾空白块（<br>、空 <div>、纯空白文本节点），
@@ -1125,6 +1133,38 @@ function ensureBlockWrapped() {
     editor.insertBefore(div, k);
     div.appendChild(k); // 裸节点(文本或元素)整体移入新 div
   });
+}
+
+// 保证编辑器内存在一个“合法且可见”的折叠光标（collapsed caret）。
+// 触发时机：解锁/加载内容、linkify 规范化、cleanup 等任何会改动 DOM 的操作之后。
+// 这些操作可能让 Selection 指向已被销毁/移动的节点而失效 → Chromium 不绘制光标，
+// 且 input/paste 因无有效插入点而“无法输入/粘贴”（用户报的两个场景：解锁后、选中+空格后）。
+// 仅在“当前选区非法”时才重建；合法选区（含用户主动选中的文本）一律不动——
+// 正好满足“除选中态外、任何时刻都应常驻光标”的需求。
+function ensureCaret() {
+  if (!editor) return;
+  const sel = window.getSelection();
+  const valid = sel.rangeCount > 0 &&
+    sel.getRangeAt(0).startContainer.isConnected &&
+    editor.contains(sel.getRangeAt(0).commonAncestorContainer);
+  if (valid) return; // 选区合法 → 不动（尊重用户选中态 / 当前光标）
+  // 选区非法：先确保块结构合法（裸文本节点会让光标再次失效），再在“末尾”重建折叠光标。
+  // 折叠光标优先落在最后一个文本节点内（最贴近浏览器原生落点，Chromium 必绘制）；
+  // 找不到文本节点（空块/空编辑器）则落在块/编辑器本身末尾。
+  ensureBlockWrapped();
+  if (document.activeElement !== editor) { try { editor.focus(); } catch (e) {} }
+  const r = document.createRange();
+  const last = editor.lastChild;
+  if (last) {
+    const tw = document.createTreeWalker(last, NodeFilter.SHOW_TEXT);
+    let t = null; while (tw.nextNode()) t = tw.currentNode;
+    if (t) r.setStart(t, t.length);
+    else r.setStart(last, last.childNodes.length);
+  } else {
+    r.setStart(editor, 0);
+  }
+  r.collapse(true);
+  try { sel.removeAllRanges(); sel.addRange(r); } catch (e) {}
 }
 
 editor.addEventListener('input', (e) => {
@@ -1431,8 +1471,11 @@ $('#lock').addEventListener('click', () => {
     }
     localVer = note.v || 0;
     loadingEl.classList.add('hidden');
-    editor.focus();
-    if (note.ct) { try { lastHtml = await decryptText(note.ct, note.iv, cryptoKey); editor.innerHTML = lastHtml; linkifyEditor(); } catch (e) {} }
+    editor.contentEditable = true;
+    if (note.ct) { try { lastHtml = await decryptText(note.ct, note.iv, cryptoKey); editor.innerHTML = lastHtml; } catch (e) {} }
+    ensureBlockWrapped();
+    if (note.ct) { try { linkifyEditor(); } catch (e) {} }
+    ensureCaret(); // 自动加载后显式重建合法折叠光标
     foot.textContent = '已解锁 · 端到端加密';
     startSync();
   } else {
