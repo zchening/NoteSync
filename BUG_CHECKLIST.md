@@ -490,6 +490,30 @@
   - [ ] 不带 `?diag` 时无浮层、无额外定时器。
   - [ ] 验收探针 `tests/e2e/_probe_f11.js` 16/16 全绿。
 
+### F12 | 选中+空格后"光标不可见且 rects=0"（光标落在不可绘制位置）
+- **版本**: v5.10
+- **现象**: 承接 F11。用户用 v5.9 带 `?diag` 截图反馈：选中"一二三"按空格后，诊断浮层显示：
+  - `focus=editor docFocus=true ranges=1 collapsed=true connected=true inEditor=true` → 选区完全合法
+  - **`rects=0 bcr=0,0,0,0`** → Chromium 无法计算光标绘制坐标
+  - `mode="TEXT" \r\n四五六\n"@1` → 光标落在 `\r\n` 换行符中间（offset=1）
+  - editor HTML: `<div> \r\n四五六\n</div>` → 第一行只剩一个空格+换行
+- **根因**: F10 覆盖了"选区失效"（节点 detach / 不在 editor 内），F11 覆盖了"选区合法但绘制相位未刷新"（rects>0 但画不出来）。但还有**第三种状态**：选区合法、Chromium 也知道焦点在哪，但光标所在的文本偏移是一个**对渲染器来说"不存在"的位置**——如 CRLF 中间、纯空白文本节点内部——此时 `getClientRects()` 返回空、`getBoundingClientRect()` 全零，Chromium 根本不知道把像素画在屏幕哪里。
+  - 这就是 F11 的 `repaintCaret()`（只切 caret-color）无效的原因：颜色切换触发了重绘请求，但渲染器仍然算不出坐标。
+  - headless Playwright 在探针 `_probe_f12.js` 中**成功复现**了此场景（rects=0 → relocate 后 rects=1），说明这次不是 headless 盲区。
+- **修复**: 新增 `relocateCaretToVisible(range)` 函数，在 `ensureCaret(forceRepaint)` 的"选区合法"分支中增加**第二层检测**：
+  1. 选区合法 + 折叠态 + `getClientRects().length === 0` → 判定"光标在不可绘制位置"
+  2. 在同块内生成候选偏移（当前 offset±1~4、节点首尾）→ 同块其他非空文本节点的首尾 → 相邻块的首个非空文本节点
+  3. 逐个尝试 `setStart + collapse + getClientRects()`，取第一个 `rects > 0` 的位置
+  4. 所有候选都失败 → 回退到 ensureBlockWrapped + 编辑器末尾重建
+  5. 关键：只在 `isCollapsed` 时动作，用户选中态完全不碰
+- **关联文件**: index.html → relocateCaretToVisible() / ensureCaret()
+- **核对要点**:
+  - [ ] 用户截图场景（选中一行按空格后）：?diag 显示 rects≥1、光标可见。
+  - [ ] 不破坏选中态（D 断言通过）。
+  - [ ] Ctrl+Z 正常（E 断言通过）。
+  - [ ] 空白块内也能重定位到可见位置（C2 断言通过）。
+  - [ ] 验收探针 `tests/e2e/_probe_f12.js` 7/7 全绿。
+
 ---
 
 ## 版本与 bug 对应速查
@@ -510,3 +534,4 @@
 | v5.7 | F8 |
 | v5.8 | F10 |
 | v5.9 | F11 |
+| v5.10 | F12 |

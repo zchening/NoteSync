@@ -178,7 +178,7 @@ const PBKDF2_ITER = 200000;
 const FAIL_LIMIT = 10;
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '5.9';
+const APP_VERSION = '5.10';
 const BUILD_DATE = '2026-08-03';
 
 const $ = s => document.querySelector(s);
@@ -1218,6 +1218,99 @@ function repaintCaret() {
   } catch (e) {}
 }
 
+// F12：光标落在「不可绘制」位置（如 \r\n 换行符中间、空文本节点内），
+// 导致 getClientRects()=0 → Chromium 无法计算caret绘制坐标 → 光标看不见（却能打字）。
+// 策略：在同块内向前/向后搜索最近的有可见 rect 的文本偏移；找不到就跨块。
+function relocateCaretToVisible(range) {
+  if (!range || !editor) return;
+  const sel = window.getSelection();
+  // 从当前起点开始，在编辑器内广度优先搜索一个 getClientRects()>0 的折叠位置
+  const container = range.startContainer;
+  const offset = range.startOffset;
+
+  // 候选位置生成器：当前偏移±1→同节点其他偏移→兄弟文本节点→其他块
+  const candidates = [];
+
+  // 1. 当前文本节点内：尝试 offset±1, ±2, ... (避开换行符中间)
+  if (container.nodeType === 3 && container.nodeValue) {
+    const len = container.nodeValue.length;
+    for (let i = 1; i <= Math.min(len, 4); i++) {
+      if (offset + i <= len) candidates.push([container, offset + i]);
+      if (offset - i >= 0) candidates.push([container, offset - i]);
+    }
+    // 也试节点首尾
+    candidates.push([container, 0]);
+    candidates.push([container, len]);
+  }
+
+  // 2. 同块内的其他文本节点
+  let block = (container.nodeType === 1) ? container : container.parentElement;
+  while (block && block !== editor && block.tagName !== 'DIV' && block.tagName !== 'P') block = block.parentElement;
+  if (block && block !== editor) {
+    const tw = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (tw.nextNode()) nodes.push(tw.currentNode);
+    for (const n of nodes) {
+      if (n === container) continue;
+      if (n.nodeValue && n.nodeValue.trim()) {
+        candidates.push([n, 0]);       // 节点开头（跳过纯空白前缀）
+        candidates.push([n, n.nodeValue.length]); // 节点末尾
+      }
+    }
+  }
+
+  // 3. 其他块的首个非空文本节点
+  if (block && block !== editor) {
+    let sibling = block.nextSibling;
+    let count = 0;
+    while (sibling && count < 3) {
+      const tw2 = document.createTreeWalker(sibling, NodeFilter.SHOW_TEXT);
+      while (tw2.nextNode()) {
+        const n = tw2.currentNode;
+        if (n.nodeValue && n.nodeValue.trim()) { candidates.push([n, 0]); break; }
+      }
+      sibling = sibling.nextSibling; count++;
+    }
+    sibling = block.previousSibling;
+    count = 0;
+    while (sibling && count < 3) {
+      const tw2 = document.createTreeWalker(sibling, NodeFilter.SHOW_TEXT);
+      while (tw2.nextNode()) {
+        const n = tw2.currentNode;
+        if (n.nodeValue && n.nodeValue.trim()) { candidates.push([n, n.nodeValue.length]); break; }
+      }
+      sibling = sibling.previousSibling; count++;
+    }
+  }
+
+  // 逐个尝试，取第一个 rects>0 的
+  for (const [node, off] of candidates) {
+    try {
+      const tr = document.createRange();
+      tr.setStart(node, off);
+      tr.collapse(true);
+      if (tr.getClientRects().length > 0) {
+        sel.removeAllRanges();
+        sel.addRange(tr);
+        return; // 成功重定位到可见位置
+      }
+    } catch (e) { /* 某些偏移可能非法（如 Element 节点越界），跳过 */ }
+  }
+
+  // 所有候选都失败 → 回退到 ensureBlockWrapped + 末尾重建（与非法选区路径相同）
+  ensureBlockWrapped();
+  const last = editor.lastChild;
+  const fr = document.createRange();
+  if (last) {
+    const tw = document.createTreeWalker(last, NodeFilter.SHOW_TEXT);
+    let t = null; while (tw.nextNode()) t = tw.currentNode;
+    if (t) fr.setStart(t, t.length);
+    else fr.setStart(last, last.childNodes.length);
+  } else { fr.setStart(editor, 0); }
+  fr.collapse(true);
+  try { sel.removeAllRanges(); sel.addRange(fr); } catch (e) {}
+}
+
 function ensureCaret(forceRepaint) {
   if (!editor || isComposing) return;
   const sel = window.getSelection();
@@ -1225,8 +1318,18 @@ function ensureCaret(forceRepaint) {
     sel.getRangeAt(0).startContainer.isConnected &&
     editor.contains(sel.getRangeAt(0).commonAncestorContainer);
   if (valid) {
-    // 选区合法 → 不改位置（尊重用户选中态 / 当前光标），
-    // 但 DOM 刚被重排过时补一次绘制刷新，解决「位置对、画不出来」。
+    // 选区合法 → 进一步检查光标是否有可绘制的屏幕位置。
+    // F12 根因：用户选中一行按空格后，选区合法(connected/inEditor/collapsed)，
+    // 但 getClientRects()=0、bcr=0,0,0,0 —— 光标落在 \r\n 换行符中间，
+    // Chromium 无法计算绘制坐标 → 光标看不见（却能打字，因为插入点逻辑上存在）。
+    if (sel.isCollapsed && sel.rangeCount > 0) {
+      const r = sel.getRangeAt(0);
+      if (r.getClientRects().length === 0) {
+        // 光标在"不可绘制"位置 → 挪到同块内最近的可见文本偏移
+        relocateCaretToVisible(r);
+        return; // 已重定位，无需再 repaint
+      }
+    }
     if (forceRepaint) repaintCaret();
     return;
   }
