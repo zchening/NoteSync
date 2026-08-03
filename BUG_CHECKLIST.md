@@ -28,7 +28,7 @@
 | B | 导出图片 | 7 | 修改 exportImage / exportImgBtn 事件 / html2canvas 调用 / 临时 div 渲染 |
 | C | 缓存与图标 | 3 | 修改 favicon / manifest.json / Cache-Control 头 |
 | D | PWA 与移动端 | 3 | 修改 manifest.json / 触摸事件 / 夜间模式 CSS |
-| E | 选区与同步 | 3 | 修改 editor 输入/粘贴处理 / linkifyEditor / saveSelectionOffsets·restoreSelectionOffsets / cleanupLeadingTrailingBreaks / insertNodeAtCaret / 删除逻辑 / poll 远端合并 |
+| E | 选区与同步 | 4 | 修改 editor 输入/粘贴处理 / linkifyEditor / saveSelectionOffsets·restoreSelectionOffsets / cleanupLeadingTrailingBreaks / insertNodeAtCaret / 删除逻辑 / poll 远端合并 / selectionchange 钳制 |
 
 ---
 
@@ -329,6 +329,21 @@
 
 ---
 
+### E4 | 三击选行 + 空格 → 下一行被拽上来（块边界溢出）
+- **版本**: v5.13
+- **现象**: 输入两行（第一行 一二三四五六，第二行 七），三击选中第一行，按空格，期望第一行变" "、第二行保持"七"；实际第一行变成" 七"（第二行内容被合并上来）
+- **根因**: Chromium 三击行选会把选区终点放到"下一行块的起点(offset 0)"，选区把两块之间的边界也包进去；随后任何替换/删除选区都会吞掉块边界、把下一行内容合并上来。NoteSync 自身此前未处理该边界溢出
+- **修复**: 新增 `selectionchange` 守卫 + `isOverflowSelection()` / `clampOverflowSelection()`：检测"选区终点落在紧随其后的兄弟块起点、且未选中该块任何内容、正向溢出"的边界溢出模式，把选区终点钳制回当前块末尾。钳制后按空格只替换当前行、保留块结构
+- **关联文件**: index.html → isOverflowSelection() / clampOverflowSelection() / selectionchange 监听
+- **核对要点**:
+  - [ ] 两行文本，三击第一行，按空格 → 第一行" "、第二行"七"（innerHTML = `<div> </div><div>七</div>`）
+  - [ ] 普通跨两行拖选（选中了下一行内容）再按空格 → 不误钳制，行为正常
+  - [ ] 反向选择（从第二行选到第一行开头）不误钳制
+  - [ ] 三击后 Ctrl+Z 撤销仍正常（v5.12 自建撤销栈不回归）
+  - [ ] 其他控件（密码框等）选区不受影响（守卫 `activeElement===editor`）
+
+---
+
 ### F1 | 按回车没反应：cleanup 把刚换出来的空行立刻删掉
 - **版本**: v5.3
 - **现象**: 没输入任何字符时按回车期望换行，结果毫无反应；在已有文字行尾按回车同样不换行
@@ -598,3 +613,4 @@
 | v5.10 | F12 |
 | v5.11 | F13 |
 | v5.12 | G1 |
+| v5.13 | E4 |

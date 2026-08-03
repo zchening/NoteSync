@@ -178,7 +178,7 @@ const PBKDF2_ITER = 200000;
 const FAIL_LIMIT = 10;
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '5.12';
+const APP_VERSION = '5.13';
 const BUILD_DATE = '2026-08-03';
 
 const $ = s => document.querySelector(s);
@@ -880,6 +880,9 @@ function redo() {
 // 调试钩子（仅供自动化探针读取/重置，无业务副作用）
 window.__undoState = () => ({ u: undoStack.length, r: redoStack.length, html: editor.innerHTML });
 window.__undoReset = () => { undoStack = []; redoStack = []; lastState = captureState(); };
+// 选区边界溢出判定的测试钩子（仅供自动化探针调用，无业务副作用）
+window.__isOverflowSelection = isOverflowSelection;
+window.__clampOverflowSelection = clampOverflowSelection;
 
 // ── Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z 键盘拦截 ──
 editor.addEventListener('keydown', e => {
@@ -888,6 +891,51 @@ editor.addEventListener('keydown', e => {
   const k = (e.key || '').toLowerCase();
   if (k === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); }
   else if (k === 'y') { e.preventDefault(); redo(); }
+});
+
+// ── 三击行选"边界溢出"钳制（修复：选中第一行 + 空格 → 第二行被拽上来）──
+// Chromium 三击选中一行时，选区终点会落在"下一行块的起点(offset 0)"，
+// 选区把两块之间的边界也包了进去；随后任何替换/删除选区都会吞掉块边界、
+// 把下一行内容合并上来（用户报：第一行 一二三四五六 + 第二行 七，三击第一行按空格→" 七"）。
+// 这里检测该"边界溢出"模式并钳制回当前块末尾，使替换只影响当前行、保留块结构。
+// 判定很窄：终点在紧随其后的兄弟块起点 + 该块无任何内容被选中 + 正向溢出，
+// 不会误伤正常跨行拖选（那种情况终点在文字里、且选中了下一行内容）。
+function isOverflowSelection(range) {
+  if (!range || range.collapsed) return false;
+  const startBlock = blockOf(range.startContainer, editor);
+  const endBlock = blockOf(range.endContainer, editor);
+  if (startBlock === editor || endBlock === editor || startBlock === endBlock) return false;
+  // 终点是否正好落在 endBlock 的起点（即未选中 endBlock 任何内容）
+  let atStart = false;
+  try {
+    const p = document.createRange();
+    p.selectNodeContents(endBlock);
+    p.setStart(range.endContainer, range.endOffset);
+    atStart = (p.toString() === (endBlock.textContent || ''));
+  } catch (e) { return false; }
+  if (!atStart) return false;
+  // 正向溢出：startBlock 必须在 endBlock 之前（避免干扰反向选择）
+  return !!(endBlock.compareDocumentPosition(startBlock) & Node.DOCUMENT_POSITION_PRECEDING);
+}
+function clampOverflowSelection() {
+  const sel = window.getSelection();
+  if (!sel.rangeCount || sel.isCollapsed) return false;
+  const r = sel.getRangeAt(0);
+  if (!isOverflowSelection(r)) return false;
+  const startBlock = blockOf(r.startContainer, editor);
+  const tail = document.createRange();
+  tail.selectNodeContents(startBlock);
+  tail.collapse(false); // 收回到 startBlock 末尾
+  try {
+    r.setEnd(tail.endContainer, tail.endOffset);
+    sel.removeAllRanges();
+    sel.addRange(r);
+  } catch (e) { return false; }
+  return true;
+}
+document.addEventListener('selectionchange', () => {
+  if (document.activeElement !== editor || isComposing || isRestoring) return;
+  clampOverflowSelection();
 });
 
 // 编辑器是否"空"：仅含浏览器在空 contenteditable 里塞的占位 <br> 或纯空白，无任何实质内容
