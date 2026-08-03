@@ -26,9 +26,12 @@
 |------|------|--------|----------------|
 | A | 删除线 | 7 | 修改 strikeBtn / addStrikeToRange / removeStrikeFromRange / rangeIntersectsNode / contentHasS / linkifyEditor |
 | B | 导出图片 | 7 | 修改 exportImage / exportImgBtn 事件 / html2canvas 调用 / 临时 div 渲染 |
-| C | 缓存与图标 | 3 | 修改 favicon / manifest.json / Cache-Control 头 |
+| C | 缓存与图标 | 4 | 修改 favicon / manifest.json / Cache-Control 头 / icon-maskable 生成与路由 |
 | D | PWA 与移动端 | 3 | 修改 manifest.json / 触摸事件 / 夜间模式 CSS |
 | E | 选区与同步 | 4 | 修改 editor 输入/粘贴处理 / linkifyEditor / saveSelectionOffsets·restoreSelectionOffsets / cleanupLeadingTrailingBreaks / insertNodeAtCaret / 删除逻辑 / poll 远端合并 / selectionchange 钳制 |
+| F | 光标与编辑 | 13 | 修改 Enter 处理 / cleanupLeadingTrailingBreaks / caretInsideNode / linkifyEditor 块内偏移 / ensureBlockWrapped / ensureCaret / repaintCaret / relocateCaretToVisible / isComposing |
+| G | 撤销栈 | 1 | 修改 自建撤销栈 / captureState / applyState / recordIfChanged / syncCurrentState / undo / redo / keydown 拦截 Ctrl+Z/Y |
+| H | 落地页/解锁/路由/图标/指纹 | 4 | 修改 landing 路由(ID_RE/extractId/导航) / 打开按钮禁用 / 解锁按钮禁用态样式 / 指纹 WebAuthn PRF 逻辑 |
 
 ---
 
@@ -241,6 +244,19 @@
   - [ ] manifest.json 的 icon src 含版本号
   - [ ] 更新后提示用户卸载重装 PWA
   - [ ] 新安装的 PWA 显示新图标
+
+### C4 | PWA 自适应图标透明底被填黑（手机 Chrome 添加快捷方式图标黑底）
+- **版本**: v5.14
+- **现象**: 手机 Chrome「添加到主屏幕」后，PWA 图标底层是黑色背景，难看；原 manifest 用透明 `favicon.svg` 作图标（且 purpose 含 "any maskable"），Android 自适应图标会把透明区域填成黑色。
+- **根因**: 透明 SVG 在 Android 自适应图标（maskable）场景下，透明像素被系统填充为黑色，没有实底。
+- **修复**: 新增米白实底(#FBFBF8)金 logo 的 `icon-maskable-192.png` / `icon-maskable-512.png`（Pillow 生成，金线 sync 弧 + 圆角），manifest 改为这两个 PNG 且 `purpose:"maskable"`（带 `?v=5.14` 版本号）；同时给 `favicon.svg` 加 `<rect width="48" height="48" fill="#FBFBF8" rx="10"/>` 兜底，避免 "any" 用法也出现黑底。`server.js` 新增 `/icon-maskable-192.png` `/icon-maskable-512.png` 路由（image/png、no-cache）。
+- **关联文件**: manifest.json / favicon.svg / icon-maskable-192.png / icon-maskable-512.png / server.js（图标路由）
+- **核对要点**:
+  - [ ] manifest.json 的 maskable 图标 src 含版本号 `?v=5.14`
+  - [ ] 图标为米白实底，无透明/黑底
+  - [ ] `favicon.svg` 含 `fill="#FBFBF8"` 矩形兜底
+  - [ ] `/icon-maskable-192.png` `/icon-maskable-512.png` 以 image/png 返回、正文非 trivial
+  - [ ] 手机 Chrome 添加快捷方式后图标为米白底金 logo（真机验证）
 
 ---
 
@@ -592,6 +608,64 @@
 
 ---
 
+## H. 落地页 / 解锁 / 路由 / 图标 / 指纹
+
+### H1 | 落地页笔记名不支持中文（路由拒绝中文 ID）
+- **版本**: v5.14
+- **现象**: 首页输入框输入中文笔记名（如"我的日记"）→ 点"打开"要么无反应、要么服务端返回 400；中文名经 URL 编码后也无法定位笔记
+- **根因**: `server.js` 的 `ID_RE` 用 `/^[a-zA-Z0-9_-]{1,32}$/` 只认 ASCII，中文被 400 拒绝；`extractId` 未对路径段 `decodeURIComponent`，客户端编码后的路径（`%E6%88%91...`）路由失败
+- **修复**: `ID_RE` 放宽为 `/^[^\x00-\x1f\/\\?#%]{1,64}$/`（接受 Unicode，仅禁控制符与 `/ \ ? # %`）；`extractId` 与 SSE 推送 id 均 `decodeURIComponent`；客户端 `#landingBtn` 点击走 `encodeURIComponent` 导航；`manifest.json` 动态 `start_url` 用 `encodeURI`
+- **关联文件**: server.js（ID_RE/extractId/SSE id）/ index.html（landing 导航）/ manifest.json（start_url）
+- **核对要点**:
+  - [ ] 中文笔记名 → 打开后能定位并读写（PUT/GET 不 400）
+  - [ ] 中文名编码后 URL 正常路由（服务端 decode 回来）
+  - [ ] 含空格/特殊可见字符（如 `my note!`）的笔记名也能用
+  - [ ] 仍拒绝非法字符：`/ \ ? # %` 与不可见控制符（\x00-\x1f）返回 400
+  - [ ] manifest 快捷方式 `start_url` 中文编码正确（D1 不回归）
+
+### H2 | 笔记名为空时"打开"按钮禁用
+- **版本**: v5.14
+- **现象**: 首页未输入笔记名时，"打开"按钮应不可点击，防止误开默认/空笔记
+- **根因**: 原 `#landingBtn` 无禁用逻辑，空名也能点
+- **修复**: `#landingBtn` 初始 `disabled`；`landingInput` 的 input 监听按 `value.trim()` 空否切换 `disabled`
+- **关联文件**: index.html → `#landingBtn` / `landingInput` 监听
+- **核对要点**:
+  - [ ] 输入框为空 → 打开按钮 `disabled`、不可点
+  - [ ] 输入任意非空内容 → 按钮立即可点
+  - [ ] 清空内容 → 按钮恢复 `disabled`
+  - [ ] 只输入空格（trim 后空）→ 仍 `disabled`（边界）
+
+### H3 | 口令为空时"解锁"按钮禁用 + 禁用态被主题 `!important` 压穿（真实 bug）
+- **版本**: v5.14
+- **现象**: 未输口令时"解锁"按钮不可点击；用户明确要求"禁用状态设计得好看点"。初版禁用态在真机下仍显示成"启用"样式（深色底浅字），等于没禁用，违反用户诉求
+- **根因**: ① 原 `#ok` 无禁用逻辑；② `applyTheme()` 注入的主题覆盖 `.box button{...!important}` 与 `#landing button{...!important}` 用 `!important` 压过了禁用态基样式，导致禁用态仍取启用色。**这是子代理在真实 Chromium 用 computed-style 校验揪出的真实实现缺陷**
+- **修复**: `#ok` 初始 `disabled`，`pw` 监听按空否切换；新增统一禁用态 `.box button:disabled,#landing button:disabled{background:var(--line);color:var(--muted);cursor:not-allowed;box-shadow:none}`；把 `applyTheme` 的主题覆盖限定为 `:not(:disabled)`，禁用态自然回落 muted 基样式，且随深浅色主题变量自动跟随
+- **关联文件**: index.html → `#ok` / `pw` 监听 / 禁用态 CSS / `applyTheme()` 的 `:not(:disabled)` 限定
+- **核对要点**:
+  - [ ] 口令为空 → 解锁按钮 `disabled`、不可点
+  - [ ] 输入任意口令 → 按钮立即可点
+  - [ ] **禁用态在真机/计算样式下确实弱化**（computed `background === var(--line)` 米白、`color === var(--muted)`、非启用深色）——本 bug 核心价值点
+  - [ ] 禁用态在深色/浅色主题下都正确跟随（不再被主题 `!important` 压穿）
+  - [ ] 指纹按钮 `#bioBtn` 在 PRF 不支持时隐藏（H4 联动）
+
+### H4 | 手机端指纹解锁（WebAuthn PRF）
+- **版本**: v5.14
+- **现象**: 手机 Chrome 用户希望用指纹/面容解锁笔记，免去每次输口令
+- **约束**: 端到端加密笔记主密钥由口令派生，绝不能把密钥交给服务器——方案必须纯前端
+- **修复**: 纯前端 **WebAuthn PRF 扩展**（不碰后端、不破坏 E2E 加密）：
+  - 注册 `enrollBiometric`：建平台凭证（prf 扩展）→ 取 assertion 拿 PRF 输出 → HKDF-SHA256 派生 KEK → AES-GCM 包裹主密钥存 `localStorage BIO_STORE`
+  - 解锁 `unlockWithBiometric`：取 assertion（prf eval 用注册时存的盐）→ 解包 → `importKey` → `applyUnlocked`
+  - 口令始终为兜底；`supportsWebAuthnPRF` 探测，iOS 不支持 PRF 时自动隐藏 `#bioBtn`
+- **关联文件**: index.html → `supportsWebAuthnPRF` / `deriveBiometricKEK` / `aesGcmWrapBytes` / `aesGcmUnwrap` / `enrollBiometric` / `unlockWithBiometric` / `updateBioUI` / `offerBiometricEnrollment`
+- **核对要点**:
+  - [ ] `supportsWebAuthnPRF=false`（如 iOS）→ `#bioBtn` 隐藏，仅口令解锁
+  - [ ] 注册成功后将**包裹**密钥写入 `BIO_STORE`，明文主密钥不落盘
+  - [ ] 解锁走 PRF 派生 KEK → 解包主密钥 → 成功进入（HKDF/AES-GCM 往返 headless 不可测，靠 crypto round-trip + UI 守卫验证）
+  - [ ] PRF 不可用 / 用户取消时优雅回退口令，无异常
+  - [ ] 口令兜底路径不受影响（H3 联动）
+
+---
+
 ## 版本与 bug 对应速查
 
 | 版本 | 涉及 bug 编号 |
@@ -614,3 +688,4 @@
 | v5.11 | F13 |
 | v5.12 | G1 |
 | v5.13 | E4 |
+| v5.14 | H1, H2, H3, H4, C4 |

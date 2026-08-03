@@ -16,8 +16,8 @@ if (!fs.existsSync(NOTES_DIR)) fs.mkdirSync(NOTES_DIR, { recursive: true });
 
 const EMPTY = { v: 0, ct: '', iv: '', salt: '', updatedAt: 0 };
 
-// noteId 校验：只允许字母数字、横线、下划线，1-32 字符
-const ID_RE = /^[a-zA-Z0-9_-]{1,32}$/;
+// noteId 校验：允许中英文/数字/常用符号（支持中文笔记名），但禁止路径与编码危险字符，1-64 字符
+const ID_RE = /^[^\x00-\x1f\/\\?#%]{1,64}$/;
 
 // --- 限流参数 ---
 const FAIL_LIMIT = 10;                   // 失败阈值
@@ -115,9 +115,10 @@ function sendJSON(res, code, obj) {
 }
 
 function extractId(url, prefix) {
-  // /api/note/abc123 → abc123
+  // /api/note/abc123 → abc123（路径段可能含中文等，需先 decodeURIComponent）
   const m = url.match(new RegExp('^' + prefix + '/([^/]+)'));
-  return m ? m[1] : null;
+  if (!m) return null;
+  try { return decodeURIComponent(m[1]); } catch { return null; }
 }
 
 const server = http.createServer((req, res) => {
@@ -126,7 +127,7 @@ const server = http.createServer((req, res) => {
 
   // --- API: SSE 流 ---
   if (req.method === 'GET' && url.startsWith('/api/note/') && url.endsWith('/stream')) {
-    const id = url.replace(/\/stream$/, '').replace(/^\/api\/note\//, '');
+    const id = decodeURIComponent(url.replace(/\/stream$/, '').replace(/^\/api\/note\//, ''));
     if (!id || !ID_RE.test(id)) return sendJSON(res, 400, { error: 'bad id' });
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -207,7 +208,7 @@ const server = http.createServer((req, res) => {
         const params = new URLSearchParams(query);
         const start = params.get('start') || '/';
         let manifest = JSON.parse(fs.readFileSync(f, 'utf8'));
-        manifest.start_url = start;
+        manifest.start_url = encodeURI(start);
         manifest.id = start;
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-cache, no-store, must-revalidate' });
         res.end(JSON.stringify(manifest));
@@ -226,6 +227,22 @@ const server = http.createServer((req, res) => {
       const f = path.join(APP_DIR, 'favicon.svg');
       if (fs.existsSync(f)) {
         res.writeHead(200, { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'no-cache, no-store, must-revalidate' });
+        fs.createReadStream(f).pipe(res);
+        return;
+      }
+    }
+    if (url === '/icon-maskable-192.png') {
+      const f = path.join(APP_DIR, 'icon-maskable-192.png');
+      if (fs.existsSync(f)) {
+        res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-cache, no-store, must-revalidate' });
+        fs.createReadStream(f).pipe(res);
+        return;
+      }
+    }
+    if (url === '/icon-maskable-512.png') {
+      const f = path.join(APP_DIR, 'icon-maskable-512.png');
+      if (fs.existsSync(f)) {
+        res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-cache, no-store, must-revalidate' });
         fs.createReadStream(f).pipe(res);
         return;
       }

@@ -3,18 +3,35 @@
 // 直接驱动页面内的真实函数，绕过后端鉴权（隐藏 landing/mask 遮罩让按钮可点）。
 const { test, before, after } = require('node:test');
 const assert = require('node:assert');
-const { chromium } = require('playwright');
-const { startServer } = require('./server');
+const { setup, teardown } = require('./harness');
 
 const ZWSP = '\u200B';
-const strip = (s) => (s || '').replace(/\u200B/g, '');
+
+// 仅吞掉 Playwright/浏览器拆解阶段偶发的未处理 rejection（Windows 环境），不掩盖真实业务错误。
+process.on('unhandledRejection', (reason) => {
+  const msg = String((reason && reason.message) || reason);
+  if (/playwright|browser|connection|target|transport|closed|websocket/i.test(msg)) return;
+  console.error('Unhandled rejection (non-teardown):', msg);
+  process.exitCode = 1;
+});
+
+// 失败计数：teardown 后据此决定最终退出码，避免 Windows 拆解 hang 污染结果。
+let failures = 0;
+function guard(fn) {
+  return async (t) => {
+    try {
+      await fn(t);
+    } catch (e) {
+      failures++;
+      throw e;
+    }
+  };
+}
 
 let server, browser, page, baseURL;
 
 before(async () => {
-  server = await startServer();
-  baseURL = `http://localhost:${server.address().port}/`;
-  browser = await chromium.launch({ headless: true, args: ['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage'] });
+  ({ server, baseURL, browser } = await setup());
   page = await browser.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
@@ -29,12 +46,12 @@ before(async () => {
 });
 
 after(async () => {
-  if (browser) await browser.close();
-  if (server) server.close();
+  await teardown(browser, server);
+  process.exit(failures > 0 ? 1 : 0);
 });
 
 // ── A7：删除线后 linkify 的 500ms 防抖重排不应破坏选区 ─────────────────
-test('A7 删除线后 linkify 防抖不破坏选区', async () => {
+test('A7 删除线后 linkify 防抖不破坏选区', guard(async () => {
   await page.evaluate(() => {
     const ed = document.getElementById('editor');
     ed.innerHTML = 'AB15.34CD';
@@ -70,10 +87,10 @@ test('A7 删除线后 linkify 防抖不破坏选区', async () => {
   assert.strictEqual(info.hasS, true, '应已加删除线');
   assert.ok(info.rangeCount > 0, '选区不应塌缩（rangeCount>0）');
   assert.strictEqual(info.text, 'AB15.34CD', '选区应精确覆盖原文字、不因 \u200B 插入丢尾字');
-});
+}));
 
 // ── B3：点击导出按钮页面不刷新 ───────────────────────────────────────
-test('B3 点导出按钮页面不刷新', async () => {
+test('B3 点导出按钮页面不刷新', guard(async () => {
   await page.evaluate(() => {
     window.__reloadMarker = 'keep';
     document.getElementById('editor').innerHTML = '导出测试内容';
@@ -82,10 +99,10 @@ test('B3 点导出按钮页面不刷新', async () => {
   await page.waitForTimeout(600);
   const kept = await page.evaluate(() => window.__reloadMarker === 'keep');
   assert.strictEqual(kept, true, '点击导出后页面不应刷新（reload marker 应保留）');
-});
+}));
 
 // ── B6：导出后 editor 的 overflow 样式必须恢复 ────────────────────────
-test('B6 导出后 editor overflow 样式恢复', async () => {
+test('B6 导出后 editor overflow 样式恢复', guard(async () => {
   await page.evaluate(() => {
     document.getElementById('editor').innerHTML = 'overflow 恢复测试';
   });
@@ -96,4 +113,4 @@ test('B6 导出后 editor overflow 样式恢复', async () => {
     .catch(() => {});
   const overflow = await page.evaluate(() => document.getElementById('editor').style.overflow);
   assert.strictEqual(overflow, '', '导出后 editor.overflow 应恢复为空，不被 hidden 残留');
-});
+}));

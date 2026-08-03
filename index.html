@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="NoteSync">
 <meta name="description" content="NoteSync · 端到端加密的多设备同步笔记">
 <link rel="manifest" href="/manifest.json">
-<link rel="icon" href="/favicon.svg?v=5.1" type="image/svg+xml">
+<link rel="icon" href="/favicon.svg?v=5.14" type="image/svg+xml">
 <title>NoteSync</title>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <style>
@@ -73,6 +73,9 @@
   .box button{width:100%;height:46px;border:0;border-radius:10px;background:var(--fg);color:var(--bg);font-size:15px;font-weight:500;letter-spacing:.08em;cursor:pointer;transition:opacity .2s}
   .box button:hover{opacity:.85}
   .box button:active{opacity:.75}
+  /* 统一禁用态：保留品牌色但弱化（暖灰底+弱化金字），深浅色自动跟随，不破坏整体风格 */
+  .box button:disabled, #landing button:disabled{background:var(--line);color:var(--muted);cursor:not-allowed;box-shadow:none;opacity:1}
+  .box button:disabled:hover, #landing button:disabled:hover{opacity:1}
 
   /* ── 根路径说明 ─────────────────────── */
   .home{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;text-align:center}
@@ -102,6 +105,11 @@
   /* ── 提示气泡 / 加载 ────────────────── */
   .upload-status{position:fixed;bottom:44px;left:50%;transform:translateX(-50%);background:var(--upload-bg);color:var(--bg);padding:10px 20px;border-radius:999px;font-size:13px;letter-spacing:.03em;z-index:20;opacity:0;transition:opacity .3s;pointer-events:none;box-shadow:0 10px 30px rgba(20,20,18,.2)}
   .upload-status.show{opacity:1}
+.bio-banner{position:fixed;bottom:44px;left:50%;transform:translateX(-50%);background:var(--upload-bg);color:var(--bg);padding:10px 20px;border-radius:999px;font-size:13px;z-index:20;display:none;align-items:center;gap:10px;box-shadow:0 10px 30px rgba(20,20,18,.2)}
+.bio-banner button{border:1px solid rgba(255,255,255,.35);background:transparent;color:inherit;border-radius:999px;padding:4px 12px;font-size:12px;cursor:pointer;transition:background .2s}
+.bio-banner button:hover{background:rgba(255,255,255,.15)}
+.box button.bio{margin-top:10px;background:transparent;border:1px solid var(--line);color:var(--fg)}
+.box button.bio:hover{background:var(--hover)}
   #loading{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:5;color:var(--muted);font-size:13px;letter-spacing:.2em}
 </style>
 </head>
@@ -117,8 +125,8 @@
   <h1>NoteSync</h1>
   <p class="sub">端到端加密 · 多设备同步</p>
   <div class="input-row">
-    <input id="landingInput" placeholder="笔记名（英文或数字）" autocomplete="off">
-    <button id="landingBtn">打开</button>
+    <input id="landingInput" placeholder="笔记名（中英文 / 数字均可）" autocomplete="off">
+    <button id="landingBtn" disabled>打开</button>
   </div>
   <p class="hint">在网址后加笔记名即可，如 note.xuyinji.com.cn/notes</p>
 </div>
@@ -140,6 +148,7 @@
 <input type="file" id="fileInput" accept="image/*" style="display:none">
 <footer id="foot">端到端加密 · 仅在你的浏览器内加解密</footer>
 <div class="upload-status" id="uploadStatus"></div>
+<div class="bio-banner" id="bioBanner" style="display:none"><span>是否开启指纹解锁以便下次快速进入？</span><button type="button" id="bioEnrollYes">开启</button><button type="button" id="bioEnrollNo">不用</button></div>
 
 <div id="loading">加载中</div>
 
@@ -155,7 +164,8 @@
     <p>此口令用于在本机派生加密密钥，不会发送到服务器。每台新设备首次打开需输入一次，之后自动记住。</p>
     <input id="pw" type="password" autocomplete="off" autofocus>
     <div class="err" id="err"></div>
-    <button id="ok">解 锁</button>
+    <button id="ok" disabled>解 锁</button>
+    <button id="bioBtn" class="bio" type="button" style="display:none">指纹解锁</button>
   </div>
 </div>
 
@@ -174,11 +184,12 @@ document.querySelector('link[rel="manifest"]').href = '/manifest.json?start=/' +
 const NOTE_API = '/api/note/' + encodeURIComponent(noteId);
 const FAIL_API = '/api/fail/' + encodeURIComponent(noteId);
 const KEY_STORE = 'notesync_key_' + noteId;
+const BIO_STORE = 'notesync_bio_' + noteId;
 const PBKDF2_ITER = 200000;
 const FAIL_LIMIT = 10;
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '5.13';
+const APP_VERSION = '5.14';
 const BUILD_DATE = '2026-08-03';
 
 const $ = s => document.querySelector(s);
@@ -233,10 +244,10 @@ function applyTheme(dark) {
       footer{background:#0F0F11!important;color:#7A786F!important;border-color:#242428!important}
       .box{background:#17171A!important;color:#E9E8E3!important;border-color:#242428!important}
       .box input{background:#0F0F11!important;color:#E9E8E3!important;border-color:#242428!important}
-      .box button{background:#E9E8E3!important;color:#0F0F11!important}
+      .box button:not(:disabled){background:#E9E8E3!important;color:#0F0F11!important}
       #landing{background:#0F0F11!important;color:#E9E8E3!important}
       #landing input{background:#17171A!important;color:#E9E8E3!important;border-color:#242428!important}
-      #landing button{background:#E9E8E3!important;color:#0F0F11!important}
+      #landing button:not(:disabled){background:#E9E8E3!important;color:#0F0F11!important}
       #loading{background:#0F0F11!important;color:#7A786F!important}
     `;
   } else {
@@ -248,10 +259,10 @@ function applyTheme(dark) {
       footer{background:#FBFBF8!important;color:#98958A!important;border-color:#ECEAE2!important}
       .box{background:#FFFFFF!important;color:#1C1C1A!important;border-color:#ECEAE2!important}
       .box input{background:#FBFBF8!important;color:#1C1C1A!important;border-color:#ECEAE2!important}
-      .box button{background:#1C1C1A!important;color:#FBFBF8!important}
+      .box button:not(:disabled){background:#1C1C1A!important;color:#FBFBF8!important}
       #landing{background:#FBFBF8!important;color:#1C1C1A!important}
       #landing input{background:#FFFFFF!important;color:#1C1C1A!important;border-color:#ECEAE2!important}
-      #landing button{background:#1C1C1A!important;color:#FBFBF8!important}
+      #landing button:not(:disabled){background:#1C1C1A!important;color:#FBFBF8!important}
       #loading{background:#FBFBF8!important;color:#98958A!important}
     `;
   }
@@ -558,7 +569,7 @@ strikeBtn.addEventListener('mousedown', e => { if (e.button !== 0) return; e.pre
 const bufToB64 = b => btoa(String.fromCharCode(...new Uint8Array(b)));
 const b64ToBuf = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 
-let cryptoKey = null, serverSalt = null, localVer = 0, busy = false, lastHtml = '';
+let cryptoKey = null, serverSalt = null, localVer = 0, busy = false, lastHtml = '', bioEnrolled = false;
 
 function setStatus(on, text) { statusEl.className = 'dot' + (on ? ' on' : ''); statusText.textContent = text; }
 function fmtRetry(sec) { const m = Math.ceil(sec / 60); return m + ' 分钟'; }
@@ -1116,6 +1127,24 @@ if (window.PointerEvent) {
 exportImgBtn.addEventListener('click', e => { e.preventDefault(); if (!window.PointerEvent) exportImage(); });
 
 // --- 解锁 ---
+async function applyUnlocked(key, note) {
+  cryptoKey = key;
+  try {
+    const raw = await crypto.subtle.exportKey('raw', key);
+    localStorage.setItem(KEY_STORE, bufToB64(raw));
+  } catch (e) {}
+  localVer = note.v || 0;
+  mask.classList.add('hidden');
+  editor.contentEditable = true;
+  if (note.ct) { try { lastHtml = await decryptText(note.ct, note.iv, key); editor.innerHTML = lastHtml; } catch (e) {} }
+  ensureBlockWrapped();
+  if (note.ct) { try { linkifyEditor(); } catch (e) {} }
+  ensureCaret(); // 关键：解密内容载入后显式重建合法折叠光标（避免"解锁后无光标/无法输入"）
+  undoStack = []; redoStack = []; lastState = captureState(); // 新笔记会话：清空并重置撤销栈基线
+  foot.textContent = '已解锁 · 端到端加密';
+  startSync();
+}
+
 async function unlock(pass) {
   err.textContent = '';
   if (!pass) { err.textContent = '请输入口令'; return; }
@@ -1132,22 +1161,125 @@ async function unlock(pass) {
     try { await decryptText(note.ct, note.iv, key); }
     catch (e) { await reportFail(); return; }
   }
-  cryptoKey = key;
-  try {
-    const raw = await crypto.subtle.exportKey('raw', key);
-    localStorage.setItem(KEY_STORE, bufToB64(raw));
-  } catch (e) {}
   if (!note.salt) { try { await apiPut({ ct: '', iv: '', salt: bufToB64(serverSalt) }); } catch (e) {} }
-  localVer = note.v || 0;
-  mask.classList.add('hidden');
-  editor.contentEditable = true;
-  if (note.ct) { try { lastHtml = await decryptText(note.ct, note.iv, key); editor.innerHTML = lastHtml; } catch (e) {} }
-  ensureBlockWrapped();
-  if (note.ct) { try { linkifyEditor(); } catch (e) {} }
-  ensureCaret(); // 关键：解密内容载入后显式重建合法折叠光标（避免"解锁后无光标/无法输入"）
-  undoStack = []; redoStack = []; lastState = captureState(); // 新笔记会话：清空并重置撤销栈基线
-  foot.textContent = '已解锁 · 端到端加密';
-  startSync();
+  await applyUnlocked(key, note);
+  offerBiometricEnrollment();
+}
+
+async function supportsWebAuthnPRF() {
+  if (!window.PublicKeyCredential || typeof PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable !== 'function') return false;
+  try { if (!await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()) return false; }
+  catch (e) { return false; }
+  if (PublicKeyCredential.getClientCapabilities) {
+    try { const caps = await PublicKeyCredential.getClientCapabilities(); if (caps && typeof caps.prf === 'boolean') return caps.prf; }
+    catch (e) {}
+  }
+  return true; // 平台认证器存在且未明确拒绝 PRF 时尝试
+}
+async function deriveBiometricKEK(prfOut) {
+  const base = await crypto.subtle.importKey('raw', new Uint8Array(prfOut), 'HKDF', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: new TextEncoder().encode('notesync-bio-kek-v1') },
+    base, 256);
+  return new Uint8Array(bits);
+}
+async function aesGcmWrapBytes(plainBuf, kekBytes) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const kekKey = await crypto.subtle.importKey('raw', kekBytes, { name: 'AES-GCM', length: 256 }, false, ['encrypt']);
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, kekKey, plainBuf);
+  return { ct: bufToB64(ct), iv: bufToB64(iv) };
+}
+async function aesGcmUnwrap(ctB64, ivB64, kekBytes) {
+  const kekKey = await crypto.subtle.importKey('raw', kekBytes, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64ToBuf(ivB64) }, kekKey, b64ToBuf(ctB64));
+  return new Uint8Array(pt);
+}
+async function enrollBiometric() {
+  const masterRawB64 = localStorage.getItem(KEY_STORE);
+  if (!masterRawB64) { showUploadStatus('未持有密钥，无法开启指纹'); return; }
+  $('#bioBanner').style.display = 'none';
+  try {
+    if (!await supportsWebAuthnPRF()) throw new Error('当前设备不支持指纹解锁');
+    const prfSalt = crypto.getRandomValues(new Uint8Array(16));
+    const userId = new TextEncoder().encode('notesync');
+    const cred = await navigator.credentials.create({ publicKey: {
+      rp: { name: 'NoteSync' },
+      user: { id: userId, name: 'notesync', displayName: 'NoteSync' },
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+      authenticatorSelection: { authenticatorAttachment: 'platform', residentKey: 'required', userVerification: 'required' },
+      extensions: { prf: {} }
+    }});
+    const assertion = await navigator.credentials.get({ publicKey: {
+      allowCredentials: [{ id: cred.rawId, type: 'public-key' }],
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      userVerification: 'required',
+      extensions: { prf: { eval: { first: prfSalt } } }
+    }});
+    const ext = assertion.getClientExtensionResults();
+    const prfOut = ext && ext.prf && ext.prf.results && ext.prf.results.first;
+    if (!prfOut) throw new Error('无法获取指纹密钥');
+    const kekBytes = await deriveBiometricKEK(prfOut);
+    const w = await aesGcmWrapBytes(b64ToBuf(masterRawB64), kekBytes);
+    localStorage.setItem(BIO_STORE, JSON.stringify({
+      credId: bufToB64(cred.rawId),
+      prfSalt: bufToB64(prfSalt),
+      wrappedKey: w.ct + ':' + w.iv,
+      rpId: location.hostname
+    }));
+    bioEnrolled = true;
+    updateBioUI();
+    showUploadStatus('指纹解锁已开启');
+  } catch (e) {
+    showUploadStatus('开启指纹解锁失败：' + (e.message || e));
+  }
+}
+async function unlockWithBiometric() {
+  err.textContent = '';
+  const recStr = localStorage.getItem(BIO_STORE);
+  if (!recStr) { err.textContent = '未开启指纹解锁'; return; }
+  let rec;
+  try { rec = JSON.parse(recStr); } catch { err.textContent = '指纹记录损坏'; return; }
+  try {
+    const assertion = await navigator.credentials.get({ publicKey: {
+      allowCredentials: [{ id: b64ToBuf(rec.credId), type: 'public-key' }],
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      userVerification: 'required',
+      extensions: { prf: { eval: { first: b64ToBuf(rec.prfSalt) } } }
+    }});
+    const ext = assertion.getClientExtensionResults();
+    const prfOut = ext && ext.prf && ext.prf.results && ext.prf.results.first;
+    if (!prfOut) throw new Error('无法获取指纹密钥');
+    const kekBytes = await deriveBiometricKEK(prfOut);
+    const parts = rec.wrappedKey.split(':');
+    if (parts.length !== 2) throw new Error('指纹记录格式错误');
+    const masterRaw = await aesGcmUnwrap(parts[0], parts[1], kekBytes);
+    const key = await crypto.subtle.importKey('raw', masterRaw, { name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
+    const note = await apiGet();
+    if (!note.salt) {
+      serverSalt = crypto.getRandomValues(new Uint8Array(16));
+      try { await apiPut({ ct: '', iv: '', salt: bufToB64(serverSalt) }); } catch (e) {}
+    } else { serverSalt = b64ToBuf(note.salt); }
+    await applyUnlocked(key, note);
+  } catch (e) {
+    err.textContent = '指纹解锁失败，请使用口令';
+    pw.focus();
+  }
+}
+async function updateBioUI() {
+  const recStr = localStorage.getItem(BIO_STORE);
+  bioEnrolled = !!recStr;
+  const bioBtn = $('#bioBtn');
+  if (!bioBtn) return;
+  if (!bioEnrolled) { bioBtn.style.display = 'none'; return; }
+  const ok = await supportsWebAuthnPRF();
+  bioBtn.style.display = ok ? 'block' : 'none';
+}
+async function offerBiometricEnrollment() {
+  if (bioEnrolled) return;
+  if (!await supportsWebAuthnPRF()) return;
+  const banner = $('#bioBanner');
+  if (banner) banner.style.display = 'flex';
 }
 
 async function loadStoredKey() {
@@ -1827,11 +1959,17 @@ function startSync() {
 
 $('#ok').addEventListener('click', () => unlock(pw.value));
 pw.addEventListener('keydown', e => { if (e.key === 'Enter') unlock(pw.value); });
+pw.addEventListener('input', () => { $('#ok').disabled = pw.value.length === 0; });
+updateBioUI();
+$('#bioBtn').addEventListener('click', unlockWithBiometric);
+$('#bioEnrollYes').addEventListener('click', enrollBiometric);
+$('#bioEnrollNo').addEventListener('click', () => { $('#bioBanner').style.display = 'none'; });
 $('#lock').addEventListener('click', () => {
   localStorage.removeItem(KEY_STORE); cryptoKey = null;
   undoStack = []; redoStack = []; lastState = null; // 退出锁定：清空撤销栈
   editor.innerHTML = ''; editor.contentEditable = false;
   mask.classList.remove('hidden'); pw.value = ''; err.textContent = '';
+  updateBioUI();
   foot.textContent = '端到端加密 · 仅在你的浏览器内加解密';
   setStatus(false, '已退出');
 });
@@ -1841,13 +1979,15 @@ $('#lock').addEventListener('click', () => {
     // 根路径：显示极简首页，不跳转
     loadingEl.classList.add('hidden');
     document.getElementById('landing').classList.remove('hidden');
-    document.getElementById('landingBtn').addEventListener('click', () => {
-      const name = document.getElementById('landingInput').value.trim();
-      if (name) location.href = '/' + name;
+    const li = document.getElementById('landingInput'), lb = document.getElementById('landingBtn');
+    const syncOpenBtn = () => { lb.disabled = li.value.trim().length === 0; };
+    li.addEventListener('input', syncOpenBtn);
+    syncOpenBtn();
+    lb.addEventListener('click', () => {
+      const name = li.value.trim();
+      if (name) location.href = '/' + encodeURIComponent(name);
     });
-    document.getElementById('landingInput').addEventListener('keydown', e => {
-      if (e.key === 'Enter') document.getElementById('landingBtn').click();
-    });
+    li.addEventListener('keydown', e => { if (e.key === 'Enter') lb.click(); });
     return;
   }
   if (await loadStoredKey()) {
@@ -1887,6 +2027,7 @@ $('#lock').addEventListener('click', () => {
     loadingEl.classList.add('hidden');
     mask.classList.remove('hidden');
     pw.focus();
+    updateBioUI();
   }
 })();
 // PWA Service Worker
