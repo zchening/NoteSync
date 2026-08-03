@@ -545,6 +545,38 @@
 
 ---
 
+## G. 撤销（Ctrl+Z / Ctrl+Y）
+
+### G1 | Ctrl+Z 没反应 / 回退的不是上一步
+- **版本**: v5.12
+- **现象**: 用户精确复现两类问题——
+  1. 有时按 Ctrl+Z「没反应」（连按多次内容才动，甚至要按几十次）；
+  2. 有时按了「回退的不是上一步」（比如刚输入一段带网址的文字，按一次 Ctrl+Z 不是撤销刚打的字，而是穿透到更早的、看不见的程序化改动）。
+- **根因**: 之前依赖浏览器**原生 UndoManager**，但它有两个致命缺陷无法绕过：
+  1. **无法"选择性排除"**——`linkifyEditor()` 在每次 input 后 500ms 用 `replaceWith`/`normalize` 重排 DOM 把网址包成 `<a>`，`poll()` 远端同步时整段 `innerHTML=` 替换，这些**程序化改动统统被塞进原生撤销栈**。用户按一次 Ctrl+Z 要先穿过好几个"看不见"的 linkify/同步步骤才轮到自己的输入 → 表现为"按了没反应 / 回退错位"。
+  2. **contentEditable 切换会清空整个原生栈**：曾试过用 `editor.contentEditable='false'` 三明治规避，实测 Chromium 切回可编辑态会**清空全部原生撤销记录**，反而让 Ctrl+Z 彻底失效（更糟）。
+- **修复**: 彻底放弃原生栈，**自建撤销栈**（`undoStack` / `redoStack`）：
+  1. `input` 事件里 `recordIfChanged(it)`：用户真实编辑（打字/删除/粘贴/回车/删除线/插图）内容变化时压入"上一步"快照；同一输入突发内的连续逐字输入按 700ms 时间窗合并为一步（贴近 Chrome 的"一次打字突发=一步撤销"）。
+  2. `linkifyEditor()` / `poll()` 等**程序化改动**只调 `syncCurrentState()` 把当前内容同步为"已提交状态"，**绝不压栈** → Ctrl+Z 永远命中用户的上一步，linkify 不再产生任何撤销步。
+  3. `editor` 上的 `keydown` 拦截 `Ctrl/Cmd+Z`（撤销）、`Ctrl/Cmd+Shift+Z` 与 `Ctrl/Cmd+Y`（重做），`preventDefault` 接管，不再走原生栈；组字期间（isComposing）放行不拦截。
+  4. 快照为 `{html, sel}`：撤销时用 `restoreSelectionOffsets` 按可见字符偏移恢复选区（与删除线/linkify 同一套机制，无视 `\u200B` 漂移）；恢复后 `ensureCaret(true)` 兜底光标绘制。
+  5. `unlock()` / `init()` 加载内容后重置基线（`undoStack=[]; lastState=captureState()`），`#lock` 退出时清空栈。
+- **关联文件**: index.html → 撤销栈声明与 `captureState/applyState/recordIfChanged/syncCurrentState/undo/redo` / `input` 监听器末尾 / `linkifyEditor` finally / `poll` 远端同步段 / `unlock`/`init`/`#lock` / 新增 `keydown` 拦截 / `window.__undoState`·`window.__undoReset` 调试钩子
+- **核对要点**:
+  - [ ] 输入含网址的一段文字 → 连续输入合并为**单个**撤销条目（`__undoState().u===1`）
+  - [ ] 等 linkify 跑完后 `u` **仍为 1**（linkify 不新增撤销步——这是 60 次按压根因的直接反证）
+  - [ ] 一次 Ctrl+Z 即回退整段输入（不再"按了没反应"），`presses<=2`
+  - [ ] 一次 Ctrl+Z 后内容确实变化（非空时必变），不穿透到程序化改动
+  - [ ] Ctrl+Y 重做能恢复（含已链接态，URL 内 `\u200B` 不可见，比对需剥离）
+  - [ ] 选中整行+空格后 Ctrl+Z → 第一行还原、选区仍合法（connected）
+  - [ ] 连续多次 Ctrl+Z 不越界崩溃、无 JS 异常（pageerror）
+  - [ ] 粘贴整段后一次 Ctrl+Z 撤销粘贴（粘贴是用户动作，应可撤销）
+  - [ ] 空编辑器连按回车、行尾回车等（F1/F13）仍正常，不被撤销栈逻辑干扰
+  - [ ] 删除线加/取消（A1-A7）、链接中间回车（F5）、块整理（F7/F8）在按过 Ctrl+Z 后不回归
+  - [ ] 验收探针 `tests/e2e/_probe_undo_paste.js` 13/13 全绿（Bug B 粘贴 + Bug A 撤销粒度/选中+空格）
+
+---
+
 ## 版本与 bug 对应速查
 
 | 版本 | 涉及 bug 编号 |
@@ -565,3 +597,4 @@
 | v5.9 | F11 |
 | v5.10 | F12 |
 | v5.11 | F13 |
+| v5.12 | G1 |

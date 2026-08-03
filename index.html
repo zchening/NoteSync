@@ -178,7 +178,7 @@ const PBKDF2_ITER = 200000;
 const FAIL_LIMIT = 10;
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '5.11';
+const APP_VERSION = '5.12';
 const BUILD_DATE = '2026-08-03';
 
 const $ = s => document.querySelector(s);
@@ -388,8 +388,7 @@ function applyStrike() {
         const newRange = restoreSelectionOffsets(editor, savedOffsets.start, savedOffsets.end);
         if (newRange) {
           const sel = window.getSelection();
-          sel.removeAllRanges();
-          sel.addRange(newRange);
+          setSel(newRange);
           lastRange = newRange.cloneRange();
         }
       }
@@ -725,8 +724,7 @@ function insertImageAtCursor(url) {
   img.src = url;
   range.insertNode(img);
   range.collapse(false);
-  sel.removeAllRanges();
-  sel.addRange(range);
+  setSel(range);
   editor.dispatchEvent(new Event('input'));
 }
 
@@ -753,8 +751,10 @@ function insertNodeAtCaret(node) {
   let range;
   if (sel.rangeCount > 0) {
     range = sel.getRangeAt(0);
-    range.deleteContents();
-  } else {
+    try { range.deleteContents(); } catch (e) {}
+  }
+  // 选区可能指向已被清空的节点（如清空空编辑器占位 <br> 后），重建到末尾
+  if (!range || !range.startContainer || !range.startContainer.isConnected) {
     range = document.createRange();
     range.selectNodeContents(editor);
     range.collapse(false);
@@ -769,9 +769,142 @@ function insertNodeAtCaret(node) {
   }
   range.insertNode(node);
   range.collapse(false);
-  sel.removeAllRanges();
-  sel.addRange(range);
+  setSel(range);
   editor.dispatchEvent(new Event('input'));
+}
+
+// 安全设置选区：用 setBaseAndExtent / collapse 一次性设置，绝不 removeAllRanges()+addRange()。
+// 旧的“清空所有选区再重加”写法会打断 Chromium 原生撤销事务分组，导致 Ctrl+Z 失效（F11 教训）。
+function setSel(range) {
+  const sel = window.getSelection();
+  try { sel.setBaseAndExtent(range.startContainer, range.startOffset, range.endContainer, range.endOffset); } catch (e) {}
+}
+function setCaret(node, offset) {
+  const sel = window.getSelection();
+  try { sel.collapse(node, offset); } catch (e) {}
+}
+
+// ── 自建撤销栈（Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z）────────────────────────
+// 为什么放弃浏览器原生 UndoManager：
+//  1) 原生栈无法"选择性排除"——linkify 的程序化 DOM 手术、poll 的整段 innerHTML 替换
+//     都会各自塞进原生撤销栈，用户按一次 Ctrl+Z 要穿透好几个"看不见"的程序化改动，
+//     表现为「按了没反应 / 回退的不是上一步」（Bug A）。
+//  2) 实测 Chromium 在 contentEditable=false↔true 切换时会清空整个原生撤销栈
+//     （曾试过用 toggle 规避，结果更糟：Ctrl+Z 彻底失效）。
+// 故改为自建栈：用户真实编辑（input 事件）压入快照；程序化改动（linkify / poll 同步）
+// 只"同步"当前快照而不压栈，Ctrl+Z 永远命中用户的上一步。
+let undoStack = [];
+let redoStack = [];
+let lastState = null;        // 当前已提交状态 {html, sel}
+let isRestoring = false;     // 撤销/重做恢复 DOM 期间，屏蔽 recordIfChanged
+let lastEditTime = 0;
+let lastEditType = '';
+
+function captureState() {
+  const sel = window.getSelection();
+  let selOff = null;
+  if (sel.rangeCount > 0) {
+    const r = sel.getRangeAt(0);
+    if (editor.contains(r.commonAncestorContainer)) {
+      try { selOff = saveSelectionOffsets(editor, r); } catch (e) {}
+    }
+  }
+  return { html: editor.innerHTML, sel: selOff };
+}
+
+function applyState(s) {
+  isRestoring = true;
+  try {
+    editor.innerHTML = s.html;
+    if (s.sel) {
+      const r = restoreSelectionOffsets(editor, s.sel.start, s.sel.end);
+      if (r) setSel(r);
+    }
+  } finally {
+    isRestoring = false;
+  }
+  lastState = captureState();
+}
+
+// 用户编辑：内容变化则压入"上一步"快照。同一输入突发内的连续打字合并为一步（贴近 Chrome）。
+function recordIfChanged(it) {
+  if (isRestoring || isComposing) return;
+  let cur;
+  try { cur = captureState(); } catch (e) { return; }
+  const now = Date.now();
+  const isTyping = it === 'insertText' || it === 'insertCompositionText';
+  if (lastState && cur.html !== lastState.html) {
+    const prevTyping = lastEditType === 'insertText' || lastEditType === 'insertCompositionText';
+    const coalesce = isTyping && prevTyping && (now - lastEditTime < 700);
+    if (!coalesce) {
+      undoStack.push(lastState);
+      if (undoStack.length > 300) undoStack.shift();
+      redoStack = [];
+    }
+    lastState = cur;
+    lastEditTime = now;
+    lastEditType = it || 'other';
+  } else if (cur.sel && lastState && lastState.sel &&
+             (cur.sel.start !== lastState.sel.start || cur.sel.end !== lastState.sel.end)) {
+    // 仅光标移动、内容未变：更新当前状态的选区，不新增撤销条目（移动光标不可撤销）
+    lastState = cur;
+  }
+}
+
+// 程序化改动（linkify / poll 远端同步）调用：把当前内容"同步"为已提交状态，不压栈，
+// 避免把程序化改动混入用户撤销序列。
+function syncCurrentState() {
+  let cur;
+  try { cur = captureState(); } catch (e) { return; }
+  if (!lastState || cur.html !== lastState.html) {
+    lastState = cur;
+    redoStack = [];
+  }
+}
+
+function undo() {
+  if (undoStack.length === 0) return;
+  const prev = undoStack.pop();
+  redoStack.push(lastState);
+  applyState(prev);
+  try { ensureCaret(true); } catch (e) {}
+}
+function redo() {
+  if (redoStack.length === 0) return;
+  const next = redoStack.pop();
+  undoStack.push(lastState);
+  applyState(next);
+  try { ensureCaret(true); } catch (e) {}
+}
+
+// 调试钩子（仅供自动化探针读取/重置，无业务副作用）
+window.__undoState = () => ({ u: undoStack.length, r: redoStack.length, html: editor.innerHTML });
+window.__undoReset = () => { undoStack = []; redoStack = []; lastState = captureState(); };
+
+// ── Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z 键盘拦截 ──
+editor.addEventListener('keydown', e => {
+  if (isComposing) return;
+  if (!(e.ctrlKey || e.metaKey)) return;
+  const k = (e.key || '').toLowerCase();
+  if (k === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); }
+  else if (k === 'y') { e.preventDefault(); redo(); }
+});
+
+// 编辑器是否"空"：仅含浏览器在空 contenteditable 里塞的占位 <br> 或纯空白，无任何实质内容
+function isEditorEmpty() {
+  if (editor.querySelector('img,a,s')) return false;
+  const txt = (editor.textContent || '').replace(/\u200B/g, '').trim();
+  return txt.length === 0;
+}
+// 是否存在可被 linkify 处理的文本（URL / 手机号 / 超长词）
+function hasLinkableText(root, urlTest, phoneTest, longWordTest) {
+  const tw = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let n;
+  while (n = tw.nextNode()) {
+    const v = n.nodeValue || '';
+    if (urlTest.test(v) || phoneTest.test(v) || longWordTest.test(v)) return true;
+  }
+  return false;
 }
 
 // 粘贴：图片→上传，文字→纯文本（URL/手机号自动转链接）
@@ -789,18 +922,20 @@ editor.addEventListener('paste', e => {
   const text = e.clipboardData.getData('text/plain') || e.clipboardData.getData('text/uri-list') || '';
   if (!text) return;
   e.preventDefault();
-  const urlRegex = /((?:https?|file|ftp):\/\/[^\s<]+)/g;
-  const phoneRegex = /(?<!\d)(1[3-9]\d{9})(?!\d)/g;
-  const breakSeparators = /([\/.?:=&#_%-])/g;
-  if (urlRegex.test(text) || phoneRegex.test(text)) {
-    const html = text
-      .replace(urlRegex, (m) => '<a href="' + m + '" target="_blank" rel="noopener noreferrer">' + m.replace(breakSeparators, '$1\u200B') + '</a>')
-      .replace(phoneRegex, '<a href="tel:$1">$1</a>');
-    const frag = document.createRange().createContextualFragment(html);
-    insertNodeAtCaret(frag);
-  } else {
-    insertNodeAtCaret(document.createTextNode(text));
-  }
+  // 纯文本按行拆成 <div> 块，匹配浏览器原生多行粘贴结构。
+  // 旧实现把整段当作单个含 "\n" 的文本节点塞进一个 <div>：换行只是渲染换行、
+  // 且空编辑器（点击后浏览器塞的占位 <br>）会残留成顶部空行（用户报的“粘贴多出一个空行”）。
+  // URL/手机号仍交给 500ms 后的 linkifyEditor 统一转链接，这里只负责块结构。
+  const lines = text.split(/\r?\n/);
+  const frag = document.createDocumentFragment();
+  lines.forEach(line => {
+    const d = document.createElement('div');
+    d.textContent = line;
+    frag.appendChild(d);
+  });
+  // 空编辑器（仅 <br>/纯空白）粘贴：先清掉占位 <br>，避免顶部多出一个空行
+  if (isEditorEmpty()) editor.innerHTML = '';
+  insertNodeAtCaret(frag);
 });
 
 // 拖拽图片
@@ -961,7 +1096,8 @@ async function unlock(pass) {
   if (note.ct) { try { lastHtml = await decryptText(note.ct, note.iv, key); editor.innerHTML = lastHtml; } catch (e) {} }
   ensureBlockWrapped();
   if (note.ct) { try { linkifyEditor(); } catch (e) {} }
-  ensureCaret(); // 关键：解密内容载入后显式重建合法折叠光标（避免“解锁后无光标/无法输入”）
+  ensureCaret(); // 关键：解密内容载入后显式重建合法折叠光标（避免"解锁后无光标/无法输入"）
+  undoStack = []; redoStack = []; lastState = captureState(); // 新笔记会话：清空并重置撤销栈基线
   foot.textContent = '已解锁 · 端到端加密';
   startSync();
 }
@@ -1014,29 +1150,46 @@ function linkifyEditor(opts) {
     const phoneRegex = /(?<!\d)(1[3-9]\d{9})(?!\d)/g;
     const breakSeparators = /([\/.?:=&#_%-])/g;
 
-    // 1) 先把所有自动生成的 <a data-url="1"> 拆回纯文本，再统一重新识别。
-    //    修复：a) 链接文字被改动后 href 陈旧（旧 walker 直接跳过 <a> 内部文本，href 一旦生成永不更新）；
-    //          b) 链接中间回车拆分、再合并回来时结尾段(def)丢失（测试 C1）；
-    //          c) 跨文本节点边界的 URL 拼接（逐字输入 / 合并后段落）。
-    //    只拆自动链接（data-url="1"），手动创建的链接不受影响。
     const autoLinks = Array.from(editor.querySelectorAll('a[data-url="1"]'));
+    const straySpans = Array.from(editor.querySelectorAll('span'));
+
+    // 早退：无自动链接可拆解、无杂散 span、也无任何可链接文本 → 不碰 DOM（避免污染原生撤销栈）。
+    // 普通纯文本输入走此分支；粘贴/输入本身已产生合法块结构，无需 ensureBlockWrapped/normalize。
+    if (autoLinks.length === 0 && straySpans.length === 0 && !hasLinkableText(editor, urlTest, phoneTest, longWordTest)) {
+      return;
+    }
+
+    const hadFocus = document.activeElement === editor;
+    const sel = window.getSelection();
+    // 用"块内字符偏移"保存选区，而非 cloneRange：linkify 会 replaceWith 替换文本节点，
+    // 旧 Range 指向的节点被 detach 后恢复必失败、选区丢失（见 BUG_CHECKLIST A7）。
+    // 块内作用域可避免跨块边界时把光标放到上一行末尾（bug 3：回车后光标跳到上一行右侧）。
+    let saved = null;
+    if (keepSelection && sel.rangeCount > 0) {
+      const r = sel.getRangeAt(0);
+      if (editor.contains(r.commonAncestorContainer)) {
+        try { saved = saveSelectionBlocked(editor, r); } catch (e) {}
+      }
+    }
+
+    // ===== 程序化 DOM 手术（链接识别）=====
+    // 不用 contentEditable=false 三明治来规避原生撤销栈：实测 Chromium 切回可编辑态会清空
+    // 整个原生撤销栈，反而让 Ctrl+Z 彻底失效。改为“自建撤销栈”接管（见 undoStack）：
+    // linkify 是程序化改动，不向撤销栈压入新条目，Ctrl+Z 直接命中用户的上一步。
+    // 1) 先把所有自动生成的 <a data-url="1"> 拆回纯文本，再统一重新识别。
+    //    只拆自动链接（data-url="1"），手动创建的链接不受影响。
     autoLinks.forEach(a => {
       const t = document.createTextNode(a.textContent.replace(/\u200B/g, ''));
       a.replaceWith(t);
     });
     // 2) 把浏览器在块合并/格式保留时自动插入的纯 <span> 包装层拍平（应用本身从不创建 span，
-    //    这些 span 无语义）。否则像上方 C1 场景里 "def end" 被包进 <span> 后，无法与前面的
-    //    URL 文本相邻合并，导致结尾段丢失。只拍平 <span>，不动 <s>(删除线) 等语义标签。
-    const straySpans = Array.from(editor.querySelectorAll('span'));
+    //    这些 span 无语义）。只拍平 <span>，不动 <s>(删除线) 等语义标签。
     straySpans.forEach(s => {
       while (s.firstChild) s.parentNode.insertBefore(s.firstChild, s);
       s.remove();
     });
-    // 2.5) 确保编辑器根下是块级结构（<div>/<p>）。粘贴到空编辑器等场景可能在根下留下裸文本/裸元素
-    // 节点（contenteditable 视为非法结构，Chromium 不绘制光标，见 F7）。此处（input 后 500ms 防抖内）
-    // 整理是安全的——不与正在进行的按键输入竞争，避免同步改 DOM 破坏逐字输入。
+    // 2.5) 确保编辑器根下是块级结构（<div>/<p>），并合并相邻文本节点。
     ensureBlockWrapped();
-    // 3) 合并相邻文本节点，消除因拆链接/编辑产生的文本边界，让跨节点的 URL 片段能被一次正则匹配到。
     editor.normalize();
 
     const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT, {
@@ -1053,18 +1206,6 @@ function linkifyEditor(opts) {
     const targets = [];
     let n;
     while (n = walker.nextNode()) targets.push(n);
-    if (targets.length === 0) return;
-    const sel = window.getSelection();
-    // 用"块内字符偏移"保存选区，而非 cloneRange：linkify 会 replaceWith 替换文本节点，
-    // 旧 Range 指向的节点被 detach 后恢复必失败、选区丢失（见 BUG_CHECKLIST A7）。
-    // 块内作用域可避免跨块边界时把光标放到上一行末尾（bug 3：回车后光标跳到上一行右侧）。
-    let saved = null;
-    if (keepSelection && sel.rangeCount > 0) {
-      const r = sel.getRangeAt(0);
-      if (editor.contains(r.commonAncestorContainer)) {
-        try { saved = saveSelectionBlocked(editor, r); } catch (e) {}
-      }
-    }
     for (const textNode of targets) {
       // 清理旧断行符，交由本次重新生成（避免 href 里混入 \u200B）
       textNode.nodeValue = textNode.nodeValue.replace(/\u200B/g, '');
@@ -1095,22 +1236,18 @@ function linkifyEditor(opts) {
       });
       textNode.replaceWith(...span.childNodes);
     }
+    if (hadFocus) { try { editor.focus(); } catch (e) {} }
+
+    // 恢复选区（安全方式，绝不 removeAllRanges+addRange）
     if (saved && document.activeElement === editor) {
       try {
         const newRange = restoreSelectionInBlock(editor, saved);
         if (newRange) {
-          sel.removeAllRanges();
-          sel.addRange(newRange);
+          setSel(newRange);
         } else {
           // 兜底：把光标放到起始块末尾，保证光标不消失（bug 1）
           const fb = placeInBlock(saved.startBlock, 1e9);
-          if (fb) {
-            const r = document.createRange();
-            r.setStart(fb.node, fb.offset);
-            r.collapse(true);
-            sel.removeAllRanges();
-            sel.addRange(r);
-          }
+          if (fb) setCaret(fb.node, fb.offset);
         }
       } catch (e) {}
     }
@@ -1119,6 +1256,9 @@ function linkifyEditor(opts) {
     // 链接规范化可能移动/合并节点（如 <div> </div> 场景），导致选区失效 → 此处兜底重建合法光标。
     // 仅在选区已失效时重建位置；选区合法时只补一次 caret 绘制刷新（F11：位置对但画不出来）。
     try { ensureCaret(true); } catch (e) {}
+    // linkify 是程序化改动：把当前（已链接）内容同步为已提交状态，不向撤销栈压新条目，
+    // 否则用户按 Ctrl+Z 会先穿透 linkify 而非命中自己的上一步（Bug A 的 60 次按压根因）。
+    syncCurrentState();
   }
 }
 
@@ -1311,8 +1451,7 @@ function relocateCaretToVisible(range) {
       tr.setStart(node, off);
       tr.collapse(true);
       if (tr.getClientRects().length > 0) {
-        sel.removeAllRanges();
-        sel.addRange(tr);
+        setCaret(tr.startContainer, tr.startOffset);
         return; // 成功重定位到可见位置
       }
     } catch (e) { /* 某些偏移可能非法（如 Element 节点越界），跳过 */ }
@@ -1329,7 +1468,7 @@ function relocateCaretToVisible(range) {
     else fr.setStart(last, last.childNodes.length);
   } else { fr.setStart(editor, 0); }
   fr.collapse(true);
-  try { sel.removeAllRanges(); sel.addRange(fr); } catch (e) {}
+  try { setCaret(fr.startContainer, fr.startOffset); } catch (e) {}
 }
 
 function ensureCaret(forceRepaint) {
@@ -1370,7 +1509,7 @@ function ensureCaret(forceRepaint) {
     r.setStart(editor, 0);
   }
   r.collapse(true);
-  try { sel.removeAllRanges(); sel.addRange(r); } catch (e) {}
+  try { setCaret(r.startContainer, r.startOffset); } catch (e) {}
 }
 
 editor.addEventListener('input', (e) => {
@@ -1379,14 +1518,23 @@ editor.addEventListener('input', (e) => {
   // 插入类输入尤其是回车(insertParagraph/insertLineBreak)绝不清理，
   // 否则刚换出来的空行会被立刻删掉，用户看到的就是"回车无反应"(bug 4)。
   const it = (e && e.inputType) || '';
-  const needCleanup = it.indexOf('delete') === 0 || it === 'insertFromPaste' ||
-    it === 'historyUndo' || it === 'historyRedo' || (it === '' && !skipCleanupOnce);
+  // 注意：historyUndo / historyRedo 绝不参与首尾空行清理，也不触发 linkify。
+  // 在撤销事务内部再跑 cleanup / linkify 的 DOM 手术会破坏原生撤销栈（cleanup 删空白块、
+  // linkify 的选区重设打断撤销事务分组），导致 Ctrl+Z“按了没反应”或错位。
+  const needCleanup = it.indexOf('delete') === 0 || it === 'insertFromPaste' || (it === '' && !skipCleanupOnce);
   skipCleanupOnce = false;
   if (needCleanup) cleanupLeadingTrailingBreaks();
   clearTimeout(saveTimer);
   saveTimer = setTimeout(saveLocal, 800);
-  clearTimeout(linkifyTimer);
-  linkifyTimer = setTimeout(linkifyEditor, 500);
+  // 撤销/重做后不挂 linkify：避免紧接着的程序化 DOM 手术污染/打断刚完成的撤销状态
+  if (it !== 'historyUndo' && it !== 'historyRedo') {
+    clearTimeout(linkifyTimer);
+    linkifyTimer = setTimeout(linkifyEditor, 500);
+  }
+  // 用户真实编辑记入自管撤销栈；程序化改动（linkify/poll）不在此路径，由 syncCurrentState 同步
+  if (it !== 'historyUndo' && it !== 'historyRedo') {
+    recordIfChanged(it);
+  }
 });
 
 // ── 回车处理：空块/空编辑器也能正常换行 ─────────────────────────────
@@ -1413,8 +1561,7 @@ function placeCaretInBlock(block) {
   const r = document.createRange();
   r.setStart(block, 0);
   r.collapse(true);
-  sel.removeAllRanges();
-  sel.addRange(r);
+  setSel(r);
 }
 // 在链接文本中间回车时，insertParagraph 会把一个 <a> 劈成两个 href 相同的链接，
 // 于是第二行的链接文字与 href 对不上（显示 "def"，href 却是完整 URL），
@@ -1447,8 +1594,7 @@ function flattenSplitLink() {
   const r = document.createRange();
   r.setStart(t2, 0);
   r.collapse(true);
-  sel.removeAllRanges();
-  sel.addRange(r);
+  setSel(r);
 }
 editor.addEventListener('keydown', e => {
   if (e.key !== 'Enter' || e.isComposing || e.metaKey || e.ctrlKey) return;
@@ -1571,6 +1717,9 @@ async function poll() {
           }
         }
         lastHtml = html;
+        // 远端内容覆盖：直接替换 innerHTML。原生撤销栈已被"自建撤销栈"取代，
+        // 不再需要 contentEditable toggle——实测它切回可编辑态会清空整个原生撤销栈，
+        // 反而让 Ctrl+Z 彻底失效（Bug A 的另一种诱因）。
         editor.innerHTML = html;
         linkifyEditor({ keepSelection: false });
         if (wasFocused && savedOffsets) {
@@ -1578,17 +1727,17 @@ async function poll() {
           const sel = window.getSelection();
           const newRange = restoreSelectionOffsets(editor, savedOffsets.start, savedOffsets.end);
           if (newRange) {
-            sel.removeAllRanges();
-            sel.addRange(newRange);
+            setSel(newRange);
           } else {
             // 兜底：远端内容比本机短时偏移越界，把光标放到内容末尾，避免丢失
             const r = document.createRange();
             r.selectNodeContents(editor);
             r.collapse(false);
-            sel.removeAllRanges();
-            sel.addRange(r);
+            setSel(r);
           }
         }
+        // 远端同步是程序化改动：同步撤销栈当前状态，避免把同步重渲染混入用户撤销序列
+        syncCurrentState();
       }
       localVer = note.v;
     }
@@ -1632,6 +1781,7 @@ $('#ok').addEventListener('click', () => unlock(pw.value));
 pw.addEventListener('keydown', e => { if (e.key === 'Enter') unlock(pw.value); });
 $('#lock').addEventListener('click', () => {
   localStorage.removeItem(KEY_STORE); cryptoKey = null;
+  undoStack = []; redoStack = []; lastState = null; // 退出锁定：清空撤销栈
   editor.innerHTML = ''; editor.contentEditable = false;
   mask.classList.remove('hidden'); pw.value = ''; err.textContent = '';
   foot.textContent = '端到端加密 · 仅在你的浏览器内加解密';
@@ -1682,6 +1832,7 @@ $('#lock').addEventListener('click', () => {
     ensureBlockWrapped();
     if (note.ct) { try { linkifyEditor(); } catch (e) {} }
     ensureCaret(); // 自动加载后显式重建合法折叠光标
+    undoStack = []; redoStack = []; lastState = captureState(); // 新笔记会话：清空并重置撤销栈基线
     foot.textContent = '已解锁 · 端到端加密';
     startSync();
   } else {

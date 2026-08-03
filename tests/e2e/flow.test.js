@@ -14,7 +14,7 @@ let server, browser, page, baseURL;
 before(async () => {
   server = await startServer();
   baseURL = `http://localhost:${server.address().port}/`;
-  browser = await chromium.launch({ args: ['--no-sandbox'] });
+  browser = await chromium.launch({ headless: true, args: ['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage'] });
   page = await browser.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
