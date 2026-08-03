@@ -1,5 +1,5 @@
 // NoteSync 服务端集成测试（针对真实 server.js）
-// 验证 Bug 1（中文笔记名路由 / ID 校验）与 Bug 4（maskable 图标 + cream favicon 静态路由）。
+// 验证 Bug 1（笔记名仅允英文数字 / ID 校验收紧）与 Bug 4（maskable 图标 + 黑色 favicon 静态路由）。
 // 约定：spawn 真实 server.js 子进程于测试端口，等待 "listening on" 行后跑测试，after() 杀掉子进程。
 // 只创建本测试文件并运行；不修改任何应用代码或其它测试。
 'use strict';
@@ -46,21 +46,17 @@ after(() => {
   if (child) child.kill('SIGKILL');
 });
 
-// --- Bug 1: 中文笔记名 PUT 不应被当作 bad id 拒绝 ---
-test('Bug1 PUT /api/note/<中文名> 不被 bad id 拒绝', async () => {
+// --- Bug 1: 中文笔记名 PUT 应被 bad id 拒绝（笔记名仅允英文数字）---
+test('Bug1 PUT /api/note/<中文名> 应被 400 bad id 拒绝', async () => {
   const name = encodeURIComponent('我的笔记');
   const res = await fetch(`${BASE}/api/note/${name}`, {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ ct: '', iv: '', salt: '' }),
   });
-  let body = null;
-  if (res.status === 400) body = await res.json().catch(() => null);
-  // 修复要点：合法中文 id 绝不能是 400 bad id；若因其它原因 400 也需 error !== 'bad id'
-  assert.ok(
-    res.status !== 400 || (body && body.error !== 'bad id'),
-    `中文名 PUT 不应是 bad id；status=${res.status} body=${JSON.stringify(body)}`
-  );
+  assert.strictEqual(res.status, 400, '中文名应被拒绝');
+  const b = await res.json().catch(() => null);
+  assert.strictEqual(b && b.error, 'bad id', '错误应为 bad id');
 });
 
 // --- Bug 1: 名称中的斜杠应被拒（bad id）---
@@ -77,12 +73,12 @@ test('Bug1 GET /api/note/%00（控制字符）返回 400', async () => {
   assert.strictEqual(res.status, 400);
 });
 
-// --- Bug 1: SSE /stream 的 id 提取需在 decodeURIComponent 后通过校验 → 200 ---
-test('Bug1 GET /api/note/<中文名>/stream 返回 200', async () => {
+// --- Bug 1: SSE /stream 的 id 也需通过收紧后的校验 → 中文应 400 ---
+test('Bug1 GET /api/note/<中文名>/stream 应返回 400 bad id', async () => {
   const name = encodeURIComponent('我的笔记');
   const ac = new AbortController();
   const res = await fetch(`${BASE}/api/note/${name}/stream`, { signal: ac.signal });
-  assert.strictEqual(res.status, 200);
+  assert.strictEqual(res.status, 400, '中文名 SSE 也应被拒绝');
   ac.abort(); // 立即断开，避免悬挂长连接
 });
 
@@ -118,10 +114,10 @@ test('Bug4 GET /manifest.json 含 purpose=maskable 且 src 含 icon-maskable-512
   assert.ok(hit, 'manifest 缺少 maskable 512 图标；icons=' + JSON.stringify(icons));
 });
 
-// --- Bug 4: favicon.svg 含奶油色填充 ---
-test('Bug4 GET /favicon.svg → 200 且含 fill="#FBFBF8"', async () => {
+// --- Bug 4: favicon.svg 含黑色填充 ---
+test('Bug4 GET /favicon.svg → 200 且含 fill="#0F0F11"（黑色背景）', async () => {
   const res = await fetch(`${BASE}/favicon.svg`);
   assert.strictEqual(res.status, 200);
   const text = await res.text();
-  assert.ok(text.includes('fill="#FBFBF8"'), 'favicon 缺少奶油色填充 #FBFBF8');
+  assert.ok(text.includes('fill="#0F0F11"'), 'favicon 缺少黑色填充 #0F0F11');
 });

@@ -16,8 +16,8 @@ if (!fs.existsSync(NOTES_DIR)) fs.mkdirSync(NOTES_DIR, { recursive: true });
 
 const EMPTY = { v: 0, ct: '', iv: '', salt: '', updatedAt: 0 };
 
-// noteId 校验：允许中英文/数字/常用符号（支持中文笔记名），但禁止路径与编码危险字符，1-64 字符
-const ID_RE = /^[^\x00-\x1f\/\\?#%]{1,64}$/;
+// noteId 校验：仅允许英文/数字（前端已禁止中文输入，后端同步收紧），1-64 字符
+const ID_RE = /^[A-Za-z0-9]{1,64}$/;
 
 // --- 限流参数 ---
 const FAIL_LIMIT = 10;                   // 失败阈值

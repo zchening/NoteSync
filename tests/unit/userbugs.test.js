@@ -18,17 +18,30 @@ function dispatchInput(el) {
   el.dispatchEvent(new window.Event('input', { bubbles: true }));
 }
 
-// ── Bug 1：落地页笔记名输入框应接受中文，不被清空/拦截 ───────────────
-test('Bug1 落地页输入框保留中英文（中文不被清空）', () => {
+// ── Bug 1：落地页笔记名输入框禁止中文/符号，仅保留英文与数字 ──────────
+test('Bug1 落地页输入框过滤中文与符号，仅保留英文数字', () => {
   const li = document.getElementById('landingInput');
   assert.ok(li, 'landingInput 应存在');
+
+  // 纯中文应被完全剔除
   li.value = '我的笔记';
   dispatchInput(li);
-  assert.strictEqual(li.value, '我的笔记', '中文应被保留');
+  assert.strictEqual(li.value, '', '中文输入应被清空');
 
-  li.value = 'MyNote';
+  // 中英文混合：仅保留英文部分
+  li.value = '我的Note123';
   dispatchInput(li);
-  assert.strictEqual(li.value, 'MyNote', '英文应被保留');
+  assert.strictEqual(li.value, 'Note123', '中文应被剔除，仅留英文数字');
+
+  // 英文数字保留
+  li.value = 'MyNote123';
+  dispatchInput(li);
+  assert.strictEqual(li.value, 'MyNote123', '英文数字应被保留');
+
+  // 符号与空格被剔除
+  li.value = 'a-b@c d!';
+  dispatchInput(li);
+  assert.strictEqual(li.value, 'abcd', '符号与空格应被剔除');
 });
 
 // ── Bug 2：笔记名为空时「打开」按钮应禁用 ───────────────────────────
@@ -108,49 +121,21 @@ test('Bug4 manifest 含 maskable 目的图标（奶油色背景）', () => {
   );
 });
 
-test('Bug4 favicon.svg 使用奶油色背景（非黑）', () => {
+test('Bug4 favicon.svg 使用黑色背景（#0F0F11）', () => {
   const svgPath = path.resolve(__dirname, '..', '..', 'favicon.svg');
   const svg = fs.readFileSync(svgPath, 'utf8');
-  assert.ok(svg.includes('fill="#FBFBF8"'), 'favicon.svg 应含奶油色背景 #FBFBF8');
+  assert.ok(svg.includes('fill="#0F0F11"'), 'favicon.svg 应含黑色背景 #0F0F11');
 });
 
-// ── Bug 5：移动端指纹解锁（WebAuthn PRF）在 jsdom 中的可测部分 ──────
-// 注意：jsdom 未实现 crypto.subtle / PublicKeyCredential，故加密往返无法在此运行。
-test('Bug5 supportsWebAuthnPRF 在 jsdom 中解析为 false', async () => {
-  const supported = await window.supportsWebAuthnPRF();
-  assert.strictEqual(supported, false, 'jsdom 无 PublicKeyCredential，应为 false');
-});
-
-test('Bug5 updateBioUI 在 PRF 不支持时隐藏 bioBtn', async () => {
-  const bioBtn = document.getElementById('bioBtn');
-  assert.ok(bioBtn, 'bioBtn 应存在');
-  await window.updateBioUI();
-  assert.strictEqual(bioBtn.style.display, 'none', 'PRF 不支持时 bioBtn 应隐藏');
-});
-
-test('Bug5 enrollBiometric 无密钥时不抛错并设置状态文案', async () => {
-  // 全新 jsdom localStorage 中无 KEY_STORE → 命中 !masterRawB64 守卫
-  let threw = false;
-  try {
-    await window.enrollBiometric();
-  } catch (e) {
-    threw = true;
-  }
-  assert.strictEqual(threw, false, 'enrollBiometric 应不抛异常');
-  const status = document.getElementById('uploadStatus');
-  assert.ok(status, 'uploadStatus 应存在');
-  assert.ok((status.textContent || '').length > 0, '应设置一段状态文案');
-});
-
-test('Bug5 unlockWithBiometric 无 BIO_STORE 时不抛错并设置错误文案', async () => {
-  const errEl = document.getElementById('err');
-  assert.ok(errEl, 'err 应存在');
-  let threw = false;
-  try {
-    await window.unlockWithBiometric();
-  } catch (e) {
-    threw = true;
-  }
-  assert.strictEqual(threw, false, 'unlockWithBiometric 应不抛异常');
-  assert.ok((errEl.textContent || '').length > 0, '应设置一段错误文案');
+// ── Bug 5：指纹解锁功能已按用户决定彻底移除（v5.15）─────────────────
+// 此前基于 WebAuthn PRF 的指纹解锁在浏览器内只能走"通行密钥"流程，
+// 且国内 Android 设备普遍不可用，故 v5.15 起完全移除相关代码与 UI。
+// 本条仅断言：指纹相关全局函数与元素已不复存在。
+test('Bug5 指纹解锁相关代码已彻底移除', () => {
+  assert.strictEqual(typeof window.supportsWebAuthnPRF, 'undefined', 'supportsWebAuthnPRF 应已删除');
+  assert.strictEqual(typeof window.enrollBiometric, 'undefined', 'enrollBiometric 应已删除');
+  assert.strictEqual(typeof window.unlockWithBiometric, 'undefined', 'unlockWithBiometric 应已删除');
+  assert.strictEqual(typeof window.updateBioUI, 'undefined', 'updateBioUI 应已删除');
+  assert.strictEqual(document.getElementById('bioBtn'), null, 'bioBtn 元素应已删除');
+  assert.strictEqual(document.getElementById('bioBanner'), null, 'bioBanner 元素应已删除');
 });
