@@ -178,7 +178,7 @@ const PBKDF2_ITER = 200000;
 const FAIL_LIMIT = 10;
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '5.8';
+const APP_VERSION = '5.9';
 const BUILD_DATE = '2026-08-03';
 
 const $ = s => document.querySelector(s);
@@ -189,6 +189,15 @@ const uploadBtn = $('#uploadBtn'), fileInput = $('#fileInput'), uploadStatus = $
 const themeBtn = $('#themeBtn');
 const strikeBtn = $('#strikeBtn');
 const copyBtn = $('#copyBtn'), exportImgBtn = $('#exportImgBtn');
+
+// 输入法组字状态：组字期间（拼音未上屏）任何对选区/caret 的程序化干预都会吞字，一律跳过。
+let isComposing = false;
+editor.addEventListener('compositionstart', () => { isComposing = true; });
+editor.addEventListener('compositionend', () => {
+  isComposing = false;
+  // 组字结束时 DOM 刚被 IME 改过，补一次绘制刷新（位置不动）
+  try { repaintCaret(); } catch (e) {}
+});
 
 // 回车换行统一产出 <div> 块，与 cleanupLeadingTrailingBreaks / currentBlock 对块结构的预期一致
 try { document.execCommand('defaultParagraphSeparator', false, 'div'); } catch (e) {}
@@ -578,6 +587,49 @@ function hideUploadStatus() { uploadStatus.classList.remove('show'); }
   }
   if (location.search.indexOf('about') !== -1) showVersionToast(true);
   console.log('%cNoteSync v' + APP_VERSION + ' · 构建 ' + BUILD_DATE, 'color:#c0392b;font-weight:bold');
+})();
+
+// 光标诊断浮层（?diag 开启）。用于在真实浏览器里定位 caret 类问题——
+// headless 不做真实合成，「能打字但看不见光标」这类现象只能靠真机读数确认。
+// 纯只读：不改 DOM、不抢焦点（pointer-events:none），不开启时零开销。
+(function setupCaretDiag() {
+  if (location.search.indexOf('diag') === -1) return;
+  const box = document.createElement('div');
+  box.id = 'caretDiag';
+  box.style.cssText = 'position:fixed;right:8px;bottom:8px;z-index:99999;max-width:46vw;' +
+    'padding:8px 10px;border-radius:8px;background:rgba(0,0,0,.82);color:#0f0;' +
+    'font:11px/1.5 ui-monospace,Consolas,monospace;white-space:pre-wrap;word-break:break-all;' +
+    'pointer-events:none;user-select:none';
+  document.body.appendChild(box);
+  const cut = (s, n) => (s.length > n ? s.slice(0, n) + '…' : s);
+  setInterval(() => {
+    const L = [];
+    try {
+      L.push('v' + APP_VERSION + '  composing=' + (typeof isComposing !== 'undefined' ? isComposing : '?'));
+      const ae = document.activeElement;
+      L.push('focus=' + (ae ? (ae.id || ae.nodeName) : 'null') + '  docFocus=' + document.hasFocus());
+      L.push('caretColor=' + (getComputedStyle(editor).caretColor || '-'));
+      const sel = window.getSelection();
+      L.push('ranges=' + sel.rangeCount + '  collapsed=' + sel.isCollapsed);
+      if (sel.rangeCount) {
+        const r = sel.getRangeAt(0);
+        const sc = r.startContainer;
+        L.push('node=' + (sc.nodeType === 3 ? 'TEXT' + JSON.stringify(cut(sc.nodeValue || '', 10)) : sc.nodeName) + '@' + r.startOffset);
+        L.push('connected=' + sc.isConnected + '  inEditor=' + editor.contains(r.commonAncestorContainer));
+        const rects = r.getClientRects();
+        const b = r.getBoundingClientRect();
+        L.push('rects=' + rects.length + '  bcr=' + [b.x, b.y, b.width, b.height].map(n => Math.round(n)).join(','));
+        let blk = sc.nodeType === 3 ? sc.parentElement : sc;
+        while (blk && blk.parentElement !== editor && blk !== editor) blk = blk.parentElement;
+        if (blk && blk !== editor) {
+          const bb = blk.getBoundingClientRect();
+          L.push('block=' + blk.nodeName + ' h=' + Math.round(bb.height) + ' html=' + cut(JSON.stringify(blk.innerHTML), 34));
+        }
+      }
+      L.push('editor=' + cut(JSON.stringify(editor.innerHTML), 70));
+    } catch (e) { L.push('ERR ' + e.message); }
+    box.textContent = L.join('\n');
+  }, 250);
 })();
 
 // --- 加解密 ---
@@ -1065,8 +1117,8 @@ function linkifyEditor(opts) {
   } finally {
     isLinkifying = false;
     // 链接规范化可能移动/合并节点（如 <div> </div> 场景），导致选区失效 → 此处兜底重建合法光标。
-    // 仅在选区已失效时动作，合法选区（含用户选中态）不动。
-    try { ensureCaret(); } catch (e) {}
+    // 仅在选区已失效时重建位置；选区合法时只补一次 caret 绘制刷新（F11：位置对但画不出来）。
+    try { ensureCaret(true); } catch (e) {}
   }
 }
 
@@ -1141,13 +1193,43 @@ function ensureBlockWrapped() {
 // 且 input/paste 因无有效插入点而“无法输入/粘贴”（用户报的两个场景：解锁后、选中+空格后）。
 // 仅在“当前选区非法”时才重建；合法选区（含用户主动选中的文本）一律不动——
 // 正好满足“除选中态外、任何时刻都应常驻光标”的需求。
-function ensureCaret() {
-  if (!editor) return;
+// 强制 Chromium 重绘 caret（F11）。
+// 背景：大量 DOM 重排（linkify 的拆链接 / 拍平 span / normalize）之后，caret 的布局
+// 位置完全正确（getClientRects 有值、能正常打字），但 Chromium 的 caret 绘制相位没被
+// 刷新 → 用户看到「能打字但没有光标」。headless 不做真实合成，此现象测不出来。
+// 手段选择：只改 caret-color 触发 paint invalidation，跨一帧后还原。
+//   * 不用 blur()+focus()：会打断中文输入法组字（吞拼音），代价不可接受。
+//   * 不改 DOM：避免动撤销栈与块结构（F9 的教训）。
+function repaintCaret() {
+  if (!editor || isComposing) return;            // 组字期间绝不干预
+  try {
+    const sel = window.getSelection();
+    if (!sel.rangeCount || !sel.isCollapsed) return; // 只处理光标态，用户选中态不碰
+    if (document.activeElement !== editor) return;
+    // 只动样式，绝不动选区。
+    // 曾试过在此 removeAllRanges()+addRange() 重设同位置以重启闪烁相位，
+    // 结果打断了 Chromium 的撤销事务分组 → Ctrl+Z 失效（探针 A4 由 11/11 掉到 9/11）。
+    // 教训同 F9：任何看似“无副作用”的选区/DOM 干预都可能连锁破坏 undo 栈。
+    const prev = editor.style.caretColor;
+    editor.style.caretColor = 'transparent';
+    requestAnimationFrame(() => {
+      try { editor.style.caretColor = prev || ''; } catch (e) {}
+    });
+  } catch (e) {}
+}
+
+function ensureCaret(forceRepaint) {
+  if (!editor || isComposing) return;
   const sel = window.getSelection();
   const valid = sel.rangeCount > 0 &&
     sel.getRangeAt(0).startContainer.isConnected &&
     editor.contains(sel.getRangeAt(0).commonAncestorContainer);
-  if (valid) return; // 选区合法 → 不动（尊重用户选中态 / 当前光标）
+  if (valid) {
+    // 选区合法 → 不改位置（尊重用户选中态 / 当前光标），
+    // 但 DOM 刚被重排过时补一次绘制刷新，解决「位置对、画不出来」。
+    if (forceRepaint) repaintCaret();
+    return;
+  }
   // 选区非法：先确保块结构合法（裸文本节点会让光标再次失效），再在“末尾”重建折叠光标。
   // 折叠光标优先落在最后一个文本节点内（最贴近浏览器原生落点，Chromium 必绘制）；
   // 找不到文本节点（空块/空编辑器）则落在块/编辑器本身末尾。

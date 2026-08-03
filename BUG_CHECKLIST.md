@@ -466,6 +466,29 @@
   - [ ] 选中第一行+空格后：光标仍合法、可继续输入（不再"无光标/无法输入"）。
   - [ ] 用户主动选中文本时：光标不被 `ensureCaret` 打扰（选中态保留）。
   - [ ] 字面复现探针 `tests/e2e/_probe_blockwrap.js` 仍全绿（F8 不回归）。
+- **遗留**: F10 只解决了"选区失效"这一半。用户实测 v5.8 后场景 1（解锁）已好，场景 2（选中+空格）仍无光标但**能打字** → 说明选区是合法的，问题在绘制层，见 F11。
+
+### F11 | 选中+空格后"看不见光标但能打字"（caret 绘制相位未刷新）
+- **版本**: v5.9
+- **现象**: 承接 F10。用户实测 v5.8：解锁后光标正常（F10 场景 1 已修复）；但**选中"一二三"按空格后，光标不显示，却可以继续打字**。
+  - "能打字"是关键信号：说明 Selection **是合法的**（有有效插入点），F10 的 `ensureCaret` 判定合法遂不介入 —— 所以这不是选区失效，是**渲染问题**。
+- **根因**: linkify 的大幅 DOM 重排（拆链接 → 拍平 span → `normalize()`）之后，caret 的**布局位置完全正确**（`getClientRects()` 有值、高 22px、块高 32px、focus 正常），但 Chromium 的 **caret 绘制相位没有被刷新**，caret 停在不可见状态。
+  - 排查中排除的两个假设（探针实测）：① `<div> </div>` 高度为 0 → 否，块高 32px 正常；② `white-space:pre-wrap` 行尾空格 hanging 影响 caret 定位 → 否，`pre-wrap` 与 `break-spaces` 下 caret 距行首均为 5.02px，完全一致。
+  - **headless 完全测不出**：所有 layout/focus/selection 指标在 headless 里都正常，因为 headless 不做真实合成。诊断脚本 `tests/e2e/_probe_caret_space.js` 即为此结论的证据。
+- **修复**: 新增 `repaintCaret()`——**只切换 `editor.style.caretColor`（transparent → rAF 后还原）触发 caret 的 paint invalidation，不动 DOM、不动选区、不动焦点**。`ensureCaret(forceRepaint)` 增参：选区合法时若 `forceRepaint` 则调 `repaintCaret()`；`linkifyEditor()` 的 `finally` 改为 `ensureCaret(true)`。
+  - 同时新增输入法组字保护：`isComposing` 标志（`compositionstart`/`compositionend`），组字期间 `ensureCaret`/`repaintCaret` 一律跳过，避免吞拼音。
+- **⚠️ 本轮踩坑（务必牢记）**: 最初 `repaintCaret()` 里还做了 `sel.removeAllRanges(); sel.addRange(r)`（想"重启闪烁相位"，位置不变、自认无副作用），结果**打断了 Chromium 的撤销事务分组 → Ctrl+Z 失效**，`_probe_blockwrap` 由 11/11 掉到 9/11。**教训同 F9：在 contenteditable 里任何对选区/DOM 的程序化干预都可能连锁破坏 undo 栈，"位置没变"不等于"无副作用"。** 去掉选区重设、只留样式切换后恢复 11/11。
+- **不采用 `blur()+focus()`**: 它是 Chromium 重建 caret 绘制状态最可靠的手段，但会**打断中文输入法组字（吞拼音）**，对中文用户代价不可接受，故弃用。
+- **配套：`?diag` 光标诊断浮层**。URL 加 `?diag` 在右下角显示实时只读读数（focus / caretColor / rangeCount / collapsed / 起点节点+offset / isConnected / rects 数 / caret bcr / 所在块高度+html / editor.innerHTML 片段）。`pointer-events:none` 不抢焦点，不带参数时零开销。**用途：caret 类 bug 在 headless 是盲区，靠它从真实浏览器一次性取到读数，避免反复盲改。**
+- **关联文件**: index.html → repaintCaret() / ensureCaret() / linkifyEditor() / setupCaretDiag() / isComposing
+- **核对要点**:
+  - [ ] 选中第一行+空格后：光标可见且能继续打字。
+  - [ ] Ctrl+Z 仍能正确撤销（`_probe_blockwrap` 11/11，本轮曾在此翻车）。
+  - [ ] 用户选中态不被折叠（`repaintCaret` 只在 `isCollapsed` 时动作）。
+  - [ ] 中文输入法组字期间不被干预（不吞拼音）。
+  - [ ] `caretColor` 不残留 `transparent`（否则光标真会永久消失）。
+  - [ ] 不带 `?diag` 时无浮层、无额外定时器。
+  - [ ] 验收探针 `tests/e2e/_probe_f11.js` 16/16 全绿。
 
 ---
 
@@ -486,3 +509,4 @@
 | v5.6 | F7 |
 | v5.7 | F8 |
 | v5.8 | F10 |
+| v5.9 | F11 |
