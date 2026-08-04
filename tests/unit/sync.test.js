@@ -1,11 +1,14 @@
 // NoteSync 同步回归单测（jsdom 加载真实 index.html）
-// 核心守卫（v5.17）：轮询基线无条件常驻（每 4 秒），SSE 仅作加速器；
+// 核心守卫（v5.17→v5.18）：轮询基线无条件常驻（每 2 秒，恢复 v2.x 体感），SSE 仅作加速器；
 // 旧代码在 SSE onopen 时 clearInterval 杀掉轮询、且只在 onerror 才启动轮询——
 // 当 SSE 在隧道/代理下“连上但不投递”悬挂时，onerror 永不触发、轮询永不启动，另一端必须手动刷新。
+// v5.18 进一步：轮询间隔 4000→2000（退化场景体感回到“几乎秒同步”），并移除同步提示浮层
+// （自动同步是基操，不应每次弹“已从其他设备同步”打扰用户）。
 // 本测试用可控假 EventSource + 监听 setInterval/clearInterval，断言：
-//   1) startSync 建立 4000ms 无条件轮询；
+//   1) startSync 建立 2000ms 无条件轮询；
 //   2) 模拟 SSE 连上（onopen）不会 clearInterval（轮询保活）；
-//   3) SSE onmessage 会触发 poll。
+//   3) SSE onmessage 会触发 poll；
+//   4) showSyncToast 已被移除（window.showSyncToast 为 undefined），同步静默。
 const { test, after } = require('node:test');
 const assert = require('node:assert');
 const { loadApp } = require('../helpers');
@@ -40,12 +43,15 @@ test('v5.17 同步：轮询基线无条件常驻，SSE onopen 不再清轮询', 
   // 调用 startSync（顶层函数声明，挂在 window 上）
   window.startSync();
 
-  // 1) 无条件基线：startSync 应已建立 4000ms 轮询
-  const base = intervalCalls.find((c) => c.ms === 4000);
-  assert.ok(base, 'startSync 应建立 4000ms 无条件轮询基线');
+  // 1) 无条件基线：startSync 应已建立 2000ms 轮询
+  const base = intervalCalls.find((c) => c.ms === 2000);
+  assert.ok(base, 'startSync 应建立 2000ms 无条件轮询基线');
   assert.strictEqual(typeof base.fn, 'function', '轮询回调应为函数');
   const clearAfterStart = clearCount;
   assert.strictEqual(clearAfterStart, 0, 'startSync 阶段不应有 clearInterval');
+
+  // 4) v5.18 移除同步提示浮层：showSyncToast 不应存在（同步静默，不打扰）
+  assert.strictEqual(typeof window.showSyncToast, 'undefined', 'v5.18 应移除 showSyncToast（同步不再弹提示）');
 
   // 2) 模拟 SSE 连上（onopen）——旧代码这里会 clearInterval 杀掉轮询；新代码绝不应
   const es = window.__es;

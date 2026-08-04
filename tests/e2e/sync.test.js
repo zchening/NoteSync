@@ -1,8 +1,9 @@
 // NoteSync E2E（Playwright + 真实 Chromium）：两端自动同步验证
 // 直接走真实 URL 笔记路径（/synctest）+ 真实解锁，验证：
 //   T1 正常链路（SSE + 轮询）：A 端输入后，B 端在 ≤5s 内自动收到，无需刷新；
-//   T2 决定性回归证明（disableSSE）：即便 SSE 完全不可用，仅靠无条件 4s 轮询基线，
-//       B 端仍能在 ≤5s 内自动收到——这正是 v5.17 修复的“必须刷新”失败模式。
+//   T2 决定性回归证明（disableSSE）：即便 SSE 完全不可用，仅靠无条件 2s 轮询基线，
+//       B 端仍能在 ≤3.5s 内自动收到——这正是 v5.17 修复、v5.18 提速到 2s 的“必须刷新”失败模式。
+//   另：两端同步后页面不应出现 #syncToast 提示浮层（v5.18 移除同步打扰提示，自动同步静默）。
 const { test, after } = require('node:test');
 const assert = require('node:assert');
 const { chromium } = require('playwright');
@@ -84,10 +85,13 @@ test('T1 正常链路：A 输入后 B 在 ≤5s 内自动同步，无需刷新',
   );
   const bText = await pageB.evaluate(() => document.getElementById('editor').textContent);
   assert.ok(bText.includes(TEXT), `B 应自动收到 A 的输入（无需刷新），实际: ${bText}`);
+  // v5.18：同步静默，不应出现提示浮层
+  const toast1 = await pageB.evaluate(() => !!document.getElementById('syncToast'));
+  assert.strictEqual(toast1, false, 'T1 同步后不应出现 #syncToast 提示浮层');
   assert.deepStrictEqual([...pageA.__errors, ...pageB.__errors], [], '两端不应有 pageerror');
 }));
 
-test('T2 决定性回归：SSE 关闭时仅靠 4s 轮询基线，B 仍自动同步（无需刷新）', guard(async () => {
+test('T2 决定性回归：SSE 关闭时仅靠 2s 轮询基线，B 仍自动同步（无需刷新）', guard(async () => {
   const { browser, baseURL } = await withEnv(true);
   const ctxA = await browser.newContext();
   const ctxB = await browser.newContext();
@@ -97,13 +101,16 @@ test('T2 决定性回归：SSE 关闭时仅靠 4s 轮询基线，B 仍自动同�
   await pageA.click('#editor');
   await pageA.keyboard.type(TEXT);
 
-  // 仅靠轮询基线（≤4s 一拍），应在 8s 内到达；若旧代码（轮询被 onopen 清掉、SSE 又不可用）则永远到不了
+  // 仅靠 2s 轮询基线（最坏一拍 2s），应在 3.5s 内到达；若旧代码（轮询被 onopen 清掉、SSE 又不可用）则永远到不了
   await pageB.waitForFunction(
     (t) => document.getElementById('editor').textContent.includes(t),
     TEXT,
-    { timeout: 8000 }
+    { timeout: 3500 }
   );
   const bText = await pageB.evaluate(() => document.getElementById('editor').textContent);
-  assert.ok(bText.includes(TEXT), `SSE 关闭时，B 应仅靠轮询自动收到（无需刷新），实际: ${bText}`);
+  assert.ok(bText.includes(TEXT), `SSE 关闭时，B 应仅靠 2s 轮询自动收到（无需刷新），实际: ${bText}`);
+  // v5.18：同步静默，不应出现提示浮层
+  const toast2 = await pageB.evaluate(() => !!document.getElementById('syncToast'));
+  assert.strictEqual(toast2, false, 'T2 同步后不应出现 #syncToast 提示浮层');
   assert.deepStrictEqual([...pageA.__errors, ...pageB.__errors], [], '两端不应有 pageerror');
 }));
