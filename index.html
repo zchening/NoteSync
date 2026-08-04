@@ -183,7 +183,7 @@ const PBKDF2_ITER = 200000;
 const FAIL_LIMIT = 10;
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '5.16';
+const APP_VERSION = '5.17';
 const BUILD_DATE = '2026-08-03';
 
 const $ = s => document.querySelector(s);
@@ -1748,8 +1748,24 @@ async function saveLocal() {
   finally { busy = false; }
 }
 
+// 远端落地轻提示：拉到并应用了其他设备的改动时提示一次（仅在确有内容变更时触发）
+function showSyncToast(text) {
+  let el = document.getElementById('syncToast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'syncToast';
+    el.style.cssText = 'position:fixed;top:54px;left:50%;transform:translateX(-50%);z-index:60;padding:7px 14px;font-size:12px;letter-spacing:.04em;color:var(--fg);background:var(--hover);border:1px solid var(--line);border-radius:20px;opacity:0;pointer-events:none;transition:opacity .35s;box-shadow:0 4px 16px rgba(0,0,0,.12)';
+    document.body.appendChild(el);
+  }
+  el.textContent = text;
+  el.style.opacity = '1';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.style.opacity = '0'; }, 1800);
+}
+
 async function poll() {
   if (busy) return;
+  if (!cryptoKey) return; // 已锁定：无密钥无须轮询，避免“同步中断”噪声
   try {
     const note = await apiGet();
     setStatus(true, '已同步');
@@ -1795,6 +1811,7 @@ async function poll() {
         }
         // 远端同步是程序化改动：同步撤销栈当前状态，避免把同步重渲染混入用户撤销序列
         syncCurrentState();
+        showSyncToast('已从其他设备同步');
       }
       localVer = note.v;
     }
@@ -1804,19 +1821,25 @@ async function poll() {
   }
 }
 
-// SSE 推送 + 断线自动重连 + 轮询兜底
+// SSE 推送（仅作即时加速器）+ 无条件常驻轮询基线 + 断线自动重连
+// 关键修复（v5.17）：此前轮询兜底被 onopen 清掉、且只在 onerror 时才启动——
+// 当 SSE 在 Cloudflare 隧道/代理下“连上但不投递”悬挂时，onerror 永不触发，轮询永不启动，
+// 另一端既收不到推送也没人轮询，只能手动刷新（见 BUG_CHECKLIST 同步段）。
+// 现改为：轮询是无条件常驻基线（每 4 秒，恢复 v2.x 体感），SSE 只负责“收到推送→立即拉一次”加速；
+// 无论 SSE 是否可用，均 ≤4 秒自愈，彻底消除“必须刷新”。
 let sseSource = null, pollTimer = null, sseReconnectTimer = null;
+const POLL_INTERVAL = 4000;
 
 function connectSSE() {
   try {
     sseSource = new EventSource('/api/note/' + encodeURIComponent(noteId) + '/stream');
-    sseSource.onopen = () => {
-      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-    };
+    // onopen 不再 clearInterval(pollTimer)：轮询基线始终运行，SSE 仅是加速器
+    sseSource.onopen = () => {};
     sseSource.onmessage = e => { poll(); };
     sseSource.onerror = () => {
       if (sseSource) { sseSource.close(); sseSource = null; }
-      if (!pollTimer) { pollTimer = setInterval(poll, 10000); }
+      // 断线立即拉一次（轮询兜底本就常驻，无需在此启动），并尝试重连
+      poll();
       if (!sseReconnectTimer) {
         sseReconnectTimer = setTimeout(() => {
           sseReconnectTimer = null;
@@ -1825,14 +1848,21 @@ function connectSSE() {
       }
     };
   } catch (e) {
-    if (!pollTimer) { pollTimer = setInterval(poll, 10000); }
+    // EventSource 构造失败：轮询基线由 startSync 保证运行，无需在此处理
   }
 }
 
 function startSync() {
+  // 无条件常驻轮询基线：即便 SSE 在隧道下完全沉默，也 ≤4 秒自愈
+  if (!pollTimer) { pollTimer = setInterval(poll, POLL_INTERVAL); }
   connectSSE();
   poll();
 }
+
+// 设备从后台切回前台时立即拉一次，避免回前台还要等下一拍
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') poll();
+});
 
 $('#ok').addEventListener('click', () => unlock(pw.value));
 pw.addEventListener('keydown', e => { if (e.key === 'Enter') unlock(pw.value); });
