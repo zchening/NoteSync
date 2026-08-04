@@ -82,42 +82,25 @@ test('Bug1 GET /api/note/<中文名>/stream 应返回 400 bad id', async () => {
   ac.abort(); // 立即断开，避免悬挂长连接
 });
 
-// --- Bug 4: maskable 192 图标 ---
-test('Bug4 GET /icon-maskable-192.png → 200 image/png 且 >100 字节', async () => {
-  const res = await fetch(`${BASE}/icon-maskable-192.png`);
-  assert.strictEqual(res.status, 200);
-  const ct = res.headers.get('content-type') || '';
-  assert.ok(ct.startsWith('image/png'), 'content-type=' + ct);
-  const buf = Buffer.from(await res.arrayBuffer());
-  assert.ok(buf.length > 100, 'body length=' + buf.length);
-});
-
-// --- Bug 4: maskable 512 图标 ---
-test('Bug4 GET /icon-maskable-512.png → 200 image/png 且 >100 字节', async () => {
-  const res = await fetch(`${BASE}/icon-maskable-512.png`);
-  assert.strictEqual(res.status, 200);
-  const ct = res.headers.get('content-type') || '';
-  assert.ok(ct.startsWith('image/png'), 'content-type=' + ct);
-  const buf = Buffer.from(await res.arrayBuffer());
-  assert.ok(buf.length > 100, 'body length=' + buf.length);
-});
-
-// --- Bug 4: manifest.json 含 maskable 512 图标 ---
-test('Bug4 GET /manifest.json 含 purpose=maskable 且 src 含 icon-maskable-512.png 的图标', async () => {
+// --- Bug 4: manifest.json 仅含 favicon.svg（无 maskable PNG，v5.16 移除）---
+test('Bug4 GET /manifest.json 含 favicon.svg 的 maskable 条目、无 icon-maskable PNG', async () => {
   const res = await fetch(`${BASE}/manifest.json`);
   assert.strictEqual(res.status, 200);
   const m = await res.json();
   const icons = Array.isArray(m.icons) ? m.icons : [];
-  const hit = icons.find(
-    (i) => (i.purpose || '').includes('maskable') && (i.src || '').includes('icon-maskable-512.png')
+  const faviconMaskable = icons.find(
+    (i) => (i.src || '').includes('favicon.svg') && (i.purpose || '').includes('maskable')
   );
-  assert.ok(hit, 'manifest 缺少 maskable 512 图标；icons=' + JSON.stringify(icons));
+  assert.ok(faviconMaskable, 'manifest 缺少 favicon.svg 的 maskable 条目；icons=' + JSON.stringify(icons));
+  const png = icons.find((i) => (i.src || '').includes('icon-maskable'));
+  assert.ok(!png, 'manifest 不应再含 icon-maskable-*.png；icons=' + JSON.stringify(icons));
 });
 
-// --- Bug 4: favicon.svg 含黑色填充 ---
-test('Bug4 GET /favicon.svg → 200 且含 fill="#0F0F11"（黑色背景）', async () => {
+// --- Bug 4: favicon.svg 透明金 logo（无黑色背景）---
+test('Bug4 GET /favicon.svg → 200 且为透明金 logo（无 fill="#0F0F11"）', async () => {
   const res = await fetch(`${BASE}/favicon.svg`);
   assert.strictEqual(res.status, 200);
   const text = await res.text();
-  assert.ok(text.includes('fill="#0F0F11"'), 'favicon 缺少黑色填充 #0F0F11');
+  assert.ok(text.includes('stroke="#8F7126"'), 'favicon 缺少金色描边 #8F7126');
+  assert.ok(!text.includes('fill="#0F0F11"'), 'favicon 不应含黑色填充 #0F0F11（备案前透明）');
 });

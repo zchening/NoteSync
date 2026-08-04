@@ -207,33 +207,30 @@ test('Bug3 空口令时解锁按钮禁用且禁用样式为有意弱化', guard(
   assert.notStrictEqual(styles.disBg, enStyles.bg, '禁用态背景应区别于启用态（金色渐变）');
 }));
 
-// ── Bug 4：PWA maskable 图标 + 米色 favicon 正确服务 ───────────────────────
-test('Bug4 PWA maskable 图标 + 米色 favicon 由服务器正确返回', guard(async () => {
+// ── Bug 4：PWA 图标恢复为备案前透明金 logo（v5.16 修正 v5.15 误改黑底）────
+test('Bug4 manifest 仅含 favicon.svg maskable + favicon 透明金 logo 由服务器正确返回', guard(async () => {
   await page.goto(baseURL);
 
   const manifestOk = await page.evaluate(async () => {
     const r = await fetch('/manifest.json');
     const j = await r.json();
-    return j.icons.some(
-      (i) => (i.purpose || '').includes('maskable') && i.src.includes('icon-maskable-512.png')
+    const icons = Array.isArray(j.icons) ? j.icons : [];
+    const faviconMaskable = icons.some(
+      (i) => (i.purpose || '').includes('maskable') && (i.src || '').includes('favicon.svg')
     );
+    const hasPng = icons.some((i) => (i.src || '').includes('icon-maskable'));
+    return { faviconMaskable, hasPng };
   });
-  assert.strictEqual(manifestOk, true, 'manifest 应包含 maskable 512 图标');
-
-  const png = await page.evaluate(async () => {
-    const r = await fetch('/icon-maskable-192.png');
-    const buf = await r.arrayBuffer();
-    return { ct: r.headers.get('content-type'), len: buf.byteLength };
-  });
-  assert.ok((png.ct || '').startsWith('image/png'), '192 png content-type 应为 image/png，实际: ' + png.ct);
-  assert.ok(png.len > 100, '192 png 应为有效文件 (>100 bytes)，实际: ' + png.len);
+  assert.strictEqual(manifestOk.faviconMaskable, true, 'manifest 应包含 favicon.svg 的 maskable 条目');
+  assert.strictEqual(manifestOk.hasPng, false, 'manifest 不应再含 icon-maskable-*.png');
 
   const svg = await page.evaluate(async () => {
     const r = await fetch('/favicon.svg');
     const t = await r.text();
-    return t.includes('fill="#0F0F11"');
+    return { hasGold: t.includes('stroke="#8F7126"'), hasBlack: t.includes('fill="#0F0F11"') };
   });
-  assert.strictEqual(svg, true, 'favicon.svg 应包含黑色 #0F0F11');
+  assert.strictEqual(svg.hasGold, true, 'favicon.svg 应保留金色描边 #8F7126');
+  assert.strictEqual(svg.hasBlack, false, 'favicon.svg 不应含黑色填充 #0F0F11（备案前透明）');
 }));
 
 // ── Bug 5：指纹解锁功能已彻底移除（v5.15）────────────────────────────

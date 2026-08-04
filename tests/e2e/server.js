@@ -12,8 +12,6 @@ const ROOT = path.resolve(__dirname, '..', '..'); // notesync 仓库根（含 in
 const STATIC = {
   '/manifest.json': { file: 'manifest.json', type: 'application/json' },
   '/favicon.svg': { file: 'favicon.svg', type: 'image/svg+xml' },
-  '/icon-maskable-192.png': { file: 'icon-maskable-192.png', type: 'image/png' },
-  '/icon-maskable-512.png': { file: 'icon-maskable-512.png', type: 'image/png' },
   '/sw.js': { file: 'sw.js', type: 'application/javascript' },
 };
 

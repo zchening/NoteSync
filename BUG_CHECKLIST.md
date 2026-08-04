@@ -245,18 +245,19 @@
   - [ ] 更新后提示用户卸载重装 PWA
   - [ ] 新安装的 PWA 显示新图标
 
-### C4 | PWA 自适应图标实底（v5.14 米白底 → v5.15 恢复黑底）
-- **版本**: v5.14（首次加米白实底）/ v5.15（用户嫌米白不好看，恢复黑底）
-- **现象**: 手机 Chrome「添加到主屏幕」后，PWA 图标底层是黑色背景——这其实是 Android 自适应图标(maskable)把透明区填黑。v5.14 改为米白实底(#FBFBF8)金 logo，用户实测"还是之前那个底层黑色背景的好看"，v5.15 反转回黑底。
-- **根因**: 透明 SVG 在 maskable 场景被系统填黑；v5.14 为规避而改米白实底，但用户审美偏好黑底。
-- **修复（v5.15 当前态）**: `favicon.svg` `<rect width="48" height="48" fill="#0F0F11" rx="10"/>`（黑底兜底）；两张 `icon-maskable-192.png` / `icon-maskable-512.png` 重新渲染为**黑底(#0F0F11)金 logo**（Chromium 渲染 favicon.svg 后截图栅格化，矢量精确）；`manifest.json` `background_color` 改回 `#0F0F11`、图标 `?v=5.15` 且 `purpose:"maskable"`；`server.js` 已有 `/icon-maskable-192.png` `/icon-maskable-512.png` 路由（image/png、no-cache）。
-- **关联文件**: manifest.json / favicon.svg / icon-maskable-192.png / icon-maskable-512.png / server.js（图标路由）
+### C4 | PWA 图标实底之争（v5.14 米白 → v5.15 误改黑底 → v5.16 还原备案前透明金 logo）
+- **版本**: v5.14（首次加米白实底 #FBFBF8）/ v5.15（用户嫌米白不好看，误改黑底 #0F0F11）/ v5.16（用户点明要的是**备案前部署在 note.xuyinji.com.cn 的那个图标**，还原透明金 logo）
+- **现象**: v5.15 把图标改黑底(#0F0F11)，用户实测不对——他要的是 ICP 备案前线上那个图标。核查 git 历史：`18d924d` 黑底版（#1C1C1A）仅存在 7 分钟即被 `b72c62f` 透明版取代、**从未上线**；ICP 备案（约 8/2）前线上跑的就是透明金 logo `favicon.svg`（`purpose: any maskable`）。所谓"黑底"是 Android 把透明 maskable SVG 填黑所致，并非一个显式黑底文件。
+- **根因**: v5.15 把"用户喜欢的黑底观感"误当成"要一个显式黑底文件"，做了与备案前不符的改动；用户要的是还原真相文件，不是再加一层底色。
+- **修复（v5.16 当前态）**: ① `favicon.svg` 恢复透明金 logo（`stroke="#8F7126"`、无背景矩形，与 `b72c62f` 一致）；② `manifest.json` 仅引用 `favicon.svg`（`background_color #fafafa`、`theme_color #2b6cff`），图标 src 加 `?v=5.16` 缓存破坏以强制刷新 PWA 图标；③ 删除 v5.14 新增的两张 `icon-maskable-192.png` / `icon-maskable-512.png` 及其 `server.js` 静态路由（回归备案前状态，无 maskable PNG）。
+- **关联文件**: manifest.json / favicon.svg / server.js（已移除图标路由）/ ~~icon-maskable-192.png / icon-maskable-512.png（v5.16 删除）~~
 - **核对要点**:
-  - [ ] manifest.json 的 maskable 图标 src 含版本号 `?v=5.15`
-  - [ ] 图标为黑实底(#0F0F11)金 logo，无透明
-  - [ ] `favicon.svg` 含 `fill="#0F0F11"` 矩形兜底
-  - [ ] `/icon-maskable-192.png` `/icon-maskable-512.png` 以 image/png 返回、正文非 trivial（黑底非 trivial）
-  - [ ] 手机 Chrome 添加快捷方式后图标为黑底金 logo（真机验证）
+  - [ ] `favicon.svg` 不含任何 `fill="#0F0F11"` / `#FBFBF8` 矩形（透明金 logo）
+  - [ ] `favicon.svg` 含 `stroke="#8F7126"` 金色描边
+  - [ ] `manifest.json` 的 icons 仅含 `favicon.svg`（`purpose: any maskable`），无 `icon-maskable-*.png` 条目
+  - [ ] 线上已删除 `icon-maskable-192.png` / `icon-maskable-512.png`（不再服务）
+  - [ ] `server.js` 不再有 `/icon-maskable-*.png` 路由
+  - [ ] 手机 Chrome 添加快捷方式后图标为透明金 logo（Android 按 maskable 填充，观感与备案前一致；真机验证）
 
 ---
 
@@ -699,5 +700,6 @@
 | v5.11 | F13 |
 | v5.12 | G1 |
 | v5.13 | E4 |
-| v5.15 | H4(移除), H5, H6, C4(黑底恢复) |
+| v5.15 | H4(移除), H5, H6, C4(误改黑底) |
+| v5.16 | C4(还原备案前透明金 logo；删 maskable PNG + 路由) |
 | v5.14 | H1, H2, H3, H4, C4 |

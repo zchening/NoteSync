@@ -108,23 +108,26 @@ test('Bug3 禁用按钮存在有意样式规则（button:disabled）', () => {
   assert.ok(found, '应存在针对 button:disabled 的有意禁用样式规则');
 });
 
-// ── Bug 4：PWA maskable 图标 + favicon 使用奶油色背景（非黑）─────────
-test('Bug4 manifest 含 maskable 目的图标（奶油色背景）', () => {
+// ── Bug 4：PWA 图标恢复为备案前透明金 logo（v5.16 修正 v5.15 误改黑底）──
+test('Bug4 manifest 仅引用透明 favicon.svg（purpose 含 maskable，无 maskable PNG）', () => {
   const manifestPath = path.resolve(__dirname, '..', '..', 'manifest.json');
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
   const icons = manifest.icons || [];
-  const maskable = icons.filter((i) => (i.purpose || '').split(/\s+/).includes('maskable'));
-  assert.ok(maskable.length >= 1, 'manifest 应至少含一个 purpose=maskable 图标');
-  assert.ok(
-    maskable.some((i) => (i.src || '').includes('icon-maskable-512.png')),
-    '应存在 icon-maskable-512.png 的 maskable 条目'
+  // 应存在 favicon.svg 的 maskable 条目（备案前即如此）
+  const faviconMaskable = icons.find(
+    (i) => (i.src || '').includes('favicon.svg') && (i.purpose || '').split(/\s+/).includes('maskable')
   );
+  assert.ok(faviconMaskable, 'manifest 应含 favicon.svg 的 purpose=maskable 条目');
+  // 不应再有任何 icon-maskable-*.png 条目（v5.14 加、v5.16 移除）
+  const png = icons.find((i) => (i.src || '').includes('icon-maskable'));
+  assert.ok(!png, 'manifest 不应再含 icon-maskable-*.png 条目；icons=' + JSON.stringify(icons));
 });
 
-test('Bug4 favicon.svg 使用黑色背景（#0F0F11）', () => {
+test('Bug4 favicon.svg 为透明金 logo（无黑色背景填充）', () => {
   const svgPath = path.resolve(__dirname, '..', '..', 'favicon.svg');
   const svg = fs.readFileSync(svgPath, 'utf8');
-  assert.ok(svg.includes('fill="#0F0F11"'), 'favicon.svg 应含黑色背景 #0F0F11');
+  assert.ok(!svg.includes('fill="#0F0F11"'), 'favicon.svg 不应含黑色背景 #0F0F11（备案前为透明）');
+  assert.ok(svg.includes('stroke="#8F7126"'), 'favicon.svg 应保留金色描边 #8F7126');
 });
 
 // ── Bug 5：指纹解锁功能已按用户决定彻底移除（v5.15）─────────────────
