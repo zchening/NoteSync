@@ -16,8 +16,9 @@ if (!fs.existsSync(NOTES_DIR)) fs.mkdirSync(NOTES_DIR, { recursive: true });
 
 const EMPTY = { v: 0, ct: '', iv: '', salt: '', updatedAt: 0 };
 
-// noteId 校验：仅允许英文/数字（前端已禁止中文输入，后端同步收紧），1-64 字符
-const ID_RE = /^[A-Za-z0-9]{1,64}$/;
+// noteId 校验：英文/数字/下划线/短横线，1-64 字符（v5.19 恢复 _ 与 -：
+// v5.15 为禁中文收紧成纯字母数字，误伤了早期带 _/- 的旧笔记；中文仍被拒绝）
+const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
 // --- 限流参数 ---
 const FAIL_LIMIT = 10;                   // 失败阈值

@@ -38,10 +38,14 @@ test('Bug1 落地页输入框过滤中文与符号，仅保留英文数字', () 
   dispatchInput(li);
   assert.strictEqual(li.value, 'MyNote123', '英文数字应被保留');
 
-  // 符号与空格被剔除
+  // 符号与空格被剔除；v5.19 起 _ 与 - 恢复为合法字符（与后端 ID_RE 一致）
   li.value = 'a-b@c d!';
   dispatchInput(li);
-  assert.strictEqual(li.value, 'abcd', '符号与空格应被剔除');
+  assert.strictEqual(li.value, 'a-bcd', '符号与空格应被剔除，短横线保留');
+
+  li.value = 'my_note-1';
+  dispatchInput(li);
+  assert.strictEqual(li.value, 'my_note-1', '下划线与短横线应被保留');
 });
 
 // ── Bug 2：笔记名为空时「打开」按钮应禁用 ───────────────────────────

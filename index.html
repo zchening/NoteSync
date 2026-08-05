@@ -121,10 +121,10 @@
   <h1>NoteSync</h1>
   <p class="sub">端到端加密 · 多设备同步</p>
   <div class="input-row">
-    <input id="landingInput" placeholder="笔记名（英文 / 数字）" autocomplete="off">
+    <input id="landingInput" placeholder="笔记名（英文 / 数字 / _ / -）" maxlength="64" autocomplete="off">
     <button id="landingBtn" disabled>打开</button>
   </div>
-  <p id="landingWarn" class="warn hidden">仅支持英文和数字</p>
+  <p id="landingWarn" class="warn hidden">仅支持英文、数字、下划线和短横线</p>
   <p class="hint">在网址后加笔记名即可，如 note.xuyinji.com.cn/notes</p>
 </div>
 <header>
@@ -183,8 +183,8 @@ const PBKDF2_ITER = 200000;
 const FAIL_LIMIT = 10;
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '5.18';
-const BUILD_DATE = '2026-08-03';
+const APP_VERSION = '5.19';
+const BUILD_DATE = '2026-08-05';
 
 const $ = s => document.querySelector(s);
 const editor = $('#editor'), mask = $('#mask'), pw = $('#pw'), err = $('#err');
@@ -660,10 +660,14 @@ async function fetchRetry(url, opts, retries) {
     try {
       const r = await fetch(url, opts);
       if (r.status === 429) { const j = await r.json(); throw { locked: true, retryAfter: j.retryAfter || 1800 }; }
-      if (!r.ok) throw new Error((opts?.method||'GET') + ' ' + r.status);
+      if (!r.ok) {
+        const err = new Error((opts?.method||'GET') + ' ' + r.status);
+        err.status = r.status;
+        throw err;
+      }
       return r;
     } catch (e) {
-      if (e.locked) throw e;
+      if (e.locked || (e.status >= 400 && e.status < 500)) throw e;
       if (i < retries) { await new Promise(r => setTimeout(r, [1000, 3000, 5000][i] || 5000)); continue; }
       throw e;
     }
@@ -833,7 +837,7 @@ function applyState(s) {
 
 // 用户编辑：内容变化则压入"上一步"快照。同一输入突发内的连续打字合并为一步（贴近 Chrome）。
 function recordIfChanged(it) {
-  if (isRestoring || isComposing) return;
+  if (isRestoring || isComposing || pasteInFlight) return;
   let cur;
   try { cur = captureState(); } catch (e) { return; }
   const now = Date.now();
@@ -962,6 +966,7 @@ function hasLinkableText(root, urlTest, phoneTest, longWordTest) {
 
 // 粘贴：图片→上传，文字→纯文本（URL/手机号自动转链接）
 editor.addEventListener('paste', e => {
+  if (isComposing) return; // 组字期间不处理粘贴，避免打断 IME
   const items = e.clipboardData && e.clipboardData.items;
   if (!items) return;
   for (const item of items) {
@@ -975,21 +980,79 @@ editor.addEventListener('paste', e => {
   const text = e.clipboardData.getData('text/plain') || e.clipboardData.getData('text/uri-list') || '';
   if (!text) return;
   e.preventDefault();
-  // 纯文本按行拆成 <div> 块，匹配浏览器原生多行粘贴结构。
-  // 旧实现把整段当作单个含 "\n" 的文本节点塞进一个 <div>：换行只是渲染换行、
-  // 且空编辑器（点击后浏览器塞的占位 <br>）会残留成顶部空行（用户报的“粘贴多出一个空行”）。
-  // URL/手机号仍交给 500ms 后的 linkifyEditor 统一转链接，这里只负责块结构。
-  const lines = text.split(/\r?\n/);
-  const frag = document.createDocumentFragment();
-  lines.forEach(line => {
-    const d = document.createElement('div');
-    d.textContent = line;
-    frag.appendChild(d);
-  });
-  // 空编辑器（仅 <br>/纯空白）粘贴：先清掉占位 <br>，避免顶部多出一个空行
-  if (isEditorEmpty()) editor.innerHTML = '';
-  insertNodeAtCaret(frag);
+  // 空编辑器（仅 <br>/纯空白）：清掉占位 <br> 后整段按行拆成 <div> 块
+  // （若走原生 insertText，空编辑器的占位 <br> 会残留成顶部空行，即用户报的“粘贴多出一个空行”）
+  if (isEditorEmpty()) {
+    const lines = text.split(/\r?\n/);
+    const frag = document.createDocumentFragment();
+    lines.forEach(line => {
+      const d = document.createElement('div');
+      d.textContent = line;
+      frag.appendChild(d);
+    });
+    editor.innerHTML = '';
+    insertNodeAtCaret(frag);
+    return;
+  }
+  pasteTextNative(text);
 });
+
+// I2：非空编辑器粘贴——用原生 execCommand 逐行插入，与当前行正确合并。
+// 旧实现把每一行无条件包成 <div> 块再 insertNode：在 "abc|def" 中间粘贴 "XY"
+// 会产生嵌套 <div>（abc/XY/def 渲染成三行），且光标落到块首（接着打字出现在行首）。
+// insertText 在光标处内联合并，insertParagraph 走浏览器原生拆段，光标位置天然正确。
+// 整个粘贴作为单步压入自建撤销栈（pasteInFlight 期间 recordIfChanged 不逐条记录）。
+let pasteInFlight = false;
+function pasteTextNative(text) {
+  const lines = text.split(/\r?\n/);
+  editor.focus();
+  const prePaste = captureState();
+  pasteInFlight = true;
+  try {
+    lines.forEach((line, i) => {
+      if (i > 0) document.execCommand('insertParagraph', false);
+      if (line) document.execCommand('insertText', false, line);
+    });
+  } finally {
+    pasteInFlight = false;
+  }
+  undoStack.push(prePaste);
+  if (undoStack.length > 300) undoStack.shift();
+  redoStack = [];
+  // 结构整理（独立验证发现）：单行笔记的常见形态是"裸文本节点挂根"（空编辑器首行打字
+  // Chromium 不包 div），此时行中粘贴多行文本，insertParagraph 会留下「裸文本节点 + <div>
+  // 做兄弟」的非法结构（如 abX<div>Yc</div>）。无可链接文本时 linkifyEditor 早退不碰 DOM，
+  // 该结构会以该形态保存/同步，且在其上回车会产生真嵌套块。这里在 undo 压栈后补一次包块+
+  // normalize（只移动/合并节点、不压撤销栈），并重新捕获当前态，避免 recordIfChanged 误判。
+  // 注意：ensureBlockWrapped 会把光标所在的裸文本节点搬进新 <div>，父节点变更会让 Chromium
+  // 把选区折叠成元素偏移、光标丢失。故先用"块内偏移"保存选区、整理后再恢复（同 linkifyEditor），
+  // 保证光标停在粘贴内容之后、而不是跳到行尾。
+  const sel0 = window.getSelection();
+  let savedSel = null;
+  if (sel0.rangeCount > 0) {
+    const r0 = sel0.getRangeAt(0);
+    if (editor.contains(r0.commonAncestorContainer)) {
+      try { savedSel = saveSelectionBlocked(editor, r0); } catch (e) {}
+    }
+  }
+  ensureBlockWrapped();
+  editor.normalize();
+  if (savedSel) {
+    try {
+      const nr = restoreSelectionInBlock(editor, savedSel);
+      if (nr) setSel(nr);
+    } catch (e) {}
+  }
+  lastState = captureState();
+  lastEditTime = Date.now();
+  lastEditType = 'insertFromPaste';
+  try { ensureCaret(true); } catch (e) {}
+  // execCommand 派发的 input 事件若撞上 busy 会被提前跳过，这里保底挂一次保存/linkify
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveLocal, 800);
+  clearTimeout(linkifyTimer);
+  linkifyTimer = setTimeout(linkifyEditor, 500);
+}
 
 // 拖拽图片
 editor.addEventListener('dragover', e => { e.preventDefault(); editor.classList.add('dragover'); });
@@ -1024,8 +1087,9 @@ fileInput.addEventListener('change', e => {
 // --- 复制到剪贴板 ---
 copyBtn.addEventListener('click', async () => {
   try {
-    const html = editor.innerHTML;
-    const text = editor.innerText;
+    // ZWSP（\u200B）仅用于编辑器内长词/链接断行，复制出去会污染其它应用，剥离
+    const html = editor.innerHTML.replace(/\u200B/g, '');
+    const text = editor.innerText.replace(/\u200B/g, '');
     const item = new ClipboardItem({
       'text/html': new Blob([html], { type: 'text/html' }),
       'text/plain': new Blob([text], { type: 'text/plain' })
@@ -1034,7 +1098,7 @@ copyBtn.addEventListener('click', async () => {
     showUploadStatus('已复制到剪贴板');
   } catch (e) {
     try {
-      await navigator.clipboard.writeText(editor.innerText);
+      await navigator.clipboard.writeText(editor.innerText.replace(/\u200B/g, ''));
       showUploadStatus('已复制文字');
     } catch (e2) {
       showUploadStatus('复制失败');
@@ -1146,6 +1210,7 @@ async function unlock(pass) {
   try { note = await apiGet(); }
   catch (e) {
     if (e.locked) { err.textContent = '尝试过多，请 ' + fmtRetry(e.retryAfter) + ' 后再试'; return; }
+    if (e.status === 400) { err.textContent = '笔记名不合法（仅英文、数字、下划线、短横线）'; return; }
     err.textContent = '无法连接服务器'; return;
   }
   serverSalt = note.salt ? b64ToBuf(note.salt) : crypto.getRandomValues(new Uint8Array(16));
@@ -1170,6 +1235,10 @@ async function loadStoredKey() {
 
 // --- 同步 ---
 let saveTimer = null, linkifyTimer = null, isLinkifying = false;
+// I4：保存可靠性状态——pendingResave: busy 期间有输入待补存；
+// saveRetryTimer/saveRetryCount: 保存失败后的退避重试（3s/6s/12s，至多 3 次）
+let pendingResave = false, saveRetryTimer = null, saveRetryCount = 0;
+const SAVE_RETRY_DELAYS = [3000, 6000, 12000];
 
 // URL 和手机号自动检测：扫描文本节点，转为 <a> 标签
 // 修复：1) 支持裸域名（www.baidu.com / example.com），不再要求 http(s):// 方案前缀；
@@ -1193,6 +1262,67 @@ function denyAsUrl(m) {
   if (!TLD_ALLOW.has(tld)) return true;         // 裸域名必须是已知 TLD
   return false;
 }
+// I3 兜底：修剪 URL 尾部中文标点（主防御是正则字符类排除 CJK，见 linkifyEditor；
+// 此函数覆盖粘贴旧内容等漏网场景）。只修中文标点，绝不动 ASCII 尾部
+// （保护 https://zh.wikipedia.org/wiki/条目_(消歧义) 这类以 ) 结尾的合法 URL）。
+function trimUrlTrailing(u) {
+  return u.replace(/[。，、！？；：…·～（）【】《》〈〉「」『』“”‘’—－]+$/, '');
+}
+
+// I1：用 DOM API（createTextNode / createElement + 属性赋值）组装链接片段，
+// 替代旧的 span.innerHTML = text.replace(...) 字符串拼接——
+// 旧写法会把文本里的 HTML/属性当标记解析：`" onmouseover="alert(1)` 可注入属性、
+// <img onerror> 直接执行 JS、<b> 等标签篡改内容（存储型 XSS，随加密同步跨设备传播）。
+// 属性赋值与文本节点天然转义，任何输入都只是纯文本。
+// 规则与旧版对齐：URL 优先于手机号（重叠时取 URL）、denyAsUrl 命中保持纯文本、
+// 链接文本与长词（≥15 连续非空白）插入 ZWSP 断行符。
+function buildLinkSafe(text, urlRegex, phoneRegex, breakSeparators) {
+  const matches = [];
+  let m;
+  while ((m = urlRegex.exec(text)) !== null) {
+    if (m[0].length === 0) { urlRegex.lastIndex++; continue; } // 零宽匹配防御
+    const raw = trimUrlTrailing(m[0]);
+    if (raw) matches.push({ start: m.index, end: m.index + raw.length, text: raw, kind: 'url' });
+  }
+  while ((m = phoneRegex.exec(text)) !== null) {
+    const s = m.index, e = s + m[0].length;
+    if (!matches.some(u => s < u.end && e > u.start)) {
+      matches.push({ start: s, end: e, text: m[0], kind: 'phone' });
+    }
+  }
+  matches.sort((a, b) => a.start - b.start);
+  const frag = document.createDocumentFragment();
+  let pos = 0;
+  const addText = str => {
+    if (!str) return;
+    // 长词（≥15 连续非空白）在分隔符后插 ZWSP 以便换行，与原实现一致
+    if (/\S{15,}/.test(str)) str = str.replace(breakSeparators, '$1\u200B');
+    frag.appendChild(document.createTextNode(str));
+  };
+  for (const mt of matches) {
+    addText(text.slice(pos, mt.start));
+    if (mt.kind === 'url' && denyAsUrl(mt.text)) {
+      addText(mt.text); // 文件名/未知裸域名：保持纯文本
+    } else {
+      const a = document.createElement('a');
+      if (mt.kind === 'url') {
+        a.href = normalizeHref(mt.text);
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.setAttribute('data-url', '1');
+        a.textContent = mt.text.replace(breakSeparators, '$1\u200B');
+      } else {
+        a.href = 'tel:' + mt.text;
+        a.textContent = mt.text;
+      }
+      frag.appendChild(a);
+    }
+    pos = mt.end;
+  }
+  addText(text.slice(pos));
+  return frag;
+}
+
 function linkifyEditor(opts) {
   const keepSelection = opts ? opts.keepSelection !== false : true;
   if (isLinkifying) return;
@@ -1200,8 +1330,11 @@ function linkifyEditor(opts) {
   try {
     // 方案 URL、www. 域名、裸域名（带常见 TLD）均视为网址
     // 前置 (?<![@\w.-]) 排除邮箱域名段（x@y.com）和版本号中段（v1.2.3）被单独截出来当链接
-    const urlTest = /(?:https?:\/\/|www\.)[^\s<]+|(?:[a-z0-9-]+\.)+[a-z]{2,}/i;
-    const urlRegex = /(?<![@\w.-])((?:https?:\/\/|www\.)[^\s<]+|(?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/[^\s<]*)?)/gi;
+    // I3：字符类排除 CJK（汉字/中文标点/全角符号），URL 在中文处即停，
+    // 不再把“看https://baidu.com。很好”里的“。很好”吞进链接文本与 href。
+    const CJK = '\u2E80-\u9FFF\uF900-\uFAFF\u3040-\u30FF\uAC00-\uD7AF\uFF01-\uFF60\u3000-\u303F';
+    const urlTest = new RegExp('(?:https?:\\/\\/|www\\.)[^\\s<' + CJK + ']+|(?:[a-z0-9-]+\\.)+[a-z]{2,}', 'i');
+    const urlRegex = new RegExp('(?<![@\\w.-])((?:https?:\\/\\/|www\\.)[^\\s<' + CJK + ']+|(?:[a-z0-9-]+\\.)+[a-z]{2,}(?:\\/[^\\s<' + CJK + ']*)?)', 'gi');
     const longWordTest = /\S{15,}/;
     const phoneTest = /(?<!\d)1[3-9]\d{9}(?!\d)/;
     const phoneRegex = /(?<!\d)(1[3-9]\d{9})(?!\d)/g;
@@ -1266,32 +1399,8 @@ function linkifyEditor(opts) {
     for (const textNode of targets) {
       // 清理旧断行符，交由本次重新生成（避免 href 里混入 \u200B）
       textNode.nodeValue = textNode.nodeValue.replace(/\u200B/g, '');
-      const text = textNode.nodeValue;
-      const span = document.createElement('span');
-      span.innerHTML = text
-        .replace(urlRegex, m => {
-          if (denyAsUrl(m)) return m; // 文件名/非域名的普通文字，保持纯文本
-          return '<a href="' + normalizeHref(m) + '" target="_blank" rel="noopener noreferrer" data-url="1">' + m.replace(breakSeparators, '$1\u200B') + '</a>';
-        })
-        .replace(phoneRegex, '<a href="tel:$1">$1</a>');
-      const tw = document.createTreeWalker(span, NodeFilter.SHOW_TEXT, {
-        acceptNode: node => {
-          let p = node.parentNode;
-          while (p && p !== span) {
-            if (p.tagName === 'A') return NodeFilter.FILTER_REJECT;
-            p = p.parentNode;
-          }
-          return /\S{15,}/.test(node.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
-        }
-      });
-      const longNodes = [];
-      while (tw.nextNode()) longNodes.push(tw.currentNode);
-      longNodes.forEach(node => {
-        if (!node.nodeValue.includes('\u200B')) {
-          node.nodeValue = node.nodeValue.replace(breakSeparators, '$1\u200B');
-        }
-      });
-      textNode.replaceWith(...span.childNodes);
+      // I1：DOM API 组装链接（纯文本节点 + 属性赋值，天然转义），不再走 innerHTML 拼接
+      textNode.replaceWith(buildLinkSafe(textNode.nodeValue, urlRegex, phoneRegex, breakSeparators));
     }
     if (hadFocus) { try { editor.focus(); } catch (e) {} }
 
@@ -1570,11 +1679,22 @@ function ensureCaret(forceRepaint) {
 }
 
 editor.addEventListener('input', (e) => {
-  if (busy) return;
+  const it = (e && e.inputType) || '';
+  if (busy) {
+    // I4：保存进行中（网络慢时可达数秒）的输入不再被丢弃——
+    // 标记 pendingResave，本轮 saveLocal 完成后（finally）补挂保存；
+    // 撤销栈照常记录，避免连续输入中出现撤销断档。
+    pendingResave = true;
+    if (it !== 'historyUndo' && it !== 'historyRedo') {
+      clearTimeout(linkifyTimer);
+      linkifyTimer = setTimeout(linkifyEditor, 500);
+      try { recordIfChanged(it); } catch (e2) {}
+    }
+    return;
+  }
   // 只有删除类输入（以及粘贴/程序化派发）才做首尾空行清理。
   // 插入类输入尤其是回车(insertParagraph/insertLineBreak)绝不清理，
   // 否则刚换出来的空行会被立刻删掉，用户看到的就是"回车无反应"(bug 4)。
-  const it = (e && e.inputType) || '';
   // 注意：historyUndo / historyRedo 绝不参与首尾空行清理，也不触发 linkify。
   // 在撤销事务内部再跑 cleanup / linkify 的 DOM 手术会破坏原生撤销栈（cleanup 删空白块、
   // linkify 的选区重设打断撤销事务分组），导致 Ctrl+Z“按了没反应”或错位。
@@ -1733,6 +1853,7 @@ function restoreSelectionInBlock(root, saved) {
 }
 
 async function saveLocal() {
+  clearTimeout(saveRetryTimer); saveRetryTimer = null;
   const html = editor.innerHTML;
   if (html === lastHtml) return;
   busy = true; setStatus(false, '保存中…');
@@ -1740,12 +1861,41 @@ async function saveLocal() {
     const { ct, iv } = await encryptText(html, cryptoKey);
     const r = await apiPut({ ct, iv, salt: bufToB64(serverSalt) });
     localVer = r.v; lastHtml = html;
+    saveRetryCount = 0;
     setStatus(true, '已同步');
   } catch (e) {
     if (e.locked) { setStatus(false, '已锁定，请稍后'); editor.contentEditable = false; }
-    else { setStatus(false, '保存失败'); }
+    else {
+      setStatus(false, '保存失败');
+      scheduleSaveRetry(); // I4：失败自动退避重试，不再“失败即永久丢失，须手动再改一笔”
+    }
   }
-  finally { busy = false; }
+  finally {
+    busy = false;
+    // I4：保存期间（busy）的输入只做了标记，这里补挂一次保存把它真正写出去
+    if (pendingResave) {
+      pendingResave = false;
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(saveLocal, 300);
+    }
+  }
+}
+
+// I4：保存失败退避重试。内容仍在编辑器里（html !== lastHtml），重试只是重新加密上传当前内容；
+// 成功即停（saveLocal 成功分支清零计数），达到上限则保持“保存失败”状态等待用户下一次编辑触发。
+function scheduleSaveRetry() {
+  if (saveRetryCount >= SAVE_RETRY_DELAYS.length) return;
+  const delay = SAVE_RETRY_DELAYS[saveRetryCount++];
+  clearTimeout(saveRetryTimer);
+  saveRetryTimer = setTimeout(() => { saveRetryTimer = null; saveLocal(); }, delay);
+}
+
+// I4：切后台/关页前把未保存内容尽力写出（best-effort：saveLocal 是异步的，
+// 页面被系统立即杀掉时仍可能丢最后一笔，但常态下显著收窄丢失窗口）
+function flushDirtySave() {
+  if (!cryptoKey || busy) return;
+  if (editor.innerHTML === lastHtml) return;
+  saveLocal();
 }
 
 async function poll() {
@@ -1843,10 +1993,13 @@ function startSync() {
   poll();
 }
 
-// 设备从后台切回前台时立即拉一次，避免回前台还要等下一拍
+// 设备从后台切回前台时立即拉一次，避免回前台还要等下一拍；
+// I4：切到后台/关页前先把未保存内容尽力写出（手机上切走应用很常见，不能只等 800ms 定时器）
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') poll();
+  else flushDirtySave();
 });
+window.addEventListener('pagehide', flushDirtySave);
 
 $('#ok').addEventListener('click', () => unlock(pw.value));
 pw.addEventListener('keydown', e => { if (e.key === 'Enter') unlock(pw.value); });
@@ -1870,7 +2023,8 @@ $('#lock').addEventListener('click', () => {
     const warnEl = document.getElementById('landingWarn');
     const syncOpenBtn = () => { lb.disabled = li.value.trim().length === 0; };
     const sanitizeName = () => {
-      const cleaned = li.value.replace(/[^A-Za-z0-9]/g, '');
+      // v5.19 恢复 _ 与 -（与后端 ID_RE 一致）；中文等其它字符仍被剔除
+      const cleaned = li.value.replace(/[^A-Za-z0-9_-]/g, '');
       if (cleaned !== li.value) {
         li.value = cleaned;
         if (warnEl) warnEl.classList.remove('hidden');
@@ -1898,6 +2052,12 @@ $('#lock').addEventListener('click', () => {
         setStatus(false, '已锁定');
         mask.classList.remove('hidden');
         err.textContent = '尝试过多，请 ' + fmtRetry(e.retryAfter) + ' 后再试';
+        return;
+      }
+      if (e.status === 400) {
+        setStatus(false, '笔记名不合法');
+        mask.classList.remove('hidden');
+        err.textContent = '笔记名不合法（仅英文、数字、下划线、短横线）';
         return;
       }
       setStatus(false, '无法连接');

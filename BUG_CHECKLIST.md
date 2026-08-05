@@ -32,6 +32,7 @@
 | F | 光标与编辑 | 13 | 修改 Enter 处理 / cleanupLeadingTrailingBreaks / caretInsideNode / linkifyEditor 块内偏移 / ensureBlockWrapped / ensureCaret / repaintCaret / relocateCaretToVisible / isComposing |
 | G | 撤销栈 | 1 | 修改 自建撤销栈 / captureState / applyState / recordIfChanged / syncCurrentState / undo / redo / keydown 拦截 Ctrl+Z/Y |
 | H | 落地页/解锁/路由/图标/指纹 | 6 | 修改 landing 路由(ID_RE/extractId/导航) / 打开按钮禁用 / 解锁按钮禁用态样式 / 退出锁定禁用态 / 落地页中文输入过滤 / 指纹 WebAuthn PRF 逻辑（v5.15 起彻底移除） |
+| I | 链接转换/粘贴/保存可靠性 | 6 | 修改 linkifyEditor / buildLinkSafe / trimUrlTrailing / urlRegex / paste 处理 / pasteTextNative / input 处理器 busy 分支 / saveLocal / scheduleSaveRetry / flushDirtySave / fetchRetry / copyBtn |
 
 ---
 
@@ -691,6 +692,7 @@
 > **【v5.15 移除】** 用户实测 v5.14 指纹在大陆 Android Chrome 上不可用（WebAuthn PRF 本质是通行密钥/平台凭证，常需 GMS/翻墙），且退出后仍弹"是否开启指纹"提示、失败甩一长串错误码。用户明确"彻底移除指纹功能"。v5.15 整段删除该能力（前端零残留：`supportsWebAuthnPRF`/`enrollBiometric`/`unlockWithBiometric`/`updateBioUI`/`offerBiometricEnrollment`/`BIO_STORE`/`bioBtn`/`bio-banner` 全清除，grep 命中 0），仅保留口令解锁。历史实现细节（PRF 注册/解包、BIO_STORE、iOS 隐藏等）与对应核对要点已不再适用，故从检查清单移除，仅保留本移除记录。
 
 ### H5 | 落地页笔记名输入框禁止中文输入（前端过滤 + 后端再收紧）
+> **【v5.19 修正】** `_` 与 `-` 已恢复为合法字符（前后端 `[A-Za-z0-9_-]{1,64}`），v5.15 的纯字母数字收紧误伤了早期带 `_`/`-` 的旧笔记，详见 I5。**中文仍被拒绝**，本条"禁止中文"的结论不变。
 - **版本**: v5.15
 - **现象**: v5.14 的 H1 曾"放宽 ID_RE 接受中文"，但用户实测中文笔记名能跳转、却**无论设什么口令都进不去**——中文经 URL 编码后路由/密钥派生错位，属于"能打开却永远解不开"的半吊子。用户改口"干脆笔记名输入框就不支持输入中文"
 - **根因**: 中文笔记名在端到端加密模型下本就不该出现（口令派生与 noteId 强绑定 ASCII）；v5.14 为"支持中文"放宽前后端，反而制造了打不开的体验
@@ -714,6 +716,79 @@
   - [ ] 解锁进入后点"退出" → 口令框清空、`#ok` 为 `disabled`、不可点
   - [ ] 退出后重新输入口令 → 按钮立即可点（H3 不回归）
   - [ ] 退出后未输入时按钮确为禁用态（无"空口令也能点"的窗口期）
+
+---
+
+## I. 链接转换 / 粘贴 / 保存可靠性（v5.19 代码审查发现）
+
+### I1 | linkify 用 innerHTML 字符串拼接 → 存储型 XSS + 内容篡改
+- **版本**: v5.19 修复（缺陷自 linkify 引入字符串拼接起长期存在）
+- **现象**: 文本含 `" onmouseover="alert(1)` 时可给链接注入任意属性；文本含 `<img src=x onerror=...>` 直接执行 JS；`<b>bold</b>` 被解析成元素、纯文本内容被篡改。真实 Chromium 实测：属性注入成立、onerror 执行 count=1
+- **根因**: `span.innerHTML = text.replace(urlRegex, ...'<a href="' + normalizeHref(m) + '"...')` 把用户文本当 HTML 解析，无任何转义。笔记内容随加密同步跨设备传播 → 存储型 XSS，可窃取 localStorage 内其它笔记的 AES 密钥
+- **修复**: 新增 `buildLinkSafe()`：DocumentFragment + `createTextNode`（纯文本）+ `createElement('a')` 属性赋值（href/target/rel 天然转义），按"URL 优先于手机号、denyAsUrl 保持纯文本、链接文本与长词插 ZWSP"重建匹配序列，替换原 innerHTML 拼接段
+- **关联文件**: index.html → buildLinkSafe() / linkifyEditor()
+- **核对要点**:
+  - [ ] 输入 `https://a.com/x"onmouseover="alert(1)` → linkify 后无 onmouseover 属性（探针 R4）
+  - [ ] 输入 `<b>bold</b> see https://x.com` → `<b>bold</b>` 原样为纯文本，链接正常（探针 R5）
+  - [ ] 普通 URL/裸域名/手机号链接化行为不回归（E2E flow/userbugs）
+
+### I2 | 行中粘贴产生嵌套 <div>（多出换行）且光标跳到行首
+- **版本**: v5.19
+- **现象**: 在 "abc|def" 中间粘贴 "XY" 得到三行（abc/XY/def）；粘贴多行 "X\nY" 得到四行；粘贴后继续打字出现在行首。真实 Chromium 实测确认
+- **根因**: 粘贴处理把每一行无条件包成 `<div>` 块后 `insertNodeAtCaret`，行中粘贴形成嵌套块结构，光标落入新块开头
+- **修复**: 空编辑器保留原拆块路径（避免占位 `<br>` 残留空行）；非空编辑器改 `pasteTextNative()`——`execCommand('insertText')` 行内合并 + `execCommand('insertParagraph')` 原生拆段，光标位置天然正确；`pasteInFlight` 标志让整个粘贴作为单步压入自建撤销栈（recordIfChanged 期间不逐条记录）。**补充（独立验证发现）**：单行笔记常见形态是裸文本节点挂根，此时行中粘贴多行，`insertParagraph` 留下「裸文本节点 + `<div>` 做兄弟」的非法结构（`abX<div>Yc</div>`），linkify 早退不整理 → 以该形态保存/同步、其上回车产生真嵌套块；故 `pasteTextNative` 在 undo 压栈后补 `ensureBlockWrapped()`+`normalize()` 并重捕获 lastState（不压撤销栈）。注意包块会把光标所在裸文本节点搬进新 `<div>`、选区被折叠丢失 → 整理前先用块内偏移保存选区、整理后恢复（同 linkifyEditor），否则光标会跳到行尾（复测中发现并修复）；末了 `ensureCaret(true)` 兜底
+- **关联文件**: index.html → paste 处理器 / pasteTextNative() / recordIfChanged()
+- **核对要点**:
+  - [ ] 行中粘贴单行 → 一行合并（abcXYdef），无嵌套块（探针 R1）
+  - [ ] 行中粘贴多行 → 正确两行 [abcX, Ydef]（探针 R2/R2b）
+  - [ ] 粘贴后光标在粘贴内容末尾，继续打字接续其后
+  - [ ] 一次 Ctrl+Z 整体撤销粘贴（_probe_undo_paste / _probe_review_bugs）
+  - [ ] 空编辑器粘贴多行无空首行（探针 R7）
+  - [ ] 单行（裸文本挂根）行中粘贴多行后根下全为块级子节点（_probe_v519_independent I2 不变量）
+
+### I3 | URL 正则吞掉尾部中文标点与后续文字
+- **版本**: v5.19
+- **现象**: "看https://baidu.com。很好" 的链接文本与 href 变成 `https://baidu.com。很好`，点击 404
+- **根因**: urlRegex 字符类 `[^\s<]+` 不排除 CJK，中文标点/汉字都被当作 URL 的一部分
+- **修复**: urlTest/urlRegex 字符类排除 CJK 区段（汉字/CJK 标点/全角符号：`\u2E80-\u9FFF\uF900-\uFAFF\u3040-\u30FF\uAC00-\uD7AF\uFF01-\uFF60\u3000-\u303F`），URL 在中文处即停；`trimUrlTrailing()` 兜底修剪尾部中文标点。ASCII 尾部行为不动（保护 `...(消歧义)` 类以 `)` 结尾的合法 URL）
+- **关联文件**: index.html → linkifyEditor() / trimUrlTrailing()
+- **核对要点**:
+  - [ ] "看https://baidu.com。很好" → 链接仅到 `https://baidu.com`，"。很好" 为纯文本（探针 R3）
+  - [ ] 中文标点（，！？等）紧跟 URL 均不被吞
+  - [ ] 英文尾部标点行为不变（句点/括号结尾 URL 不回归）
+
+### I4 | busy 期间输入被丢弃 + 保存失败无重试
+- **版本**: v5.19
+- **现象**: 保存进行中（网络慢时数秒）继续输入，这些输入不挂保存定时器、不记撤销栈——保存完成后即丢失；保存失败后无任何重试，用户不察觉则内容永久不同步
+- **根因**: input 处理器首行 `if (busy) return;` 直接丢弃；saveLocal catch 只改状态文案
+- **修复**: ① busy 分支改为标记 `pendingResave` 并照常记撤销栈/linkify，saveLocal 的 finally 补挂 300ms 保存；② 非锁定失败走 `scheduleSaveRetry()` 退避重试（3s/6s/12s，至多 3 次，成功清零）；③ `flushDirtySave()` 挂 visibilitychange→hidden 与 pagehide，切后台/关页前兜底写出
+- **关联文件**: index.html → input 处理器 / saveLocal() / scheduleSaveRetry() / flushDirtySave()
+- **核对要点**:
+  - [ ] busy 期间输入不丢：补存内容为最新版（探针 _probe_save_reliability S1）
+  - [ ] 保存失败 ~3s 后自动重试成功（探针 S2）
+  - [ ] flushDirtySave 立即写出脏内容（探针 S3）
+  - [ ] 正常输入保存节奏不变（800ms 防抖，E2E sync 不回归）
+
+### I5 | 笔记名恢复 `_` `-` 支持 + 400 提示 + 长度上限提示
+- **版本**: v5.19（修正 v5.15 H5 的过度收紧）
+- **现象**: v5.15 把 ID_RE 收紧成纯字母数字，早期带 `_`/`-` 的旧笔记打不开（400）；超长名/非法名 URL 直接打开时前端重试 ~9s 后误报"无法连接服务器"
+- **根因**: `ID_RE = /^[A-Za-z0-9]{1,64}$/` 误伤旧笔记名；fetchRetry 对 4xx 也重试
+- **修复**: 前后端同步放宽为 `[A-Za-z0-9_-]{1,64}`（server.js ID_RE + 落地页 sanitizeName，中文仍拒绝）；fetchRetry 错误带 `status`，4xx 不重试；unlock/init 对 400 显示"笔记名不合法（仅英文、数字、下划线、短横线）"；`#landingInput` 加 `maxlength="64"`
+- **关联文件**: server.js → ID_RE / index.html → sanitizeName / fetchRetry / unlock / init / landingInput
+- **核对要点**:
+  - [ ] `ab-c`、`my_note` GET/PUT 返回 200（server.test.js）
+  - [ ] 中文/斜杠/控制字符仍 400 bad id（既有断言不回归）
+  - [ ] 落地页输入 `a-b@c d!` → 余 `a-bcd`；`my_note-1` 完整保留（unit userbugs）
+  - [ ] 400 时提示"笔记名不合法"而非"无法连接服务器"，且无 ~9s 重试等待
+
+### I6 | 复制到剪贴板带出 ZWSP 断行符
+- **版本**: v5.19
+- **现象**: 复制笔记内容粘贴到其它应用，长词/链接里混有零宽空格（\u200B）
+- **根因**: linkify 为长词/链接文本插入 ZWSP 辅助断行，copyBtn 直接复制 innerHTML/innerText
+- **修复**: copyBtn 复制前对 html 与 text 统一 `.replace(/\u200B/g, '')`
+- **关联文件**: index.html → copyBtn 处理器
+- **核对要点**:
+  - [ ] 含长链接的笔记复制后，粘贴到纯文本环境无不可见字符
 
 ---
 
@@ -741,4 +816,5 @@
 | v5.13 | E4 |
 | v5.15 | H4(移除), H5, H6, C4(误改黑底) |
 | v5.16 | C4(还原备案前透明金 logo；删 maskable PNG + 路由) |
+| v5.19 | I1, I2, I3, I4, I5(含 H5 的 ID_RE 修正), I6 |
 | v5.14 | H1, H2, H3, H4, C4 |

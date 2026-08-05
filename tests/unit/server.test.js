@@ -73,6 +73,14 @@ test('Bug1 GET /api/note/%00（控制字符）返回 400', async () => {
   assert.strictEqual(res.status, 400);
 });
 
+// --- v5.19: 恢复 _ 与 - 的笔记名支持（v5.15 收紧时误伤的旧笔记名重新可用）---
+test('v5.19 GET /api/note/ab-c 与 my_note 带 -/_ 的笔记名应被接受（200）', async () => {
+  const r1 = await fetch(`${BASE}/api/note/ab-c`);
+  assert.strictEqual(r1.status, 200, '带短横线的笔记名应被接受');
+  const r2 = await fetch(`${BASE}/api/note/my_note`);
+  assert.strictEqual(r2.status, 200, '带下划线的笔记名应被接受');
+});
+
 // --- Bug 1: SSE /stream 的 id 也需通过收紧后的校验 → 中文应 400 ---
 test('Bug1 GET /api/note/<中文名>/stream 应返回 400 bad id', async () => {
   const name = encodeURIComponent('我的笔记');
