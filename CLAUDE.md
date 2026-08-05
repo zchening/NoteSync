@@ -27,6 +27,7 @@ node tests/e2e/_probe_<name>.js             # 各专项回归探针（退出码 
 
 - 改完必须全量回归：单元 + E2E + 相关探针全绿才算完成；大版本上线前派独立子代理做盲测验证（v5.19 起惯例）
 - 发布四件套：`index.html` 的 `APP_VERSION`/`BUILD_DATE` → README 更新历史条目 → BUG_CHECKLIST 对应条目/版本表 → git tag（纯版本号 `vN`）
+- **必须推送 GitHub**：提交后 `git push origin main && git push origin v5.20`（分支 + tag 都要推，否则 GitHub 上的 README/代码滞后——v5.20 用户反馈过"GitHub 怎么没更新"，v5.19 同样漏推）
 - 部署只走 `D:/Users/zchen/Documents/WorkBuddyProject/NoteSync/deploy_gen.py` + `deploy_target_*.json`（清单不含凭据，密码读 `C:\Temp\new_server_pwd.txt`）。验证走服务器 localhost（域名 note.xuyinji.com.cn 因 ICP 备案暂停解析；直连 IP 会被拦截 302）
 
 ## 深入文档
