@@ -33,6 +33,7 @@
 | G | 撤销栈 | 1 | 修改 自建撤销栈 / captureState / applyState / recordIfChanged / syncCurrentState / undo / redo / keydown 拦截 Ctrl+Z/Y |
 | H | 落地页/解锁/路由/图标/指纹 | 6 | 修改 landing 路由(ID_RE/extractId/导航) / 打开按钮禁用 / 解锁按钮禁用态样式 / 退出锁定禁用态 / 落地页中文输入过滤 / 指纹 WebAuthn PRF 逻辑（v5.15 起彻底移除） |
 | I | 链接转换/粘贴/保存可靠性 | 6 | 修改 linkifyEditor / buildLinkSafe / trimUrlTrailing / urlRegex / paste 处理 / pasteTextNative / input 处理器 busy 分支 / saveLocal / scheduleSaveRetry / flushDirtySave / fetchRetry / copyBtn |
+| J | 二维码配对 | 2 | 修改 tryPairingUnlock / parsePairingKey / buildPairingUrl / drawQrTo / revealQr / resetQrHolder / qrBtn 弹层 / b64ToUrlSafe·urlSafeToB64 |
 
 ---
 
@@ -792,6 +793,34 @@
 
 ---
 
+## J. 二维码配对（v5.20 快速档）
+
+### J1 | 配对链接指向不存在的笔记时静默"配对成功"（任意密钥被接受 + 凭空创建服务端笔记）
+- **版本**: v5.20（发布前独立盲测 `_probe_v520_blind.js` D1 发现，同版修复）
+- **现象**: 用一个全新 noteId 拼 `origin/<新笔记>#k=<任意密钥>` 打开，页面竟"解锁成功"进入编辑器；且接收端凭空向服务器 PUT salt，服务端无中生有创建了一条脏笔记。用户会误以为已与某台设备配对成功
+- **根因**: `tryPairingUnlock` 对 `note.ct` 为空（笔记从未初始化）的情况跳过解密校验——`if (note.ct) await decryptText(...)` 直接放行，任意密钥都"验证通过"并落地 localStorage；随后走正常解锁路径还会把 salt 写回服务器
+- **修复**: `tryPairingUnlock` 在导入密钥前先查 `note.salt`——真实解锁过的笔记必有 salt（首次解锁即写入），缺 salt 即判定"配对目标未初始化"，走失败分支：剥离 hash、提示"配对链接无效或已失效"、密钥不落地、回退口令界面
+- **关联文件**: index.html → tryPairingUnlock()
+- **核对要点**:
+  - [ ] 全新 noteId + 任意密钥的配对链接 → 回退口令界面、提示"配对链接无效或已失效"（盲测 D1）
+  - [ ] 失败后 localStorage 无该笔记密钥、地址栏 hash 已剥离
+  - [ ] 服务端未被写入任何 salt/ct（`GET /api/note/<新笔记>` 仍为空笔记）
+  - [ ] 已初始化笔记的正常配对不回归（`_probe_qr_pairing` P5 免口令解锁仍通过）
+
+### J2 | KEY_STORE 缺失时「显示配对二维码」点了没反应（哑按钮）
+- **版本**: v5.20（发布前独立盲测 `_probe_v520_blind.js` J1 发现，同版修复）
+- **现象**: 设备内存里有密钥（cryptoKey）但 localStorage 的 KEY_STORE 缺失（如用户部分清理站点数据、解锁时写入失败）时，弹层里"显示配对二维码"按钮点击后静默无反应——无画布、无链接、无提示
+- **根因**: `revealQr` 只从 `localStorage.getItem(KEY_STORE)` 取密钥（`buildPairingUrl`），取不到就 `return`，没有利用内存中现成的 cryptoKey，也没有任何反馈
+- **修复**: `revealQr` 改为 async：KEY_STORE 缺失但 cryptoKey 存在时，`exportKey('raw')` 重新导出并补写 KEY_STORE 再生成配对链接；兜底后仍拿不到密钥时，弹层内显示"无法读取本机密钥，请退出锁定后重新解锁再配对"提示，不再静默
+- **关联文件**: index.html → revealQr() / buildPairingUrl()
+- **核对要点**:
+  - [ ] 解锁后运行时删除 KEY_STORE → 点"显示配对二维码"仍能出码（密钥重新导出补写）
+  - [ ] 补写后 localStorage 密钥与内存密钥一致，配对链接可正常解锁另一台设备
+  - [ ] 极端无密钥场景（cryptoKey 也为空由锁定态兜底，不触发此分支）不出现哑按钮：要么出码、要么有文字提示
+  - [ ] 正常路径（KEY_STORE 在场）行为不变：按需显示、60s 自动隐藏、关闭复位（盲测 A2-A6 不回归）
+
+---
+
 ## 版本与 bug 对应速查
 
 | 版本 | 涉及 bug 编号 |
@@ -817,4 +846,5 @@
 | v5.15 | H4(移除), H5, H6, C4(误改黑底) |
 | v5.16 | C4(还原备案前透明金 logo；删 maskable PNG + 路由) |
 | v5.19 | I1, I2, I3, I4, I5(含 H5 的 ID_RE 修正), I6 |
+| v5.20 | J1, J2（均为发布前独立盲测发现并同版修复） |
 | v5.14 | H1, H2, H3, H4, C4 |
