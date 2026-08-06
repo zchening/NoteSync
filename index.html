@@ -1225,7 +1225,9 @@ let qrHideTimer = null;
 function buildPairingUrl() {
   const b64 = localStorage.getItem(KEY_STORE); // 解锁时已写入的 AES 密钥（raw base64）
   if (!b64) return null;
-  return location.origin + '/' + encodeURIComponent(noteId) + '#k=' + b64ToUrlSafe(b64);
+  const BRIDGE_URL = 'https://zchening.github.io/NoteSync/bridge.html';
+  const target = location.origin + '/' + encodeURIComponent(noteId);
+  return BRIDGE_URL + '#t=' + encodeURIComponent(target) + '&k=' + b64ToUrlSafe(b64);
 }
 function drawQrTo(canvas, text) {
   const qr = qrcode(0, 'M'); // typeNumber=0 自动选版本；纠错级别 M

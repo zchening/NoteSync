@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NoteSync 配对中转</title>
+<style>
+  body{display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;background:#FBFBF8;color:#0F0F11}
+  .status{color:#98958A}
+</style>
+</head>
+<body>
+<div class="status">正在跳转…</div>
+<script>
+(function(){
+  var p=new URLSearchParams(location.hash.slice(1));
+  var t=p.get('t'),k=p.get('k');
+  if(!t||!k){document.body.textContent='配对链接无效';return;}
+  try{var u=new URL(t)}catch(e){document.body.textContent='配对链接无效';return;}
+  if(u.protocol!=='https:'&&u.protocol!=='http:'){document.body.textContent='配对链接无效';return;}
+  location.replace(t+'#k='+k);
+})();
+</script>
+</body>
+</html>
