@@ -81,13 +81,16 @@ const { window } = dom;
 {
   const src = fs.readFileSync(INDEX_PATH, 'utf8');
   check('S4a: 存在 60000ms 自动隐藏定时器', /setTimeout\(\s*resetQrHolder\s*,\s*60000\s*\)/.test(src));
-  check('S4b: qrBtn 打开弹层前先 resetQrHolder（不残留上次二维码）', /qrBtn\.addEventListener\('click',\s*\(\)\s*=>\s*\{\s*resetQrHolder\(\);\s*qrMask\.classList\.remove\('hidden'\)/.test(src));
+  check('S4b: qrBtn 打开弹层即直出二维码（v5.21：锁定态提示、解锁态 revealQr，无二次点击）', /qrBtn\.addEventListener\('click',\s*\(\)\s*=>\s*\{[^{]*?qrMask\.classList\.remove\('hidden'\);[\s\S]*?if \(!cryptoKey\) \{ resetQrHolder\(\); return; \}[\s\S]*?revealQr\(\);\s*\}\)/.test(src));
   check('S4c: qrClose 关闭即复位', /qrClose'\)\.addEventListener\('click',\s*\(\)\s*=>\s*\{\s*resetQrHolder\(\);\s*qrMask\.classList\.add\('hidden'\)/.test(src));
   check('S4d: revealQr 每次重新 clearTimeout（防多定时器叠加）', /clearTimeout\(qrHideTimer\);\s*\n\s*qrHideTimer = setTimeout/.test(src));
   check('S4e: 配对密钥走 fragment（#k=），buildPairingUrl 不含 ? 查询段', /'#k=' \+ b64ToUrlSafe\(b64\)/.test(src));
   check('S4f: tryPairingUnlock 成功与失败路径均 stripHash', (src.match(/stripHash\(\);/g) || []).length >= 3);
   check('S4g: 错误配对密钥不落地（失败路径无 setItem(KEY_STORE)）', !/catch \(e\) \{[^}]*setItem\(KEY_STORE/.test(src));
   check('S4h: server.js 零改动假设外：配对未调用 reportFail（密钥暴力破解不计入口令失败）——仅记录', true);
+  check('S4i: v5.21 配对链接展示行彻底移除（qrUrl 元素/样式/JS 引用零残留）', !src.includes('qrUrl'));
+  check('S4j: v5.21 状态区移到底栏（footer 含 #status/#statustext，header 无 .status 样式）',
+    /<footer id="foot"><span class="dot" id="status"><\/span><span id="statustext">/.test(src) && !/header \.status\{/.test(src));
 }
 
 try { window.close(); } catch (e) {}

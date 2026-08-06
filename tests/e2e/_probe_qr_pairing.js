@@ -1,7 +1,7 @@
-// _probe_qr_pairing.js — v5.20 二维码配对（快速档）端到端验证
+// _probe_qr_pairing.js — v5.20 二维码配对（快速档）端到端验证（v5.21 起：弹层直出、无配对链接行）
 //   P1 发送端解锁并写入内容
-//   P2 弹层按需显示：打开只见"显示配对二维码"按钮，画布未出现
-//   P3 点显示后：画布出现且已绘制；qrUrl = origin/noteId#k=<URL-safe密钥>，与本机存储密钥一致
+//   P2 弹层直出：打开即见二维码画布，无"显示"按钮（v5.21）
+//   P3 画布渲染检查；二维码内容 === origin/noteId#k=<URL-safe密钥>（像素级比对库输出，不再依赖 DOM 链接文本）
 //   P4 关闭弹层后复位（qrMask 隐藏、画布移除）
 //   P5 接收端（全新上下文、无本地密钥）打开配对链接 → 免口令自动解锁，内容与发送端一致
 //   P6 接收端解锁后地址栏 hash 被剥离、密钥已写入其 localStorage
@@ -67,18 +67,19 @@ const strip = s => (s || '').replace(/\u200B/g, '');
     const savedNote = await (await fetch(BASE + '/api/note/' + NOTE)).json();
     check('P1: 发送端解锁并保存种子内容', (savedNote.v || 0) > 0 && !!savedNote.ct, JSON.stringify({ v: savedNote.v, ctLen: (savedNote.ct || '').length }));
 
-    // ---- P2 弹层按需显示 ----
+    // ---- P2 弹层直出（v5.21：打开即显示二维码，无二次点击） ----
     await sender.click('#qrBtn');
-    const maskShown = await sender.evaluate(() => !document.getElementById('qrMask').classList.contains('hidden'));
-    const hasRevealBtn = await sender.evaluate(() => !!document.getElementById('qrReveal'));
-    const canvasBefore = await sender.evaluate(() => !!document.getElementById('qrCanvas'));
-    check('P2a: 打开弹层可见', maskShown);
-    check('P2b: 初始只显示"显示配对二维码"按钮', hasRevealBtn);
-    check('P2c: 密钥二维码默认不渲染', !canvasBefore);
+    await sender.waitForSelector('#qrCanvas', { timeout: 5000 }); // 直出：未点击任何"显示"按钮即出现画布
+    const p2 = await sender.evaluate(() => ({
+      maskShown: !document.getElementById('qrMask').classList.contains('hidden'),
+      reveal: !!document.getElementById('qrReveal'),
+      canvas: !!document.getElementById('qrCanvas'),
+    }));
+    check('P2a: 打开弹层可见', p2.maskShown);
+    check('P2b: v5.21 直出——打开即出现二维码画布', p2.canvas);
+    check('P2c: 无二次"显示配对二维码"按钮', !p2.reveal);
 
-    // ---- P3 显示二维码与配对链接 ----
-    await sender.click('#qrReveal');
-    await sender.waitForSelector('#qrCanvas', { timeout: 5000 });
+    // ---- P3 画布渲染与二维码内容 ----
     const qrInfo = await sender.evaluate(() => {
       const cv = document.getElementById('qrCanvas');
       let dark = 0, total = 0;
@@ -89,24 +90,34 @@ const strip = s => (s || '').replace(/\u200B/g, '');
       } catch (e) {}
       return {
         w: cv.width, h: cv.height, dark, total,
-        url: document.getElementById('qrUrl').textContent,
-        urlVisible: !document.getElementById('qrUrl').classList.contains('hidden'),
+        hasUrlRow: !!document.getElementById('qrUrl'),
         stored: localStorage.getItem('notesync_key_' + 'probeQrPair'),
       };
     });
     check('P3a: 画布已绘制且为方形', qrInfo.w > 100 && qrInfo.w === qrInfo.h, JSON.stringify({ w: qrInfo.w, h: qrInfo.h }));
     check('P3b: 画布含明暗模块（真实二维码而非空白）', qrInfo.dark > 50 && qrInfo.dark < qrInfo.total * 0.8, 'dark=' + qrInfo.dark + '/' + qrInfo.total);
-    check('P3c: 配对链接同时展示', qrInfo.urlVisible && qrInfo.url.length > 0);
-    const expectedUrl = BASE + '/' + NOTE;
-    const m = qrInfo.url.match(/^(http:\/\/localhost:8151\/probeQrPair)#k=([A-Za-z0-9_-]+)$/);
-    check('P3d: 配对链接形如 origin/noteId#k=<URL-safe密钥>', !!m && m[1] === expectedUrl, qrInfo.url);
-    if (m && qrInfo.stored) {
-      const safe = qrInfo.stored.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-      check('P3e: #k= 与本机存储密钥一致（URL-safe 化后）', m[2] === safe);
-    } else {
-      check('P3e: #k= 与本机存储密钥一致（URL-safe 化后）', false, 'stored=' + !!qrInfo.stored);
-    }
-    const pairingUrl = qrInfo.url;
+    check('P3c: v5.21 配对链接行已移除（DOM 无 qrUrl）', !qrInfo.hasUrlRow);
+    // 期望配对链接由本机存储密钥推导；二维码内容用库输出与画布像素逐模块比对验证
+    const safeKey = (qrInfo.stored || '').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const pairingUrl = BASE + '/' + NOTE + '#k=' + safeKey;
+    const m = pairingUrl.match(/^http:\/\/localhost:8151\/probeQrPair#k=[A-Za-z0-9_-]+$/);
+    check('P3d: 配对链接形如 origin/noteId#k=<URL-safe密钥>', !!m && !!qrInfo.stored, pairingUrl);
+    const cmp = await sender.evaluate((pairUrl) => {
+      const cv = document.getElementById('qrCanvas');
+      const q = window.qrcode(0, 'M');
+      q.addData(pairUrl, 'Byte'); q.make();
+      const n = q.getModuleCount();
+      const w = cv.width;
+      if (w !== cv.height || w % (n + 8) !== 0) return { error: 'bad size ' + w + 'x' + cv.height + ' n=' + n };
+      const s = w / (n + 8), quiet = 4 * s;
+      const data = cv.getContext('2d').getImageData(0, 0, w, w).data;
+      const px = (x, y) => data[(y * w + x) * 4] < 128;
+      let mismatches = 0;
+      for (let r = 0; r < n; r++) for (let c = 0; c < n; c++)
+        if (px(quiet + c * s + (s >> 1), quiet + r * s + (s >> 1)) !== !!q.isDark(r, c)) mismatches++;
+      return { mismatches };
+    }, pairingUrl);
+    check('P3e: 二维码内容 === 配对链接（像素级比对 0 偏差）', !cmp.error && cmp.mismatches === 0, cmp.error || ('mismatches=' + cmp.mismatches));
 
     // ---- P4 关闭弹层复位 ----
     await sender.click('#qrClose');
@@ -146,12 +157,14 @@ const strip = s => (s || '').replace(/\u200B/g, '');
       && document.getElementById('mask').classList.contains('hidden'), { timeout: 25000 });
     const recvState = await recv.evaluate(() => ({
       html: document.getElementById('editor').innerHTML,
-      foot: document.getElementById('foot').textContent,
       pwVisible: !document.getElementById('mask').classList.contains('hidden'),
+      statusInFoot: document.getElementById('foot').contains(document.getElementById('status')),
+      statusTextInFoot: document.getElementById('foot').contains(document.getElementById('statustext')),
+      headerStatus: !!document.querySelector('header .status'),
     }));
     check('P5a: 接收端免口令自动解锁', !recvState.pwVisible);
     check('P5b: 解密出的内容与发送端一致', strip(recvState.html).includes('QRPAIR-SEED-CONTENT'), strip(recvState.html));
-    check('P5c: 状态栏显示已解锁', recvState.foot.includes('已解锁'), recvState.foot);
+    check('P5c: v5.21 状态条在底栏（顶栏无状态区）', recvState.statusInFoot && recvState.statusTextInFoot && !recvState.headerStatus, JSON.stringify(recvState));
 
     // ---- P6 hash 剥离 + 密钥落地接收端 ----
     const postState = await recv.evaluate(() => ({

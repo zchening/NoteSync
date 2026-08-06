@@ -33,9 +33,6 @@
   header .brand{display:flex;align-items:center;gap:8px;color:var(--fg);flex-shrink:0}
   header .brand svg{width:17px;height:17px;color:var(--accent)}
   header .brand b{font-family:var(--serif);font-weight:500;font-size:13.5px;letter-spacing:.06em}
-  header .status{display:flex;align-items:center;gap:7px}
-  header .dot{width:7px;height:7px;border-radius:50%;background:#C9C7BE;flex-shrink:0;transition:background .3s}
-  header .dot.on{background:#2FA866}
   header .sp{flex:1}
   header button{display:flex;align-items:center;justify-content:center;width:31px;height:31px;color:var(--muted);background:none;border:0;border-radius:8px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:color .2s,background .2s}
   header button:hover{color:var(--fg);background:var(--hover)}
@@ -57,8 +54,10 @@
   #editor::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
   @media (max-width:560px){ #editor{padding:24px 18px 100px;font-size:16px} }
 
-  /* ── 页脚 ───────────────────────────── */
-  footer{padding:10px 16px;border-top:1px solid var(--line);font-size:11px;color:var(--muted);text-align:center;letter-spacing:.14em}
+  /* ── 页脚（v5.21：纯状态条「● 状态字」，状态自顶栏移入；解锁态已由状态字编码，加密标语已在落地页/解锁弹窗表达）── */
+  footer{display:flex;align-items:center;justify-content:center;gap:7px;padding:10px 16px;border-top:1px solid var(--line);font-size:11px;color:var(--muted);letter-spacing:.14em}
+  footer .dot{width:7px;height:7px;border-radius:50%;background:#C9C7BE;flex-shrink:0;transition:background .3s}
+  footer .dot.on{background:#2FA866}
 
   /* ── 解锁弹窗 ───────────────────────── */
   .mask{position:fixed;inset:0;background:rgba(20,20,18,.42);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:center;z-index:10}
@@ -84,7 +83,6 @@
   #qrHolder{display:flex;align-items:center;justify-content:center;min-height:236px;margin:0 0 12px}
   #qrHolder button{width:100%}
   #qrCanvas{border-radius:12px;border:1px solid var(--line);background:#fff;max-width:100%}
-  .qr-url{font-size:11.5px;color:var(--muted);word-break:break-all;line-height:1.6;font-family:ui-monospace,Consolas,monospace;user-select:all;-webkit-user-select:all}
   .qr-warn{font-size:12px;color:#C0453E;line-height:1.65;margin:0 0 16px}
   .qr-lock-warn{font-size:13px;color:var(--muted)}
 
@@ -143,7 +141,6 @@
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M38.5 21.5A15 15 0 0 0 13 13.6"/><path d="M12.5 6.5v7.5H20"/><path d="M9.5 26.5A15 15 0 0 0 35 34.4"/><path d="M35.5 41.5V34H28"/><line x1="17.5" y1="24" x2="30.5" y2="24"/></svg>
     <b>NoteSync</b>
   </span>
-  <span class="status"><span class="dot" id="status"></span><span id="statustext">连接中…</span></span>
   <span class="sp"></span>
   <button type="button" id="themeBtn" title="切换夜间模式"></button>
   <button type="button" id="strikeBtn" title="删除线"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4H9a3 3 0 0 0-2.83 4"/><path d="M14 12a4 4 0 0 1 0 8H6"/><line x1="4" x2="20" y1="12" y2="12"/></svg></button>
@@ -155,7 +152,7 @@
 </header>
 <div id="editor" data-ph="开始输入，自动同步到所有设备…" contenteditable="true"></div>
 <input type="file" id="fileInput" accept="image/*" style="display:none">
-<footer id="foot">端到端加密 · 仅在你的浏览器内加解密</footer>
+<footer id="foot"><span class="dot" id="status"></span><span id="statustext">连接中…</span></footer>
 <div class="upload-status" id="uploadStatus"></div>
 
 <div id="loading">加载中</div>
@@ -181,7 +178,6 @@
     <h1 class="qr-title">扫码配对</h1>
     <p>用另一台设备扫描二维码，直接打开此笔记，无需输入口令。</p>
     <div id="qrHolder"></div>
-    <p class="qr-url hidden" id="qrUrl"></p>
     <p class="qr-warn">二维码包含解锁密钥，等同于口令：请只在自己的设备间扫码，勿截图或外传。</p>
     <button id="qrClose">关 闭</button>
   </div>
@@ -213,12 +209,12 @@ const PBKDF2_ITER = 200000;
 const FAIL_LIMIT = 10;
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '5.20';
-const BUILD_DATE = '2026-08-05';
+const APP_VERSION = '5.21';
+const BUILD_DATE = '2026-08-06';
 
 const $ = s => document.querySelector(s);
 const editor = $('#editor'), mask = $('#mask'), pw = $('#pw'), err = $('#err');
-const statusEl = $('#status'), statusText = $('#statustext'), foot = $('#foot');
+const statusEl = $('#status'), statusText = $('#statustext');
 const homeEl = $('#home'), loadingEl = $('#loading');
 const uploadBtn = $('#uploadBtn'), fileInput = $('#fileInput'), uploadStatus = $('#uploadStatus');
 const themeBtn = $('#themeBtn');
@@ -1223,8 +1219,8 @@ if (window.PointerEvent) {
 }
 exportImgBtn.addEventListener('click', e => { e.preventDefault(); if (!window.PointerEvent) exportImage(); });
 
-// --- 二维码配对 · 发送端弹层（v5.20）---
-const qrBtn = $('#qrBtn'), qrMask = $('#qrMask'), qrHolder = $('#qrHolder'), qrUrlEl = $('#qrUrl');
+// --- 二维码配对 · 发送端弹层（v5.20 引入；v5.21 改直出：打开即显示二维码，去掉配对链接行）---
+const qrBtn = $('#qrBtn'), qrMask = $('#qrMask'), qrHolder = $('#qrHolder');
 let qrHideTimer = null;
 function buildPairingUrl() {
   const b64 = localStorage.getItem(KEY_STORE); // 解锁时已写入的 AES 密钥（raw base64）
@@ -1246,10 +1242,9 @@ function drawQrTo(canvas, text) {
   for (let r = 0; r < n; r++) for (let c = 0; c < n; c++)
     if (qr.isDark(r, c)) ctx.fillRect(quiet + c * scale, quiet + r * scale, scale, scale);
 }
-function resetQrHolder() { // 复位为"按需显示"初始态，不让二维码常驻屏幕
+function resetQrHolder() { // 复位：锁定态显示提示，否则给"重新显示"按钮（60s 自动隐藏后的入口），不让二维码常驻屏幕
   clearTimeout(qrHideTimer); qrHideTimer = null;
   qrHolder.innerHTML = '';
-  qrUrlEl.textContent = ''; qrUrlEl.classList.add('hidden');
   if (!cryptoKey) {
     const hint = document.createElement('p');
     hint.className = 'qr-lock-warn';
@@ -1258,7 +1253,7 @@ function resetQrHolder() { // 复位为"按需显示"初始态，不让二维码
     return;
   }
   const btn = document.createElement('button');
-  btn.type = 'button'; btn.id = 'qrReveal'; btn.textContent = '显示配对二维码';
+  btn.type = 'button'; btn.id = 'qrReveal'; btn.textContent = '重新显示';
   btn.addEventListener('click', revealQr);
   qrHolder.appendChild(btn);
 }
@@ -1284,12 +1279,14 @@ async function revealQr() {
   cv.id = 'qrCanvas';
   try { drawQrTo(cv, url); } catch (e) { resetQrHolder(); return; }
   qrHolder.appendChild(cv);
-  qrUrlEl.textContent = url; // 无法扫码时可整段选中复制（user-select:all）
-  qrUrlEl.classList.remove('hidden');
   clearTimeout(qrHideTimer);
   qrHideTimer = setTimeout(resetQrHolder, 60000); // 60 秒自动隐藏，缩短密钥暴露窗口
 }
-qrBtn.addEventListener('click', () => { resetQrHolder(); qrMask.classList.remove('hidden'); });
+qrBtn.addEventListener('click', () => { // v5.21 直出：打开弹层即渲染二维码，无需二次点击
+  qrMask.classList.remove('hidden');
+  if (!cryptoKey) { resetQrHolder(); return; } // 锁定态：显示"解锁后才可用"提示
+  revealQr();
+});
 $('#qrClose').addEventListener('click', () => { resetQrHolder(); qrMask.classList.add('hidden'); });
 
 // --- 解锁 ---
@@ -1307,7 +1304,6 @@ async function applyUnlocked(key, note) {
   if (note.ct) { try { linkifyEditor(); } catch (e) {} }
   ensureCaret(); // 关键：解密内容载入后显式重建合法折叠光标（避免"解锁后无光标/无法输入"）
   undoStack = []; redoStack = []; lastState = captureState(); // 新笔记会话：清空并重置撤销栈基线
-  foot.textContent = '已解锁 · 端到端加密';
   startSync();
 }
 
@@ -2159,7 +2155,6 @@ $('#lock').addEventListener('click', () => {
   editor.innerHTML = ''; editor.contentEditable = false;
   mask.classList.remove('hidden'); pw.value = ''; err.textContent = '';
   $('#ok').disabled = true; // 退出锁定：清空口令后解锁按钮必须回到禁用态
-  foot.textContent = '端到端加密 · 仅在你的浏览器内加解密';
   setStatus(false, '已退出');
 });
 
@@ -2232,7 +2227,6 @@ $('#lock').addEventListener('click', () => {
     if (note.ct) { try { linkifyEditor(); } catch (e) {} }
     ensureCaret(); // 自动加载后显式重建合法折叠光标
     undoStack = []; redoStack = []; lastState = captureState(); // 新笔记会话：清空并重置撤销栈基线
-    foot.textContent = '已解锁 · 端到端加密';
     startSync();
   } else {
     loadingEl.classList.add('hidden');

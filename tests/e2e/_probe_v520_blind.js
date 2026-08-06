@@ -10,7 +10,7 @@
 //   H 已有本地密钥的设备遇到错误配对密钥：回退且已存密钥不得被破坏
 //   I 二维码内容真实可解码：自研 QR 解码器（格式信息 BCH/掩码/之字形/块解交织，独立于页面库）
 //     从画布像素还原模块矩阵并解出载荷，必须 === 配对链接；另做模块矩阵与库输出比对+结构校验
-//   J 边界：KEY_STORE 缺失时「显示配对二维码」的行为（审查发现的疑似哑按钮）
+//   J 边界：KEY_STORE 缺失时打开弹层应自动补写密钥并直出二维码（v5.21）
 // 环境：spawn 真实 server.js（localhost 安全上下文）；不修改任何业务代码。
 // 用法: cd tests && node e2e/_probe_v520_blind.js
 'use strict';
@@ -204,24 +204,9 @@ function decodeQrMatrix(m) {
     const senderKeyB64 = await sender.evaluate(id => localStorage.getItem('notesync_key_' + id), NOTE);
     const senderKeySafe = b64ToUrlSafe(senderKeyB64);
 
-    // ============ A2 打开弹层：未显示二维码时 DOM 不得含密钥 ============
+    // ============ A2 打开弹层即直出二维码（v5.21）+ 泄漏扫描 ============
     // 注意：扫描只针对"渲染 DOM"——先剔除 <script> 块，因为应用源码本身含 '#k=' 字面量（非泄漏）。
-    await sender.click('#qrBtn');
-    const a2 = await sender.evaluate(({k, ks}) => {
-      const html = document.documentElement.outerHTML.replace(/<script[\s\S]*?<\/script>/gi, '');
-      return {
-        maskShown: !document.getElementById('qrMask').classList.contains('hidden'),
-        reveal: !!document.getElementById('qrReveal'),
-        canvas: !!document.getElementById('qrCanvas'),
-        leakStd: html.includes(k),
-        leakSafe: html.includes(ks),
-        leakMark: html.includes('#k='),
-      };
-    }, {k: senderKeyB64, ks: senderKeySafe});
-    check('A2a: 弹层打开后只见"显示配对二维码"按钮', a2.maskShown && a2.reveal && !a2.canvas);
-    check('A2b: 未显示时 DOM 无任何密钥字符串（标准/URL-safe/#k= 均无）', !a2.leakStd && !a2.leakSafe && !a2.leakMark, JSON.stringify(a2));
-
-    // ============ A3+A4+A5 定时器埋点 → 显示二维码 ============
+    // 定时器埋点必须在打开前安装：v5.21 直出，60s 自动隐藏定时器在打开瞬间注册。
     await sender.evaluate(() => {
       window.__timers = [];
       const origSet = window.setTimeout, origClear = window.clearTimeout;
@@ -235,20 +220,33 @@ function decodeQrMatrix(m) {
         return origClear(id);
       };
     });
-    await sender.click('#qrReveal');
+    await sender.click('#qrBtn');
     await sender.waitForSelector('#qrCanvas', { timeout: 5000 });
+    const a2 = await sender.evaluate(({k, ks}) => {
+      const html = document.documentElement.outerHTML.replace(/<script[\s\S]*?<\/script>/gi, '');
+      return {
+        maskShown: !document.getElementById('qrMask').classList.contains('hidden'),
+        reveal: !!document.getElementById('qrReveal'),
+        canvas: !!document.getElementById('qrCanvas'),
+        hasUrlRow: !!document.getElementById('qrUrl'),
+        leakStd: html.includes(k),
+        leakSafe: html.includes(ks),
+        leakMark: html.includes('#k='),
+      };
+    }, {k: senderKeyB64, ks: senderKeySafe});
+    check('A2a: v5.21 直出——打开弹层即渲染二维码画布（无二次"显示"按钮）', a2.maskShown && a2.canvas && !a2.reveal, JSON.stringify({ maskShown: a2.maskShown, canvas: a2.canvas, reveal: a2.reveal }));
+    check('A2b: 配对链接展示行已移除（DOM 无 qrUrl）', !a2.hasUrlRow);
+    check('A2c: 二维码已渲染时 DOM 仍无任何密钥字符串（标准/URL-safe/#k= 均无，画布像素非 DOM 文本）', !a2.leakStd && !a2.leakSafe && !a2.leakMark, JSON.stringify(a2));
+
+    // ============ A3 配对链接推导 + A5a 定时器 ============
+    const pairingUrl = BASE + '/' + NOTE + '#k=' + senderKeySafe;
+    check('A3a: 发送端密钥推导的配对链接形如 origin/noteId#k=<URL-safe>', /^http:\/\/localhost:8161\/v520blind#k=[A-Za-z0-9_-]+$/.test(pairingUrl), pairingUrl);
+    check('A3b: URL-safe 密钥字符集合法且无填充', /^[A-Za-z0-9_-]+$/.test(senderKeySafe) && !senderKeySafe.includes('='));
     const a5 = await sender.evaluate(() => {
       const pend = window.__timers.filter(t => !t.cleared && t.delay === 60000);
       return { pending60s: pend.length, totalTimers: window.__timers.length };
     });
-    check('A5a: 显示后注册了唯一的 60000ms 自动隐藏定时器', a5.pending60s === 1, JSON.stringify(a5));
-
-    const a3 = await sender.evaluate(() => ({
-      url: document.getElementById('qrUrl').textContent,
-      urlVisible: !document.getElementById('qrUrl').classList.contains('hidden'),
-    }));
-    check('A3a: 配对链接可见且形如 origin/noteId#k=<URL-safe>', a3.urlVisible && a3.url === BASE + '/' + NOTE + '#k=' + senderKeySafe, a3.url);
-    check('A3b: URL-safe 密钥字符集合法且无填充', /^[A-Za-z0-9_-]+$/.test(senderKeySafe) && !senderKeySafe.includes('='));
+    check('A5a: 直出后注册了唯一的 60000ms 自动隐藏定时器', a5.pending60s === 1, JSON.stringify(a5));
 
     // ---- A4 画布像素 → 模块矩阵；与库输出比对；自研解码器独立解码 ----
     const qr = await sender.evaluate((pairUrl) => {
@@ -279,7 +277,7 @@ function decodeQrMatrix(m) {
         if (px(x, 1) || px(x, h - 2) || px(1, x) || px(w - 2, x)) quietWhite = false;
       }
       return { n, s, mismatches, quietWhite, matrix };
-    }, a3.url);
+    }, pairingUrl);
     if (qr.error) {
       check('A4a: 画布尺寸与模块布局一致', false, qr.error);
     } else {
@@ -288,7 +286,7 @@ function decodeQrMatrix(m) {
       let decoded = null, derr = '';
       try { decoded = decodeQrMatrix(qr.matrix.map(r => r.map(Boolean))); }
       catch (e) { derr = e.message; }
-      check('A4c: 自研独立解码器从画布还原出完整载荷', !!decoded && decoded.text === a3.url, derr || ('decoded=' + JSON.stringify(decoded && decoded.text)));
+      check('A4c: 自研独立解码器从画布还原出完整载荷', !!decoded && decoded.text === pairingUrl, derr || ('decoded=' + JSON.stringify(decoded && decoded.text)));
       if (decoded) console.log('       (version=' + decoded.version + ', mask=' + decoded.mask + ', EC=M)');
     }
 
@@ -303,16 +301,15 @@ function decodeQrMatrix(m) {
       return {
         canvas: !!document.getElementById('qrCanvas'),
         reveal: !!document.getElementById('qrReveal'),
-        urlHidden: document.getElementById('qrUrl').classList.contains('hidden'),
-        urlEmpty: document.getElementById('qrUrl').textContent === '',
+        revealText: (document.getElementById('qrReveal') || {}).textContent || '',
         leakStd: html.includes(k), leakSafe: html.includes(ks),
       };
     }, {k: senderKeyB64, ks: senderKeySafe});
-    check('A5b: 自动隐藏回调触发后复位：画布移除、回到"显示"按钮、链接清空', a5b.reveal && !a5b.canvas && a5b.urlHidden && a5b.urlEmpty, JSON.stringify(a5b));
+    check('A5b: 自动隐藏回调触发后复位：画布移除、回到"重新显示"按钮', a5b.reveal && !a5b.canvas && a5b.revealText === '重新显示', JSON.stringify(a5b));
     check('A5c: 复位后 DOM 无密钥残留', !a5b.leakStd && !a5b.leakSafe);
 
-    // ============ A6 关闭弹层复位 + 重开状态正确 ============
-    await sender.click('#qrReveal');
+    // ============ A6 关闭弹层复位 + 重开直出 ============
+    await sender.click('#qrReveal'); // "重新显示"
     await sender.waitForSelector('#qrCanvas', { timeout: 5000 });
     await sender.click('#qrClose');
     const a6 = await sender.evaluate(({k, ks}) => {
@@ -320,10 +317,10 @@ function decodeQrMatrix(m) {
       return { hidden: document.getElementById('qrMask').classList.contains('hidden'), canvas: !!document.getElementById('qrCanvas'), leak: html.includes(k) || html.includes(ks) };
     }, {k: senderKeyB64, ks: senderKeySafe});
     check('A6a: 关闭后弹层隐藏、画布移除、DOM 无密钥', a6.hidden && !a6.canvas && !a6.leak, JSON.stringify(a6));
-    await sender.click('#qrBtn');
+    await sender.click('#qrBtn'); // 重开 → v5.21 直出
+    await sender.waitForSelector('#qrCanvas', { timeout: 5000 });
     const a6b = await sender.evaluate(() => ({ reveal: !!document.getElementById('qrReveal'), canvas: !!document.getElementById('qrCanvas'), pend60: window.__timers.filter(t => !t.cleared && t.delay === 60000).length }));
-    check('A6b: 重新打开为按需初始态（显示按钮、无画布、无悬挂 60s 定时器）', a6b.reveal && !a6b.canvas && a6b.pend60 === 0, JSON.stringify(a6b));
-    const pairingUrl = a3.url;
+    check('A6b: 重新打开直出二维码且注册新的 60s 定时器', a6b.canvas && !a6b.reveal && a6b.pend60 === 1, JSON.stringify(a6b));
 
     // ============ F1 接收端正例 + hash 剥离彻底性（全新上下文） ============
     {
@@ -557,7 +554,7 @@ function decodeQrMatrix(m) {
       await freshCtx.close();
     }
 
-    // ============ J1 边界：cryptoKey 存在但 KEY_STORE 被移除 → 显示按钮行为 ============
+    // ============ J1 边界：cryptoKey 存在但 KEY_STORE 被移除 → v5.21 直出应自动补写密钥 ============
     {
       // 刷新后凭已存密钥自动解锁（无需再输口令）；随后运行时删除 KEY_STORE，
       // 模拟"内存有密钥、本地存储缺失"的边界（exportKey 失败 / 部分清理数据）。
@@ -566,22 +563,14 @@ function decodeQrMatrix(m) {
         && document.getElementById('editor').contentEditable === 'true', { timeout: 20000 });
       await sender.evaluate(() => {
         localStorage.removeItem('notesync_key_' + location.pathname.slice(1));
-        document.getElementById('qrBtn').click();
+        document.getElementById('qrBtn').click(); // v5.21 直出：revealQr 会在打开时重新导出密钥补写
       });
-      const j0 = await sender.evaluate(() => ({ reveal: !!document.getElementById('qrReveal') }));
-      if (j0.reveal) {
-        await sender.click('#qrReveal');
-        await sender.waitForTimeout(500);
-        const j1 = await sender.evaluate(() => ({
-          canvas: !!document.getElementById('qrCanvas'),
-          urlText: document.getElementById('qrUrl').textContent,
-          maskShown: !document.getElementById('qrMask').classList.contains('hidden'),
-        }));
-        if (!j1.canvas && !j1.urlText) note('J1', 'UX(低): KEY_STORE 缺失（如 exportKey 失败/部分清数据）时，"显示配对二维码"点击后静默无反应（哑按钮），无画布无提示。');
-        check('J1: KEY_STORE 缺失时 reveal 行为被记录', true);
-      } else {
-        check('J1: KEY_STORE 缺失时不出现误导性"显示"按钮', true);
-      }
+      await sender.waitForSelector('#qrCanvas', { timeout: 5000 }).catch(() => {});
+      const j1 = await sender.evaluate(() => ({
+        canvas: !!document.getElementById('qrCanvas'),
+        restored: localStorage.getItem('notesync_key_' + location.pathname.slice(1)),
+      }));
+      check('J1: KEY_STORE 缺失时打开弹层自动补写密钥并直出二维码', j1.canvas && j1.restored === senderKeyB64, JSON.stringify({ canvas: j1.canvas, restoredMatch: j1.restored === senderKeyB64 }));
     }
 
     await senderCtx.close();

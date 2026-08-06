@@ -54,14 +54,21 @@ test('parsePairingKey 非法输入一律返回 null', () => {
 });
 
 // ── Q3：配对弹层 DOM 结构 ──────────────────────────────
-test('二维码配对弹层结构齐全且默认隐藏', () => {
+test('二维码配对弹层结构齐全且默认隐藏（v5.21：无配对链接行）', () => {
   assert.ok(document.getElementById('qrBtn'), '顶栏应有 qrBtn');
   const m = document.getElementById('qrMask');
   assert.ok(m, '应有 qrMask 弹层');
   assert.ok(m.classList.contains('hidden'), '弹层默认应隐藏');
   assert.ok(document.getElementById('qrHolder'), '应有二维码容器');
-  assert.ok(document.getElementById('qrUrl'), '应有配对链接展示行');
+  assert.ok(!document.getElementById('qrUrl'), 'v5.21 已移除配对链接展示行');
   assert.ok(document.getElementById('qrClose'), '应有关闭按钮');
+});
+
+test('v5.21 状态区在底栏（顶栏无状态）', () => {
+  const foot = document.getElementById('foot');
+  assert.ok(foot.contains(document.getElementById('status')), '状态圆点应在底栏');
+  assert.ok(foot.contains(document.getElementById('statustext')), '状态文字应在底栏');
+  assert.ok(!document.querySelector('header .status'), '顶栏不应再有状态区');
 });
 
 // ── Q4：内联二维码库 ──────────────────────────────
@@ -79,8 +86,8 @@ test('内联 qrcode 库可为真实配对 URL 生成模块矩阵', () => {
 });
 
 // ── Q5：版本号 ──────────────────────────────
-test('APP_VERSION 为 5.20', () => {
+test('APP_VERSION 为 5.21', () => {
   const fs = require('fs');
   const src = fs.readFileSync(require('../helpers').INDEX_PATH, 'utf8');
-  assert.ok(src.includes("const APP_VERSION = '5.20';"), 'index.html 应声明 APP_VERSION = 5.20');
+  assert.ok(src.includes("const APP_VERSION = '5.21';"), 'index.html 应声明 APP_VERSION = 5.21');
 });

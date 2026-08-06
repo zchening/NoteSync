@@ -811,13 +811,13 @@
 - **版本**: v5.20（发布前独立盲测 `_probe_v520_blind.js` J1 发现，同版修复）
 - **现象**: 设备内存里有密钥（cryptoKey）但 localStorage 的 KEY_STORE 缺失（如用户部分清理站点数据、解锁时写入失败）时，弹层里"显示配对二维码"按钮点击后静默无反应——无画布、无链接、无提示
 - **根因**: `revealQr` 只从 `localStorage.getItem(KEY_STORE)` 取密钥（`buildPairingUrl`），取不到就 `return`，没有利用内存中现成的 cryptoKey，也没有任何反馈
-- **修复**: `revealQr` 改为 async：KEY_STORE 缺失但 cryptoKey 存在时，`exportKey('raw')` 重新导出并补写 KEY_STORE 再生成配对链接；兜底后仍拿不到密钥时，弹层内显示"无法读取本机密钥，请退出锁定后重新解锁再配对"提示，不再静默
+- **修复**: `revealQr` 改为 async：KEY_STORE 缺失但 cryptoKey 存在时，`exportKey('raw')` 重新导出并补写 KEY_STORE 再生成配对链接；兜底后仍拿不到密钥时，弹层内显示"无法读取本机密钥，请退出锁定后重新解锁再配对"提示，不再静默。（v5.21 起弹层改为打开即直出二维码，此兜底触发点从"点显示按钮"变为"打开弹层时"，逻辑不变）
 - **关联文件**: index.html → revealQr() / buildPairingUrl()
 - **核对要点**:
-  - [ ] 解锁后运行时删除 KEY_STORE → 点"显示配对二维码"仍能出码（密钥重新导出补写）
+  - [ ] 解锁后运行时删除 KEY_STORE → 打开配对弹层仍能出码（密钥重新导出补写，v5.21 盲测 J1 硬断言）
   - [ ] 补写后 localStorage 密钥与内存密钥一致，配对链接可正常解锁另一台设备
   - [ ] 极端无密钥场景（cryptoKey 也为空由锁定态兜底，不触发此分支）不出现哑按钮：要么出码、要么有文字提示
-  - [ ] 正常路径（KEY_STORE 在场）行为不变：按需显示、60s 自动隐藏、关闭复位（盲测 A2-A6 不回归）
+  - [ ] 正常路径（KEY_STORE 在场）行为不变：打开直出、60s 自动隐藏、关闭复位（盲测 A2-A6 不回归）
 
 ---
 
