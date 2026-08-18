@@ -17,11 +17,13 @@
     --accent:#8F7126; --accent-soft:rgba(143,113,38,.07); --ring:rgba(143,113,38,.16);
     --box-bg:#FFFFFF; --upload-bg:#1C1C1A; --hover:rgba(28,28,26,.05);
     --serif:Georgia,"Times New Roman","Songti SC","STSong",serif;
+    color-scheme:light; /* 声明浅色方案，提示遵守标准的浏览器（小米/QQ新版内核）不要对本页强制套夜间 */
   }
   body.dark{
     --bg:#0F0F11; --fg:#E9E8E3; --muted:#7A786F; --line:#242428;
     --accent:#D4B068; --accent-soft:rgba(212,176,104,.08); --ring:rgba(212,176,104,.22);
     --box-bg:#17171A; --upload-bg:#E9E8E3; --hover:rgba(233,232,227,.07);
+    color-scheme:dark;
   }
   *{box-sizing:border-box}
   html,body{height:100%;margin:0}
@@ -209,7 +211,7 @@ const PBKDF2_ITER = 200000;
 const FAIL_LIMIT = 10;
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '5.23';
+const APP_VERSION = '5.24';
 const BUILD_DATE = '2026-08-18';
 
 const $ = s => document.querySelector(s);
@@ -248,6 +250,8 @@ function shouldBeDark() {
 function applyTheme(dark) {
   document.body.classList.toggle('dark', dark);
   themeBtn.innerHTML = dark ? ICON_SUN : ICON_MOON;
+  // 运行时同步 color-scheme 到 <html>，对抗小米/QQ浏览器遵守标准的夜间模式强制反色
+  document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
   // 注入 !important CSS 覆盖小米浏览器夜间模式的 CSS 注入
   let override = document.getElementById('theme-override');
   if (!override) {
