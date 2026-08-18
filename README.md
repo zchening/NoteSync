@@ -306,6 +306,7 @@ bash install.sh
 
 | 版本 | 日期 | 摘要 |
 |------|------|------|
+| v5.24 | 2026-08-18 | 夜间模式兼容：新增 CSS `color-scheme` 声明（:root light / body.dark dark）+ applyTheme 同步 document.documentElement.style.colorScheme，对抗小米/QQ浏览器遵守标准的夜间模式渲染层强制反色；新增 tests/unit/theme.test.js 专项断言 |
 | v5.23 | 2026-08-18 | 配对中转页迁至自有域名 note.xuyinji.com.cn/bridge.html（去 github.io 第三方依赖，国内可靠）；server.js 加 /bridge.html 静态路由 |
 | v5.21 | 2026-08-06 | UI 精简：状态栏移底栏 + 二维码弹层直出（移除配对链接行） |
 | v5.20 | 2026-08-05 | 二维码配对，添加新设备免输网址与口令 |
@@ -349,6 +350,7 @@ bash install.sh
 <details>
 <summary>完整更新详情（共 39 个版本）</summary>
 
+- **v5.24**：夜间模式兼容小米/QQ浏览器强制反色——根因：小米浏览器/QQ浏览器"夜间模式"在渲染层对页面强制反色，页内日/夜切换按钮其实生效（图标切换）但被浏览器盖掉，视觉上"切换无效"；页面此前未声明 `color-scheme`，浏览器默认按"未适配浅色"处理而强制套暗。修复：`:root` 声明 `color-scheme:light`、`body.dark` 声明 `color-scheme:dark`；`applyTheme()` 同步写 `document.documentElement.style.colorScheme`，向浏览器明确声明当前配色方案，使其停止对本页强制反色（D4，承接 D2 的 `!important` 覆盖机制，增量新增、不冲突）。注意：`color-scheme` 能对抗"遵守标准的智能适配"夜间模式，对个别老版本"纯滤镜暴力反色"仍可能无效——那种情况需关掉浏览器自带夜间模式或把 `note.xuyinji.com.cn` 加进排除名单。测试：jsdom 单测 47/47（含新增 `theme.test.js` 3 项断言：切日间→`color-scheme:light`、切夜间→`dark`、初始与 `shouldBeDark` 一致）、Playwright E2E 11/11 无回归、独立子代理 Playwright 真机专项验证（点击 `#themeBtn` 后 `documentElement.style.colorScheme` 在 light↔dark 切换、D1/D2/D3 核对无回归），共 59 项全绿
 - **v5.23**：配对中转页迁至自有域名——v5.22 用 `bridge.html` 解决了小米相机拦截风险域名白屏的问题，但 bridge 部署在 GitHub Pages（`zchening.github.io`），属第三方境外依赖、国内偶发不可达，与已备案的国内 HTTPS 主站自相矛盾。本版将 `BRIDGE_URL` 由 `https://zchening.github.io/NoteSync/bridge.html` 改为 `https://note.xuyinji.com.cn/bridge.html`，并把 `bridge.html` 部署到自有已备案域名（Caddy 静态服务）。`server.js` 新增 `/bridge.html` 显式静态路由（`text/html`, no-cache），否则会被 SPA 兜底返回 index.html 导致桥页失效（`buildPairingUrl()` 生成的仍是 `…/bridge.html#t=<目标>&k=<密钥>`，仅域名变了）。密钥仍走 URL fragment（`#k=`），不经过任何服务器，零知识安全模型不变；小米相机拦截绕开机制保留。配套：仓库 `Caddyfile` 同步为线上完整 https 版（此前缺根域/www 静态块且 note 块仍是 http，属漂移）。测试：jsdom 单测 44/44（含版本号断言同步至 5.23）、Playwright E2E 11/11 无回归、线上 `/bridge.html` 返回中转页（非 SPA index.html）+ `/healthz`=200 验证通过
 - **v5.22**：中转页二维码——小米系统相机扫码无法打开 trycloudflare 临时域名（被安全模块标记为风险域名，弹出警告后白屏跳回）。新增 `bridge.html` 部署至 GitHub Pages，`buildPairingUrl()` 改为生成 `https://zchening.github.io/NoteSync/bridge.html#t=<目标>&k=<密钥>` 中转 URL。github.io 为可信域名，不被任何安全系统拦截。bridge.html 读取 hash 参数后 `location.replace` 跳转到目标 trycloudflare 地址，`#k=` 触发 `tryPairingUnlock` 自动解锁。密钥全程走 URL fragment，不经过 GitHub 服务器，零知识安全模型不变。测试：单元测试 7/7 + 模块测试 3/3 + 全链路测试 3/3（含 XSS 协议拦截、密钥 URL-safe base64 往返无损、错误密钥拒绝、未初始化笔记拒绝）
 - **v5.21**：UI 精简——状态栏移至底栏 + 二维码弹层直出（承接 v5.20）——用户反馈两项体验调整。① **状态从顶栏移到底栏（全端）**：移动端顶栏按钮过多，"已同步"被挤得无法与绿点同行；顶栏状态区整体移除，底栏变为纯状态条「● 状态字」，圆点颜色语义不变（已同步绿、其余灰），`setStatus()` 单一写入；底栏原文案随之精简——"已解锁"状态本就由状态字编码（已同步即已解锁，锁定时显示已退出/已锁定/无法连接），"端到端加密"标语已在落地页与解锁弹窗表达，无需在底栏常驻重复。② **二维码弹层改直出 + 移除配对链接行**：点二维码图标即渲染二维码（去掉"显示配对二维码"二次点击）；60 秒自动隐藏保留，到期后弹层内变为「重新显示」按钮；移除二维码下方的配对链接文字行，密钥不再以文字形式出现在屏幕（取舍：两台电脑互配只能扫码）。安全姿态不变：60 秒暴露窗口、「勿截图外传」警示、fragment 零知识、J2 的 KEY_STORE 缺失兜底（触发点改为打开弹层时）。测试纪律：jsdom 单测 44/44（+1 底栏状态条结构）、静态盲测 `_probe_v520_blind_static` 29/29（+2：链接行零残留、状态移底栏）、`_probe_qr_pairing` 21/21（P2/P3 改直出断言+二维码内容像素级比对）、对抗盲测 `_probe_v520_blind` 44/44（+1 链接行移除；J1 由观察改硬断言：自动补写密钥并直出）、Playwright E2E 11/11、v5.19 四探针 80/80 复跑全绿，共 229 项，退出码 0
