@@ -4,18 +4,26 @@
     }
 }
 
-http://note.xuyinji.com.cn {
-    # SSE streaming optimization
+https://xuyinji.com.cn, https://www.xuyinji.com.cn {
+    root * C:/Services/xuyinji
+    file_server
+    encode gzip
+    header {
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "no-referrer"
+    }
+    @html path /index.html /
+    header @html Cache-Control "no-cache, no-store, must-revalidate"
+}
+
+https://note.xuyinji.com.cn {
     reverse_proxy /api/note/*/stream 127.0.0.1:8080 {
         transport http {
             keepalive off
         }
         flush_interval -1
     }
-
-    # All other requests
     reverse_proxy 127.0.0.1:8080
-
     encode gzip
     header {
         Content-Security-Policy "default-src 'self'; script-src 'unsafe-inline' cdn.jsdelivr.net; style-src 'unsafe-inline'; img-src 'self' https://res.cloudinary.com data:; connect-src 'self' https://api.cloudinary.com; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
