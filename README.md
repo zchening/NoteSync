@@ -5,7 +5,7 @@
 ![端到端加密](https://img.shields.io/badge/加密-端到端-blue)
 ![零依赖](https://img.shields.io/badge/后端-零依赖-green)
 ![自托管](https://img.shields.io/badge/部署-自托管-orange)
-![Cloudflare Tunnel](https://img.shields.io/badge/HTTPS-Cloudflare_Tunnel-success)
+![Caddy + DNSPod](https://img.shields.io/badge/HTTPS-Caddy%20%2B%20DNSPod-success)
 ![夜间模式](https://img.shields.io/badge/主题-深色%2F浅色-purple)
 
 ---
@@ -180,22 +180,19 @@ flowchart TD
 | PWA | manifest.json + Service Worker | 可安装到主屏幕，离线可打开 |
 | 后端 | Node.js | 零依赖，单文件 `server.js` |
 | 存储 | JSON 文件 | 每笔记独立 `data/notes/{id}.json` |
-| 反代 | nginx | HTTP-only（端口 80），HTTP/1.1 |
-| 隧道 | Cloudflare Tunnel | 出站隧道绕过运营商 SNI 干扰，Cloudflare 负责 HTTPS |
+| 反代 | Caddy（HTTPS） | 按 Host 分流：xuyinji.com.cn/www→静态根，note→反代 8080；Let's Encrypt 自签 |
+| 隧道 | 无（DNSPod 直连） | 域名 DNSPod 解析到 124.221.92.225，Caddy 自签 HTTPS；已弃用 Cloudflare Tunnel |
 | 进程管理 | nssm | Windows 服务，开机自启 |
 
 ```mermaid
 flowchart TD
-    Browser[浏览器] -->|HTTPS| CF[Cloudflare 边缘]
-    CF -->|加密隧道| Tunneld[cloudflared 出站]
-    Tunneld -->|HTTP :80| Nginx[nginx :80]
-    Nginx -->|反代| Node[Node.js :8080]
+    Browser[浏览器] -->|HTTPS :443| Caddy[Caddy 反代+静态]
+    Caddy -->|Host=note| Node[NoteSync :8080]
+    Caddy -->|Host=xuyinji| Site[静态站 C:/Services/xuyinji]
     Node -->|读写| Storage[(data/notes/*.json)]
     Browser -->|加解密| Crypto[Web Crypto API]
     style Browser fill:#bbf,stroke:#333
-    style CF fill:#cfc,stroke:#333
-    style Tunneld fill:#ffd,stroke:#333
-    style Nginx fill:#cfc,stroke:#333
+    style Caddy fill:#cfc,stroke:#333
     style Node fill:#fcc,stroke:#333
     style Storage fill:#f9f,stroke:#333
     style Crypto fill:#bbf,stroke:#333
@@ -279,14 +276,16 @@ bash install.sh
 
 ### Windows（手动）
 
-1. 安装 [Node.js 20+](https://nodejs.org/) 和 [nginx](https://nginx.org/en/docs/windows.html)
-2. 部署 `server.js`、`index.html`、`nginx.conf`（或站点配置）到目标目录
-3. 用 [nssm](https://nssm.cc/) 注册 Node 为 Windows 服务（服务名 `NoteSync`）
-4. nginx 配置为 HTTP-only（端口 80），TLS 由 Cloudflare 负责
-5. 安装 [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) 并创建 Cloudflare Tunnel
-6. DNS 创建 CNAME 记录指向 `{tunnel-id}.cfargotunnel.com`（橙云代理）
+> 当前生产架构（2026-08 起）：反代用 **Caddy**（非 nginx），域名走 **DNSPod** 直连（非 Cloudflare Tunnel），Caddy 自签 Let's Encrypt HTTPS。Cloudflare Tunnel / cloudflared 已弃用。
 
-> **为什么用 Tunnel**：国内服务器直接暴露 443 端口会触发运营商 SNI 检查和 RST 注入，80 端口触发备案拦截。Cloudflare Tunnel 使用出站连接绕过这两层限制。
+1. 安装 [Node.js 20+](https://nodejs.org/)
+2. 部署 `server.js`、`index.html`、`bridge.html`（配对中转页）到目标目录（如 `C:/Services/NoteSync/`）
+3. 用 [nssm](https://nssm.cc/) 注册两个 Windows 服务：`NoteSync`（运行 `node server.js`，端口 8080）、`NoteSyncProxy`（运行 `caddy.exe`，读取 `Caddyfile` 做 HTTPS 反代/静态分流）
+4. `Caddyfile` 按 Host 分流：`xuyinji.com.cn`/`www` → 静态根 `C:/Services/xuyinji/`；`note.xuyinji.com.cn` → `https://` 反代 `127.0.0.1:8080`（含 `/bridge.html` 静态路由）。Caddy 自动 Let's Encrypt 签 HTTPS
+5. DNSPod 加 A 记录 `xuyinji.com.cn`/`www`/`note` → 服务器 IP（DNS only，不开代理）
+6. 腾讯云安全组 + Windows 防火墙放通 80/443
+
+> **为什么不再用 Tunnel**：ICP 备案通过后，域名可合规直连国内服务器（DNSPod→124.221.92.225），Caddy 自签 HTTPS 满足 secure context（NoteSync 的 `crypto.subtle` 解锁前提）。Cloudflare 橙云会把域名解析到境外节点，触发接入商「解析指向境外」扫描→取消接入→ICP 作废，故必须灰云/直连。
 
 ### noteId 规则
 
