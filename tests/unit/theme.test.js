@@ -26,15 +26,25 @@ test('applyTheme(true) 将 <html> color-scheme 设为 dark', () => {
   assert.strictEqual(document.body.classList.contains('dark'), true, 'body 应有 dark 类');
 });
 
-test('applyTheme(false) 将 <html> color-scheme 设为 light', () => {
+test('applyTheme(false) 将 <html> color-scheme 设为 only light（Auto-Dark 豁免标记）', () => {
   window.applyTheme(false);
-  assert.strictEqual(schemeOf(), 'light', '日间模式应声明 color-scheme:light');
+  assert.strictEqual(schemeOf(), 'only light', '日间模式应声明 color-scheme:only light（Chrome Auto-Dark 豁免）');
   assert.strictEqual(document.body.classList.contains('dark'), false, 'body 不应有 dark 类');
 });
 
-test('初始按时间自动设置：当前为夜间时段则 color-scheme=dark', () => {
+test('applyTheme 同步 <meta name="color-scheme"> 的 content', () => {
+  window.applyTheme(false);
+  let meta = document.querySelector('meta[name="color-scheme"]');
+  assert.ok(meta, 'meta[name=color-scheme] 应存在（静态或动态创建）');
+  assert.strictEqual(meta.getAttribute('content'), 'only light', '日间 meta content 应为 only light');
+  window.applyTheme(true);
+  meta = document.querySelector('meta[name="color-scheme"]');
+  assert.strictEqual(meta.getAttribute('content'), 'dark', '夜间 meta content 应为 dark');
+});
+
+test('初始按时间自动设置：color-scheme 与 shouldBeDark 一致', () => {
   // 重新触发一次页面同款初始化逻辑，验证日间/夜间默认声明与 shouldBeDark 一致
   const dark = window.shouldBeDark();
   window.applyTheme(dark);
-  assert.strictEqual(schemeOf(), dark ? 'dark' : 'light', '初始 color-scheme 应与 shouldBeDark 一致');
+  assert.strictEqual(schemeOf(), dark ? 'dark' : 'only light', '初始 color-scheme 应与 shouldBeDark 一致');
 });

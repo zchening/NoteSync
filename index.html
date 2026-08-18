@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="color-scheme" content="light dark">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="NoteSync">
@@ -17,7 +18,7 @@
     --accent:#8F7126; --accent-soft:rgba(143,113,38,.07); --ring:rgba(143,113,38,.16);
     --box-bg:#FFFFFF; --upload-bg:#1C1C1A; --hover:rgba(28,28,26,.05);
     --serif:Georgia,"Times New Roman","Songti SC","STSong",serif;
-    color-scheme:light; /* 声明浅色方案，提示遵守标准的浏览器（小米/QQ新版内核）不要对本页强制套夜间 */
+    color-scheme:light dark; /* 两种配色都支持；运行时 applyTheme 按当前主题精确声明 only light/dark（对抗跟随系统的 Auto-Dark） */
   }
   body.dark{
     --bg:#0F0F11; --fg:#E9E8E3; --muted:#7A786F; --line:#242428;
@@ -211,7 +212,7 @@ const PBKDF2_ITER = 200000;
 const FAIL_LIMIT = 10;
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '5.24';
+const APP_VERSION = '5.25';
 const BUILD_DATE = '2026-08-18';
 
 const $ = s => document.querySelector(s);
@@ -250,8 +251,18 @@ function shouldBeDark() {
 function applyTheme(dark) {
   document.body.classList.toggle('dark', dark);
   themeBtn.innerHTML = dark ? ICON_SUN : ICON_MOON;
-  // 运行时同步 color-scheme 到 <html>，对抗小米/QQ浏览器遵守标准的夜间模式强制反色
-  document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+  // 运行时同步 color-scheme 到 <html> 内联样式与 <meta>：日间声明 only light——Chrome 官方
+  // Auto-Dark（夜间模式"跟随系统"时的强制暗色算法）的唯一豁免标记，比 light 多一层豁免语义；
+  // 夜间声明 dark。参考 web.dev "Prevent Auto Dark Mode"。静态 meta（light dark）早于 JS 生效。
+  const scheme = dark ? 'dark' : 'only light';
+  document.documentElement.style.colorScheme = scheme;
+  let csMeta = document.querySelector('meta[name="color-scheme"]');
+  if (!csMeta) {
+    csMeta = document.createElement('meta');
+    csMeta.setAttribute('name', 'color-scheme');
+    document.head.appendChild(csMeta);
+  }
+  csMeta.setAttribute('content', scheme);
   // 注入 !important CSS 覆盖小米浏览器夜间模式的 CSS 注入
   let override = document.getElementById('theme-override');
   if (!override) {

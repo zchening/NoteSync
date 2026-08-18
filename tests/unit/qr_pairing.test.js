@@ -86,8 +86,8 @@ test('内联 qrcode 库可为真实配对 URL 生成模块矩阵', () => {
 });
 
 // ── Q5：版本号 ──────────────────────────────
-test('APP_VERSION 为 5.23', () => {
+test('APP_VERSION 为 5.25', () => {
   const fs = require('fs');
   const src = fs.readFileSync(require('../helpers').INDEX_PATH, 'utf8');
-  assert.ok(src.includes("const APP_VERSION = '5.23';"), 'index.html 应声明 APP_VERSION = 5.23');
+  assert.ok(src.includes("const APP_VERSION = '5.25';"), 'index.html 应声明 APP_VERSION = 5.25');
 });

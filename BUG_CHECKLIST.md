@@ -300,17 +300,32 @@
   - [ ] PC 鼠标选中 → 点删除线 → 正常（回归检查）
 
 ### D4 | 小米/QQ浏览器（新版内核）遵守标准的夜间模式仍强制反色
-- **版本**: v5.24（本次发版，版本号待用户确认）
+- **版本**: v5.24（2026-08-18 已发版）
 - **现象**: 小米浏览器 / QQ 浏览器开启浏览器自带夜间模式时，页内日/夜切换按钮点击后图标会切换，但页面配色被浏览器渲染层强制反色，视觉上"切换无效"
 - **根因**: 两家浏览器新版内核的"智能适配"夜间模式会读取页面 CSS `color-scheme` 声明；页面此前未声明 color-scheme，浏览器默认按"未适配浅色"处理而强制套暗
-- **修复**: `:root` 声明 `color-scheme:light`、`body.dark` 声明 `color-scheme:dark`；`applyTheme()` 同步写 `document.documentElement.style.colorScheme`，向浏览器明确声明当前配色方案，使其停止对本页强制反色
+- **修复**: `:root` 声明 `color-scheme:light`、`body.dark` 声明 `color-scheme:dark`；`applyTheme()` 同步写 `document.documentElement.style.colorScheme`，向浏览器明确声明当前配色方案，使其停止对本页强制反色（v5.25 升级为 only light，见 D5）
 - **关联文件**: index.html → `:root`/`body.dark` 样式 + `applyTheme()`
 - **核对要点**:
   - [ ] 小米浏览器开夜间模式 → 页内切日间生效（不再被强制反暗）
   - [ ] QQ浏览器开夜间模式 → 页内切日间生效
   - [ ] 页内按钮在 Chrome 上仍正常（回归）
   - [ ] 07:00/19:00 自动切换不受影响（回归）
-  - [ ] 单元测试 unit/theme.test.js 三个断言全过
+  - [ ] 单元测试 unit/theme.test.js 断言全过
+
+### D5 | 夜间模式"跟随系统"路径下 Auto-Dark 仍强制反色（D4 残留）
+- **版本**: v5.25（2026-08-18 发版）
+- **现象**: v5.24 后用户实测：小米/QQ浏览器夜间模式设"**跟随系统**"+ 手机系统深色模式时，页内切日间**仍无效**；而手动开夜间模式场景 v5.24 已缓解
+- **根因**: "跟随系统"走 Chromium **Auto-Dark / force-dark** 强制暗色算法，该路径**不豁免** `color-scheme: light`——Chrome 官方（web.dev "Prevent Auto Dark Mode"）规定的豁免标记是 `color-scheme: only light`（"此页只支持浅色"），v5.24 差在没加 `only`
+- **修复**: `applyTheme(false)` 时 `documentElement.style.colorScheme` 与 `<meta name="color-scheme">` content 均声明 **`only light`**；`applyTheme(true)` 声明 `dark`；head 静态加 `<meta name="color-scheme" content="light dark">`（首帧早于 JS 被读到）；`:root` CSS 改 `color-scheme:light dark`
+- **关联文件**: index.html → `<head>` meta / `:root` 样式 / `applyTheme()`
+- **核对要点**:
+  - [ ] 小米浏览器夜间模式"跟随系统"+ 系统深色 → 页内切日间生效
+  - [ ] QQ浏览器同上 → 生效
+  - [ ] 手动开夜间模式场景不回归（v5.24 修复保持）
+  - [ ] Chrome 上日/夜切换正常（回归）
+  - [ ] 07:00/19:00 自动切换不受影响（回归）
+  - [ ] unit/theme.test.js 4 断言（dark / only light / meta 同步 / 初始一致）全过
+  - [ ] 若实测仍无效：属内核魔改无视 `only light`，转方案 B（浏览器夜间模式关"跟随系统"或加站点白名单），页面侧无解
 
 ---
 
