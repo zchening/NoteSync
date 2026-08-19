@@ -23,10 +23,15 @@ https://note.xuyinji.com.cn {
         }
         flush_interval -1
     }
-    reverse_proxy 127.0.0.1:8080
+    @html path /index.html /
+    header @html Cache-Control "no-cache, no-store, must-revalidate"
+}
+
+https://520.xuyinji.com.cn {
+    root * C:/Services/520
+    file_server
     encode gzip
     header {
-        Content-Security-Policy "default-src 'self'; script-src 'unsafe-inline' cdn.jsdelivr.net; style-src 'unsafe-inline'; img-src 'self' https://res.cloudinary.com data:; connect-src 'self' https://api.cloudinary.com; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
         X-Content-Type-Options "nosniff"
         Referrer-Policy "no-referrer"
     }
