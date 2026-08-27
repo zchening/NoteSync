@@ -212,8 +212,8 @@ const PBKDF2_ITER = 200000;
 const FAIL_LIMIT = 10;
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '5.25';
-const BUILD_DATE = '2026-08-18';
+const APP_VERSION = '5.26';
+const BUILD_DATE = '2026-08-27';
 
 const $ = s => document.querySelector(s);
 const editor = $('#editor'), mask = $('#mask'), pw = $('#pw'), err = $('#err');
@@ -1235,14 +1235,22 @@ if (window.PointerEvent) {
 exportImgBtn.addEventListener('click', e => { e.preventDefault(); if (!window.PointerEvent) exportImage(); });
 
 // --- 二维码配对 · 发送端弹层（v5.20 引入；v5.21 改直出：打开即显示二维码，去掉配对链接行）---
+// v5.26：生产环境的配对二维码改走主站可信域名 302 短链（xuyinji.com.cn/note/* → note.xuyinji.com.cn/*）。
+// 背景：v5.22 曾靠 github.io 中转绕开小米相机对 trycloudflare 域名的拦截，v5.23 中转页迁回
+// note.xuyinji.com.cn 后，该子域自身也被小米相机网址安全判定拦截（风险提示 + 跳转失败）。
+// 小米只在扫码瞬间校验二维码内的 URL，故让二维码只含可信主站的干净短链，跳转发生在浏览器内；
+// 密钥仍走 fragment（#k=），302 后由浏览器自动拼回，服务器与中转站全程不可见，零知识模型不变。
 const qrBtn = $('#qrBtn'), qrMask = $('#qrMask'), qrHolder = $('#qrHolder');
 let qrHideTimer = null;
 function buildPairingUrl() {
   const b64 = localStorage.getItem(KEY_STORE); // 解锁时已写入的 AES 密钥（raw base64）
   if (!b64) return null;
-  const BRIDGE_URL = 'https://note.xuyinji.com.cn/bridge.html';
-  const target = location.origin + '/' + encodeURIComponent(noteId);
-  return BRIDGE_URL + '#t=' + encodeURIComponent(target) + '&k=' + b64ToUrlSafe(b64);
+  if (location.hostname === 'note.xuyinji.com.cn') {
+    // 生产：主站短链（Caddy handle_path /note/* → 302 note.xuyinji.com.cn/*，目标写死，非开放重定向）
+    return 'https://xuyinji.com.cn/note/' + encodeURIComponent(noteId) + '#k=' + b64ToUrlSafe(b64);
+  }
+  // 本地/自建部署：直连当前源，无中转环节
+  return location.origin + '/' + encodeURIComponent(noteId) + '#k=' + b64ToUrlSafe(b64);
 }
 function drawQrTo(canvas, text) {
   const qr = qrcode(0, 'M'); // typeNumber=0 自动选版本；纠错级别 M

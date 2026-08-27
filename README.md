@@ -281,7 +281,7 @@ bash install.sh
 1. 安装 [Node.js 20+](https://nodejs.org/)
 2. 部署 `server.js`、`index.html`、`bridge.html`（配对中转页）到目标目录（如 `C:/Services/NoteSync/`）
 3. 用 [nssm](https://nssm.cc/) 注册两个 Windows 服务：`NoteSync`（运行 `node server.js`，端口 8080）、`NoteSyncProxy`（运行 `caddy.exe`，读取 `Caddyfile` 做 HTTPS 反代/静态分流）
-4. `Caddyfile` 按 Host 分流：`xuyinji.com.cn`/`www` → 静态根 `C:/Services/xuyinji/`；`note.xuyinji.com.cn` → `https://` 反代 `127.0.0.1:8080`（含 `/bridge.html` 静态路由）。Caddy 自动 Let's Encrypt 签 HTTPS
+4. `Caddyfile` 按 Host 分流：`xuyinji.com.cn`/`www` → 静态根 `C:/Services/xuyinji/`（v5.26 起含 `/note/*` → 302 `note.xuyinji.com.cn/*` 配对短链中转，规避小米相机对 note 子域二维码的网址安全拦截）；`note.xuyinji.com.cn` → `https://` 反代 `127.0.0.1:8080`（含 `/bridge.html` 静态路由，兼容 v5.23-v5.25 旧配对码）。Caddy 自动 Let's Encrypt 签 HTTPS
 5. DNSPod 加 A 记录 `xuyinji.com.cn`/`www`/`note` → 服务器 IP（DNS only，不开代理）
 6. 腾讯云安全组 + Windows 防火墙放通 80/443
 
@@ -306,6 +306,7 @@ bash install.sh
 
 | 版本 | 日期 | 摘要 |
 |------|------|------|
+| v5.26 | 2026-08-27 | 配对二维码改走主站可信短链：`xuyinji.com.cn/note/<笔记名>#k=<密钥>` → 302 → `note.xuyinji.com.cn/<笔记名>`，规避小米相机对 note 子域 + 高熵片段的网址安全拦截（风险提示后跳转失败）；密钥仍走 fragment、302 后浏览器自动拼回，零知识不变；本地/自建部署直连不受影响；`bridge.html` 保留，v5.23-v5.25 旧配对码不失效 |
 | v5.25 | 2026-08-18 | 夜间模式兼容二：日间态 color-scheme 升级为 **only light**（Chrome Auto-Dark 官方豁免标记）+ head 静态 meta color-scheme 动态同步，专治夜间模式"跟随系统"+系统深色时的强制反色（v5.24 的 `light` 声明对该路径无效） |
 | v5.24 | 2026-08-18 | 夜间模式兼容：新增 CSS `color-scheme` 声明（:root light / body.dark dark）+ applyTheme 同步 document.documentElement.style.colorScheme，对抗小米/QQ浏览器遵守标准的夜间模式渲染层强制反色；新增 tests/unit/theme.test.js 专项断言 |
 | v5.23 | 2026-08-18 | 配对中转页迁至自有域名 note.xuyinji.com.cn/bridge.html（去 github.io 第三方依赖，国内可靠）；server.js 加 /bridge.html 静态路由 |
@@ -349,8 +350,9 @@ bash install.sh
 | v1.0 | 2026-07-21 | 初始版本，纯文字端到端加密同步 |
 
 <details>
-<summary>完整更新详情（共 40 个版本）</summary>
+<summary>完整更新详情（共 41 个版本）</summary>
 
+- **v5.26**：配对二维码改走主站可信短链（承接 v5.22/v5.23 的拦截规避线）——用户实测：v5.23 中转页迁回 `note.xuyinji.com.cn` 后，小米相机扫配对二维码再次弹风险提示（"此链接有风险可能性……"），点确定跳转后立即弹回相机；而扫 `xuyinji.com.cn`/`baidu.com` 正常、同一码在微信/QQ浏览器打开正常——站点链路本身健康（LE 证书 SAN 匹配、各路由 200），问题在小米扫码瞬间的网址安全判定：v5.23 链接形态 `bridge.html#t=<双重百分号编码 URL>&k=<43 位高熵密钥>` 是钓鱼跳转页的典型指纹。用户对照实验 `xuyinji.com.cn/go.html`（跳转 note 子域）小米相机可正常打开，给出关键事实：**小米只校验扫码瞬间二维码内的 URL，浏览器内跳转不再复检**。修复：① `buildPairingUrl()` 生产域名（`note.xuyinji.com.cn`）下改产 `https://xuyinji.com.cn/note/<noteId>#k=<密钥>`（载荷 129B→78B，QR v8/49 模块→v5/37 模块）；仓库 `Caddyfile` 主站块新增 `handle_path /note/* { redir https://note.xuyinji.com.cn{path} 302 }`——目标写死本站 note 子域，非开放重定向；302 的 Location 不含片段时浏览器自动拼回原请求的 `#k=`，落点即接收端既有 `tryPairingUnlock` 入口，**接收端零改动**；② 密钥全程走 fragment，服务器与跳转环节不可见，零知识模型不变；③ 本地/自建部署（hostname 非 note.xuyinji.com.cn）保持直连形态，E2E 探针与自部署不受影响；④ `bridge.html` 文件与 `server.js` 路由保留，v5.23-v5.25 已外发配对码不失效。测试纪律：jsdom 单测 50/50（新增 Q6/Q7：生产短链形态源断言 + jsdom 本地直连功能断言）、`_probe_qr_pairing` 21/21、`_probe_v520_blind` 44/44、`_probe_v520_blind_static` 29/29、Playwright E2E 11/11，共 155 项全绿，退出码 0
 - **v5.25**：夜间模式兼容二（D5，承接 v5.24/D4）——用户实测 v5.24 后反馈：小米/QQ浏览器夜间模式设"**跟随系统**"+ 手机系统深色模式时，页内切日间**仍无效**（v5.24 只缓解了"手动开夜间模式"场景）。根因：两条反色路径机制不同——手动开走"智能适配"（读页面 `color-scheme` 声明，v5.24 的 `light` 声明可生效）；"跟随系统"走 Chromium **Auto-Dark / force-dark** 强制暗色算法，该路径**不豁免** `color-scheme: light`——Chrome 官方（web.dev "Prevent Auto Dark Mode"）规定的豁免标记是 `color-scheme: only light`（明确声明"此页只支持浅色，禁止自动变暗"），v5.24 差就差在没加 `only`。修复：① `applyTheme(false)` 时 `documentElement.style.colorScheme` 声明 `only light`（夜间仍 `dark`）；② `<head>` 静态加 `<meta name="color-scheme" content="light dark">`，`applyTheme` 动态把 content 同步为 `only light`/`dark`（静态 meta 首帧即被浏览器读到，早于 JS，对国产内核更稳）；③ `:root` CSS 由 `color-scheme:light` 改 `light dark`。已知边界（丑话）：若小米/QQ魔改内核连 `only light` 都无视（纯暴力滤镜），页面侧无解，只能浏览器设置里把夜间模式从"跟随系统"改手动关、或把 `note.xuyinji.com.cn` 加夜间模式白名单。配套修复：`qr_pairing.test.js` 硬编码版本断言 5.23→5.25（v5.24 发版时跑测试在改版本号之前，该断言漂移未暴露——流程教训：**改 APP_VERSION 后必须重跑单元测试**）。测试：jsdom 单测 48/48（`theme.test.js` 增至 4 断言：dark、only light、meta content 同步、初始与 shouldBeDark 一致）、Playwright E2E 11/11 无回归
 - **v5.24**：夜间模式兼容小米/QQ浏览器强制反色——根因：小米浏览器/QQ浏览器"夜间模式"在渲染层对页面强制反色，页内日/夜切换按钮其实生效（图标切换）但被浏览器盖掉，视觉上"切换无效"；页面此前未声明 `color-scheme`，浏览器默认按"未适配浅色"处理而强制套暗。修复：`:root` 声明 `color-scheme:light`、`body.dark` 声明 `color-scheme:dark`；`applyTheme()` 同步写 `document.documentElement.style.colorScheme`，向浏览器明确声明当前配色方案，使其停止对本页强制反色（D4，承接 D2 的 `!important` 覆盖机制，增量新增、不冲突）。注意：`color-scheme` 能对抗"遵守标准的智能适配"夜间模式，对个别老版本"纯滤镜暴力反色"仍可能无效——那种情况需关掉浏览器自带夜间模式或把 `note.xuyinji.com.cn` 加进排除名单。测试：jsdom 单测 47/47（含新增 `theme.test.js` 3 项断言：切日间→`color-scheme:light`、切夜间→`dark`、初始与 `shouldBeDark` 一致）、Playwright E2E 11/11 无回归、独立子代理 Playwright 真机专项验证（点击 `#themeBtn` 后 `documentElement.style.colorScheme` 在 light↔dark 切换、D1/D2/D3 核对无回归），共 59 项全绿
 - **v5.23**：配对中转页迁至自有域名——v5.22 用 `bridge.html` 解决了小米相机拦截风险域名白屏的问题，但 bridge 部署在 GitHub Pages（`zchening.github.io`），属第三方境外依赖、国内偶发不可达，与已备案的国内 HTTPS 主站自相矛盾。本版将 `BRIDGE_URL` 由 `https://zchening.github.io/NoteSync/bridge.html` 改为 `https://note.xuyinji.com.cn/bridge.html`，并把 `bridge.html` 部署到自有已备案域名（Caddy 静态服务）。`server.js` 新增 `/bridge.html` 显式静态路由（`text/html`, no-cache），否则会被 SPA 兜底返回 index.html 导致桥页失效（`buildPairingUrl()` 生成的仍是 `…/bridge.html#t=<目标>&k=<密钥>`，仅域名变了）。密钥仍走 URL fragment（`#k=`），不经过任何服务器，零知识安全模型不变；小米相机拦截绕开机制保留。配套：仓库 `Caddyfile` 同步为线上完整 https 版（此前缺根域/www 静态块且 note 块仍是 http，属漂移）。测试：jsdom 单测 44/44（含版本号断言同步至 5.23）、Playwright E2E 11/11 无回归、线上 `/bridge.html` 返回中转页（非 SPA index.html）+ `/healthz`=200 验证通过

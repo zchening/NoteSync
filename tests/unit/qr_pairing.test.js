@@ -4,7 +4,8 @@
 //   Q2 parsePairingKey 合法/非法 hash 解析
 //   Q3 配对弹层 DOM 结构齐全且默认隐藏
 //   Q4 内联二维码库可用（真实配对 URL 能生成模块矩阵）
-//   Q5 版本号 5.20
+//   Q5 版本号 5.26
+//   Q6/Q7 v5.26 生产走主站 302 短链（源断言）+ 本地分支直连（jsdom 功能）
 // 真实解锁链路（导入密钥→解密→进入编辑器）由 Playwright 探针 _probe_qr_pairing.js 覆盖。
 const { test, after } = require('node:test');
 const assert = require('node:assert');
@@ -86,8 +87,30 @@ test('内联 qrcode 库可为真实配对 URL 生成模块矩阵', () => {
 });
 
 // ── Q5：版本号 ──────────────────────────────
-test('APP_VERSION 为 5.25', () => {
+test('APP_VERSION 为 5.26', () => {
   const fs = require('fs');
   const src = fs.readFileSync(require('../helpers').INDEX_PATH, 'utf8');
-  assert.ok(src.includes("const APP_VERSION = '5.25';"), 'index.html 应声明 APP_VERSION = 5.25');
+  assert.ok(src.includes("const APP_VERSION = '5.26';"), 'index.html 应声明 APP_VERSION = 5.26');
+});
+
+// ── Q6：v5.26 生产配对二维码走主站 302 短链 ──────────────────────────────
+test('v5.26 生产分支走主站短链，且不再硬编码 bridge 中转 URL', () => {
+  const fs = require('fs');
+  const src = fs.readFileSync(require('../helpers').INDEX_PATH, 'utf8');
+  // 生产分支：可信主站短链 + 片段密钥
+  assert.ok(src.includes("'https://xuyinji.com.cn/note/'"), '生产配对链接应以主站 /note/ 短链为基底');
+  assert.ok(src.includes("location.hostname === 'note.xuyinji.com.cn'"), '短链分支应仅在生产域名启用（本地/自建直连，不影响探针与自部署）');
+  // 密钥仍以 #k= 片段传递（片段不发往服务器，302 后由浏览器拼回）
+  assert.ok(/'https:\/\/xuyinji\.com\.cn\/note\/' \+ encodeURIComponent\(noteId\) \+ '#k=' \+ b64ToUrlSafe\(b64\)/.test(src), '短链分支应以 #k= 片段携带密钥');
+  // v5.23 的 bridge 中转常量应从配对链接构造中移除（bridge.html 文件与路由保留，兼容旧码）
+  assert.ok(!src.includes("'https://note.xuyinji.com.cn/bridge.html'"), 'buildPairingUrl 不应再指向 bridge.html 中转页');
+});
+
+test('v5.26 本地分支（jsdom 下）仍生成当前源的直连配对链接', () => {
+  const b64 = Buffer.alloc(32, 9).toString('base64');
+  window.localStorage.setItem('notesync_key_', b64); // jsdom url=http://localhost/ → noteId 为空
+  const url = window.buildPairingUrl();
+  assert.match(url, /^http:\/\/localhost\/#k=[A-Za-z0-9_-]+$/, '非生产域名应直连当前源：' + url);
+  assert.strictEqual(window.urlSafeToB64(url.split('#k=')[1]), b64, '密钥往返应无损');
+  window.localStorage.removeItem('notesync_key_');
 });
