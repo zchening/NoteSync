@@ -34,6 +34,7 @@
 | H | 落地页/解锁/路由/图标/指纹 | 6 | 修改 landing 路由(ID_RE/extractId/导航) / 打开按钮禁用 / 解锁按钮禁用态样式 / 退出锁定禁用态 / 落地页中文输入过滤 / 指纹 WebAuthn PRF 逻辑（v5.15 起彻底移除） |
 | I | 链接转换/粘贴/保存可靠性 | 6 | 修改 linkifyEditor / buildLinkSafe / trimUrlTrailing / urlRegex / paste 处理 / pasteTextNative / input 处理器 busy 分支 / saveLocal / scheduleSaveRetry / flushDirtySave / fetchRetry / copyBtn |
 | J | 二维码配对 | 2 | 修改 tryPairingUnlock / parsePairingKey / buildPairingUrl / drawQrTo / revealQr / resetQrHolder / qrBtn 弹层 / b64ToUrlSafe·urlSafeToB64 |
+| K | 服务端遗留缺陷（Open） | 2 | 修改 server.js 静态分支（GET/HEAD、/.well-known/ 路由）——K1/K2 确诊未修复 |
 
 ---
 
@@ -846,6 +847,34 @@
   - [ ] 补写后 localStorage 密钥与内存密钥一致，配对链接可正常解锁另一台设备
   - [ ] 极端无密钥场景（cryptoKey 也为空由锁定态兜底，不触发此分支）不出现哑按钮：要么出码、要么有文字提示
   - [ ] 正常路径（KEY_STORE 在场）行为不变：打开直出、60s 自动隐藏、关闭复位（盲测 A2-A6 不回归）
+
+---
+
+## K. 服务端遗留缺陷（v5.26 排查中确诊，**未修复 / Open**）
+
+> 这两条在排查小米相机扫码问题时一并确诊，但超出 v5.26（扫码中转）范围，**当时决定不修**。留此备忘，下次动 `server.js` 时顺手处理。诊断细节见 memory「NoteSync 已知缺陷」。
+
+### K1 | server.js 不处理 HEAD，全站 HEAD 请求返回 404 `🔴 OPEN`
+- **版本**: 确诊于 v5.26 排查（缺陷早于 v5.19，一直存在，未修复）
+- **现象**: `curl -I https://note.xuyinji.com.cn/`（HEAD）返回 404，同 URL GET 返回 200。探线上路由若用 `curl -I` 会得到假 404，误判路由不存在
+- **根因**: `server.js:202` 静态分支只判 `req.method === 'GET'`；`server.js:249` 对所有非 GET 直接 `404 not found`。HEAD 落到最后兜底
+- **建议修复**: 静态分支改 `(req.method === 'GET' || req.method === 'HEAD')`，HEAD 时 `res.writeHead` 后 `res.end()` 不写 body；`/healthz` 同步放行 HEAD。**（未实施）**
+- **关联文件**: server.js → 静态文件分支 / healthz 分支
+- **影响面**: 预取、监控探针、部分国产浏览器/安全组件的探活走 HEAD 会拿到 404；对普通 GET 访问无影响
+- **核对要点**（修复后补）:
+  - [ ] `curl -I /`、`curl -I /bridge.html`、`curl -I /healthz` 均返回 200 且无 body
+  - [ ] 站点其余 GET 行为无回归
+
+### K2 | SPA 兜底吞掉 `/.well-known/assetlinks.json`，返回 index.html `🔴 OPEN`
+- **版本**: 确诊于 v5.26 排查（未修复）
+- **现象**: `GET /.well-known/assetlinks.json` 返回 200 但内容是 `text/html`（整个 index.html），而非 JSON。仓库与线上均无任何 assetlinks 处理（grep 零命中）
+- **根因**: `server.js` 静态兜底 `server.js:243-246` 对所有非 `/api/`、非特定静态文件的 GET 一律返回 index.html，`/.well-known/*` 也被吞进这条
+- **影响**: 安卓 Digital Asset Links 永远校验失败。**注意**：正因它从来没生效过，"已安装网页应用劫持扫码链接后又闪退"这条链路其实走不通（劫持前提是安装时验证通过）——v5.26 排查一度把它当作"跳回相机"的候选主因，后被推翻（真因是小米扫码瞬间对二维码内 URL 的信誉判定，见 memory「小米扫码风控规律」与 README v5.26）。故本条**降级为卫生缺陷**，非当前任何用户可见 bug 的根因，但仍应修
+- **建议修复**: 在 SPA 兜底之前加 `/.well-known/` 分支——`assetlinks.json` 返回 `[]`（`application/json`，显式声明"无关联安卓应用"）或真实 statement；其余 `/.well-known/*` 返回 404 JSON。**（未实施）**
+- **关联文件**: server.js → 静态分支前新增 `/.well-known/` 路由
+- **核对要点**（修复后补）:
+  - [ ] `GET /.well-known/assetlinks.json` 返回 `application/json`，Content-Type 非 text/html
+  - [ ] 笔记 SPA 路由（`/noteId`）仍正常返回 index.html（不被新分支误伤）
 
 ---
 
