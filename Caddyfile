@@ -1,15 +1,14 @@
 {
+    email admin@xuyinji.com.cn
+    storage file_system {
+        root C:/Services/Caddy/data
+    }
     servers {
         protocols h1
     }
 }
-
 https://xuyinji.com.cn, https://www.xuyinji.com.cn {
-    # v5.26 配对二维码中转：主站可信短链 /note/<笔记名> → 302 → note.xuyinji.com.cn/<笔记名>。
-    # 小米等系统相机只在扫码瞬间校验二维码内的 URL，用可信主站干净短链规避其对
-    # note 子域 + 高熵 #k= 片段的网址安全拦截（承接 v5.22/v5.23 的 bridge 中转方案）。
-    # handle_path 剥掉 /note 前缀，{path} 即笔记路径；#k= 片段不发往服务器，
-    # 302 后由浏览器自动拼回，密钥零知识模型不变。目标写死为本站 note 子域，非开放重定向。
+    # v5.26 NoteSync pairing short link: /note/<id> -> 302 -> note.xuyinji.com.cn/<id>
     handle_path /note/* {
         redir https://note.xuyinji.com.cn{path} 302
     }
@@ -32,6 +31,13 @@ https://note.xuyinji.com.cn {
         }
         flush_interval -1
     }
+    reverse_proxy 127.0.0.1:8080
+    encode gzip
+    header {
+        Content-Security-Policy "default-src 'self'; script-src 'unsafe-inline' cdn.jsdelivr.net; style-src 'unsafe-inline'; img-src 'self' https://res.cloudinary.com data:; connect-src 'self' https://api.cloudinary.com; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "no-referrer"
+    }
     @html path /index.html /
     header @html Cache-Control "no-cache, no-store, must-revalidate"
 }
@@ -46,4 +52,57 @@ https://520.xuyinji.com.cn {
     }
     @html path /index.html /
     header @html Cache-Control "no-cache, no-store, must-revalidate"
+}
+
+https://ddd.xuyinji.com.cn {
+    reverse_proxy /api/* 127.0.0.1:8787 {
+        flush_interval -1
+    }
+    reverse_proxy 127.0.0.1:8787
+    encode gzip
+    header {
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "no-referrer"
+    }
+}
+
+https://gsdsmj.xuyinji.com.cn {
+    handle /wecom/* {
+        reverse_proxy 127.0.0.1:8099
+    }
+    handle {
+        root * C:/Services/gsdsmj
+        file_server
+        encode gzip
+        header {
+            X-Content-Type-Options "nosniff"
+            Referrer-Policy "no-referrer"
+        }
+        @html path /index.html / /qr.png /config.js
+        header @html Cache-Control "no-cache, no-store, must-revalidate"
+    }
+}
+
+# ===== sszbot（神算子：企微智能机器人 PDF→XLSX）=====
+# 把下面整段追加到 VPS 的 Caddyfile（C:/Services/Caddy/Caddyfile），然后 `caddy reload`
+# 前提：DNS 已加 A 记录  ssz.xuyinji.com.cn → 124.221.92.225
+
+https://ssz.xuyinji.com.cn {
+    # 企微智能机器人回调入口（反代到 sszbot Node 服务）
+    handle /wecom/* {
+        reverse_proxy 127.0.0.1:8098
+    }
+    # 生成的 XLSX 静态下载目录
+    handle {
+        root * C:/Services/sszbot/outputs
+        file_server
+        encode gzip
+        header {
+            X-Content-Type-Options "nosniff"
+            Referrer-Policy "no-referrer"
+            Content-Disposition "attachment"
+        }
+        @html path /index.html /
+        header @html Cache-Control "no-cache, no-store, must-revalidate"
+    }
 }
