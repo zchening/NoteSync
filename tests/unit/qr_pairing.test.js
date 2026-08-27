@@ -4,8 +4,8 @@
 //   Q2 parsePairingKey 合法/非法 hash 解析
 //   Q3 配对弹层 DOM 结构齐全且默认隐藏
 //   Q4 内联二维码库可用（真实配对 URL 能生成模块矩阵）
-//   Q5 版本号 5.26
-//   Q6/Q7 v5.26 生产走主站 302 短链（源断言）+ 本地分支直连（jsdom 功能）
+//   Q5 版本号 5.27
+//   Q6/Q7/Q8 v5.27 生产主站短链 + biji 直出分支（源断言）+ 本地分支直连（jsdom 功能）
 // 真实解锁链路（导入密钥→解密→进入编辑器）由 Playwright 探针 _probe_qr_pairing.js 覆盖。
 const { test, after } = require('node:test');
 const assert = require('node:assert');
@@ -87,14 +87,14 @@ test('内联 qrcode 库可为真实配对 URL 生成模块矩阵', () => {
 });
 
 // ── Q5：版本号 ──────────────────────────────
-test('APP_VERSION 为 5.26', () => {
+test('APP_VERSION 为 5.27', () => {
   const fs = require('fs');
   const src = fs.readFileSync(require('../helpers').INDEX_PATH, 'utf8');
-  assert.ok(src.includes("const APP_VERSION = '5.26';"), 'index.html 应声明 APP_VERSION = 5.26');
+  assert.ok(src.includes("const APP_VERSION = '5.27';"), 'index.html 应声明 APP_VERSION = 5.27');
 });
 
 // ── Q6：v5.26 生产配对二维码走主站 302 短链 ──────────────────────────────
-test('v5.26 生产分支走主站短链，且不再硬编码 bridge 中转 URL', () => {
+test('v5.27 生产分支走主站短链，且不再硬编码 bridge 中转 URL', () => {
   const fs = require('fs');
   const src = fs.readFileSync(require('../helpers').INDEX_PATH, 'utf8');
   // 生产分支：可信主站短链 + 片段密钥
@@ -106,11 +106,19 @@ test('v5.26 生产分支走主站短链，且不再硬编码 bridge 中转 URL',
   assert.ok(!src.includes("'https://note.xuyinji.com.cn/bridge.html'"), 'buildPairingUrl 不应再指向 bridge.html 中转页');
 });
 
-test('v5.26 本地分支（jsdom 下）仍生成当前源的直连配对链接', () => {
+test('v5.27 本地分支（jsdom 下）仍生成当前源的直连配对链接', () => {
   const b64 = Buffer.alloc(32, 9).toString('base64');
   window.localStorage.setItem('notesync_key_', b64); // jsdom url=http://localhost/ → noteId 为空
   const url = window.buildPairingUrl();
   assert.match(url, /^http:\/\/localhost\/#k=[A-Za-z0-9_-]+$/, '非生产域名应直连当前源：' + url);
   assert.strictEqual(window.urlSafeToB64(url.split('#k=')[1]), b64, '密钥往返应无损');
   window.localStorage.removeItem('notesync_key_');
+});
+
+// ── Q8：v5.27 biji 并行可信域直出分支 ──────────────────────────────
+test('v5.27 biji 域直出自身域名（无中转），与 note 分支并列', () => {
+  const fs = require('fs');
+  const src = fs.readFileSync(require('../helpers').INDEX_PATH, 'utf8');
+  assert.ok(src.includes("location.hostname === 'biji.xuyinji.com.cn'"), 'biji 分支应在 buildPairingUrl 中显式声明');
+  assert.ok(/'https:\/\/biji\.xuyinji\.com\.cn\/' \+ encodeURIComponent\(noteId\) \+ '#k=' \+ b64ToUrlSafe\(b64\)/.test(src), 'biji 分支应直出 biji.xuyinji.com.cn/<id>#k=...（无中转）');
 });

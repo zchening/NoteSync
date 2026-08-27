@@ -106,3 +106,23 @@ https://ssz.xuyinji.com.cn {
         header @html Cache-Control "no-cache, no-store, must-revalidate"
     }
 }
+
+https://biji.xuyinji.com.cn {
+    # v5.27 新增：与 note.xuyinji.com.cn 并列的可信域名，反向代理到同一后端(127.0.0.1:8080)，
+    # 共享同一套笔记数据库。biji 域下二维码直出 biji.xuyinji.com.cn/<id>#k=... (无中转)。
+    reverse_proxy /api/note/*/stream 127.0.0.1:8080 {
+        transport http {
+            keepalive off
+        }
+        flush_interval -1
+    }
+    reverse_proxy 127.0.0.1:8080
+    encode gzip
+    header {
+        Content-Security-Policy "default-src 'self'; script-src 'unsafe-inline' cdn.jsdelivr.net; style-src 'unsafe-inline'; img-src 'self' https://res.cloudinary.com data:; connect-src 'self' https://api.cloudinary.com; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "no-referrer"
+    }
+    @html path /index.html /
+    header @html Cache-Control "no-cache, no-store, must-revalidate"
+}
