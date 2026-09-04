@@ -218,7 +218,7 @@ const PBKDF2_ITER = 200000;
 const FAIL_LIMIT = 10;
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '5.29';
+const APP_VERSION = '5.30';
 const BUILD_DATE = '2026-09-04';
 
 const $ = s => document.querySelector(s);
@@ -704,6 +704,11 @@ function hideUploadStatus() { uploadStatus.classList.remove('show'); }
 //      渲染层变换，作者 CSS 的 !important 根本够不着，只能换策略（自反色抵消 / 跟随系统）。
 // 判定照妖镜：**中灰 #808080** 在 invert 前后视觉不变（invert(128)=127）。
 //   中灰不变 + 纯白变黑 → 像素反色型；中灰自身也变色 → CSS 注入型。
+// v5.30 实测补充（小米 Chrome 135 真机）：computed 全部正确浅色但整页渲染成深色，
+//   纯白探针变黑、纯黑变白 = 渲染层强制反色（无视 only light，CSS 无解）。
+//   但本浮层（position:fixed）疑似未被反色 → 对手可能跳过 fixed 层。
+//   故新增三组定位探针（relative/absolute/fixed 同为中灰）+ 滤镜抵消开关：
+//   ① 哪类探针被反色 → 定位对手的豁免规则；② 滤镜抵消复原与否 → 决定能否自动对抗。
 // 纯取证，不开时零开销；开启后只读取数，不碰笔记内容。
 (function setupThemeDiag() {
   if (location.search.indexOf('themedi') === -1) return;
@@ -721,18 +726,37 @@ function hideUploadStatus() { uploadStatus.classList.remove('show'); }
       '<div style="text-align:center"><div style="width:30px;height:30px;background:#000000"></div><div style="font-size:9px">纯黑<br>反色→白</div></div>' +
       '<div style="text-align:center"><img src="' + PX1 + '" style="width:30px;height:30px;background:#fff;display:block"><div style="font-size:9px">白img<br>通常还原</div></div>' +
     '</div>' +
-    '<div style="margin-bottom:8px;font-size:10px">判据：中灰不变+纯白变黑 = 像素反色型（CSS 无解）；中灰自身也变色 = CSS 注入型（覆盖可拦）</div>' +
-    '<pre id="tdBody" style="margin:0 0 8px;white-space:pre-wrap;word-break:break-all;font:inherit"></pre>' +
+    '<div style="margin-bottom:8px;font-size:10px">判据①：中灰不变+纯白变黑 = 像素反色型（CSS 无解）；中灰自身也变色 = CSS 注入型（覆盖可拦）<br>' +
+    '判据②（fixed 豁免）：下面三块定位探针都是中灰，若只有浮层(fixed)这块保持中灰、RELATIVE/ABSOLUTE 两块变了色，说明对手跳过 fixed 层（可全页容器化绕过）</div>' +
+    '<div id="tdBody" style="margin:0 0 8px;white-space:pre-wrap;word-break:break-all;font:inherit"></div>' +
     '<div id="tdBtns"></div>';
   document.body.appendChild(box);
+  // 三组定位探针（relative / absolute），与浮层(fixed)对照。都插在 body 最前，独立于任何容器
+  const mkProbe = function (id, css, label) {
+    const d = document.createElement('div');
+    d.id = id;
+    d.style.cssText = css + 'width:auto;background:#808080;color:#fff;font:10px sans-serif;padding:4px 8px;border-radius:4px';
+    d.textContent = label;
+    document.body.insertBefore(d, document.body.firstChild);
+    return d;
+  };
+  mkProbe('tdProbeRelative', 'position:relative;z-index:99998;margin:6px;', '定位探针 RELATIVE（中灰#808080）');
+  mkProbe('tdProbeAbsolute', 'position:absolute;top:2px;left:50%;transform:translateX(-50%);z-index:99998;', '定位探针 ABSOLUTE（中灰#808080）');
   const body = box.querySelector('#tdBody');
   const btns = box.querySelector('#tdBtns');
-  [['切日间', 'light'], ['切夜间', 'dark'], ['复制读数', 'copy'], ['关闭', 'close']].forEach(function (p) {
+  [['切日间', 'light'], ['切夜间', 'dark'], ['滤镜抵消', 'invert'], ['复制读数', 'copy'], ['关闭', 'close']].forEach(function (p) {
     const b = document.createElement('button');
     b.textContent = p[0];
     b.style.cssText = 'margin:0 6px 0 0;padding:5px 10px;font:11px sans-serif;border:0;border-radius:6px;background:#fff;color:#000;cursor:pointer';
     b.addEventListener('click', function () {
       if (p[1] === 'light' || p[1] === 'dark') { try { window.applyTheme(p[1] === 'dark'); themeAutoMode = false; } catch (e) {} }
+      else if (p[1] === 'invert') {
+        // 抵消实验：给 <html> 预先套一层反色。对手若再反色一次 → 负负得正复原；
+        // 对手若对"已深色"页面放行 → 显示我们反色后的样子（= 自带深色模式）。
+        const h = document.documentElement;
+        if (h.style.filter && h.style.filter.indexOf('invert') !== -1) { h.style.filter = ''; b.textContent = '滤镜抵消'; }
+        else { h.style.filter = 'invert(1) hue-rotate(180deg)'; b.textContent = '关闭抵消'; }
+      }
       else if (p[1] === 'copy') { try { navigator.clipboard.writeText(body.textContent); } catch (e) {} b.textContent = '已复制'; }
       else { box.remove(); return; }
       render();
@@ -753,6 +777,7 @@ function hideUploadStatus() { uploadStatus.classList.remove('show'); }
       "CSS.supports('color-scheme','only light') = " + SUPPORTS_ONLY_LIGHT,
       'html.style.colorScheme(读回) = ' + (document.documentElement.style.colorScheme || '(空=声明被内核丢弃)'),
       'computed(html).colorScheme = ' + (hcs.colorScheme || '-'),
+      'html.style.filter = ' + (document.documentElement.style.filter || '(无)'),
       'meta[color-scheme] = ' + (csMeta ? csMeta.getAttribute('content') : '(无)'),
       'meta[theme-color]  = ' + (tcMeta ? tcMeta.getAttribute('content') : '(无)'),
       '--- 关键判据 ---',

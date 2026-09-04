@@ -351,6 +351,7 @@
   - [ ] 删除线、落地页渐变、解锁弹窗毛玻璃视觉无回归
   - [ ] unit/theme.test.js 18 断言全过（含旧内核降级、写回校验、MutationObserver 顶回）
 - **已知边界**: 若取证确认是 X5 合成器像素反色型，页面侧 CSS 无解。可选「自反色抵消」（给 `<html>` 自套 `filter: invert(1) hue-rotate(180deg)`，图片再反转还原），但 `filter` 会创建新包含块，破坏 `position:fixed`（顶栏/上传气泡/弹窗遮罩）与 `backdrop-filter`（解锁弹窗毛玻璃），需逐项真机验收——**待取证后再决定**。兜底：引导用户在浏览器设置里把本站加入夜间模式白名单
+- **v5.30 真机取证结论（小米浏览器 Chrome 135）**: `computed` 全部正确浅色 + `only light` 声明成功，但整页渲染深色，纯白探针变黑/纯黑变白 → **渲染层强制反色实锤，CSS 无解**。桌面 Chromium `--enable-features=WebContentsForceDark` 模拟尊重豁免、无法复现（反证 MIUI 自研反色层）。关键线索：`?themedi` 浮层（fixed）未被反色 → 对手疑似跳过 fixed 层。v5.30 已把 `?themedi` 升级为实验台（三组定位探针 + 滤镜抵消开关），待真机二次取证决定最终方案：滤镜抵消自动生效 / 全页 fixed 容器化 / 白名单引导
 
 ---
 
