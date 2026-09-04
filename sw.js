@@ -1,7 +1,7 @@
 // NoteSync Service Worker - 缓存 index.html 供离线打开
 // v5.35：缓存名由注册 URL 的 ?v= 参数（= index.html 的 APP_VERSION）驱动——
-// 版本号单一来源，发版即换名、activate 清理旧名，杜绝旧版「CACHE 硬编码 notesync-v1、
-// 发版后离线用户永远拿旧壳」的隐患。
+// 版本号单一来源，发版即换名、activate 清理旧名，根治旧版缓存名硬编码、
+// 发版后离线用户永远拿旧壳的隐患。
 const VER = (new URL(self.location.href).searchParams.get('v')) || 'x';
 const CACHE = 'notesync-' + VER;
 const ASSETS = ['/index.html', '/manifest.json', '/favicon.svg'];
