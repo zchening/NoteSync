@@ -218,7 +218,7 @@ const PBKDF2_ITER = 200000;
 const FAIL_LIMIT = 10;
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '5.30';
+const APP_VERSION = '5.31';
 const BUILD_DATE = '2026-09-04';
 
 const $ = s => document.querySelector(s);
@@ -704,15 +704,31 @@ function hideUploadStatus() { uploadStatus.classList.remove('show'); }
 //      渲染层变换，作者 CSS 的 !important 根本够不着，只能换策略（自反色抵消 / 跟随系统）。
 // 判定照妖镜：**中灰 #808080** 在 invert 前后视觉不变（invert(128)=127）。
 //   中灰不变 + 纯白变黑 → 像素反色型；中灰自身也变色 → CSS 注入型。
-// v5.30 实测补充（小米 Chrome 135 真机）：computed 全部正确浅色但整页渲染成深色，
+// v5.30 实测（小米 Chrome 135 真机）：computed 全部正确浅色但整页渲染深色，
 //   纯白探针变黑、纯黑变白 = 渲染层强制反色（无视 only light，CSS 无解）。
-//   但本浮层（position:fixed）疑似未被反色 → 对手可能跳过 fixed 层。
-//   故新增三组定位探针（relative/absolute/fixed 同为中灰）+ 滤镜抵消开关：
-//   ① 哪类探针被反色 → 定位对手的豁免规则；② 滤镜抵消复原与否 → 决定能否自动对抗。
+//   且滤镜抵消（html 套 invert+hue-rotate）无效 → 对手是"浅色检测型"智能反色：
+//   页面浅色才反、深色放行（所以夜间模式一直正常）。
+// v5.31 剩余决定性问题：对手是否跳过 fixed 定位层（真机截图中本浮层未被反色）。
+//   若跳过 → 全页 fixed 容器化可绕过。实验用两个白块肩对肩：
+//   白块A = position:fixed，白块B = relative 文档流，都在 body 直下。
+//   A 白 B 黑 → 有救；A B 都黑 → 无差别反色，页面侧无解。
 // 纯取证，不开时零开销；开启后只读取数，不碰笔记内容。
 (function setupThemeDiag() {
   if (location.search.indexOf('themedi') === -1) return;
   const PX1 = 'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==';
+  // 白块A（fixed 定位）与白块B（relative 文档流）：同色对照，定位对手的豁免规则
+  const mkWhite = function (id, css, label) {
+    const d = document.createElement('div');
+    d.id = id;
+    d.style.cssText = css + 'width:112px;height:46px;background:#FFFFFF;color:#000;font:11px/1.3 sans-serif;' +
+      'display:flex;align-items:center;justify-content:center;text-align:center;border-radius:6px;border:1px solid #888';
+    d.textContent = label;
+    return d;
+  };
+  const probeFixed = mkWhite('tdProbeFixed', 'position:fixed;top:4px;right:8px;z-index:99997;', '白块A\n固定 FIXED');
+  const probeFlow = mkWhite('tdProbeFlow', 'position:relative;z-index:99997;margin:6px;', '白块B\n流内 FLOW');
+  document.body.appendChild(probeFixed);
+  document.body.insertBefore(probeFlow, document.body.firstChild);
   const box = document.createElement('div');
   box.id = 'themeDiag';
   // 浮层背景刻意用中灰 #808080：它在像素反色前后视觉一致，保证截图在两种环境下都可读
@@ -726,22 +742,14 @@ function hideUploadStatus() { uploadStatus.classList.remove('show'); }
       '<div style="text-align:center"><div style="width:30px;height:30px;background:#000000"></div><div style="font-size:9px">纯黑<br>反色→白</div></div>' +
       '<div style="text-align:center"><img src="' + PX1 + '" style="width:30px;height:30px;background:#fff;display:block"><div style="font-size:9px">白img<br>通常还原</div></div>' +
     '</div>' +
-    '<div style="margin-bottom:8px;font-size:10px">判据①：中灰不变+纯白变黑 = 像素反色型（CSS 无解）；中灰自身也变色 = CSS 注入型（覆盖可拦）<br>' +
-    '判据②（fixed 豁免）：下面三块定位探针都是中灰，若只有浮层(fixed)这块保持中灰、RELATIVE/ABSOLUTE 两块变了色，说明对手跳过 fixed 层（可全页容器化绕过）</div>' +
+    '<div style="margin-bottom:8px;font-size:10px">已确认：本浏览器是"浅色检测型"强制反色（页面浅才反、深色放行），滤镜抵消无效。<br>' +
+    '<b>决定性实验</b>：页面顶部有「白块A·固定FIXED」和「白块B·流内FLOW」两个白块——<br>' +
+    '① A 白、B 黑 → 对手跳过固定层，全页容器化可救（回我"A白B黑"）<br>' +
+    '② A、B 都黑 → 对手无差别反色，页面侧无解，只能夜间+白名单（回我"都黑"）<br>' +
+    '③ 两块都白 → 当前未触发反色</div>' +
     '<div id="tdBody" style="margin:0 0 8px;white-space:pre-wrap;word-break:break-all;font:inherit"></div>' +
     '<div id="tdBtns"></div>';
   document.body.appendChild(box);
-  // 三组定位探针（relative / absolute），与浮层(fixed)对照。都插在 body 最前，独立于任何容器
-  const mkProbe = function (id, css, label) {
-    const d = document.createElement('div');
-    d.id = id;
-    d.style.cssText = css + 'width:auto;background:#808080;color:#fff;font:10px sans-serif;padding:4px 8px;border-radius:4px';
-    d.textContent = label;
-    document.body.insertBefore(d, document.body.firstChild);
-    return d;
-  };
-  mkProbe('tdProbeRelative', 'position:relative;z-index:99998;margin:6px;', '定位探针 RELATIVE（中灰#808080）');
-  mkProbe('tdProbeAbsolute', 'position:absolute;top:2px;left:50%;transform:translateX(-50%);z-index:99998;', '定位探针 ABSOLUTE（中灰#808080）');
   const body = box.querySelector('#tdBody');
   const btns = box.querySelector('#tdBtns');
   [['切日间', 'light'], ['切夜间', 'dark'], ['滤镜抵消', 'invert'], ['复制读数', 'copy'], ['关闭', 'close']].forEach(function (p) {
@@ -751,14 +759,12 @@ function hideUploadStatus() { uploadStatus.classList.remove('show'); }
     b.addEventListener('click', function () {
       if (p[1] === 'light' || p[1] === 'dark') { try { window.applyTheme(p[1] === 'dark'); themeAutoMode = false; } catch (e) {} }
       else if (p[1] === 'invert') {
-        // 抵消实验：给 <html> 预先套一层反色。对手若再反色一次 → 负负得正复原；
-        // 对手若对"已深色"页面放行 → 显示我们反色后的样子（= 自带深色模式）。
         const h = document.documentElement;
         if (h.style.filter && h.style.filter.indexOf('invert') !== -1) { h.style.filter = ''; b.textContent = '滤镜抵消'; }
         else { h.style.filter = 'invert(1) hue-rotate(180deg)'; b.textContent = '关闭抵消'; }
       }
       else if (p[1] === 'copy') { try { navigator.clipboard.writeText(body.textContent); } catch (e) {} b.textContent = '已复制'; }
-      else { box.remove(); return; }
+      else { box.remove(); probeFixed.remove(); probeFlow.remove(); return; }
       render();
     });
     btns.appendChild(b);
@@ -783,6 +789,7 @@ function hideUploadStatus() { uploadStatus.classList.remove('show'); }
       '--- 关键判据 ---',
       'computed(body).background = ' + cs.backgroundColor + (dark ? '   期望 rgb(15, 15, 17)' : '   期望 rgb(251, 251, 248)'),
       'computed(body).color      = ' + cs.color,
+      '白块A(fixed) / 白块B(flow) 是否都还白着？——肉眼判断，决定能否容器化绕过',
       'UA = ' + cut(navigator.userAgent, 150),
       '--- 页面内 style/link 指纹（抓浏览器注入）---'
     ];
@@ -795,6 +802,60 @@ function hideUploadStatus() { uploadStatus.classList.remove('show'); }
   function render() { body.textContent = snapshot().join('\n'); }
   render();
   setInterval(render, 800);
+})();
+
+// 深色环境提示条（v5.31）。仅在 QQ/小米浏览器 + 系统深色 + 页面处于日间时出现：
+// 实测（BUG_CHECKLIST D6）这些浏览器的"网页夜间"功能在渲染层对浅色页面强制反色、
+// 无视 color-scheme 豁免，日间模式无法正常显示 —— 这是浏览器功能设计，页面无法阻止。
+// 提示条只做三件事：说清楚原因、给一键切夜间、引导去浏览器设置加白名单。
+// 不做主题持久化；「我知道了」后本次会话不再打扰（纯内存 flag）。
+(function setupDarkEnvHint() {
+  const ua = navigator.userAgent;
+  const isRisky = /MiuiBrowser|XiaoMi/i.test(ua) || /MQQBrowser|QQBrowser/i.test(ua);
+  if (!isRisky) return;
+  if (!window.matchMedia) return;
+  const mqDark = window.matchMedia('(prefers-color-scheme: dark)');
+  let dismissed = false;   // 本次会话内不再打扰（刷新即重置，符合"会话内存态"约定）
+  let bar = null;
+  function removeBar() { if (bar) { bar.remove(); bar = null; } }
+  function maybeShow() {
+    if (dismissed) return;
+    if (!mqDark.matches) { removeBar(); return; }          // 系统浅色：无冲突
+    if (document.body.classList.contains('dark')) { removeBar(); return; } // 夜间：正常
+    if (document.getElementById('darkEnvHint')) return;     // 已在显示
+    bar = document.createElement('div');
+    bar.id = 'darkEnvHint';
+    bar.style.cssText = 'position:fixed;left:12px;right:12px;bottom:64px;z-index:70;padding:12px 14px;' +
+      'border-radius:12px;background:#2B2A26;color:#F5F2E8;font-size:12.5px;line-height:1.7;' +
+      'box-shadow:0 8px 30px rgba(0,0,0,.35)';
+    bar.innerHTML = '系统深色模式下，此浏览器的"网页夜间"功能会强制把页面改成深色，<b>日间模式无法正常显示</b>（浏览器行为，页面无法阻止）。可在浏览器设置里把夜间模式改为关闭、或将本站加入夜间白名单。';
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:8px;margin-top:9px';
+    const mkBtn = function (t, bg, fg, ghost) {
+      const b = document.createElement('button');
+      b.textContent = t;
+      b.style.cssText = 'flex:1;height:34px;border:0;border-radius:8px;background:' + bg + ';color:' + fg +
+        ';font-size:12.5px;cursor:pointer' + (ghost ? ';border:1px solid rgba(255,255,255,.25)' : '');
+      return b;
+    };
+    const bDark = mkBtn('切到夜间（推荐）', '#D4B068', '#1C1C1A');
+    bDark.addEventListener('click', function () {
+      try { window.applyTheme(true); themeAutoMode = false; } catch (e) {}
+      removeBar();
+    });
+    const bClose = mkBtn('我知道了', 'transparent', '#CFCBC0', true);
+    bClose.addEventListener('click', function () { dismissed = true; removeBar(); });
+    row.appendChild(bDark);
+    row.appendChild(bClose);
+    bar.appendChild(row);
+    document.body.appendChild(bar);
+  }
+  // 初始延迟一拍，不抢 loading/mask 的首屏；系统深浅切换、页内切日间时复查
+  setTimeout(maybeShow, 1500);
+  try { mqDark.addEventListener('change', maybeShow); } catch (e) {}
+  // 页内切主题后复查（手动切到日间 + 系统深色 = 冲突场景，需要提示）
+  themeBtn.addEventListener('click', function () { setTimeout(maybeShow, 120); });
+  setInterval(function () { if (!dismissed) maybeShow(); }, 10000); // 兜底轮询，覆盖自动定时切换
 })();
 
 // 光标诊断浮层（?diag 开启）。用于在真实浏览器里定位 caret 类问题——
