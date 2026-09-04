@@ -20,6 +20,15 @@ self.addEventListener('activate', e => {
   self.clients.claim();
 });
 
+// v5.36 提醒：点击通知聚焦已打开的笔记，没有则打开
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  e.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+    for (const c of list) { if (c.focus) return c.focus(); }
+    return clients.openWindow('/');
+  }));
+});
+
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET') return;

@@ -175,7 +175,12 @@ const server = http.createServer((req, res) => {
         return sendJSON(res, 400, { error: 'missing fields' });
       }
       const cur = readNote(id);
-      const next = { v: (cur.v || 0) + 1, ct: obj.ct, iv: obj.iv, salt: obj.salt, updatedAt: Date.now() };
+      // v5.36 提醒字段（rem）：与正文同为密文，服务端零知识不变。
+      // 客户端显式传 rem（含 null=取消提醒）时采用之；未传（普通正文保存）时保留原值——
+      // 否则任何一台设备的正文保存都会抹掉另一台设备刚设的提醒。
+      let rem = cur.rem || null;
+      if (obj.rem !== undefined) rem = obj.rem; // null 也是显式意图（取消提醒）
+      const next = { v: (cur.v || 0) + 1, ct: obj.ct, iv: obj.iv, salt: obj.salt, rem: rem, updatedAt: Date.now() };
       writeNote(id, next);
       sseBroadcast(id, { v: next.v, updatedAt: next.updatedAt });
       return sendJSON(res, 200, { ok: true, v: next.v, updatedAt: next.updatedAt });

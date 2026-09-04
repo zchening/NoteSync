@@ -154,6 +154,15 @@ flowchart TD
 
 编辑后自动保存，其他设备通过 SSE（Server-Sent Events）亚秒级收到更新并自动加载。连接断开时自动重试 + SSE 自动重连 + 轮询兜底，确保各种网络环境下都能恢复同步。
 
+### 便签提醒
+
+给整条笔记设一个提醒时间，到点弹系统通知（或页面内提示）。工具栏闹钟按钮 → 选「1 小时后 / 今晚 8 点 / 明天上午 9 点」，或自定义时间；已设提醒可随时取消，按钮呈高亮状态。
+
+- **通知文案**默认取笔记首行（截 20 字），到点后弹系统通知，点击直达笔记
+- **页面关了怎么办**：到点时如果页面没开，下次打开笔记会自动补弹提示条（已过 N 分钟）——这是 100% 兜底；页面开着则准点弹。安卓装成 App 后后台送达更可靠；iOS 需先添加到主屏幕才支持通知
+- **隐私**：提醒内容与正文同一把密钥加密，服务器只存乱码，不知道你设了什么提醒、什么时候提醒
+- 通知权限在第一次设提醒时才申请；被拒绝也不影响使用（自动降级为打开笔记时的提示条）
+
 ### PWA 支持
 
 手机浏览器打开后，可"添加到主屏幕"作为独立应用使用，全屏体验、自定义 SVG 图标、离线可打开缓存页面。浏览器标签页标题显示为 "NoteSync"。每个笔记的快捷方式会打开对应笔记（而非默认笔记），Chrome 和小米浏览器均支持。
@@ -317,6 +326,7 @@ bash install.sh
 
 | 版本 | 日期 | 摘要 |
 |------|------|------|
+| v5.36 | 2026-09-05 | 便签提醒：快捷时间一键设，到点通知，关页下次补弹 |
 | v5.35 | 2026-09-04 | 离线草稿：断网写不丢，冲突时弹条自选；安装引导 |
 | v5.34 | 2026-09-04 | 新增待办：光标停行内点勾图标变待办，点方框切换完成态 |
 | v5.33 | 2026-09-04 | 借壳日间正式上线：反色环境自动启用，像素级复原日间 |
@@ -372,6 +382,7 @@ bash install.sh
 <details>
 <summary>完整更新详情（共 47 个版本）</summary>
 
+- **v5.36**：便签提醒（L1+L2 本地方案，不上 Web Push——那需要服务端存明文提醒时间，零知识破防）。**数据**：`rem` 字段与正文同一把 key 加密的 `{ct,iv}` JSON 串，`server.js` PUT 透传时**显式传参才更新、未传保留原值**（`obj.rem !== undefined` 判断，null 是显式取消）——否则任何一台设备的普通正文保存都会抹掉另一台设备刚设的提醒；服务端依旧只见密文。**设置**：工具栏第 9 个按钮（闹钟），面板快捷「1 小时后 / 今晚 8 点（过 20:00 自动变明晚）/ 明天上午 9 点 / datetime-local 自定义」，默认文案取笔记首行截 20 字；设置即完整保存（正文 + rem 一起 PUT，v 递增 SSE 广播其他设备实时拿到）；权限 `requestPermission` 只在用户主动设提醒时申请，被拒自动降级。**触发三通道**：① 页内 `setTimeout` → SW `showNotification`（tag 固定 `notesync-rem` 系统去重）或 `new Notification`；② 过期未确认 → 解锁时 `loadReminder` 补弹 `remBar` 提示条「已过 N 分钟」（唯一 100% 兜底，`REM_DONE` 时间戳防同机重复弹，跨设备重复弹接受）；③ Notification Triggers API 探测性支持（`showTrigger` in Notification.prototype，至今未正式落地，不指望）。**iOS 未装 PWA**：面板内如实提示「需先添加到主屏幕才能收到通知」，不装糊涂；sw.js 补 `notificationclick`（聚焦已开窗口否则打开）；`Math.min(at-now, 2^31-1)` 防 setTimeout 溢出。按钮高亮态 `#remBtn.on` 用 `var(--fg)/var(--hover)` 不引新色。测试：新增 `unit/reminder.test.js` 11 项（rem 上传/恢复调度/过期补弹/确认去重/显式 null 取消/权限降级/SW 通知/首行截断/面板渲染/server 透传语义/无 pushManager），jsdom 110/110 + E2E 18/18 = 128 全绿。⚠ 测试教训：页面顶层 `let` 声明（reminder 等）是**词法绑定不挂 window**，测试不能 `window.reminder` 读/写——必须走真实函数路径（`setReminder`）建立状态，直接赋值 `window.reminder=x` 是无效属性
 - **v5.35**：离线草稿 + 安装引导。**离线草稿**——此前"离线能写"是假的：保存失败只有 3s/6s/12s 退避重试，页面一关未同步内容直接蒸发。现在 `saveLocal` 加密成功后、上传前先把密文草稿同步落盘 `localStorage['notesync_draft_{noteId}']`（含 `ct/iv/baseV/at`，与正文同一把 AES key，明文不落盘零知识不变）：上传成功即清；失败/中途关页/杀进程草稿都在。解锁时 `applyUnlocked` 末尾走 `restoreDraftIfNeeded` 三分支：① 解不开（口令换过/损坏）→ 静默丢弃；② `baseV !== note.v`（另一台设备已保存新版本）→ 顶部冲突条「恢复我的修改 / 丢弃」，**绝不自动覆盖**；③ 无冲突 → 静默恢复进编辑器并 `scheduleDraftResave`（400ms 后补传）。关键不变量：`lastHtml` 恢复时保持为服务端内容，`saveLocal` 靠 `innerHTML !== lastHtml` 检测差异才会真正补传（补传再失败草稿重写仍在）。**安装引导**——Android/桌面 Chromium 靠 `beforeinstallprompt`（preventDefault 暂存，解锁后点「安装」一键装）；iOS 无此事件，如实提示走 Safari 分享菜单「添加到主屏幕」；`appinstalled` 收尾、`notesync_install_dismissed='1'` 记住拒绝、会话内不重弹、standalone 模式不弹、与草稿冲突条互斥不叠条、解锁后才弹不在落地页打扰。**sw.js 重写**——缓存名改由注册 URL `?v=APP_VERSION` 驱动（版本号单一来源仍是 index.html，发版即换名、activate 清旧名，根治此前 `notesync-v1` 硬编码导致发版后离线用户拿旧壳的隐患）；预缓存补 `favicon.svg`；html2canvas CDN（固定 1.4.1）纳入 cache-first（no-cors opaque response 可整体缓存），离线时「导出为图片」不再失效。提示条样式只用 `var(--*)` 主题变量跟随内部主题，借壳滤镜自动翻色，无需进反色覆盖块。测试：新增 `unit/pwa.test.js` 11 项（失败落盘/成功清除/无冲突恢复补传/冲突弹条不覆盖/恢复推送/丢弃清除/坏草稿静默丢/SW 版本注册/iOS 引导/dismiss 记忆/standalone 不弹），注入 Node webcrypto + TextEncoder 走真实 AES-GCM 加解密；全套 jsdom 99/99 + Playwright E2E 18/18 = 117 全绿。⚠ 测试基建教训：测试中途 throw 时末尾 `dom.window.close()` 执行不到 → jsdom 实例泄漏 → 事件循环永不排空 → 整个测试进程挂死到超时（todo.test.js 曾同坑），所有用例必须 `t.after(close)` 兜底
 - **v5.34**：新增待办功能（工具栏第 8 个按钮，紧跟删除线）。设计取舍——状态只挂在**根级块的 class + `data-done` 属性**上，不插 `contenteditable=false` 元素、不重建块：① `linkifyEditor` 会拍平全部 `<span>`，任何 span 标记方案都会被它吃掉；② `ensureBlockWrapped` 只包裹裸节点、不碰已有块，根级 div/p 的 class 是唯一安全落点；③ 方框与勾由 CSS `::before`/`::after` 绘制，切换完成态只改一个属性值，**DOM 结构零变化** → 撤销栈（抓 innerHTML）、linkify、同步三者天然兼容。交互：光标停在行内点一下即变待办（无需先选中文字），点方框切换完成态，选中多行可批量转换。两个坑：① 不能依赖 `lastRange`——它只在**非折叠选区**时才被 selectionchange 更新，折叠光标下恒为 null，故 `todoBlocksInRange()` 实时读 selection、`lastRange` 仅兜底；② 判定锁定态用 `getAttribute('contenteditable')` 而非 `isContentEditable`（后者依赖渲染层，jsdom 未实现）。样式**只使用 `currentColor` + `opacity`，不引入任何新颜色值**，因此无需进入那三处反色对抗覆盖块。移动端按钮由 7 个增至 8 个，360px 屏按原尺寸会溢出（40+17+90+8×31=395px>360px），故 560px 断点下收紧为 gap 6px / 按钮 27px / 图标 16px。测试：新增 `unit/todo.test.js` 11 项（折叠光标、批量、混合态、序列化、点方框命中、点文字不误触、linkify 后存活、CSS 无新颜色、移动端不溢出），全套 jsdom 88/88 + Playwright E2E 18/18 = 106 全绿
 - **v5.33**：借壳日间正式上线——`darkShellActive()` 判定：小米/QQ 浏览器 UA + 系统深色自动启用，`localStorage['notesync_darkshell']` 可强制开（'1'）/关（'0'）。借壳日间（用户语义日间）= 内部伪装夜间（body.dark + color-scheme:dark，对手判定已深色而放行）+ html `filter:invert(1)` + `#theme-shell` 预反色日间板（滤镜一翻像素级复原），与对手行为解耦：对手开着它放行、滤镜翻色；对手关着滤镜独立翻色，两种设置显示一致。关键改动：① 手动切换改走 `themeWantsDark` 语义状态变量——借壳时 body 恒为 dark，若读 body class 会判错切换方向；② 系统深浅切换监听 `matchMedia` change 实时重判借壳开关并重应用（手动语义保持，自动语义走时间规则）；③ `MutationObserver` 重排回调同时维护 override/shell 顺序（shell 永远压轴，守卫条件防 observer 自触发死循环）；④ `mountThemeOverride` 在 shell 激活时保持 shell 尾部压轴；⑤ 借壳激活时 `setupDarkEnvHint` 提示条不再弹出（问题已被接管）；⑥ `?themedi` 的借壳按钮保留为手动演示工具。刷新/重进回时间规则、手动切换不持久化的约定不变。测试：jsdom 单测 77/77（theme.test.js 18→25 项，新增借壳激活/卸载/开关切换/禁用/顺序 7 项）、Playwright E2E 18/18 无回归，共 95 项全绿
