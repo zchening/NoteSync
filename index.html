@@ -48,7 +48,9 @@
   header button svg{width:17px;height:17px;pointer-events:none}
   #versionToast{position:fixed;top:54px;left:50%;transform:translateX(-50%);z-index:60;padding:7px 14px;font-size:12px;letter-spacing:.04em;color:var(--fg);background:var(--hover);border:1px solid var(--line);border-radius:20px;opacity:0;pointer-events:none;transition:opacity .35s;box-shadow:0 4px 16px rgba(0,0,0,.12)}
   #versionToast.show{opacity:1}
-  @media (max-width:560px){ header .brand b{display:none} }
+  /* v5.34：工具栏由 7 个增至 8 个按钮（新增待办），360px 屏按原尺寸会溢出
+     （40 padding + 17 brand + 90 gap + 8×31 = 395px > 360px），移动端整体收紧 */
+  @media (max-width:560px){ header{gap:6px;padding:12px 12px} header .brand b{display:none} header button{width:27px;height:27px} header button svg{width:16px;height:16px} }
 
   /* ── 编辑器 ─────────────────────────── */
   #editor{flex:1;width:100%;max-width:720px;margin:0 auto;border:0;outline:0;resize:none;padding:40px 28px 120px;background:transparent;color:var(--fg);font:inherit;font-size:17px;overflow-x:hidden;overflow-y:auto;word-wrap:break-word;overflow-wrap:anywhere;word-break:break-all;white-space:pre-wrap;-webkit-user-select:text;user-select:text;line-height:1.9}
@@ -58,6 +60,16 @@
   #editor a{color:var(--accent);text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(169,134,60,.35);transition:text-decoration-color .2s;word-break:break-all;overflow-wrap:break-word}
   #editor a:hover{text-decoration-color:var(--accent)}
   #editor s, #editor strike, #editor del{text-decoration:line-through;text-decoration-color:rgba(152,149,138,.7);color:var(--muted)}
+  /* 待办行（v5.34）：方框与勾全部用 currentColor + opacity 表达，不引入任何新颜色值，
+     因此无需进入 3 处反色对抗覆盖块（那三处只覆盖显式 color 声明）。
+     状态只存在根级块的 class 与 data-done 属性上，linkify 拍平 span / ensureBlockWrapped
+     包裹裸节点都不会触碰根级块的 class，结构安全。 */
+  #editor .todo{position:relative;padding-left:1.9em}
+  #editor .todo::before{content:'';position:absolute;left:.2em;top:.48em;width:1em;height:1em;box-sizing:border-box;border:1.6px solid currentColor;border-radius:3px;opacity:.45;pointer-events:none;transition:opacity .15s}
+  #editor .todo::after{content:'';position:absolute;left:.45em;top:.66em;width:.44em;height:.22em;border-left:1.8px solid currentColor;border-bottom:1.8px solid currentColor;transform:rotate(-45deg);opacity:0;pointer-events:none;transition:opacity .15s}
+  #editor .todo[data-done="1"]{text-decoration:line-through;opacity:.5}
+  #editor .todo[data-done="1"]::before{opacity:.8}
+  #editor .todo[data-done="1"]::after{opacity:.9}
   #editor p{margin:0}
   #editor::-webkit-scrollbar{width:8px}
   #editor::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
@@ -153,6 +165,7 @@
   <span class="sp"></span>
   <button type="button" id="themeBtn" title="切换夜间模式"></button>
   <button type="button" id="strikeBtn" title="删除线"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4H9a3 3 0 0 0-2.83 4"/><path d="M14 12a4 4 0 0 1 0 8H6"/><line x1="4" x2="20" y1="12" y2="12"/></svg></button>
+  <button type="button" id="todoBtn" title="待办（光标放该行即可切换）"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3.5" width="17.5" height="17.5" rx="3.5"/><path d="M7.5 12.2l3.2 3.2 5.8-6.4"/></svg></button>
   <button type="button" id="uploadBtn" title="上传图片"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg></button>
   <button type="button" id="copyBtn" title="复制到剪贴板"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect width="13" height="13" x="9" y="9" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
   <button type="button" id="exportImgBtn" title="导出为图片并复制"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg></button>
@@ -218,7 +231,7 @@ const PBKDF2_ITER = 200000;
 const FAIL_LIMIT = 10;
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '5.33';
+const APP_VERSION = '5.34';
 const BUILD_DATE = '2026-09-04';
 
 const $ = s => document.querySelector(s);
@@ -228,6 +241,7 @@ const homeEl = $('#home'), loadingEl = $('#loading');
 const uploadBtn = $('#uploadBtn'), fileInput = $('#fileInput'), uploadStatus = $('#uploadStatus');
 const themeBtn = $('#themeBtn');
 const strikeBtn = $('#strikeBtn');
+const todoBtn = $('#todoBtn');
 const copyBtn = $('#copyBtn'), exportImgBtn = $('#exportImgBtn');
 
 // 输入法组字状态：组字期间（拼音未上屏）任何对选区/caret 的程序化干预都会吞字，一律跳过。
@@ -484,6 +498,7 @@ themeBtn.addEventListener('click', () => {
 // 删除线：纯 DOM Range API 操作，完全弃用 execCommand
 let lastRange = null;
 let strikeBusy = false;
+let todoBusy = false;
 
 document.addEventListener('selectionchange', () => {
   const sel = window.getSelection();
@@ -758,14 +773,107 @@ function moveNodeOutOfS(node, sTag) {
   }
 }
 
+// ===== 待办（v5.34）=====
+// 设计取舍：状态只挂在根级块的 class + data-done 属性上，绝不重建块、不插 contenteditable=false 元素。
+// 理由一：linkifyEditor 会拍平全部 <span>（见其 straySpans 逻辑），任何 span 标记方案都会被它吃掉；
+//        而 ensureBlockWrapped 只包裹裸节点、不碰已有块，根级 div/p 的 class 是唯一安全落点。
+// 理由二：contenteditable=false 的元素会引入删除/换行/撤销的雷区（见 BUG_CHECKLIST 的血泪清单）。
+// 方框与勾由 CSS ::before/::after 绘制，切换完成态只改一个属性值，DOM 结构零变化
+// → 撤销栈（抓 innerHTML）、linkify、同步三者天然兼容。
+
+// 取选区覆盖到的根级块；折叠光标时取光标所在块。
+// 不能只依赖 lastRange：它仅在「非折叠选区」时才被 selectionchange 更新（见第 503 行），
+// 折叠光标下会拿到 null 或上一次的过期选区，导致工具栏操作静默失效。
+// 待办的定位就是「光标停在行内点一下」，所以这里实时读 selection，lastRange 仅作兜底
+// （按钮已 preventDefault，点按时编辑器选区不会被清除，实时读始终有效）。
+function todoBlocksInRange() {
+  let range = null;
+  const sel = window.getSelection();
+  if (sel && sel.rangeCount > 0) {
+    const r = sel.getRangeAt(0);
+    if (editor.contains(r.commonAncestorContainer)) range = r;
+  }
+  if (!range && lastRange) range = lastRange;
+  if (!range) return [];
+  const rootOf = n => {
+    if (!n || n === editor) return null;
+    let p = n.nodeType === 3 ? n.parentNode : n;
+    while (p && p.parentNode && p.parentNode !== editor) p = p.parentNode;
+    return p && p.parentNode === editor ? p : null;
+  };
+  const s = rootOf(range.startContainer);
+  if (!s) return [];
+  if (range.collapsed) return [s];
+  const e = rootOf(range.endContainer);
+  if (!e) return [];
+  const kids = Array.from(editor.children);
+  const i = kids.indexOf(s), j = kids.indexOf(e);
+  if (i < 0 || j < 0) return [];
+  return kids.slice(Math.min(i, j), Math.max(i, j) + 1)
+    .filter(k => k.tagName === 'DIV' || k.tagName === 'P');
+}
+
+// 工具栏按钮：光标所在行（或选区覆盖的多行）在「待办 / 普通」之间切换。
+// 与删除线不同，折叠光标下同样生效——光标停在某一行点一下即可，无需先选中文字。
+function applyTodo() {
+  if (todoBusy) return;
+  const blocks = todoBlocksInRange();
+  if (!blocks.length) return;
+  todoBusy = true;
+  setTimeout(() => { todoBusy = false; }, 300);
+  const htmlBefore = editor.innerHTML;
+  // 只要有一块还不是待办 → 整批变待办；否则整批取消（避免一次操作产生混合态）
+  const make = blocks.some(b => !b.classList.contains('todo'));
+  blocks.forEach(b => {
+    if (make) {
+      b.classList.add('todo');
+      const d = b.getAttribute('data-done');
+      if (d !== '0' && d !== '1') b.setAttribute('data-done', '0');
+    } else {
+      b.classList.remove('todo');
+      b.removeAttribute('data-done');
+    }
+  });
+  if (editor.innerHTML !== htmlBefore) editor.dispatchEvent(new Event('input'));
+}
+
+// 点击方框切换完成态。方框是 CSS 伪元素而非真实节点，故按点击横坐标判定命中：
+// 只有落在块左侧 TODO_HIT_ZONE 内才算点在方框上；行内文字区域照常进入编辑，不影响输入与选区。
+const TODO_HIT_ZONE = 30;
+function toggleTodoDone(block) {
+  if (!block || !editor.contains(block)) return;
+  const htmlBefore = editor.innerHTML;
+  block.setAttribute('data-done', block.getAttribute('data-done') === '1' ? '0' : '1');
+  if (editor.innerHTML !== htmlBefore) editor.dispatchEvent(new Event('input'));
+}
+editor.addEventListener('click', e => {
+  // 锁定态不响应。用 attribute 判断而非 editor.isContentEditable：后者依赖渲染层，
+  // jsdom 未实现（恒为 undefined），会让这条路径彻底无法被单测覆盖。
+  // 锁定/解锁本就是通过设置 contentEditable 实现的（见 unlock/lock），读回 attribute 等价且可靠。
+  if (editor.getAttribute('contenteditable') === 'false') return;
+  const el = e.target;
+  if (!el || !el.closest) return;
+  const block = el.closest('.todo');
+  if (!block || !editor.contains(block)) return;
+  const r = block.getBoundingClientRect();
+  if (e.clientX - r.left > TODO_HIT_ZONE) return;
+  e.preventDefault();
+  toggleTodoDone(block);
+});
+
 // pointerdown：最早触发的事件（Pointer Events 支持的浏览器），在 touchstart/mousedown 之前
 if (window.PointerEvent) {
   strikeBtn.addEventListener('pointerdown', e => { if (e.button !== 0) return; e.preventDefault(); applyStrike(); });
 }
+if (window.PointerEvent) {
+  todoBtn.addEventListener('pointerdown', e => { if (e.button !== 0) return; e.preventDefault(); applyTodo(); });
+}
 // touchstart：移动端真实触摸事件；preventDefault 阻止选区清除 + 阻止后续合成事件
 strikeBtn.addEventListener('touchstart', e => { e.preventDefault(); applyStrike(); }, { passive: false });
+todoBtn.addEventListener('touchstart', e => { e.preventDefault(); applyTodo(); }, { passive: false });
 // mousedown：桌面端；preventDefault 阻止焦点转移
 strikeBtn.addEventListener('mousedown', e => { if (e.button !== 0) return; e.preventDefault(); applyStrike(); });
+todoBtn.addEventListener('mousedown', e => { if (e.button !== 0) return; e.preventDefault(); applyTodo(); });
 
 const bufToB64 = b => btoa(String.fromCharCode(...new Uint8Array(b)));
 const b64ToBuf = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
