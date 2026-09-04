@@ -158,6 +158,17 @@ flowchart TD
 
 手机浏览器打开后，可"添加到主屏幕"作为独立应用使用，全屏体验、自定义 SVG 图标、离线可打开缓存页面。浏览器标签页标题显示为 "NoteSync"。每个笔记的快捷方式会打开对应笔记（而非默认笔记），Chrome 和小米浏览器均支持。
 
+解锁后底部会弹出一次安装引导（Android/桌面点「安装」一键装；iOS 需在 Safari 分享菜单选「添加到主屏幕」），点 × 后不再提醒。
+
+### 离线草稿：断网也能放心写
+
+此前断网时虽然能打字，但页面一关、未同步的内容就丢了。现在每一次编辑在加密之后、上传之前，都会先把密文草稿存进浏览器本地存储（明文不落盘）：
+
+- **保存成功** → 草稿自动清除
+- **保存失败 / 中途关页 / 杀进程** → 草稿都在，下次打开笔记自动恢复，并立即补传
+- **另一台设备已经写了新版本**（检测到服务端版本比草稿新）→ 顶部弹出提示条让你选：「恢复我的修改」或「丢弃」，绝不自动覆盖任何一方的数据
+
+
 ---
 
 ---
@@ -306,6 +317,7 @@ bash install.sh
 
 | 版本 | 日期 | 摘要 |
 |------|------|------|
+| v5.35 | 2026-09-04 | 离线草稿：断网写不丢，冲突时弹条自选；安装引导 |
 | v5.34 | 2026-09-04 | 新增待办：光标停行内点勾图标变待办，点方框切换完成态 |
 | v5.33 | 2026-09-04 | 借壳日间正式上线：反色环境自动启用，像素级复原日间 |
 | v5.32 | 2026-09-04 | 借壳日间方案：内部伪装夜间+滤镜，像素级复原日间 |
@@ -360,6 +372,7 @@ bash install.sh
 <details>
 <summary>完整更新详情（共 47 个版本）</summary>
 
+- **v5.35**：离线草稿 + 安装引导。**离线草稿**——此前"离线能写"是假的：保存失败只有 3s/6s/12s 退避重试，页面一关未同步内容直接蒸发。现在 `saveLocal` 加密成功后、上传前先把密文草稿同步落盘 `localStorage['notesync_draft_{noteId}']`（含 `ct/iv/baseV/at`，与正文同一把 AES key，明文不落盘零知识不变）：上传成功即清；失败/中途关页/杀进程草稿都在。解锁时 `applyUnlocked` 末尾走 `restoreDraftIfNeeded` 三分支：① 解不开（口令换过/损坏）→ 静默丢弃；② `baseV !== note.v`（另一台设备已保存新版本）→ 顶部冲突条「恢复我的修改 / 丢弃」，**绝不自动覆盖**；③ 无冲突 → 静默恢复进编辑器并 `scheduleDraftResave`（400ms 后补传）。关键不变量：`lastHtml` 恢复时保持为服务端内容，`saveLocal` 靠 `innerHTML !== lastHtml` 检测差异才会真正补传（补传再失败草稿重写仍在）。**安装引导**——Android/桌面 Chromium 靠 `beforeinstallprompt`（preventDefault 暂存，解锁后点「安装」一键装）；iOS 无此事件，如实提示走 Safari 分享菜单「添加到主屏幕」；`appinstalled` 收尾、`notesync_install_dismissed='1'` 记住拒绝、会话内不重弹、standalone 模式不弹、与草稿冲突条互斥不叠条、解锁后才弹不在落地页打扰。**sw.js 重写**——缓存名改由注册 URL `?v=APP_VERSION` 驱动（版本号单一来源仍是 index.html，发版即换名、activate 清旧名，根治此前 `notesync-v1` 硬编码导致发版后离线用户拿旧壳的隐患）；预缓存补 `favicon.svg`；html2canvas CDN（固定 1.4.1）纳入 cache-first（no-cors opaque response 可整体缓存），离线时「导出为图片」不再失效。提示条样式只用 `var(--*)` 主题变量跟随内部主题，借壳滤镜自动翻色，无需进反色覆盖块。测试：新增 `unit/pwa.test.js` 11 项（失败落盘/成功清除/无冲突恢复补传/冲突弹条不覆盖/恢复推送/丢弃清除/坏草稿静默丢/SW 版本注册/iOS 引导/dismiss 记忆/standalone 不弹），注入 Node webcrypto + TextEncoder 走真实 AES-GCM 加解密；全套 jsdom 99/99 + Playwright E2E 18/18 = 117 全绿。⚠ 测试基建教训：测试中途 throw 时末尾 `dom.window.close()` 执行不到 → jsdom 实例泄漏 → 事件循环永不排空 → 整个测试进程挂死到超时（todo.test.js 曾同坑），所有用例必须 `t.after(close)` 兜底
 - **v5.34**：新增待办功能（工具栏第 8 个按钮，紧跟删除线）。设计取舍——状态只挂在**根级块的 class + `data-done` 属性**上，不插 `contenteditable=false` 元素、不重建块：① `linkifyEditor` 会拍平全部 `<span>`，任何 span 标记方案都会被它吃掉；② `ensureBlockWrapped` 只包裹裸节点、不碰已有块，根级 div/p 的 class 是唯一安全落点；③ 方框与勾由 CSS `::before`/`::after` 绘制，切换完成态只改一个属性值，**DOM 结构零变化** → 撤销栈（抓 innerHTML）、linkify、同步三者天然兼容。交互：光标停在行内点一下即变待办（无需先选中文字），点方框切换完成态，选中多行可批量转换。两个坑：① 不能依赖 `lastRange`——它只在**非折叠选区**时才被 selectionchange 更新，折叠光标下恒为 null，故 `todoBlocksInRange()` 实时读 selection、`lastRange` 仅兜底；② 判定锁定态用 `getAttribute('contenteditable')` 而非 `isContentEditable`（后者依赖渲染层，jsdom 未实现）。样式**只使用 `currentColor` + `opacity`，不引入任何新颜色值**，因此无需进入那三处反色对抗覆盖块。移动端按钮由 7 个增至 8 个，360px 屏按原尺寸会溢出（40+17+90+8×31=395px>360px），故 560px 断点下收紧为 gap 6px / 按钮 27px / 图标 16px。测试：新增 `unit/todo.test.js` 11 项（折叠光标、批量、混合态、序列化、点方框命中、点文字不误触、linkify 后存活、CSS 无新颜色、移动端不溢出），全套 jsdom 88/88 + Playwright E2E 18/18 = 106 全绿
 - **v5.33**：借壳日间正式上线——`darkShellActive()` 判定：小米/QQ 浏览器 UA + 系统深色自动启用，`localStorage['notesync_darkshell']` 可强制开（'1'）/关（'0'）。借壳日间（用户语义日间）= 内部伪装夜间（body.dark + color-scheme:dark，对手判定已深色而放行）+ html `filter:invert(1)` + `#theme-shell` 预反色日间板（滤镜一翻像素级复原），与对手行为解耦：对手开着它放行、滤镜翻色；对手关着滤镜独立翻色，两种设置显示一致。关键改动：① 手动切换改走 `themeWantsDark` 语义状态变量——借壳时 body 恒为 dark，若读 body class 会判错切换方向；② 系统深浅切换监听 `matchMedia` change 实时重判借壳开关并重应用（手动语义保持，自动语义走时间规则）；③ `MutationObserver` 重排回调同时维护 override/shell 顺序（shell 永远压轴，守卫条件防 observer 自触发死循环）；④ `mountThemeOverride` 在 shell 激活时保持 shell 尾部压轴；⑤ 借壳激活时 `setupDarkEnvHint` 提示条不再弹出（问题已被接管）；⑥ `?themedi` 的借壳按钮保留为手动演示工具。刷新/重进回时间规则、手动切换不持久化的约定不变。测试：jsdom 单测 77/77（theme.test.js 18→25 项，新增借壳激活/卸载/开关切换/禁用/顺序 7 项）、Playwright E2E 18/18 无回归，共 95 项全绿
 - **v5.32**：借壳日间方案——用户在 v5.31 实验中的关键观察（「切夜间正常 → 点滤镜后页面显示日间样式」）直接破题：对手放行深色页面，而我们的滤镜能把深色翻成浅色，两者组合即完整日间模式。原理：**内部伪装夜间**（`body.dark` + `color-scheme:dark`，对手判定页面已深色而放行）+ **html 套 `filter:invert(1)`** + **`#theme-shell` 输出目标日间色的预反色值**（如目标米白底 `#FBFBF8` 预写 `#040407`，金色点缀 `#8F7126` 预写 `#708ED9`，滤镜一翻即像素级精确复原日间配色，非"近似反色"）+ **img/canvas 自带一层 `filter:invert(1)`** 与 html 层叠加双重反转（图片/二维码保持原样，canvas 白底黑码经 canvas 翻+html 翻复原）。方案的数学性质：与对手行为完全解耦——对手开着时它放行深色页面、滤镜负责翻色；对手关着时滤镜独立完成翻色，两种设置下显示一致。`?themedi` 将「滤镜抵消」实验替换为「借壳日间试一下」一键验证（再按退出），要求在浏览器夜间模式开/关两种设置下各验一次。v5.31 提示条（`setupDarkEnvHint`）保留为借壳不适用环境的兜底。测试：jsdom 单测 70/70、Playwright E2E 18/18 无回归，共 88 项全绿
