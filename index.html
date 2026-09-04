@@ -218,7 +218,7 @@ const PBKDF2_ITER = 200000;
 const FAIL_LIMIT = 10;
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '5.31';
+const APP_VERSION = '5.32';
 const BUILD_DATE = '2026-09-04';
 
 const $ = s => document.querySelector(s);
@@ -716,19 +716,57 @@ function hideUploadStatus() { uploadStatus.classList.remove('show'); }
 (function setupThemeDiag() {
   if (location.search.indexOf('themedi') === -1) return;
   const PX1 = 'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==';
-  // 白块A（fixed 定位）与白块B（relative 文档流）：同色对照，定位对手的豁免规则
-  const mkWhite = function (id, css, label) {
-    const d = document.createElement('div');
-    d.id = id;
-    d.style.cssText = css + 'width:112px;height:46px;background:#FFFFFF;color:#000;font:11px/1.3 sans-serif;' +
-      'display:flex;align-items:center;justify-content:center;text-align:center;border-radius:6px;border:1px solid #888';
-    d.textContent = label;
-    return d;
-  };
-  const probeFixed = mkWhite('tdProbeFixed', 'position:fixed;top:4px;right:8px;z-index:99997;', '白块A\n固定 FIXED');
-  const probeFlow = mkWhite('tdProbeFlow', 'position:relative;z-index:99997;margin:6px;', '白块B\n流内 FLOW');
-  document.body.appendChild(probeFixed);
-  document.body.insertBefore(probeFlow, document.body.firstChild);
+  // 借壳日间（v5.32 方案验证）：内部伪装夜间（body.dark，对手放行深色页面），
+  // html 套 filter:invert(1)，theme-shell 输出"目标日间色的预反色值"——
+  // 滤镜一翻即像素级精确复原日间配色；img/canvas 自带一层 invert 与 html 叠加 = 双重反转复原原样。
+  const SHELL_CSS = [
+    'html{filter:invert(1)!important}',
+    'body{background:#040407!important;color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important}',
+    '#editor{background:transparent!important;color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important}',
+    '#editor a{color:#708ED9!important;-webkit-text-fill-color:#708ED9!important}',
+    '#editor s,#editor strike,#editor del{color:#676A75!important;-webkit-text-fill-color:#676A75!important}',
+    'header{background:#040407!important;color:#676A75!important;border-color:#13151D!important}',
+    'header button{background:none!important;color:#676A75!important;-webkit-text-fill-color:#676A75!important}',
+    'header .brand,header .brand b{color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important}',
+    'header .brand svg{color:#708ED9!important}',
+    'footer{background:#040407!important;color:#676A75!important;border-color:#13151D!important}',
+    'footer .dot{background:#363841!important}',
+    'footer .dot.on{background:#D05799!important}',
+    '.box{background:#000000!important;color:#E3E3E5!important;border-color:#13151D!important}',
+    '.box h1{color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important}',
+    '.box p,.box .qr-lock-warn{color:#676A75!important;-webkit-text-fill-color:#676A75!important}',
+    '.box input{background:#040407!important;color:#E3E3E5!important;border-color:#13151D!important;-webkit-text-fill-color:#E3E3E5!important}',
+    '.box button:not(:disabled){background:#E3E3E5!important;color:#040407!important;-webkit-text-fill-color:#040407!important}',
+    '#landing{background:radial-gradient(ellipse 720px 480px at 50% 30%,rgba(112,142,217,.07),transparent),#040407!important;color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important}',
+    '#landing h1{color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important}',
+    '#landing .sub,#landing .hint{color:#676A75!important;-webkit-text-fill-color:#676A75!important}',
+    '#landing input{background:#000000!important;color:#E3E3E5!important;border-color:#13151D!important;-webkit-text-fill-color:#E3E3E5!important}',
+    '#landing button:not(:disabled){background:#E3E3E5!important;color:#040407!important;-webkit-text-fill-color:#040407!important}',
+    '#loading{background:#040407!important;color:#676A75!important;-webkit-text-fill-color:#676A75!important}',
+    '#versionToast{background:#040407!important;color:#E3E3E5!important;border-color:#13151D!important;-webkit-text-fill-color:#E3E3E5!important}',
+    '.upload-status{background:#E3E3E5!important;color:#040407!important;-webkit-text-fill-color:#040407!important}',
+    '.qr-warn,.box .err,#landing .warn{color:#3FBAC1!important;-webkit-text-fill-color:#3FBAC1!important}',
+    '#qrCanvas{background:#ffffff!important;border-color:#13151D!important}',
+    'img,canvas{filter:invert(1)!important}'
+  ].join('\n');
+  function mountShellOverride() {
+    let sh = document.getElementById('theme-shell');
+    if (!sh) {
+      sh = document.createElement('style');
+      sh.id = 'theme-shell';
+    }
+    sh.textContent = SHELL_CSS;
+    document.documentElement.appendChild(sh);
+    // 保证顺序：theme-override 在前，theme-shell 必须最后（同优先级 DOM 序后者胜）
+    const ov = document.getElementById('theme-override');
+    if (ov) document.documentElement.appendChild(ov);
+    document.documentElement.appendChild(sh);
+    return sh;
+  }
+  function unmountShellOverride() {
+    const sh = document.getElementById('theme-shell');
+    if (sh) sh.remove();
+  }
   const box = document.createElement('div');
   box.id = 'themeDiag';
   // 浮层背景刻意用中灰 #808080：它在像素反色前后视觉一致，保证截图在两种环境下都可读
@@ -742,29 +780,38 @@ function hideUploadStatus() { uploadStatus.classList.remove('show'); }
       '<div style="text-align:center"><div style="width:30px;height:30px;background:#000000"></div><div style="font-size:9px">纯黑<br>反色→白</div></div>' +
       '<div style="text-align:center"><img src="' + PX1 + '" style="width:30px;height:30px;background:#fff;display:block"><div style="font-size:9px">白img<br>通常还原</div></div>' +
     '</div>' +
-    '<div style="margin-bottom:8px;font-size:10px">已确认：本浏览器是"浅色检测型"强制反色（页面浅才反、深色放行），滤镜抵消无效。<br>' +
-    '<b>决定性实验</b>：页面顶部有「白块A·固定FIXED」和「白块B·流内FLOW」两个白块——<br>' +
-    '① A 白、B 黑 → 对手跳过固定层，全页容器化可救（回我"A白B黑"）<br>' +
-    '② A、B 都黑 → 对手无差别反色，页面侧无解，只能夜间+白名单（回我"都黑"）<br>' +
-    '③ 两块都白 → 当前未触发反色</div>' +
+    '<div style="margin-bottom:8px;font-size:10px">已确认：本浏览器是"浅色检测型"强制反色（页面浅才反、深色放行）。<br>' +
+    '<b>方案实验：点「借壳日间试一下」</b>——页面内部伪装成深色（对手放行不动手），再用滤镜把深色精确翻成日间配色（预写反色值，像素级复原；图片/二维码局部翻转保持原样）。<br>' +
+    '判定：按下后页面应变成标准日间（米白底、金色点缀、文字清晰）。请分别在「浏览器夜间模式开着」和「把夜间模式关掉」两种设置下各试一次，两种都正常即方案成立。<br>' +
+    '再按一次退出借壳。</div>' +
     '<div id="tdBody" style="margin:0 0 8px;white-space:pre-wrap;word-break:break-all;font:inherit"></div>' +
     '<div id="tdBtns"></div>';
   document.body.appendChild(box);
   const body = box.querySelector('#tdBody');
   const btns = box.querySelector('#tdBtns');
-  [['切日间', 'light'], ['切夜间', 'dark'], ['滤镜抵消', 'invert'], ['复制读数', 'copy'], ['关闭', 'close']].forEach(function (p) {
+  [['切日间', 'light'], ['切夜间', 'dark'], ['借壳日间试一下', 'shell'], ['复制读数', 'copy'], ['关闭', 'close']].forEach(function (p) {
     const b = document.createElement('button');
     b.textContent = p[0];
     b.style.cssText = 'margin:0 6px 0 0;padding:5px 10px;font:11px sans-serif;border:0;border-radius:6px;background:#fff;color:#000;cursor:pointer';
     b.addEventListener('click', function () {
       if (p[1] === 'light' || p[1] === 'dark') { try { window.applyTheme(p[1] === 'dark'); themeAutoMode = false; } catch (e) {} }
-      else if (p[1] === 'invert') {
+      else if (p[1] === 'shell') {
         const h = document.documentElement;
-        if (h.style.filter && h.style.filter.indexOf('invert') !== -1) { h.style.filter = ''; b.textContent = '滤镜抵消'; }
-        else { h.style.filter = 'invert(1) hue-rotate(180deg)'; b.textContent = '关闭抵消'; }
+        if (h.dataset.shell === '1') {
+          // 退出借壳：还原正常主题
+          h.dataset.shell = '';
+          unmountShellOverride();
+          try { window.applyTheme(document.body.classList.contains('dark')); } catch (e) {}
+          b.textContent = '借壳日间试一下';
+        } else {
+          h.dataset.shell = '1';
+          try { window.applyTheme(true); } catch (e) {}   // 内部夜间：对手放行
+          mountShellOverride();                            // 预反色日间板 + 滤镜
+          b.textContent = '退出借壳';
+        }
       }
       else if (p[1] === 'copy') { try { navigator.clipboard.writeText(body.textContent); } catch (e) {} b.textContent = '已复制'; }
-      else { box.remove(); probeFixed.remove(); probeFlow.remove(); return; }
+      else { box.remove(); unmountShellOverride(); return; }
       render();
     });
     btns.appendChild(b);
