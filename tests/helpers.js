@@ -8,7 +8,9 @@ const { JSDOM, VirtualConsole } = require('jsdom');
 const INDEX_PATH = path.resolve(__dirname, '..', 'index.html');
 const ZWSP = '​';
 
-function loadApp() {
+// extraBeforeParse：可选，用于在页面脚本执行前给 window 打桩（模拟不同内核能力）。
+// 例：模拟不支持 only 关键字的内核 —— loadApp(w => { w.CSS = { supports: () => false }; })
+function loadApp(extraBeforeParse) {
   let html = fs.readFileSync(INDEX_PATH, 'utf8');
   html = html.replace(/<script src="https:\/\/cdn\.jsdelivr[^"]*"><\/script>/, '');
 
@@ -25,6 +27,7 @@ function loadApp() {
     beforeParse(window) {
       window.fetch = () => Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
       window.EventSource = class { close() {} };
+      if (typeof extraBeforeParse === 'function') extraBeforeParse(window);
     },
   });
 

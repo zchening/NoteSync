@@ -9,7 +9,8 @@ const assert = require('node:assert');
 const path = require('path');
 const { spawn } = require('child_process');
 
-const NODE = 'C:/Users/zchen/.workbuddy/binaries/node/versions/22.22.2/node.exe';
+// 用当前运行时的 node 绝对路径（受管 node 版本目录会带后缀漂移，如 22.22.2 → 22.22.2-2，硬编码必挂）
+const NODE = process.execPath;
 const REPO = path.join(__dirname, '..', '..');
 const SERVER = path.join(REPO, 'server.js');
 const PORT = '8137';

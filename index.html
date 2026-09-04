@@ -3,7 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<meta name="color-scheme" content="light dark">
+<!-- 静态兜底必须声明"只支持浅色"：若 JS 尚未执行，写 light dark 等于主动告诉浏览器"我支持深色"，
+     QQ 浏览器 X5 / 小米 WebView 的强制深色引擎会据此判定页面未适配并对浅色页面反色。
+     JS 起来后 applyTheme() 会按当前主题精确改写为 only light（支持时）/ light / dark。 -->
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#FBFBF8">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="NoteSync">
@@ -18,7 +22,9 @@
     --accent:#8F7126; --accent-soft:rgba(143,113,38,.07); --ring:rgba(143,113,38,.16);
     --box-bg:#FFFFFF; --upload-bg:#1C1C1A; --hover:rgba(28,28,26,.05);
     --serif:Georgia,"Times New Roman","Songti SC","STSong",serif;
-    color-scheme:light dark; /* 两种配色都支持；运行时 applyTheme 按当前主题精确声明 only light/dark（对抗跟随系统的 Auto-Dark） */
+    /* 只声明 light，不写 light dark：写 light dark 会被国产强制深色引擎读成"页面已适配深色"，
+       进而在页面实际是浅色时判定"未适配"并反色。夜间由 body.dark 精确声明 dark。 */
+    color-scheme:light;
   }
   body.dark{
     --bg:#0F0F11; --fg:#E9E8E3; --muted:#7A786F; --line:#242428;
@@ -212,8 +218,8 @@ const PBKDF2_ITER = 200000;
 const FAIL_LIMIT = 10;
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '5.28';
-const BUILD_DATE = '2026-08-28';
+const APP_VERSION = '5.29';
+const BUILD_DATE = '2026-09-04';
 
 const $ = s => document.querySelector(s);
 const editor = $('#editor'), mask = $('#mask'), pw = $('#pw'), err = $('#err');
@@ -237,10 +243,25 @@ editor.addEventListener('compositionend', () => {
 try { document.execCommand('defaultParagraphSeparator', false, 'div'); } catch (e) {}
 
 // --- 夜间模式 ---
-// 自动切换：07:00 日间，19:00 夜间（北京时间）
-// 每次打开页面按时间自动设置；用户手动切换后本次会话不再自动切换，刷新后恢复
+// 默认按时间自动切换：07:00 日间，19:00 夜间（北京时间）。
+// 每次打开/刷新页面都按时间重置；用户手动切换后仅本次会话保持（纯内存，不写 localStorage），
+// 刷新或重新解锁一律回到时间规则 —— 这是刻意设计，用户明确要求"重进默认走时间规则"。
 const THEME_DAY_START = 7 * 60;      // 07:00 → 420 分钟
 const THEME_NIGHT_START = 19 * 60;   // 19:00 → 1140 分钟
+// 色板集中定义：JS 注入的 !important 覆盖与 meta theme-color 都从这里取值，避免与 CSS 变量漂移
+const THEME_PALETTE = {
+  dark:  { bg:'#0F0F11', fg:'#E9E8E3', muted:'#7A786F', line:'#242428', box:'#17171A' },
+  light: { bg:'#FBFBF8', fg:'#1C1C1A', muted:'#98958A', line:'#ECEAE2', box:'#FFFFFF' }
+};
+// color-scheme 降级链（v5.29 核心修复）：
+//   only light = Chrome Auto-Dark 官方豁免标记，但 only 关键字需 Chromium 98+。
+//   QQ 浏览器 X5 / 小米 WebView 内核版本滞后时会把整条声明**解析失败并丢弃**，
+//   于是回落到 :root 的 color-scheme —— v5.25 那里写的是 light dark，等于主动声明"我支持深色"，
+//   比 v5.24 的 light 更容易被强制反色（这就是"深色正常、浅色异常"的直接技术原因）。
+// 修法：① :root 与静态 meta 改回只声明 light；② 运行时探测 only 是否被支持，
+//   支持 → 写 only light（拿 Chrome 的强豁免），不支持 → 退回标准 light（v5.24 的有效值）；
+//   ③ 写回校验：若内联样式被内核丢弃（读回为空），再补一次标准 light，绝不留下"声明失败"的窗口。
+const SUPPORTS_ONLY_LIGHT = !!(window.CSS && CSS.supports && CSS.supports('color-scheme', 'only light'));
 const ICON_MOON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
 const ICON_SUN = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4.5"/><line x1="12" y1="19.5" x2="12" y2="22"/><line x1="4.2" y1="4.2" x2="6" y2="6"/><line x1="18" y1="18" x2="19.8" y2="19.8"/><line x1="2" y1="12" x2="4.5" y2="12"/><line x1="19.5" y1="12" x2="22" y2="12"/><line x1="4.2" y1="19.8" x2="6" y2="18"/><line x1="18" y1="6" x2="19.8" y2="4.2"/></svg>';
 function shouldBeDark() {
@@ -248,14 +269,67 @@ function shouldBeDark() {
   const minutes = now.getHours() * 60 + now.getMinutes();
   return minutes < THEME_DAY_START || minutes >= THEME_NIGHT_START;
 }
+// 生成 !important 覆盖样式：用于对抗"CSS 注入型"夜间模式（浏览器往页面塞一段自己的深色 CSS）。
+// 注意：对"合成器层像素反色"（QQ X5 的 filter: invert）此路不通 —— 那种在渲染层，CSS 够不着。
+function themeOverrideCss(dark) {
+  const p = dark ? THEME_PALETTE.dark : THEME_PALETTE.light;
+  const accent = dark ? '#D4B068' : '#8F7126';
+  const accentSoft = dark ? 'rgba(212,176,104,.08)' : 'rgba(143,113,38,.07)';
+  const dot = dark ? '#7A786F' : '#C9C7BE';
+  const warn = '#C0453E';
+  return `
+    body{background:${p.bg}!important;color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important}
+    #editor{background:transparent!important;color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important}
+    #editor a{color:${accent}!important;-webkit-text-fill-color:${accent}!important}
+    #editor s,#editor strike,#editor del{color:${p.muted}!important;-webkit-text-fill-color:${p.muted}!important}
+    header{background:${p.bg}!important;color:${p.muted}!important;border-color:${p.line}!important}
+    header button{background:none!important;color:${p.muted}!important;-webkit-text-fill-color:${p.muted}!important}
+    header .brand,header .brand b{color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important}
+    header .brand svg{color:${accent}!important}
+    footer{background:${p.bg}!important;color:${p.muted}!important;border-color:${p.line}!important}
+    footer .dot{background:${dot}!important}
+    footer .dot.on{background:#2FA866!important}
+    .box{background:${p.box}!important;color:${p.fg}!important;border-color:${p.line}!important}
+    .box h1{color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important}
+    .box p,.box .qr-lock-warn{color:${p.muted}!important;-webkit-text-fill-color:${p.muted}!important}
+    .box input{background:${p.bg}!important;color:${p.fg}!important;border-color:${p.line}!important;-webkit-text-fill-color:${p.fg}!important}
+    .box button:not(:disabled){background:${p.fg}!important;color:${p.bg}!important;-webkit-text-fill-color:${p.bg}!important}
+    #landing{background:radial-gradient(ellipse 720px 480px at 50% 30%,${accentSoft},transparent),${p.bg}!important;color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important}
+    #landing h1{color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important}
+    #landing .sub,#landing .hint{color:${p.muted}!important;-webkit-text-fill-color:${p.muted}!important}
+    #landing input{background:${p.box}!important;color:${p.fg}!important;border-color:${p.line}!important;-webkit-text-fill-color:${p.fg}!important}
+    #landing button:not(:disabled){background:${p.fg}!important;color:${p.bg}!important;-webkit-text-fill-color:${p.bg}!important}
+    #loading{background:${p.bg}!important;color:${p.muted}!important;-webkit-text-fill-color:${p.muted}!important}
+    #versionToast{background:${p.bg}!important;color:${p.fg}!important;border-color:${p.line}!important;-webkit-text-fill-color:${p.fg}!important}
+    .upload-status{background:${p.fg}!important;color:${p.bg}!important;-webkit-text-fill-color:${p.bg}!important}
+    .qr-warn,.box .err,#landing .warn{color:${warn}!important;-webkit-text-fill-color:${warn}!important}
+    #qrCanvas{background:#fff!important;border-color:${p.line}!important}
+  `;
+}
+// 把覆盖样式挂到 documentElement 的最后一个子节点（</body> 之后）。
+// 同优先级下 DOM 顺序后者胜 —— 浏览器注入的夜间 CSS 通常在 head 或 body 内，
+// 挂在 documentElement 末尾才能保证在它之后。v5.24/v5.25 挂在 head 里，插得比注入还早，等于白写。
+function mountThemeOverride(dark) {
+  let override = document.getElementById('theme-override');
+  if (!override) {
+    override = document.createElement('style');
+    override.id = 'theme-override';
+  }
+  override.textContent = themeOverrideCss(dark);
+  document.documentElement.appendChild(override);
+  return override;
+}
 function applyTheme(dark) {
   document.body.classList.toggle('dark', dark);
   themeBtn.innerHTML = dark ? ICON_SUN : ICON_MOON;
-  // 运行时同步 color-scheme 到 <html> 内联样式与 <meta>：日间声明 only light——Chrome 官方
-  // Auto-Dark（夜间模式"跟随系统"时的强制暗色算法）的唯一豁免标记，比 light 多一层豁免语义；
-  // 夜间声明 dark。参考 web.dev "Prevent Auto Dark Mode"。静态 meta（light dark）早于 JS 生效。
-  const scheme = dark ? 'dark' : 'only light';
-  document.documentElement.style.colorScheme = scheme;
+  const htmlEl = document.documentElement;
+  const want = dark ? 'dark' : (SUPPORTS_ONLY_LIGHT ? 'only light' : 'light');
+  // <html> 内联样式：作者样式表优先级高于 <meta>，但 <meta> 静态存在于 head、早于 JS 生效，两者都写
+  htmlEl.style.colorScheme = '';
+  htmlEl.style.colorScheme = want;
+  // 写回校验：内核不认该值时整条声明会被丢弃（读回为空）→ 补一次标准值，绝不留"声明失败"的窗口
+  if (!htmlEl.style.colorScheme) htmlEl.style.colorScheme = dark ? 'dark' : 'light';
+  const scheme = htmlEl.style.colorScheme || want;
   let csMeta = document.querySelector('meta[name="color-scheme"]');
   if (!csMeta) {
     csMeta = document.createElement('meta');
@@ -263,47 +337,36 @@ function applyTheme(dark) {
     document.head.appendChild(csMeta);
   }
   csMeta.setAttribute('content', scheme);
-  // 注入 !important CSS 覆盖小米浏览器夜间模式的 CSS 注入
-  let override = document.getElementById('theme-override');
-  if (!override) {
-    override = document.createElement('style');
-    override.id = 'theme-override';
-    document.head.appendChild(override);
+  // theme-color：部分国产引擎把它当作"页面主色"采样依据，同步过去可降低被强制反色的概率
+  let tcMeta = document.querySelector('meta[name="theme-color"]');
+  if (!tcMeta) {
+    tcMeta = document.createElement('meta');
+    tcMeta.setAttribute('name', 'theme-color');
+    document.head.appendChild(tcMeta);
   }
-  if (dark) {
-    override.textContent = `
-      body{background:#0F0F11!important;color:#E9E8E3!important}
-      #editor{background:transparent!important;color:#E9E8E3!important}
-      header{background:#0F0F11!important;color:#7A786F!important;border-color:#242428!important}
-      header button{background:none!important;color:#7A786F!important}
-      footer{background:#0F0F11!important;color:#7A786F!important;border-color:#242428!important}
-      .box{background:#17171A!important;color:#E9E8E3!important;border-color:#242428!important}
-      .box input{background:#0F0F11!important;color:#E9E8E3!important;border-color:#242428!important}
-      .box button:not(:disabled){background:#E9E8E3!important;color:#0F0F11!important}
-      #landing{background:#0F0F11!important;color:#E9E8E3!important}
-      #landing input{background:#17171A!important;color:#E9E8E3!important;border-color:#242428!important}
-      #landing button:not(:disabled){background:#E9E8E3!important;color:#0F0F11!important}
-      #loading{background:#0F0F11!important;color:#7A786F!important}
-    `;
-  } else {
-    override.textContent = `
-      body{background:#FBFBF8!important;color:#1C1C1A!important}
-      #editor{background:transparent!important;color:#1C1C1A!important}
-      header{background:#FBFBF8!important;color:#98958A!important;border-color:#ECEAE2!important}
-      header button{background:none!important;color:#98958A!important}
-      footer{background:#FBFBF8!important;color:#98958A!important;border-color:#ECEAE2!important}
-      .box{background:#FFFFFF!important;color:#1C1C1A!important;border-color:#ECEAE2!important}
-      .box input{background:#FBFBF8!important;color:#1C1C1A!important;border-color:#ECEAE2!important}
-      .box button:not(:disabled){background:#1C1C1A!important;color:#FBFBF8!important}
-      #landing{background:#FBFBF8!important;color:#1C1C1A!important}
-      #landing input{background:#FFFFFF!important;color:#1C1C1A!important;border-color:#ECEAE2!important}
-      #landing button:not(:disabled){background:#1C1C1A!important;color:#FBFBF8!important}
-      #loading{background:#FBFBF8!important;color:#98958A!important}
-    `;
-  }
+  tcMeta.setAttribute('content', (dark ? THEME_PALETTE.dark : THEME_PALETTE.light).bg);
+  mountThemeOverride(dark);
 }
 // 页面加载时按时间自动设置初始模式
 applyTheme(shouldBeDark());
+// 浏览器注入可能在 DOMContentLoaded / load 之后才发生，各补一次把 override 顶回 DOM 末尾
+['DOMContentLoaded', 'load'].forEach(function (evt) {
+  document.addEventListener(evt, function () {
+    try { mountThemeOverride(document.body.classList.contains('dark')); } catch (e) {}
+  });
+});
+// 浏览器夜间模式可能在任意时刻往 head / html 追加注入样式，发现就重新把 override 顶到末尾。
+// 守卫条件 ov.nextSibling 保证只在"不在末尾"时才移动，避免自己触发自己导致死循环。
+try {
+  if (typeof MutationObserver !== 'undefined') {
+    var themeMO = new MutationObserver(function () {
+      var ov = document.getElementById('theme-override');
+      if (ov && ov.nextSibling) document.documentElement.appendChild(ov);
+    });
+    themeMO.observe(document.head, { childList: true });
+    themeMO.observe(document.documentElement, { childList: true });
+  }
+} catch (e) {}
 // 定时自动切换（用户手动切换后本次会话停止自动）
 let themeAutoMode = true;
 setInterval(() => {
@@ -311,6 +374,7 @@ setInterval(() => {
   applyTheme(shouldBeDark());
 }, 60000);
 themeBtn.addEventListener('click', () => {
+  // 手动切换只改内存态：刷新或重新解锁后一律回到时间规则（刻意设计，不写 localStorage）
   applyTheme(!document.body.classList.contains('dark'));
   themeAutoMode = false; // 用户手动切换后本次会话不再自动
 });
@@ -632,6 +696,80 @@ function hideUploadStatus() { uploadStatus.classList.remove('show'); }
   }
   if (location.search.indexOf('about') !== -1) showVersionToast(true);
   console.log('%cNoteSync v' + APP_VERSION + ' · 构建 ' + BUILD_DATE, 'color:#c0392b;font-weight:bold');
+})();
+
+// 主题取证浮层（?themedi 开启）。用于真机判定国产浏览器"网页夜间模式"到底是哪一层实现的：
+//   A. CSS 注入型 —— 浏览器往页面塞一段自己的深色 CSS。页面侧 !important 覆盖能拦住。
+//   B. 合成器像素反色型 —— X5 在 Compositor 线程对整个页面 filter: invert(1) hue-rotate(180deg)，
+//      渲染层变换，作者 CSS 的 !important 根本够不着，只能换策略（自反色抵消 / 跟随系统）。
+// 判定照妖镜：**中灰 #808080** 在 invert 前后视觉不变（invert(128)=127）。
+//   中灰不变 + 纯白变黑 → 像素反色型；中灰自身也变色 → CSS 注入型。
+// 纯取证，不开时零开销；开启后只读取数，不碰笔记内容。
+(function setupThemeDiag() {
+  if (location.search.indexOf('themedi') === -1) return;
+  const PX1 = 'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==';
+  const box = document.createElement('div');
+  box.id = 'themeDiag';
+  // 浮层背景刻意用中灰 #808080：它在像素反色前后视觉一致，保证截图在两种环境下都可读
+  box.style.cssText = 'position:fixed;left:8px;top:8px;z-index:99999;max-width:92vw;max-height:86vh;' +
+    'overflow:auto;padding:10px;border-radius:8px;background:#808080;color:#fff;' +
+    'font:11px/1.55 ui-monospace,Consolas,monospace;white-space:pre-wrap;word-break:break-all';
+  box.innerHTML =
+    '<div style="display:flex;gap:8px;margin-bottom:6px;align-items:flex-end">' +
+      '<div style="text-align:center"><div style="width:30px;height:30px;background:#808080"></div><div style="font-size:9px">中灰<br>反色不变</div></div>' +
+      '<div style="text-align:center"><div style="width:30px;height:30px;background:#FFFFFF"></div><div style="font-size:9px">纯白<br>反色→黑</div></div>' +
+      '<div style="text-align:center"><div style="width:30px;height:30px;background:#000000"></div><div style="font-size:9px">纯黑<br>反色→白</div></div>' +
+      '<div style="text-align:center"><img src="' + PX1 + '" style="width:30px;height:30px;background:#fff;display:block"><div style="font-size:9px">白img<br>通常还原</div></div>' +
+    '</div>' +
+    '<div style="margin-bottom:8px;font-size:10px">判据：中灰不变+纯白变黑 = 像素反色型（CSS 无解）；中灰自身也变色 = CSS 注入型（覆盖可拦）</div>' +
+    '<pre id="tdBody" style="margin:0 0 8px;white-space:pre-wrap;word-break:break-all;font:inherit"></pre>' +
+    '<div id="tdBtns"></div>';
+  document.body.appendChild(box);
+  const body = box.querySelector('#tdBody');
+  const btns = box.querySelector('#tdBtns');
+  [['切日间', 'light'], ['切夜间', 'dark'], ['复制读数', 'copy'], ['关闭', 'close']].forEach(function (p) {
+    const b = document.createElement('button');
+    b.textContent = p[0];
+    b.style.cssText = 'margin:0 6px 0 0;padding:5px 10px;font:11px sans-serif;border:0;border-radius:6px;background:#fff;color:#000;cursor:pointer';
+    b.addEventListener('click', function () {
+      if (p[1] === 'light' || p[1] === 'dark') { try { window.applyTheme(p[1] === 'dark'); themeAutoMode = false; } catch (e) {} }
+      else if (p[1] === 'copy') { try { navigator.clipboard.writeText(body.textContent); } catch (e) {} b.textContent = '已复制'; }
+      else { box.remove(); return; }
+      render();
+    });
+    btns.appendChild(b);
+  });
+  const cut = (s, n) => (s.length > n ? s.slice(0, n) + '…' : s);
+  function snapshot() {
+    const cs = getComputedStyle(document.body);
+    const hcs = getComputedStyle(document.documentElement);
+    const dark = document.body.classList.contains('dark');
+    const mq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+    const csMeta = document.querySelector('meta[name="color-scheme"]');
+    const tcMeta = document.querySelector('meta[name="theme-color"]');
+    const L = [
+      'v' + APP_VERSION + '  当前主题 = ' + (dark ? '夜间 dark' : '日间 light'),
+      '系统深色 prefers-color-scheme:dark = ' + (mq ? mq.matches : 'n/a'),
+      "CSS.supports('color-scheme','only light') = " + SUPPORTS_ONLY_LIGHT,
+      'html.style.colorScheme(读回) = ' + (document.documentElement.style.colorScheme || '(空=声明被内核丢弃)'),
+      'computed(html).colorScheme = ' + (hcs.colorScheme || '-'),
+      'meta[color-scheme] = ' + (csMeta ? csMeta.getAttribute('content') : '(无)'),
+      'meta[theme-color]  = ' + (tcMeta ? tcMeta.getAttribute('content') : '(无)'),
+      '--- 关键判据 ---',
+      'computed(body).background = ' + cs.backgroundColor + (dark ? '   期望 rgb(15, 15, 17)' : '   期望 rgb(251, 251, 248)'),
+      'computed(body).color      = ' + cs.color,
+      'UA = ' + cut(navigator.userAgent, 150),
+      '--- 页面内 style/link 指纹（抓浏览器注入）---'
+    ];
+    document.querySelectorAll('style,link[rel="stylesheet"]').forEach(function (n, i) {
+      const txt = (n.textContent || n.getAttribute('href') || '').replace(/\s+/g, ' ').trim();
+      L.push('#' + i + ' ' + (n.id ? 'id=' + n.id : n.nodeName) + ' len=' + txt.length + ' | ' + cut(txt, 90));
+    });
+    return L;
+  }
+  function render() { body.textContent = snapshot().join('\n'); }
+  render();
+  setInterval(render, 800);
 })();
 
 // 光标诊断浮层（?diag 开启）。用于在真实浏览器里定位 caret 类问题——

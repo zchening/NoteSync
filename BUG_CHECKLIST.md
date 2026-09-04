@@ -27,7 +27,7 @@
 | A | 删除线 | 7 | 修改 strikeBtn / addStrikeToRange / removeStrikeFromRange / rangeIntersectsNode / contentHasS / linkifyEditor |
 | B | 导出图片 | 7 | 修改 exportImage / exportImgBtn 事件 / html2canvas 调用 / 临时 div 渲染 |
 | C | 缓存与图标 | 4 | 修改 favicon / manifest.json / Cache-Control 头 / icon-maskable 生成与路由 |
-| D | PWA 与移动端 | 3 | 修改 manifest.json / 触摸事件 / 夜间模式 CSS |
+| D | PWA 与移动端 | 6 | 修改 manifest.json / 触摸事件 / 夜间模式 CSS / applyTheme / THEME_PALETTE / mountThemeOverride / color-scheme 声明（:root 或 meta）/ theme-override 挂载点 |
 | E | 选区与同步 | 4 | 修改 editor 输入/粘贴处理 / linkifyEditor / saveSelectionOffsets·restoreSelectionOffsets / cleanupLeadingTrailingBreaks / insertNodeAtCaret / 删除逻辑 / poll 远端合并 / selectionchange 钳制 |
 | F | 光标与编辑 | 13 | 修改 Enter 处理 / cleanupLeadingTrailingBreaks / caretInsideNode / linkifyEditor 块内偏移 / ensureBlockWrapped / ensureCaret / repaintCaret / relocateCaretToVisible / isComposing |
 | G | 撤销栈 | 1 | 修改 自建撤销栈 / captureState / applyState / recordIfChanged / syncCurrentState / undo / redo / keydown 拦截 Ctrl+Z/Y |
@@ -326,7 +326,31 @@
   - [ ] Chrome 上日/夜切换正常（回归）
   - [ ] 07:00/19:00 自动切换不受影响（回归）
   - [ ] unit/theme.test.js 4 断言（dark / only light / meta 同步 / 初始一致）全过
+  - [x] **v5.29 复核：此条已应验**——国产内核确实无视 `only light`。且更糟：`only` 关键字需 Chromium 98+，X5/小米 WebView 版本滞后会把整条声明**解析失败并丢弃**，于是回落到本版同时改成的 `:root{color-scheme:light dark}`——那等于主动声明「我支持深色」，**比 v5.24 的 `light` 更容易被反色**。这是 v5.25 引入的回归，也是「深色正常、浅色异常」的直接技术原因。修复见 D6
   - [ ] 若实测仍无效：属内核魔改无视 `only light`，转方案 B（浏览器夜间模式关"跟随系统"或加站点白名单），页面侧无解
+
+### D6 | 系统深色 + 国产内核：切日间被强制反色（深色正常 / 浅色异常）
+- **版本**: v5.29（2026-09-04 发版）
+- **现象**: 小米手机**系统浅色**时全浏览器正常；**系统深色**时 Chrome 日/夜切换正常，但 **QQ 浏览器与小米自带浏览器「夜间正常、日间异常」**——手动切到日间，页面被强制反色
+- **根因**（四条，逐层递进）:
+  1. **架构脱钩**：`shouldBeDark()` 只看本地时间（07:00/19:00），全文无 `prefers-color-scheme`；而浏览器的「网页夜间模式=跟随系统」看的是**系统**。系统深色 + 页面按时间恰是浅色时，引擎采样到「系统要深色、页面偏浅色」→ 判定未适配 → 反色。用户 19:11 实测：默认夜间（深色）→ 放行＝「深色正常」；手动切日间 → 浅色 → 被反色＝「浅色异常」。系统浅色时引擎压根不启用深色化 → 全正常
+  2. **v5.25 回归（直接技术原因）**：`only light` 在旧内核上整条被丢弃 → 回落 `:root{color-scheme:light dark}` → 主动声明支持深色 → 更会被反色。夜间态写 `dark` 谁都认 → **只坏浅色**
+  3. **对手分三层**：① CSS 注入型（浏览器塞深色 CSS，`!important` 可拦）② 样式计算层 ③ **合成器层 `filter: invert(1) hue-rotate(180deg)` 像素无条件反色（X5 采用，对 img 二次反转还原）——渲染层变换，作者 CSS 完全够不着**
+  4. **挂载顺序**：`#theme-override` 挂在 `head` 里，插得比浏览器注入还早，同优先级下 DOM 顺序后者胜 → `!important` 白写
+- **修复**:
+  - **降级链**：新增 `SUPPORTS_ONLY_LIGHT = CSS.supports('color-scheme','only light')`；支持 → 写 `only light`（拿 Chrome 官方强豁免），不支持 → 退回标准 `light`；**写回校验**：`if (!htmlEl.style.colorScheme)` 补写标准值，堵死「嘴上支持、实际丢弃」的内核
+  - **静态兜底**：`head` 的 `meta[name=color-scheme]` 与 `:root` 的 `color-scheme` 由 `light dark` 改回 **`light`**；新增 `meta[name=theme-color]`（部分国产引擎据此采样页面主色）
+  - **覆盖加固**：`mountThemeOverride()` 改挂 `documentElement.appendChild`（DOM 最末位）；`DOMContentLoaded`/`load` 各补挂；`MutationObserver` 监听 `head`/`documentElement` childList 并把 override 顶回末尾（守卫 `ov.nextSibling` 防自触发死循环）；覆盖规则补 `-webkit-text-fill-color`、删除线颜色锁定、`#landing` 径向渐变保留
+  - **取证**：新增 `?themedi` 浮层（`setupThemeDiag`）
+- **主题策略刻意不变**：默认按时间；手动切换仅当前会话内存态、**不写 localStorage**；刷新/重新解锁回时间规则（用户明确要求）
+- **关联文件**: index.html → `THEME_PALETTE` / `SUPPORTS_ONLY_LIGHT` / `themeOverrideCss()` / `mountThemeOverride()` / `applyTheme()` / `setupThemeDiag()`
+- **核对要点**:
+  - [ ] 真机 8 组合矩阵：Chrome / QQ / 小米 × 系统深 / 浅 × 日 / 夜，日间必须显示成日间
+  - [ ] `?themedi` 真机截图取证，判定是 CSS 注入型还是合成器像素反色型（中灰 #808080 探针不变 = 像素反色）
+  - [ ] 刷新后主题回到时间规则；手动切换不持久化
+  - [ ] 删除线、落地页渐变、解锁弹窗毛玻璃视觉无回归
+  - [ ] unit/theme.test.js 18 断言全过（含旧内核降级、写回校验、MutationObserver 顶回）
+- **已知边界**: 若取证确认是 X5 合成器像素反色型，页面侧 CSS 无解。可选「自反色抵消」（给 `<html>` 自套 `filter: invert(1) hue-rotate(180deg)`，图片再反转还原），但 `filter` 会创建新包含块，破坏 `position:fixed`（顶栏/上传气泡/弹窗遮罩）与 `backdrop-filter`（解锁弹窗毛玻璃），需逐项真机验收——**待取证后再决定**。兜底：引导用户在浏览器设置里把本站加入夜间模式白名单
 
 ---
 
