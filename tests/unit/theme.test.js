@@ -197,3 +197,76 @@ test('手动切换为纯内存态：不写 localStorage / sessionStorage', () =>
   assert.ok(fn, '应能取到 applyTheme 函数体');
   assert.ok(!/localStorage|sessionStorage/.test(fn[1]), 'applyTheme 内不得持久化，刷新须回到时间规则');
 });
+
+// ── 借壳日间（v5.33）：内部伪装夜间 + 预反色板 + invert 滤镜 ────────────────
+test('借壳源断言：darkShellActive / mountShellOverride / theme-shell 存在，切换走状态变量', () => {
+  assert.ok(/function darkShellActive\(\)/.test(SRC), '应有 darkShellActive 判定函数');
+  assert.ok(/function mountShellOverride\(\)/.test(SRC), '应有 mountShellOverride');
+  assert.ok(/notesync_darkshell/.test(SRC), '应有 localStorage 校准开关');
+  assert.ok(/themeWantsDark = !themeWantsDark/.test(SRC), '手动切换必须走语义状态变量（借壳时 body 恒为 dark，读 class 会判错方向）');
+});
+
+test('借壳激活（localStorage=1）：语义日间 → 内部夜间 + theme-shell 预反色板 + color-scheme dark', () => {
+  const w = openApp(stubModern);
+  w.localStorage.setItem('notesync_darkshell', '1');
+  w.applyTheme(false); // 用户语义：日间
+  assert.strictEqual(w.document.body.classList.contains('dark'), true, '内部必须伪装夜间（body.dark），让对手放行深色页面');
+  const sh = w.document.getElementById('theme-shell');
+  assert.ok(sh, '借壳日间应挂载 theme-shell');
+  assert.ok(sh.textContent.includes('html{filter:invert(1)'), 'shell 应给 html 套 invert 滤镜');
+  assert.ok(sh.textContent.includes('background:#040407'), '预反色板应写米白底 #FBFBF8 的反色值 #040407');
+  assert.ok(sh.textContent.includes('img,canvas{filter:invert(1)'), '图片/二维码应有自身 invert 以双重反转复原');
+  assert.strictEqual(schemeOf(w), 'dark', '内部 color-scheme 应声明 dark（伪装一致）');
+  assert.strictEqual(metaContent(w, 'color-scheme'), 'dark');
+});
+
+test('借壳激活：语义夜间 → 内部夜间但无 shell（无滤镜，显示真实夜间）', () => {
+  const w = openApp(stubModern);
+  w.localStorage.setItem('notesync_darkshell', '1');
+  w.applyTheme(true); // 用户语义：夜间
+  assert.strictEqual(w.document.body.classList.contains('dark'), true);
+  assert.strictEqual(w.document.getElementById('theme-shell'), null, '夜间不得挂 shell（无滤镜）');
+  assert.strictEqual(schemeOf(w), 'dark');
+});
+
+test('借壳日间：theme-shell 必须压在 theme-override 之后（DOM 末位）', () => {
+  const w = openApp(stubModern);
+  w.localStorage.setItem('notesync_darkshell', '1');
+  w.applyTheme(false);
+  const html = w.document.documentElement;
+  const ov = w.document.getElementById('theme-override');
+  const sh = w.document.getElementById('theme-shell');
+  assert.strictEqual(html.lastElementChild, sh, 'shell 必须是最后一个元素子节点');
+  assert.strictEqual(ov.nextElementSibling, sh, 'override 应紧邻 shell 之前');
+});
+
+test('借壳开关切换：日/夜反复切换 shell 状态正确且不堆积', () => {
+  const w = openApp(stubModern);
+  w.localStorage.setItem('notesync_darkshell', '1');
+  w.applyTheme(false);
+  assert.ok(w.document.getElementById('theme-shell'), '日间应有 shell');
+  w.applyTheme(true);
+  assert.strictEqual(w.document.getElementById('theme-shell'), null, '夜间应卸载 shell');
+  w.applyTheme(false);
+  w.applyTheme(true);
+  assert.strictEqual(w.document.querySelectorAll('#theme-shell').length, 0, '反复切换不得堆积 shell 元素（末态为夜间，应为 0）');
+  assert.strictEqual(w.document.querySelectorAll('#theme-override').length, 1, 'override 也不得堆积');
+  w.applyTheme(false);
+  assert.strictEqual(w.document.querySelectorAll('#theme-shell').length, 1, '再切回日间 shell 恢复且唯一');
+});
+
+test('借壳禁用（localStorage=0）：语义日间走正常路径（only light，无 shell）', () => {
+  const w = openApp(stubModern);
+  w.localStorage.setItem('notesync_darkshell', '0');
+  w.applyTheme(false);
+  assert.strictEqual(w.document.getElementById('theme-shell'), null, '禁用借壳时不得挂 shell');
+  assert.strictEqual(schemeOf(w), 'only light', '禁用借壳时恢复标准日间声明');
+  assert.strictEqual(w.document.body.classList.contains('dark'), false, '内部不应伪装夜间');
+});
+
+test('无校准 + 非高风险 UA（jsdom 默认）：darkShellActive 判定为关，行为与 v5.29 一致', () => {
+  const w = openApp(stubModern);
+  w.applyTheme(false);
+  assert.strictEqual(w.document.getElementById('theme-shell'), null);
+  assert.strictEqual(schemeOf(w), 'only light');
+});

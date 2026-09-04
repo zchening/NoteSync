@@ -218,7 +218,7 @@ const PBKDF2_ITER = 200000;
 const FAIL_LIMIT = 10;
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '5.32';
+const APP_VERSION = '5.33';
 const BUILD_DATE = '2026-09-04';
 
 const $ = s => document.querySelector(s);
@@ -317,18 +317,94 @@ function mountThemeOverride(dark) {
   }
   override.textContent = themeOverrideCss(dark);
   document.documentElement.appendChild(override);
+  // 借壳激活时 theme-shell 必须压轴（其规则要覆盖 override）
+  const sh = document.getElementById('theme-shell');
+  if (sh) document.documentElement.appendChild(sh);
   return override;
 }
+// ── 借壳日间（v5.33）────────────────────────────────────────────────────────
+// 背景：小米/QQ 浏览器的"网页夜间"在渲染层对浅色页面强制反色、无视 color-scheme 豁免
+//（BUG_CHECKLIST D6 全程取证）。用户真机实验确认对手是"浅色检测型"：页面浅才反、深色放行，
+// 且「内部夜间 + html 滤镜」会显示成日间样式 —— 借壳方案由此而来：
+//   ① 内部伪装夜间：body.dark + color-scheme:dark，对手判定页面已深色而放行；
+//   ② html 套 filter:invert(1)；
+//   ③ theme-shell 输出"目标日间色的预反色值"（米白底 #FBFBF8 预写 #040407、金色 #8F7126 预写 #708ED9），
+//     滤镜一翻即像素级精确复原日间配色；
+//   ④ img/canvas 自带一层 invert 与 html 层叠加 = 双重反转，图片/二维码保持原样。
+// 与对手行为完全解耦：对手开着 → 放行深色页面、滤镜负责翻色；对手关着 → 滤镜独立翻色。
+// localStorage['notesync_darkshell']：'1' 强制启用（测试/高级用途），'0' 强制禁用；缺省按 UA+系统深色自动判定。
+const DARK_SHELL_KEY = 'notesync_darkshell';
+function darkShellActive() {
+  let pref = null;
+  try { pref = window.localStorage.getItem(DARK_SHELL_KEY); } catch (e) {}
+  if (pref === '0') return false;                    // 手动禁用
+  if (pref === '1') return true;                     // 手动强制启用
+  const ua = navigator.userAgent;
+  if (!/MiuiBrowser|XiaoMi/i.test(ua) && !/MQQBrowser|QQBrowser/i.test(ua)) return false;
+  if (!window.matchMedia || !window.matchMedia('(prefers-color-scheme: dark)').matches) return false;
+  return true;                                       // 高风险 UA + 系统深色 → 启用
+}
+const SHELL_CSS = [
+  'html{filter:invert(1)!important}',
+  'body{background:#040407!important;color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important}',
+  '#editor{background:transparent!important;color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important}',
+  '#editor a{color:#708ED9!important;-webkit-text-fill-color:#708ED9!important}',
+  '#editor s,#editor strike,#editor del{color:#676A75!important;-webkit-text-fill-color:#676A75!important}',
+  'header{background:#040407!important;color:#676A75!important;border-color:#13151D!important}',
+  'header button{background:none!important;color:#676A75!important;-webkit-text-fill-color:#676A75!important}',
+  'header .brand,header .brand b{color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important}',
+  'header .brand svg{color:#708ED9!important}',
+  'footer{background:#040407!important;color:#676A75!important;border-color:#13151D!important}',
+  'footer .dot{background:#363841!important}',
+  'footer .dot.on{background:#D05799!important}',
+  '.box{background:#000000!important;color:#E3E3E5!important;border-color:#13151D!important}',
+  '.box h1{color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important}',
+  '.box p,.box .qr-lock-warn{color:#676A75!important;-webkit-text-fill-color:#676A75!important}',
+  '.box input{background:#040407!important;color:#E3E3E5!important;border-color:#13151D!important;-webkit-text-fill-color:#E3E3E5!important}',
+  '.box button:not(:disabled){background:#E3E3E5!important;color:#040407!important;-webkit-text-fill-color:#040407!important}',
+  '#landing{background:radial-gradient(ellipse 720px 480px at 50% 30%,rgba(112,142,217,.07),transparent),#040407!important;color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important}',
+  '#landing h1{color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important}',
+  '#landing .sub,#landing .hint{color:#676A75!important;-webkit-text-fill-color:#676A75!important}',
+  '#landing input{background:#000000!important;color:#E3E3E5!important;border-color:#13151D!important;-webkit-text-fill-color:#E3E3E5!important}',
+  '#landing button:not(:disabled){background:#E3E3E5!important;color:#040407!important;-webkit-text-fill-color:#040407!important}',
+  '#loading{background:#040407!important;color:#676A75!important;-webkit-text-fill-color:#676A75!important}',
+  '#versionToast{background:#040407!important;color:#E3E3E5!important;border-color:#13151D!important;-webkit-text-fill-color:#E3E3E5!important}',
+  '.upload-status{background:#E3E3E5!important;color:#040407!important;-webkit-text-fill-color:#040407!important}',
+  '.qr-warn,.box .err,#landing .warn{color:#3FBAC1!important;-webkit-text-fill-color:#3FBAC1!important}',
+  '#qrCanvas{background:#ffffff!important;border-color:#13151D!important}',
+  'img,canvas{filter:invert(1)!important}'
+].join('\n');
+function mountShellOverride() {
+  let sh = document.getElementById('theme-shell');
+  if (!sh) {
+    sh = document.createElement('style');
+    sh.id = 'theme-shell';
+  }
+  sh.textContent = SHELL_CSS;
+  document.documentElement.appendChild(sh);
+  const ov = document.getElementById('theme-override');
+  if (ov) document.documentElement.appendChild(ov);
+  document.documentElement.appendChild(sh);   // shell 压轴
+  return sh;
+}
+function unmountShellOverride() {
+  const sh = document.getElementById('theme-shell');
+  if (sh) sh.remove();
+}
 function applyTheme(dark) {
-  document.body.classList.toggle('dark', dark);
-  themeBtn.innerHTML = dark ? ICON_SUN : ICON_MOON;
+  const shell = darkShellActive();          // 反色环境（小米/QQ + 系统深色，或手动开关）
+  const internalDark = dark || shell;       // 借壳日间：内部也是夜间（骗对手放行）
+  document.body.classList.toggle('dark', internalDark);
+  themeBtn.innerHTML = dark ? ICON_SUN : ICON_MOON;   // 图标/语义按用户意图
   const htmlEl = document.documentElement;
-  const want = dark ? 'dark' : (SUPPORTS_ONLY_LIGHT ? 'only light' : 'light');
+  // color-scheme：内部始终与 body 一致 —— 夜间和借壳日间都声明 dark（让对手放行），
+  // 只有非借壳的真正日间才声明 only light / light
+  const want = internalDark ? 'dark' : (SUPPORTS_ONLY_LIGHT ? 'only light' : 'light');
   // <html> 内联样式：作者样式表优先级高于 <meta>，但 <meta> 静态存在于 head、早于 JS 生效，两者都写
   htmlEl.style.colorScheme = '';
   htmlEl.style.colorScheme = want;
   // 写回校验：内核不认该值时整条声明会被丢弃（读回为空）→ 补一次标准值，绝不留"声明失败"的窗口
-  if (!htmlEl.style.colorScheme) htmlEl.style.colorScheme = dark ? 'dark' : 'light';
+  if (!htmlEl.style.colorScheme) htmlEl.style.colorScheme = internalDark ? 'dark' : 'light';
   const scheme = htmlEl.style.colorScheme || want;
   let csMeta = document.querySelector('meta[name="color-scheme"]');
   if (!csMeta) {
@@ -338,17 +414,26 @@ function applyTheme(dark) {
   }
   csMeta.setAttribute('content', scheme);
   // theme-color：部分国产引擎把它当作"页面主色"采样依据，同步过去可降低被强制反色的概率
+  //（借壳日间写内部深色，保持伪装一致）
   let tcMeta = document.querySelector('meta[name="theme-color"]');
   if (!tcMeta) {
     tcMeta = document.createElement('meta');
     tcMeta.setAttribute('name', 'theme-color');
     document.head.appendChild(tcMeta);
   }
-  tcMeta.setAttribute('content', (dark ? THEME_PALETTE.dark : THEME_PALETTE.light).bg);
-  mountThemeOverride(dark);
+  tcMeta.setAttribute('content', (internalDark ? THEME_PALETTE.dark : THEME_PALETTE.light).bg);
+  mountThemeOverride(internalDark);
+  if (shell && !dark) {
+    mountShellOverride();    // 借壳日间：预反色日间板 + invert 滤镜，压轴生效
+  } else {
+    unmountShellOverride();  // 用户语义夜间 / 非借壳日间：无滤镜
+  }
 }
 // 页面加载时按时间自动设置初始模式
-applyTheme(shouldBeDark());
+// themeWantsDark = 用户语义（想要日间还是夜间）。借壳日间时 body 内部也是 dark，
+// 所以切换绝不能读 body class，必须走这个状态变量。
+let themeWantsDark = shouldBeDark();
+applyTheme(themeWantsDark);
 // 浏览器注入可能在 DOMContentLoaded / load 之后才发生，各补一次把 override 顶回 DOM 末尾
 ['DOMContentLoaded', 'load'].forEach(function (evt) {
   document.addEventListener(evt, function () {
@@ -356,27 +441,44 @@ applyTheme(shouldBeDark());
   });
 });
 // 浏览器夜间模式可能在任意时刻往 head / html 追加注入样式，发现就重新把 override 顶到末尾。
-// 守卫条件 ov.nextSibling 保证只在"不在末尾"时才移动，避免自己触发自己导致死循环。
+// theme-shell（借壳预反色板）必须压在 override 之后，重排时一起处理。
+// 守卫条件避免重复移动已在正确位置的节点，防止 observer 自触发死循环。
 try {
   if (typeof MutationObserver !== 'undefined') {
     var themeMO = new MutationObserver(function () {
       var ov = document.getElementById('theme-override');
-      if (ov && ov.nextSibling) document.documentElement.appendChild(ov);
+      var sh = document.getElementById('theme-shell');
+      if (ov && ov.nextSibling && ov.nextSibling !== sh) {
+        document.documentElement.appendChild(ov);
+        if (sh) document.documentElement.appendChild(sh);
+      }
     });
     themeMO.observe(document.head, { childList: true });
     themeMO.observe(document.documentElement, { childList: true });
+  }
+} catch (e) {}
+// 系统深浅切换：借壳开关可能翻转，重新应用当前语义（手动语义保持，自动语义走时间规则）
+try {
+  var mqThemeDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)');
+  if (mqThemeDark && mqThemeDark.addEventListener) {
+    mqThemeDark.addEventListener('change', function () {
+      if (themeAutoMode) themeWantsDark = shouldBeDark();
+      applyTheme(themeWantsDark);
+    });
   }
 } catch (e) {}
 // 定时自动切换（用户手动切换后本次会话停止自动）
 let themeAutoMode = true;
 setInterval(() => {
   if (!themeAutoMode) return;
-  applyTheme(shouldBeDark());
+  themeWantsDark = shouldBeDark();
+  applyTheme(themeWantsDark);
 }, 60000);
 themeBtn.addEventListener('click', () => {
   // 手动切换只改内存态：刷新或重新解锁后一律回到时间规则（刻意设计，不写 localStorage）
-  applyTheme(!document.body.classList.contains('dark'));
+  themeWantsDark = !themeWantsDark;
   themeAutoMode = false; // 用户手动切换后本次会话不再自动
+  applyTheme(themeWantsDark);
 });
 
 // 删除线：纯 DOM Range API 操作，完全弃用 execCommand
@@ -716,57 +818,8 @@ function hideUploadStatus() { uploadStatus.classList.remove('show'); }
 (function setupThemeDiag() {
   if (location.search.indexOf('themedi') === -1) return;
   const PX1 = 'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==';
-  // 借壳日间（v5.32 方案验证）：内部伪装夜间（body.dark，对手放行深色页面），
-  // html 套 filter:invert(1)，theme-shell 输出"目标日间色的预反色值"——
-  // 滤镜一翻即像素级精确复原日间配色；img/canvas 自带一层 invert 与 html 叠加 = 双重反转复原原样。
-  const SHELL_CSS = [
-    'html{filter:invert(1)!important}',
-    'body{background:#040407!important;color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important}',
-    '#editor{background:transparent!important;color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important}',
-    '#editor a{color:#708ED9!important;-webkit-text-fill-color:#708ED9!important}',
-    '#editor s,#editor strike,#editor del{color:#676A75!important;-webkit-text-fill-color:#676A75!important}',
-    'header{background:#040407!important;color:#676A75!important;border-color:#13151D!important}',
-    'header button{background:none!important;color:#676A75!important;-webkit-text-fill-color:#676A75!important}',
-    'header .brand,header .brand b{color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important}',
-    'header .brand svg{color:#708ED9!important}',
-    'footer{background:#040407!important;color:#676A75!important;border-color:#13151D!important}',
-    'footer .dot{background:#363841!important}',
-    'footer .dot.on{background:#D05799!important}',
-    '.box{background:#000000!important;color:#E3E3E5!important;border-color:#13151D!important}',
-    '.box h1{color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important}',
-    '.box p,.box .qr-lock-warn{color:#676A75!important;-webkit-text-fill-color:#676A75!important}',
-    '.box input{background:#040407!important;color:#E3E3E5!important;border-color:#13151D!important;-webkit-text-fill-color:#E3E3E5!important}',
-    '.box button:not(:disabled){background:#E3E3E5!important;color:#040407!important;-webkit-text-fill-color:#040407!important}',
-    '#landing{background:radial-gradient(ellipse 720px 480px at 50% 30%,rgba(112,142,217,.07),transparent),#040407!important;color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important}',
-    '#landing h1{color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important}',
-    '#landing .sub,#landing .hint{color:#676A75!important;-webkit-text-fill-color:#676A75!important}',
-    '#landing input{background:#000000!important;color:#E3E3E5!important;border-color:#13151D!important;-webkit-text-fill-color:#E3E3E5!important}',
-    '#landing button:not(:disabled){background:#E3E3E5!important;color:#040407!important;-webkit-text-fill-color:#040407!important}',
-    '#loading{background:#040407!important;color:#676A75!important;-webkit-text-fill-color:#676A75!important}',
-    '#versionToast{background:#040407!important;color:#E3E3E5!important;border-color:#13151D!important;-webkit-text-fill-color:#E3E3E5!important}',
-    '.upload-status{background:#E3E3E5!important;color:#040407!important;-webkit-text-fill-color:#040407!important}',
-    '.qr-warn,.box .err,#landing .warn{color:#3FBAC1!important;-webkit-text-fill-color:#3FBAC1!important}',
-    '#qrCanvas{background:#ffffff!important;border-color:#13151D!important}',
-    'img,canvas{filter:invert(1)!important}'
-  ].join('\n');
-  function mountShellOverride() {
-    let sh = document.getElementById('theme-shell');
-    if (!sh) {
-      sh = document.createElement('style');
-      sh.id = 'theme-shell';
-    }
-    sh.textContent = SHELL_CSS;
-    document.documentElement.appendChild(sh);
-    // 保证顺序：theme-override 在前，theme-shell 必须最后（同优先级 DOM 序后者胜）
-    const ov = document.getElementById('theme-override');
-    if (ov) document.documentElement.appendChild(ov);
-    document.documentElement.appendChild(sh);
-    return sh;
-  }
-  function unmountShellOverride() {
-    const sh = document.getElementById('theme-shell');
-    if (sh) sh.remove();
-  }
+  // 借壳日间的 SHELL_CSS / mountShellOverride / darkShellActive 已提升至主题段（applyTheme 附近），
+  // 供正式功能与调试按钮共用。
   const box = document.createElement('div');
   box.id = 'themeDiag';
   // 浮层背景刻意用中灰 #808080：它在像素反色前后视觉一致，保证截图在两种环境下都可读
@@ -796,12 +849,12 @@ function hideUploadStatus() { uploadStatus.classList.remove('show'); }
     b.addEventListener('click', function () {
       if (p[1] === 'light' || p[1] === 'dark') { try { window.applyTheme(p[1] === 'dark'); themeAutoMode = false; } catch (e) {} }
       else if (p[1] === 'shell') {
+        // 手动强制借壳演示（与正式的 darkShellActive 自动判定独立，便于对比与排障）
         const h = document.documentElement;
         if (h.dataset.shell === '1') {
-          // 退出借壳：还原正常主题
           h.dataset.shell = '';
           unmountShellOverride();
-          try { window.applyTheme(document.body.classList.contains('dark')); } catch (e) {}
+          try { window.applyTheme(window.themeWantsDark); } catch (e) {}
           b.textContent = '借壳日间试一下';
         } else {
           h.dataset.shell = '1';
@@ -857,6 +910,7 @@ function hideUploadStatus() { uploadStatus.classList.remove('show'); }
 // 提示条只做三件事：说清楚原因、给一键切夜间、引导去浏览器设置加白名单。
 // 不做主题持久化；「我知道了」后本次会话不再打扰（纯内存 flag）。
 (function setupDarkEnvHint() {
+  if (typeof darkShellActive === 'function' && darkShellActive()) return; // 借壳已接管，无需提示
   const ua = navigator.userAgent;
   const isRisky = /MiuiBrowser|XiaoMi/i.test(ua) || /MQQBrowser|QQBrowser/i.test(ua);
   if (!isRisky) return;
