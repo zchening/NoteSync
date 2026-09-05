@@ -309,16 +309,19 @@ const CLOUDINARY_URL = 'https://api.cloudinary.com/v1_1/' + CLOUD_NAME + '/image
 const MAX_IMG_WIDTH = 1920;
 
 const noteId = location.pathname.split('?')[0].replace(/^\/+|\/+$/g, '');
-// 动态 manifest：让每个笔记的 start_url 指向自身路径，Chrome 安装/创建快捷方式时打开正确笔记
+// 动态 manifest：让每个笔记的 start_url 指向自身路径，Chrome 安装/创建快捷方式时打开正确页面
 document.querySelector('link[rel="manifest"]').href = '/manifest.json?start=/' + encodeURIComponent(noteId);
-const NOTE_API = '/api/note/' + encodeURIComponent(noteId);
-const FAIL_API = '/api/fail/' + encodeURIComponent(noteId);
+// v5.51：APK 注入绝对地址（Capacitor 加载本地 assets 后相对路径失效）
+// Web 环境保持空串=相对路径，167 测试零破坏；定义必须在 NOTE_API 之前以避免 TDZ
+const NOTESYNC_API_BASE = (typeof window !== 'undefined' && window.NOTESYNC_API_BASE) || '';
+const NOTE_API = NOTESYNC_API_BASE + '/api/note/' + encodeURIComponent(noteId);
+const FAIL_API = NOTESYNC_API_BASE + '/api/fail/' + encodeURIComponent(noteId);
 const KEY_STORE = 'notesync_key_' + noteId;
 const PBKDF2_ITER = 200000;
 const FAIL_LIMIT = 10;
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '5.50';
+const APP_VERSION = '5.51';
 const BUILD_DATE = '2026-09-05';
 
 const $ = s => document.querySelector(s);
@@ -2928,6 +2931,16 @@ function normalizeRemList(obj) {
     .sort((a, b) => a.at - b.at)
     .slice(0, REM_MAX);
 }
+// v5.51：原生层提醒桥（Capacitor 不存在时全部静默返回，167 测试零破坏）
+// 注意：每次读 window.RemBridge（不缓存 const），让 jsdom 测试可在脚本执行后再注入 mock
+// 也让 Capacitor webview 在页面 ready 后注入生效
+async function syncRemindersToNative() {
+  const rb = (typeof window !== 'undefined' && window.RemBridge) || null;
+  if (!rb || typeof rb.sync !== 'function') return;
+  try {
+    await rb.sync(reminders.map(r => ({ at: r.at, text: r.text })));
+  } catch (e) { /* 原生层异常不污染前端流程 */ }
+}
 // 解锁后从服务端恢复提醒（密文解不开→当无提醒）
 async function loadReminder(note, key) {
   reminders = []; remCipher = null;
@@ -2941,6 +2954,7 @@ async function loadReminder(note, key) {
   }
   renderRemBtn();
   scheduleReminders();
+  syncRemindersToNative(); // v5.51：解锁后把密文解密得到的提醒列表同步到原生层排程
 }
 // 设/改提醒 = 完整保存（正文 + rem 一起 PUT）：v 递增、SSE 广播、其他设备实时拿到
 async function persistReminders() {
@@ -2962,6 +2976,7 @@ async function persistReminders() {
   setStatus(true, '已同步');
   scheduleReminders();
   renderRemBtn();
+  syncRemindersToNative(); // v5.51：保存后同步最新提醒列表到原生层
 }
 async function addReminder(at, text) {
   if (!cryptoKey || typeof at !== 'number') return;
@@ -3380,7 +3395,7 @@ const POLL_INTERVAL = 2000;
 
 function connectSSE() {
   try {
-    sseSource = new EventSource('/api/note/' + encodeURIComponent(noteId) + '/stream');
+    sseSource = new EventSource(NOTESYNC_API_BASE + '/api/note/' + encodeURIComponent(noteId) + '/stream');
     // onopen 不再 clearInterval(pollTimer)：轮询基线始终运行，SSE 仅是加速器
     sseSource.onopen = () => {};
     sseSource.onmessage = e => { poll(); };
@@ -3535,12 +3550,21 @@ $('#lock').addEventListener('click', () => {
   }
 })();
 // PWA Service Worker
-if ('serviceWorker' in navigator) {
+// v5.51：APK 内 WebView 走 Capacitor 离线资源机制（本地 assets + 热更新），不需 SW——
+// 旧 SW 缓存可能与热更新文件打架；仅 Web 环境注册
+if (!window.__NOTESYNC_NATIVE__ && 'serviceWorker' in navigator) {
   // v5.35：注册 URL 带上 APP_VERSION，SW 从自身 URL 读版本做缓存名——版本号单一来源
   // （仍是 index.html 的 APP_VERSION），发版即换缓存、旧缓存自动清理，杜绝 v5.34 前
   // "CACHE 硬编码 notesync-v1、发版后离线用户拿旧壳"的隐患
   navigator.serviceWorker.register('/sw.js?v=' + encodeURIComponent(APP_VERSION)).catch(() => {});
 }
+// v5.51：APK 启动热更新检查（原生层 fetch /api/app-version + sha256 + 落盘，下次冷启动生效）
+// Web 环境无 window.RemBridge，静默跳过
+(function () {
+  const rb = (typeof window !== 'undefined' && window.RemBridge) || null;
+  if (!rb || typeof rb.checkUpdate !== 'function') return;
+  try { rb.checkUpdate({ current: APP_VERSION, base: NOTESYNC_API_BASE }); } catch (e) {}
+})();
 </script>
 </body>
 </html>

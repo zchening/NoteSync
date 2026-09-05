@@ -1,0 +1,14 @@
+{
+  "appId": "cn.xuyinji.notesync",
+  "appName": "NoteSync",
+  "webDir": "www",
+  "androidScheme": "https",
+  "android": {
+    "cleartext": false,
+    "allowMixedContent": false,
+    "captureInput": true
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}

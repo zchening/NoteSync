@@ -5,6 +5,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const PORT = process.env.PORT || 8080;
 const APP_DIR = __dirname;
@@ -115,6 +116,27 @@ function sendJSON(res, code, obj) {
   res.end(JSON.stringify(obj));
 }
 
+// v5.51：APK 热更新检查接口——直读磁盘 index.html，正则抓 APP_VERSION 算 sha256
+// 缓存 5 秒（发版后 5 秒内 APK 可见新版本；APK 启动后台轮询友好）
+let appVerCache = null, appVerCacheAt = 0;
+const APP_VER_TTL = 5000;
+function getAppVersionInfo() {
+  const now = Date.now();
+  if (appVerCache && (now - appVerCacheAt) < APP_VER_TTL) return appVerCache;
+  try {
+    const buf = fs.readFileSync(INDEX_FILE);
+    const src = buf.toString('utf8');
+    const m = src.match(/const APP_VERSION\s*=\s*'([^']+)'/);
+    const version = m ? m[1] : '0.0.0';
+    const sha256 = crypto.createHash('sha256').update(buf).digest('hex');
+    appVerCache = { version: version, sha256: sha256, size: buf.length };
+  } catch (e) {
+    appVerCache = { version: 'unknown', sha256: '', size: 0 };
+  }
+  appVerCacheAt = now;
+  return appVerCache;
+}
+
 function extractId(url, prefix) {
   // /api/note/abc123 → abc123（路径段可能含中文等，需先 decodeURIComponent）
   const m = url.match(new RegExp('^' + prefix + '/([^/]+)'));
@@ -196,6 +218,11 @@ const server = http.createServer((req, res) => {
     if (limit.locked) return sendJSON(res, 429, { locked: true, retryAfter: limit.retryAfter });
     const rec = failMap.get(ip + ':' + id);
     return sendJSON(res, 200, { locked: false, count: rec ? rec.count : 0 });
+  }
+
+  // --- API: 应用版本（APK 热更新用，缓存 5 秒）---
+  if (req.method === 'GET' && url === '/api/app-version') {
+    return sendJSON(res, 200, getAppVersionInfo());
   }
 
   // --- 健康检查 ---

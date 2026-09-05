@@ -10,8 +10,9 @@ cd tests && node --test e2e/*.test.js       # Playwright E2E（flow/sync/userbug
 node tests/e2e/_probe_<name>.js             # 各专项回归探针（退出码 0 为全绿）
 ```
 
-- Node 用 `C:/Users/zchen/.workbuddy/binaries/node/versions/22.22.2/node.exe`；playwright 装在 `tests/node_modules`，**探针脚本必须放在 `tests/` 子树内**否则 MODULE_NOT_FOUND
+- Node 用 `C:/Users/zchen/.workbuddy/binaries/node/versions/22.22.2-2/node.exe`（**带 -2**）；playwright 装在 `tests/node_modules`，**探针脚本必须放在 `tests/` 子树内**否则 MODULE_NOT_FOUND
 - 涉保存/解锁的探针必须 spawn 真实 `server.js`（localhost 安全上下文）；about:blank setContent 页无 crypto.subtle/localStorage。纯 DOM 探针可 setContent 加载 index.html（替换 html2canvas src）
+- jsdom 坑（v5.51 实锤）：顶层 `const` 不挂 window，测试要注入 mock 就让函数内**每次读 `window.X`**（不缓存 const）；每个 jsdom 测试末尾必须 `dom.window.close()`，否则 node --test 进程 SIGTERM 不退出
 
 ## 红线（违反即回归，全部有历史事故背书）
 
@@ -27,7 +28,7 @@ node tests/e2e/_probe_<name>.js             # 各专项回归探针（退出码 
 
 - 改完必须全量回归：单元 + E2E + 相关探针全绿才算完成；大版本上线前派独立子代理做盲测验证（v5.19 起惯例）
 - 发布四件套：`index.html` 的 `APP_VERSION`/`BUILD_DATE` → README 更新历史（顶部插一行「版本/日期/摘要」三列表格 + **一个** `<details>` 折叠块内含全部版本 bullet 列表）→ BUG_CHECKLIST 对应条目/版本表 → git tag（纯版本号 `vN`）
-- **必须推送 GitHub**：提交后 `git push origin main && git push origin vN`（分支 + tag 都要推，否则 GitHub 上的 README/代码滞后——v5.19/v5.20 曾漏推，用户反馈"GitHub 怎么没更新"）
+- **必须推送 GitHub**：提交后 `git push origin main && git push origin vN`（分支 + tag 都要推，否则 GitHub 上的 README/代码滞后——v5.19/v5.20 曾漏推，用户反馈"GitHub 怎么没更新"）。v5.51 起 push tag `v*` 会触发 GitHub Actions 云构建 release APK（`.github/workflows/build-apk.yml`，4 个 ANDROID_KEYSTORE* Secrets 必须在位）
 - 部署只走 `D:/Users/zchen/Documents/WorkBuddyProject/NoteSync/deploy_gen.py` + `deploy_target_*.json`（清单不含凭据，密码读 `C:\Temp\new_server_pwd.txt`）。验证走公网域名 `note.xuyinji.com.cn` / `biji.xuyinji.com.cn`（均 Caddy 反代同后端、Let's Encrypt 自动证书、DNSPod 生效；直连裸 IP 无 Host 匹配会被 302 拦截，故不走裸 IP）或 localhost
 
 ## 深入文档
@@ -35,5 +36,5 @@ node tests/e2e/_probe_<name>.js             # 各专项回归探针（退出码 
 | 要了解 | 去哪 |
 |---|---|
 | 用法 / 部署架构 / 版本更新历史 | `README.md` |
-| 历史 bug 根因与核对要点（A-I 类） | `BUG_CHECKLIST.md` |
+| 历史 bug 根因与核对要点（A-M 类） | `BUG_CHECKLIST.md` |
 | 回归探针清单与断言 | `tests/e2e/_probe_*.js` 头部注释 |

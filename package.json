@@ -1,0 +1,17 @@
+{
+  "name": "notesync",
+  "version": "5.51.0",
+  "private": true,
+  "description": "NoteSync - 端到端加密便签 + Capacitor APK 壳（v5.51）",
+  "scripts": {
+    "sync": "cap sync android",
+    "cap:open": "cap open android"
+  },
+  "dependencies": {
+    "@capacitor/core": "^7.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.0.0",
+    "@capacitor/android": "^7.0.0"
+  }
+}

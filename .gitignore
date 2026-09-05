@@ -22,3 +22,20 @@ desktop.ini
 *.pem
 *.key
 *.crt
+
+# v5.51：Capacitor 产物与临时
+www/
+android/app/build/
+android/build/
+android/.gradle/
+android/local.properties
+android/captures/
+android/.idea/
+android/*.iml
+android/app/release/
+capacitor-cordova-android-plugins/
+
+# v5.51：签名密钥库本地（仓库外备份）
+*.jks
+*.p12
+*.keystore

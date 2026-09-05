@@ -1045,6 +1045,69 @@
 - **关联文件**: index.html → maybeShowTimeChip()/buildChipDeleteBtn()/chipDeleteActivate()/itemAfterMatch()/renderRemPanel()/insertRemLine()/showRemCard()/CSS 三板
 - **测试**: timechip TC14/TC15、theme v5.47 断言组、e2e V547-1~5
 
+## M. APK 原生层（v5.51 新增分类，Capacitor 7 + 自写 Kotlin RemPlugin）
+### M1 | Capacitor 工程生成与本地 assets 复制链路
+- **版本**: v5.51（APK 落地首次）
+- **要点与核对**:
+  - [ ] `package.json` 根目录新建，devDeps 含 `@capacitor/cli` `@capacitor/core` `@capacitor/android` 三件套（注意零依赖原则：仅这三，不引 Node 端 runtime 库）
+  - [ ] `capacitor.config.json` 顶层 `androidScheme: "https"`（crypto.subtle 需 secure context，旧教训复现；HTTP scheme 下解锁直接死）
+  - [ ] `webDir: "www"`；`npm run sync`（= `cap sync android`）复制 `www/index.html` → `android/app/src/main/assets/public/index.html` 与 `capacitor.config.json` → `assets/capacitor.config.json`
+  - [ ] `cap add android` 生成 `android/` 目录（根 `.gitignore` 已过滤 `node_modules/` `android/app/build/` `android/.gradle/` `www/` `*.jks` `*.p12`）
+  - [ ] 本地打包后所有 `/api/...` 相对路径失效——`window.NOTESYNC_API_BASE` 必须在 Capacitor 注入绝对地址；web 环境保持空串=相对路径，既有 180 项测试零破坏
+### M2 | RemPlugin 同步协议与三处挂点
+- **版本**: v5.51
+- **要点与核对**:
+  - [ ] JS 侧 `syncRemindersToNative()` 函数体每次读 `window.RemBridge`（不缓存 const），让 jsdom 测试可注入 mock、Capacitor 在 webview ready 后注入生效
+  - [ ] 函数体必 try/catch——原生层异常不污染前端流程
+  - [ ] 三个挂点：`loadReminder` 末尾（解锁后从服务端密文解密得到提醒列表即同步）+ `persistReminders` 末尾（设/改/删均同步）+ 启动 IIFE（`window.RemBridge.checkUpdate` 不存在时静默）
+  - [ ] 协议精简：`RemBridge.sync([{at, text}, ...])`，返回 `{scheduled, failed}`；不要传 `at<=now-60s` 的过期项（原生层自过滤亦可，但 JS 侧过滤更显式）
+  - [ ] `cancelAll()` 清空加密 prefs + 取消所有 alarm；`getVersion()` 返回 `{nativeVersion, scheduled}`
+### M3 | RemReceiver 通知触发与点击回 App
+- **版本**: v5.51
+- **要点与核对**:
+  - [ ] `android:action="cn.xuyinji.notesync.REM_FIRE"` 匹配 `RemPlugin.scheduleAlarm` 设置的 PendingIntent
+  - [ ] 通知渠道 `IMPORTANCE_HIGH` + `setBypassDnd(true)` + `setShowBadge(true)`，锁屏可见、响铃震动
+  - [ ] `setFullScreenIntent(pi, true)` 锁屏强弹（需 `USE_FULL_SCREEN_INTENT` 权限）
+  - [ ] 点击通知 → `MainActivity`（`launchMode="singleTop"`）→ `onNewIntent` → `evaluateJavascript` 抛 `rem-notify-click` CustomEvent 给 JS（webview.post 切回主线程，避免 race）
+  - [ ] 通知小图标 `R.drawable.ic_notification` 必须白色矢量（系统 tint），禁止彩色 PNG（被反色成黑色方块）
+### M4 | BootReceiver 重排与开机自启
+- **版本**: v5.51
+- **要点与核对**:
+  - [ ] 监听 `BOOT_COMPLETED` + `MY_PACKAGE_REPLACED` + `QUICKBOOT_POWERON` 三个 action
+  - [ ] 重排逻辑 `RemPlugin.rescheduleAll(context)` 共享：读加密 prefs → 解密 → 跳过过期 → 逐条 `scheduleAlarm`
+  - [ ] Manifest 中 `android:exported="true"`（系统能发广播）；`RECEIVE_BOOT_COMPLETED` 权限声明
+  - [ ] 接收器不在 `.box` / `.bridge` 等保护圈——纯 Kotlin 无主题问题
+### M5 | 精确闹钟与 Android 12+ 权限
+- **版本**: v5.51
+- **要点与核对**:
+  - [ ] `AlarmManager.setExactAndAllowWhileIdle` 逐条（不合并；删一条不影响其他）
+  - [ ] Android 12+ 必须 `canScheduleExactAlarms()` 检查，未授权回退 `setAndAllowWhileIdle`（精度降级，不报错）
+  - [ ] Android 14+ 双重保险：manifest 同时声明 `SCHEDULE_EXACT_ALARM` 与 `USE_EXACT_ALARM`（后者普通权限，无需用户授予；前者需用户手动授权精确闹钟）
+  - [ ] 国产 ROM（小米澎湃 OS）首次启动引导页列出白名单五项：自启动/省电策略「无限制」/通知权限/锁定后台/精确闹钟——漏配一项推送失败最难排查
+### M6 | 热更新（/api/app-version + Capacitor 端下载校验）
+- **版本**: v5.51
+- **要点与核对**:
+  - [ ] server.js `/api/app-version` 直读磁盘 index.html，正则抓 `const APP_VERSION = 'X.YZ'`，算 sha256 + size；缓存 5 秒（发版后 5s 内 APK 可见）
+  - [ ] `RemPlugin.checkUpdate({current, base})` 后台线程 fetch + 下载 + sha256 校验；**校验失败/下载失败→静默回退内置 assets**，永不弹错误
+  - [ ] 落盘到 `filesDir/www-hot/index.html`（先写 `.tmp` 再 rename 防半截文件），下次冷启动 WebView 加载 hot 版
+  - [ ] APK 内 **不注册 Service Worker**（`if (!window.__NOTESYNC_NATIVE__ && 'serviceWorker' in navigator)`）——SW 缓存与热更新打架
+### M7 | GitHub Actions 云构建与签名
+- **版本**: v5.51
+- **要点与核对**:
+  - [ ] `.github/workflows/build-apk.yml` 触发：`push tags: 'v*'` + `workflow_dispatch`
+  - [ ] ubuntu-latest + JDK 17（Temurin，硬要求 AGP 8.x）+ Node 22（缓存 npm）
+  - [ ] `npm ci` → 复制 `index.html` → `www/` → `cap sync android` → 解码 `ANDROID_KEYSTORE_BASE64` → `./gradlew assembleRelease -Pandroid.injected.signing.*`
+  - [ ] 签名参数全部走 Secrets 注入：**严禁**把 keystore 密码/别名写进 workflow 文件
+  - [ ] 上传 artifact（保留 30 天）+ `softprops/action-gh-release`（仅 tag 触发）创建 Release + 挂 APK
+  - [ ] 4 个 GitHub Secrets：`ANDROID_KEYSTORE_BASE64` / `ANDROID_KEYSTORE_PASSWORD` / `ANDROID_KEY_ALIAS` / `ANDROID_KEY_PASSWORD`
+### M8 | 私钥生命周期与卸载重装代价
+- **版本**: v5.51
+- **要点与核对**:
+  - [ ] keystore 文件 `D:\NoteSync-keys\notesync-release.p12`（仓库外）+ 密码 `PASSWORDS.txt` + GitHub Secret 各一份，**至少 2 处异地备份**
+  - [ ] 仓库 `.gitignore` 已加 `*.jks` `*.p12` `*.keystore`——`git status` 验证无残留
+  - [ ] 私钥遗失→下次 APK 更新必须卸载重装；卸载后**笔记数据不丢**（密文在服务端），仅需输一次口令重新解锁（KEY_STORE 重建）+ 提醒镜像自动从服务端 rem 重建排程
+  - [ ] 白名单五项在卸载后**全部重置**——这是真痛点，不是数据；引导页图文引导防漏配
+
 ## 版本与 bug 对应速查
 
 | 版本 | 涉及 bug 编号 |
@@ -1076,4 +1139,5 @@
 | v5.46 | L6 修订, L8（下划线只包时间串/过期回归普通正文/已添加悬停两行展示卡，e2e _verify_v545 5 项固化） |
 | v5.48 | D7（Chrome 安卓键盘顶飞菜单栏：viewport meta 加 interactive-widget=resizes-content，真机验收待用户） |
 | v5.50 | I7（离线状态运行时零感知：offline/online 事件实时挂收离线条 + 保存失败按本机离线分流 + fetchRetry 离线快败，e2e offline_live + unit offline O1~O6 固化） |
+| v5.51 | M1, M2, M3, M4, M5, M6, M7, M8（APK 原生层首次落地：Capacitor 7 + 自写 Kotlin RemPlugin + Keystore 加密 + AlarmManager 精确闹钟 + BootReceiver 重排 + 本地热更新 + GitHub Actions 云构建 + 私钥生命周期） |
 | v5.14 | H1, H2, H3, H4, C4 |
