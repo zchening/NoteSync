@@ -286,8 +286,8 @@ test('TC12b 光标落过期时间上 chip 显示已过期灰态且点击无效',
   assert.ok(chip.textContent.includes('已过期'), '点击后仍是过期文案（未设上）');
 });
 
-// ── TC12c：提醒面板开着时 chip 仍浮出（v5.39 去互斥）──────
-test('TC12c 面板打开时光标落时间上 chip 照常浮出且下移错位', async t => {
+// ── TC12c：提醒模态打开时 chip 不浮出（v5.40 模态互斥回归）──
+test('TC12c 提醒模态打开时 chip 不浮出（遮罩互斥，below-panel 退役）', async t => {
   const app = freshApp();
   t.after(() => app.dom.window.close());
   const { window, document, editor } = app;
@@ -303,7 +303,7 @@ test('TC12c 面板打开时光标落时间上 chip 照常浮出且下移错位',
   const chip = document.getElementById('timeChip');
 
   window.toggleRemPanel(true);
-  assert.ok(!document.getElementById('remPanel').classList.contains('hidden'), '前置：面板已开');
+  assert.ok(!document.getElementById('remMask').classList.contains('hidden'), '前置：模态已开');
 
   const range = document.createRange();
   range.setStart(tn, idx + 2); range.setEnd(tn, idx + 2);
@@ -311,8 +311,7 @@ test('TC12c 面板打开时光标落时间上 chip 照常浮出且下移错位',
   sel.removeAllRanges(); sel.addRange(range);
   document.dispatchEvent(new window.Event('selectionchange'));
   await sleep(400);
-  assert.ok(!chip.classList.contains('hidden'), '面板开着 chip 也必须浮出（去互斥）');
-  assert.strictEqual(chip.classList.contains('below-panel'), true, '面板开着时 chip 必须下移错位');
+  assert.ok(chip.classList.contains('hidden'), '模态开着 chip 必须隐藏（真实浏览器中遮罩挡正文，光标不会落进时间）');
 });
 
 // ── TC13：集成：点 chip → addReminder 走真实 PUT ──────────

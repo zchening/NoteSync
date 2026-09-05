@@ -56,30 +56,35 @@
   .hintbar.hidden{display:none}
   #draftBar{top:54px}
   #installBar{bottom:16px}
-  /* v5.37 提醒：补弹/触发改用居中实底卡片（支持多条提醒列表），颜色全走主题变量（--box-bg 不透明）；
-     时间 chip 是编辑器外的独立浮层，不改正文 DOM（linkify 拍平 span 的约束） */
-  #remCard{position:fixed;top:40%;left:50%;transform:translate(-50%,-50%);z-index:80;display:flex;flex-direction:column;gap:12px;background:var(--box-bg);color:var(--fg);border:1px solid var(--line);border-radius:16px;padding:20px 22px;min-width:min(320px,86vw);max-width:86vw;box-shadow:0 24px 70px rgba(20,20,18,.24)}
-  #remCard.hidden{display:none}
-  #remCardTitle{font-size:15px;font-weight:600;letter-spacing:.02em}
-  #remCardList{display:flex;flex-direction:column;gap:8px;font-size:13.5px;line-height:1.55;max-height:40vh;overflow-y:auto}
-  #remCardList .rem-item{display:flex;flex-direction:column;gap:1px}
-  #remCardList .rem-when{font-size:13.5px}
+  /* v5.40：到点提醒卡片对齐扫码配对弹窗（.box）视觉——圆角 18 / rise 入场 / 同款阴影与标题层级；
+     不加遮罩：到点提醒是通知不是操作门槛，不打断正在输入的用户；颜色全走主题变量（--box-bg 不透明） */
+  #remCard{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:80;width:min(90vw,380px);max-width:86vw;background:var(--box-bg);color:var(--fg);border:1px solid var(--line);border-radius:18px;padding:30px 30px 26px;box-shadow:0 24px 70px rgba(20,20,18,.16);display:flex;flex-direction:column;gap:14px;animation:rise .5s cubic-bezier(.2,.7,.3,1) both}
+  #remCard.hidden{display:none!important}
+  #remCardTitle{font-size:18px;font-weight:600;margin:0;letter-spacing:.02em}
+  #remCardList{display:flex;flex-direction:column;gap:10px;font-size:13.5px;line-height:1.55;max-height:40vh;overflow-y:auto}
+  #remCardList .rem-item{display:flex;flex-direction:column;gap:2px}
+  #remCardList .rem-when{font-size:14px}
   #remCardList .rem-late{color:var(--muted);font-size:11.5px}
-  /* v5.39：button→div 伪按钮 + 描边样式（border/文字同源 --fg、透明底）——
-     原反色对（color:var(--bg);background:var(--fg)）在国产浏览器夜间模式强制深色下被改成"全黑"；
-     div 不受表单控件强制样式影响，描边方案任何反色环境下边框与文字都可见 */
-  #remCardAck{align-self:flex-end;padding:7px 18px;font-size:13px;color:var(--fg);background:transparent;border:1px solid var(--fg);border-radius:9px;cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
-  #remCardAck:hover,#remCardAck:active{opacity:.75}
+  /* v5.40：「知道了」对齐 .box 主按钮外观（全宽实底反色、字距加宽）；底座仍是 div 伪按钮——
+     remCard 不在 .box 深色覆盖保护圈内，原生 button 会被国产浏览器夜间模式强制深色成"全黑" */
+  #remCardAck{width:100%;height:46px;display:flex;align-items:center;justify-content:center;border:0;border-radius:10px;background:var(--fg);color:var(--bg);font-size:15px;font-weight:500;letter-spacing:.08em;cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:manipulation;-webkit-tap-highlight-color:transparent;margin-top:4px}
+  #remCardAck:hover{opacity:.85}
+  #remCardAck:active{opacity:.75}
   #timeChip{position:fixed;top:54px;left:50%;transform:translateX(-50%);z-index:56;padding:7px 14px;font-size:12.5px;color:var(--fg);background:var(--box-bg);border:1px solid var(--line);border-radius:999px;box-shadow:0 4px 16px rgba(0,0,0,.16);cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:manipulation;-webkit-tap-highlight-color:transparent;white-space:nowrap;max-width:92vw;overflow:hidden;text-overflow:ellipsis}
-  /* v5.39：chip 与提醒面板去互斥——面板开着时 chip 下移一行错位显示 */
-  #timeChip.below-panel{top:104px}
   /* v5.39：过期时间 chip 灰态（识别到但不可设，不再无声无息） */
   #timeChip.expired{color:var(--muted);cursor:default;border-style:dashed}
   #timeChip.hidden{display:none}
-  #remPanel{top:54px;flex-wrap:wrap;row-gap:6px}
-  #remPanel input{padding:4px 8px;font-size:12px;font-family:inherit;color:var(--fg);background:transparent;border:1px solid var(--line);border-radius:8px;color-scheme:inherit}
-  /* v5.39：所选时刻已过时输入框加深提示（不引新颜色值，用 --fg 加重边框） */
-  #remPanel input.bad{border-color:var(--fg);border-width:2px}
+  /* v5.40：提醒面板升级为扫码配对同款 .mask+.box 模态（复用 .box 输入框/主按钮样式与深色覆盖保护）；
+     设置行（时间/事项/添加提醒）永远首行，已设条目列表排后；chip 与模态互斥（遮罩挡正文） */
+  #remBoxForm{display:flex;flex-direction:column;gap:12px;margin:2px 0 18px}
+  #remBoxForm input[type="datetime-local"]{color-scheme:inherit}
+  #remBoxForm input.bad{border-color:var(--accent);box-shadow:0 0 0 3px var(--ring)}
+  #remBoxList{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line);padding-top:14px}
+  #remBoxList:empty{display:none}
+  #remBoxList .rem-row{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px}
+  #remBoxList .rem-row span{color:var(--fg);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #remBoxList .rem-row button{flex-shrink:0;padding:4px 12px;font-size:12px;color:var(--fg);background:none;border:1px solid var(--line);border-radius:8px;cursor:pointer;transition:border-color .2s;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+  #remBoxList .rem-row button:hover{border-color:var(--muted)}
   #remBtn.on{color:var(--fg);background:var(--hover)}
   .hintbar button{flex-shrink:0;padding:4px 10px;font-size:12px;color:var(--fg);background:none;border:1px solid var(--line);border-radius:8px;cursor:pointer;transition:border-color .2s;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
   .hintbar button:hover{border-color:var(--muted)}
@@ -205,7 +210,13 @@
   <div id="remCardAck" role="button" tabindex="0">知道了</div>
 </div>
 <div id="timeChip" class="hidden"></div>
-<div id="remPanel" class="hintbar hidden"></div>
+<div class="mask hidden" id="remMask">
+  <div class="box" id="remPanel">
+    <h1>提醒</h1>
+    <div id="remBoxForm"></div>
+    <div id="remBoxList"></div>
+  </div>
+</div>
 <div id="draftBar" class="hintbar hidden">
   <span>本机有未同步的修改，但服务器上已有更新的内容</span>
   <button type="button" id="draftRestore">恢复我的修改</button>
@@ -275,7 +286,7 @@ const PBKDF2_ITER = 200000;
 const FAIL_LIMIT = 10;
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '5.39';
+const APP_VERSION = '5.40';
 const BUILD_DATE = '2026-09-05';
 
 const $ = s => document.querySelector(s);
@@ -2523,7 +2534,7 @@ installDismiss.addEventListener('click', () => {
 //           兜底，Web 的后台限制决定的现实）；Notification Triggers（L3）支持时注册系统级
 //           定时（至今未正式落地，纯探测不指望）。
 // 多设备重复弹：接受（自己多设备弹两次反而保险），REM_DONE 记已触发时间戳集合防止同机重复。
-const remBtn = $('#remBtn'), remPanel = $('#remPanel');
+const remBtn = $('#remBtn'), remPanel = $('#remPanel'), remMask = $('#remMask');
 const remCard = $('#remCard'), remCardList = $('#remCardList'), remCardAck = $('#remCardAck');
 const timeChip = $('#timeChip');
 const REM_DONE_KEY = 'notesync_remdone_' + noteId;
@@ -2616,14 +2627,13 @@ let chipData = null, chipTimer = null;
 function hideTimeChip() { chipData = null; timeChip.classList.add('hidden'); timeChip.classList.remove('expired'); }
 function maybeShowTimeChip() {
   if (Date.now() < chipFeedbackUntil) return; // 「✓ 已设」反馈展示中
-  // v5.39：去掉与提醒面板的互斥（面板开着也出 chip，CSS 下移错位）；卡片打开仍互斥
+  // v5.40：面板升级为全屏模态——遮罩挡正文，与 chip 回归互斥（below-panel 退役）
   if (!cryptoKey || editor.getAttribute('contenteditable') === 'false' || isComposing ||
-      !remCard.classList.contains('hidden')) { hideTimeChip(); return; }
+      remPanelOpen || !remCard.classList.contains('hidden')) { hideTimeChip(); return; }
   const info = caretInfoInEditor();
   if (!info) { hideTimeChip(); return; }
   const m = matchTimeAt(info.text, info.offset);
   if (!m) { hideTimeChip(); return; }
-  timeChip.classList.toggle('below-panel', remPanelOpen);
   if (m.expired) {
     // v5.39：过期时间不再无声无息——灰态标明「已过期」，不可点
     chipData = null;
@@ -2825,7 +2835,7 @@ function showRemCard(items, isCatchup) {
     remCardList.appendChild(item);
   });
   remCard.classList.remove('hidden');
-  remPanel.classList.add('hidden'); remPanelOpen = false;
+  remMask.classList.add('hidden'); remPanelOpen = false;
   hideTimeChip();
 }
 remCardAck.addEventListener('click', () => {
@@ -2839,64 +2849,80 @@ remCardAck.addEventListener('keydown', e => { // v5.39 div 伪按钮保留键盘
 function renderRemBtn() {
   remBtn.classList.toggle('on', reminders.some(r => r.at > Date.now()));
 }
-// v5.39 面板极简重构（用户拍板）：删快捷按钮/「提醒我：」「再加：」标签/常驻发现性提示；
-// 时间选择器默认=当前时间；新增事项输入框（可留空，placeholder 不再取笔记首行）；
-// 所选时刻已过 → 时间框加重提示且不设；iOS 通知提示保留（仅适用环境出现）
+// v5.40 面板升级为扫码配对同款 .mask+.box 模态（复用 .box 输入框/主按钮样式与深色覆盖保护）；
+// 设置行（时间/事项/添加提醒）永远首行，已设条目列表排后；「定时」更名「添加提醒」（用户拍板）；
+// 事项框 Enter = 点「添加提醒」；所选时刻已过 → 时间框 accent 提示且不设；iOS 通知提示保留
 function renderRemPanel() {
-  remPanel.innerHTML = '';
+  const form = document.getElementById('remBoxForm');
+  const list = document.getElementById('remBoxList');
+  form.innerHTML = ''; list.innerHTML = '';
   hideTimeChip();
-  reminders.filter(r => r.at > Date.now()).forEach(r => {
-    const off = document.createElement('button');
-    off.type = 'button';
-    off.textContent = '× ' + fmtRemTime(r.at) + (r.text ? ' ' + r.text : '');
-    off.title = '取消这条提醒';
-    off.addEventListener('click', () => {
-      removeReminder(r.at).then(() => toggleRemPanel(reminders.some(x => x.at > Date.now())));
-    });
-    remPanel.appendChild(off);
-  });
   const inp = document.createElement('input');
   inp.type = 'datetime-local';
   inp.setAttribute('aria-label', '提醒时间');
-  const nd = new Date(); // 默认 = 当前时间（用户要求）；已过时刻由「定时」红边拦截
+  const nd = new Date(); // 默认 = 当前时间（用户要求）；已过时刻由「添加提醒」accent 提示拦截
   inp.value = nd.getFullYear() + '-' + String(nd.getMonth() + 1).padStart(2, '0') + '-' + String(nd.getDate()).padStart(2, '0') + 'T' + String(nd.getHours()).padStart(2, '0') + ':' + String(nd.getMinutes()).padStart(2, '0');
-  remPanel.appendChild(inp);
+  form.appendChild(inp);
   const item = document.createElement('input');
   item.type = 'text';
   item.placeholder = '事项（可留空）';
   item.maxLength = 20;
   item.setAttribute('aria-label', '提醒事项');
-  remPanel.appendChild(item);
   const ok = document.createElement('button');
-  ok.type = 'button'; ok.textContent = '定时';
-  ok.addEventListener('click', () => {
+  ok.type = 'button'; ok.textContent = '添加提醒';
+  const doAdd = () => {
     const at = inp.value ? new Date(inp.value).getTime() : 0;
     if (!at || at <= Date.now()) {
-      inp.classList.add('bad'); // 已过/无效：加重边框提示，不设
+      inp.classList.add('bad'); // 已过/无效：accent 提示，不设
       setTimeout(() => inp.classList.remove('bad'), 900);
       return;
     }
     askRemPermission();
     addReminder(at, item.value.trim());
     toggleRemPanel(false);
+  };
+  ok.addEventListener('click', doAdd);
+  item.addEventListener('keydown', e => { // v5.40：事项框 Enter 直接确认
+    if (e.key === 'Enter') { e.preventDefault(); doAdd(); }
   });
-  remPanel.appendChild(ok);
+  form.appendChild(item);
+  form.appendChild(ok);
+  // 已设条目永远排在设置区之后
+  reminders.filter(r => r.at > Date.now()).forEach(r => {
+    const row = document.createElement('div'); row.className = 'rem-row';
+    const label = document.createElement('span');
+    label.textContent = fmtRemTime(r.at) + (r.text ? ' · ' + r.text : '');
+    row.appendChild(label);
+    const off = document.createElement('button');
+    off.type = 'button'; off.textContent = '×'; off.title = '取消这条提醒';
+    off.addEventListener('click', () => {
+      removeReminder(r.at).then(() => toggleRemPanel(reminders.some(x => x.at > Date.now())));
+    });
+    row.appendChild(off);
+    list.appendChild(row);
+  });
   if (isIOSDevice() && !isStandaloneMode() && typeof window.Notification === 'undefined') {
     const iosTip = document.createElement('span');
+    iosTip.style.cssText = 'font-size:11.5px;color:var(--muted);line-height:1.6';
     iosTip.textContent = 'iOS 需先添加到主屏幕才能收到通知（仍可设置，下次打开会提示）';
-    remPanel.appendChild(iosTip);
+    list.appendChild(iosTip);
   }
 }
 function toggleRemPanel(force) {
   remPanelOpen = (force !== undefined) ? force : !remPanelOpen;
   if (remPanelOpen) {
     renderRemPanel();
-    remPanel.classList.remove('hidden');
+    remMask.classList.remove('hidden');
     remCard.classList.add('hidden');
   } else {
-    remPanel.classList.add('hidden');
+    remMask.classList.add('hidden');
   }
 }
+// v5.40：点遮罩空白处或 Esc 关闭提醒模态
+remMask.addEventListener('click', e => { if (e.target === remMask) toggleRemPanel(false); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && remPanelOpen) toggleRemPanel(false);
+});
 function askRemPermission() {
   // 权限只在用户主动设提醒时申请（加载即弹必然被拒）；被拒也不慌，实底卡片仍然工作
   try {
@@ -3071,7 +3097,7 @@ $('#lock').addEventListener('click', () => {
   reminders = []; remCipher = null; clearTimeout(remTimer); remTimer = null;
   clearTimeout(chipTimer); chipFeedbackUntil = 0; hideTimeChip();
   cardShownAts = []; remCard.classList.add('hidden');
-  remPanel.classList.add('hidden'); remPanelOpen = false; remBtn.classList.remove('on');
+  remMask.classList.add('hidden'); remPanelOpen = false; remBtn.classList.remove('on');
   mask.classList.remove('hidden'); pw.value = ''; err.textContent = '';
   $('#ok').disabled = true; // 退出锁定：清空口令后解锁按钮必须回到禁用态
   setStatus(false, '已退出');
