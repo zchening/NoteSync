@@ -1007,6 +1007,19 @@
 
 ---
 
+### L9 | 提醒分隔符全角空格 + 两行卡删除按钮 + 30 秒窗口差 + 面板列表左对齐升序（v5.47 四合一条目）
+- **版本**: v5.47（用户四条需求，AskUserQuestion 拍板：分隔符=全角空格、删除按钮两处都加、交互维持点击放光标）
+- **要点与核对**:
+  - [ ] 分隔符：回写正文/chip CTA 行/悬停展示卡/确认卡/到点卡片/面板列表 6 处均为「　」（全角空格）；旧格式行（` · `）经 itemAfterMatch 提取的事项不得再带「·」残留
+  - [ ] 存量正文里的旧「 · 」不回改（属用户正文内容）；下划线仍只包时间串
+  - [ ] 「✅ 提醒已添加」两行卡（悬停展示卡+确认卡）第一行尾随「删除」伪按钮：span+描边（禁原生 button），动态板+SHELL_CSS 双板锁色；点击=removeReminder 彻底移除（rem 显式 null 多端同步+下划线拆掉）；chipDeleteAt 必须随 hideTimeChip 清除（防旧目标误删）
+  - [ ] 删除后光标仍在时间串上：chip 回到蓝色「添加提醒」CTA（时间已未添加，预期转换，不是 bug）
+  - [ ] 临近触发 30 秒内（at∈(now,now+30s]，expired=true）的已添加提醒：光标落时间上仍必须弹展示卡——已添加分支优先判断、口径与下划线（at≤now）一致；未添加分支过期零打扰与「过去不能设提醒」硬规则不变
+  - [ ] 面板已设列表：text-align:left（覆盖 .qr-box 居中；标题/设置行/主按钮维持居中）；渲染处显式 sort 升序，最近提醒在最上
+  - [ ] 部署禁串纪律：宽泛禁串会拦停合法改动——v5.46 spec 的 text-align:left 已收窄为 #remBoxForm input{text-align:left}（精确历史形态）
+- **关联文件**: index.html → maybeShowTimeChip()/buildChipDeleteBtn()/chipDeleteActivate()/itemAfterMatch()/renderRemPanel()/insertRemLine()/showRemCard()/CSS 三板
+- **测试**: timechip TC14/TC15、theme v5.47 断言组、e2e V547-1~5
+
 ## 版本与 bug 对应速查
 
 | 版本 | 涉及 bug 编号 |

@@ -60,7 +60,7 @@
      不加遮罩：到点提醒是通知不是操作门槛，不打断正在输入的用户；颜色全走主题变量（--box-bg 不透明） */
   /* v5.44：remCard 必须用 remRise 专用入场——通用 rise 的 to 帧是 transform:none，
      动画结束会抹掉 translate(-50%,-50%) 居中偏移，卡片左上角钉在屏幕中心点（="不在正中心"）；
-     text-align:center 让标题「提醒」与正文「时间 · 事项」整体居中（用户反复要求） */
+     text-align:center 让标题「提醒」与正文「时间　事项」整体居中（用户反复要求） */
   #remCard{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:80;width:min(90vw,380px);max-width:86vw;background:var(--box-bg);color:var(--fg);border:1px solid var(--line);border-radius:18px;padding:30px 30px 26px;box-shadow:0 24px 70px rgba(20,20,18,.16);display:flex;flex-direction:column;gap:14px;text-align:center;animation:remRise .5s cubic-bezier(.2,.7,.3,1) both}
   #remCard.hidden{display:none!important}
   #remCardTitle{font-size:18px;font-weight:600;margin:0;letter-spacing:.02em}
@@ -74,10 +74,15 @@
   #remCardAck:hover{opacity:.85}
   #remCardAck:active{opacity:.75}
   /* v5.45：chip 改版——14px 加大更明显；尾部蓝色 CTA「添加提醒」做按钮感；
-     点添加后原地变两行确认卡（✅ 提醒已添加 / 时间 · 事项）；
+     点添加后原地变两行确认卡（✅ 提醒已添加 / 时间　事项）；
      v5.46：已添加的未来时间悬停同款两行展示卡（不可点）；过期时间不浮任何 chip（零打扰） */
   #timeChip{position:fixed;top:54px;left:50%;transform:translateX(-50%);z-index:56;padding:10px 18px;font-size:14px;color:var(--fg);background:var(--box-bg);border:1px solid var(--line);border-radius:999px;box-shadow:0 6px 20px rgba(0,0,0,.18);cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:manipulation;-webkit-tap-highlight-color:transparent;white-space:nowrap;max-width:92vw;overflow:hidden;text-overflow:ellipsis}
   #timeChip .chip-cta{color:#2563EB;font-weight:600;margin-left:12px}
+  /* v5.47：两行卡第一行尾随「删除」伪按钮（span+描边——chip 不在 .box 深色保护圈，
+     原生 button 会被国产浏览器夜间模式强制全黑，沿 v5.39 铁律） */
+  #timeChip .chip-del{display:inline-block;margin-left:12px;padding:2px 10px;font-size:12px;font-weight:400;color:var(--fg);border:1px solid var(--line);border-radius:999px;cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+  #timeChip .chip-del:hover{border-color:var(--muted)}
+  #timeChip .chip-del:active{opacity:.7}
   #timeChip.feedback{border-radius:16px;white-space:normal;text-align:center;cursor:default}
   #timeChip .chip-ok1{font-size:14px;font-weight:600;line-height:1.5}
   #timeChip .chip-ok2{font-size:13.5px;line-height:1.5;margin-top:2px}
@@ -98,7 +103,7 @@
   #remBoxForm input.bad{border-color:var(--accent);box-shadow:0 0 0 3px var(--ring)}
   #remBoxList{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line);padding-top:14px}
   #remBoxList:empty{display:none}
-  #remBoxList .rem-row{display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px;font-size:13px;line-height:1.5;color:var(--fg);background:none}
+  #remBoxList .rem-row{display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px;font-size:13px;line-height:1.5;color:var(--fg);background:none;text-align:left}
   #remBoxList .rem-row button{padding:4px 12px;font-size:12px;color:var(--fg);background:none;border:1px solid var(--line);border-radius:8px;cursor:pointer;transition:border-color .2s;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
   #remBoxList .rem-row button:hover{border-color:var(--muted)}
   #remBtn.on{color:var(--fg);background:var(--hover)}
@@ -304,7 +309,7 @@ const PBKDF2_ITER = 200000;
 const FAIL_LIMIT = 10;
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '5.46';
+const APP_VERSION = '5.47';
 const BUILD_DATE = '2026-09-05';
 
 const $ = s => document.querySelector(s);
@@ -391,6 +396,7 @@ function themeOverrideCss(dark) {
     #timeChip{background:${p.box}!important;color:${p.fg}!important;border-color:${p.line}!important;-webkit-text-fill-color:${p.fg}!important}
     #timeChip .chip-cta{color:${chipCta}!important;-webkit-text-fill-color:${chipCta}!important;background:none!important}
     #timeChip .chip-ok1,#timeChip .chip-ok2{color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important;background:none!important}
+    #timeChip .chip-del{color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important;background:none!important;border:1px solid ${p.line}!important}
     #editor u.rem-mark{color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important;text-decoration-color:${p.fg}!important}
     #landing{background:radial-gradient(ellipse 720px 480px at 50% 30%,${accentSoft},transparent),${p.bg}!important;color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important}
     #landing h1{color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important}
@@ -470,6 +476,7 @@ const SHELL_CSS = [
   '#timeChip{background:#000000!important;color:#E3E3E5!important;border-color:#13151D!important;-webkit-text-fill-color:#E3E3E5!important}',
   '#timeChip .chip-cta{color:#DA9C14!important;-webkit-text-fill-color:#DA9C14!important;background:none!important}',
   '#timeChip .chip-ok1,#timeChip .chip-ok2{color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important;background:none!important}',
+  '#timeChip .chip-del{color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important;background:none!important;border:1px solid #13151D!important}',
   '#editor u.rem-mark{color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important;text-decoration-color:#E3E3E5!important}',
   '#landing{background:radial-gradient(ellipse 720px 480px at 50% 30%,rgba(112,142,217,.07),transparent),#040407!important;color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important}',
   '#landing h1{color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important}',
@@ -2624,9 +2631,12 @@ let cardShownAts = []; // 当前卡片展示的提醒时间戳，「知道了」
 let chipFeedbackUntil = 0; // chip「已设」反馈窗口内不再被 selectionchange 改写
 
 // v5.39：提醒事项 = 时间串同行的后文（trim 后截 20 字），无后文为空——
-// 不再自动用笔记首行（用户拍板：留空就留空）；面板事项输入框同样允许留空
+// 不再自动用笔记首行（用户拍板：留空就留空）；面板事项输入框同样允许留空。
+// v5.47：分隔符改全角空格——但旧格式行里写的「 · 」残留也要剥掉（trim 只去空白不去 ·），
+// 否则 chip/卡片会把事项显示成「时间　· 事项」
 function itemAfterMatch(text, m) {
   let s = (text || '').slice(m.index + m.length).trim();
+  s = s.replace(/^[·\s\u3000]+/, '');
   if (!s) return '';
   return s.length > 20 ? s.slice(0, 20) + '…' : s;
 }
@@ -2703,8 +2713,33 @@ function caretInfoInEditor() {
 
 // ── v5.37 时间 chip：光标落在时间文本上时浮出快捷入口（v5.45 文案=时间·事项+蓝色「添加提醒」CTA）──
 // chip 是编辑器外的独立浮层；点 chip 即设提醒（pointerdown 三连 preventDefault，与工具栏按钮同套路防焦点丢失）
-let chipData = null, chipTimer = null;
-function hideTimeChip() { chipData = null; timeChip.classList.add('hidden'); timeChip.classList.remove('feedback'); }
+let chipData = null, chipTimer = null, chipDeleteAt = null; // v5.47：chipDeleteAt=两行卡「删除」按钮的目标时间戳
+function hideTimeChip() { chipData = null; chipDeleteAt = null; timeChip.classList.add('hidden'); timeChip.classList.remove('feedback'); }
+// v5.47：两行卡第一行尾随的「删除」伪按钮（span+描边；点击彻底移除该提醒——列表/下划线/响铃全清）
+function buildChipDeleteBtn() {
+  const d = document.createElement('span');
+  d.className = 'chip-del';
+  d.setAttribute('role', 'button');
+  d.setAttribute('tabindex', '0');
+  d.setAttribute('aria-label', '删除这条提醒');
+  d.textContent = '删除';
+  d.addEventListener('pointerdown', chipDeleteActivate);
+  d.addEventListener('touchstart', chipDeleteActivate, { passive: false });
+  d.addEventListener('mousedown', chipDeleteActivate);
+  d.addEventListener('keydown', e => { // v5.39 伪按钮键盘可达惯例
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); chipDeleteActivate(e); }
+  });
+  return d;
+}
+function chipDeleteActivate(e) {
+  e.preventDefault();
+  e.stopPropagation(); // 阻止冒泡到 timeChip 的 chipActivate（整卡点击路径）
+  if (chipDeleteAt == null) return;
+  const at = chipDeleteAt;
+  chipDeleteAt = null;
+  removeReminder(at); // 异步：列表移除+持久化+下划线重算全在内部
+  hideTimeChip();
+}
 function maybeShowTimeChip() {
   if (Date.now() < chipFeedbackUntil) return; // 「✅ 提醒已添加」两行确认卡展示中
   // v5.40：面板升级为全屏模态——遮罩挡正文，与 chip 回归互斥（下移错位方案退役）
@@ -2713,27 +2748,35 @@ function maybeShowTimeChip() {
   const info = caretInfoInEditor();
   if (!info) { hideTimeChip(); return; }
   const m = matchTimeAt(info.text, info.offset);
-  // v5.46：过期时间不浮 chip 且正文无任何标记（回归普通正文），光标移上零打扰（用户拍板）
-  if (!m || m.expired) { hideTimeChip(); return; }
-  // v5.46：已添加的未来时间 → 纯展示两行卡（✅ 提醒已添加 / 时间 · 事项，事项空只显时间）。
-  // 不可点：不设 chipData；无定时器：光标移走由 selectionchange 自然隐藏（用户拍板）。
+  if (!m) { hideTimeChip(); return; }
+  const now = Date.now();
+  // v5.47：已添加的提醒优先判断，且展示口径与下划线一致（at<=now 才拦）——
+  // 修复临近触发 30 秒内的窗口差：此前 expired 判断（now+30s 阈值）先把 chip 拦掉，
+  // 而下划线（now 阈值）还在 → 「有下划线却不弹卡」（用户实测报障）
   if (reminders.some(r => r.at === m.at)) {
+    if (m.at <= now) { hideTimeChip(); return; } // 真已过期：与下划线同步消失，不弹
     chipData = null; // 清残留：防此前 CTA chip 的旧目标被误触
+    chipDeleteAt = m.at; // v5.47：展示卡带「删除」按钮
     const item = itemAfterMatch(info.text, m);
     timeChip.classList.add('feedback'); // 复用两行卡样式（圆角/居中/默认光标）
     timeChip.textContent = '';
-    const l1 = document.createElement('div'); l1.className = 'chip-ok1'; l1.textContent = '✅ 提醒已添加';
-    const l2 = document.createElement('div'); l2.className = 'chip-ok2'; l2.textContent = fmtRemTime(m.at) + (item ? ' · ' + item : '');
+    const l1 = document.createElement('div'); l1.className = 'chip-ok1';
+    l1.appendChild(document.createTextNode('✅ 提醒已添加'));
+    l1.appendChild(buildChipDeleteBtn());
+    const l2 = document.createElement('div'); l2.className = 'chip-ok2'; l2.textContent = fmtRemTime(m.at) + (item ? '　' + item : '');
     timeChip.appendChild(l1); timeChip.appendChild(l2);
     timeChip.classList.remove('hidden');
     return;
   }
+  // v5.46：未添加的过期时间不浮 chip（零打扰）；「过去时间不能设提醒」硬规则不变
+  if (m.expired) { hideTimeChip(); return; }
   const item = itemAfterMatch(info.text, m);
   chipData = { at: m.at, item: item };
-  // v5.45：文案改版（用户拍板）——时间·事项在前（裸文本节点防吃字），「添加提醒」蓝色 CTA 在后
+  chipDeleteAt = null;
+  // v5.45：文案改版（用户拍板）——时间在前（裸文本节点防吃字），「添加提醒」蓝色 CTA 在后
   //（按钮感；元素盒必需故用 span，动态板+SHELL_CSS 双板锁色防夜间吃字/反色）
   timeChip.textContent = '';
-  timeChip.appendChild(document.createTextNode(fmtRemTime(m.at) + (item ? ' · ' + item : '')));
+  timeChip.appendChild(document.createTextNode(fmtRemTime(m.at) + (item ? '　' + item : '')));
   const cta = document.createElement('span');
   cta.className = 'chip-cta';
   cta.textContent = '添加提醒';
@@ -2751,13 +2794,16 @@ function chipActivate(e) {
   const at = chipData.at, item = chipData.item;
   chipData = null; // 先消费：pointerdown/touchstart/mousedown 三连触发只生效一次
   chipFeedbackUntil = Date.now() + 3000; // v5.45：两行确认卡停留 3 秒
+  chipDeleteAt = at; // v5.47：确认卡带「删除」，误添加可立即反悔
   askRemPermission();
   addReminder(at, item);
-  // v5.45：确认反馈改两行卡片（用户拍板）——第一行「✅ 提醒已添加」，第二行「时间 · 事项」
+  // v5.45：确认反馈改两行卡片（用户拍板）——第一行「✅ 提醒已添加」+「删除」，第二行「时间　事项」
   timeChip.classList.add('feedback');
   timeChip.textContent = '';
-  const l1 = document.createElement('div'); l1.className = 'chip-ok1'; l1.textContent = '✅ 提醒已添加';
-  const l2 = document.createElement('div'); l2.className = 'chip-ok2'; l2.textContent = fmtRemTime(at) + (item ? ' · ' + item : '');
+  const l1 = document.createElement('div'); l1.className = 'chip-ok1';
+  l1.appendChild(document.createTextNode('✅ 提醒已添加'));
+  l1.appendChild(buildChipDeleteBtn());
+  const l2 = document.createElement('div'); l2.className = 'chip-ok2'; l2.textContent = fmtRemTime(at) + (item ? '　' + item : '');
   timeChip.appendChild(l1); timeChip.appendChild(l2);
   clearTimeout(chipTimer);
   setTimeout(hideTimeChip, 3000);
@@ -2946,7 +2992,7 @@ function showRemCard(items, isCatchup) {
   items.forEach(r => {
     const item = document.createElement('div'); item.className = 'rem-item';
     const t = document.createElement('span'); t.className = 'rem-when';
-    t.textContent = fmtRemTime(r.at) + (r.text ? ' · ' + r.text : '');
+    t.textContent = fmtRemTime(r.at) + (r.text ? '　' + r.text : '');
     item.appendChild(t);
     if (isCatchup && r.at <= now) {
       const late = document.createElement('span'); late.className = 'rem-late';
@@ -3031,7 +3077,7 @@ function renderRemPanel() {
     askRemPermission();
     addReminder(at, text).then(() => {
       toggleRemPanel(false);
-      insertRemLine(at, text); // v5.45：面板添加的提醒回写正文光标处（时间 · 事项）
+      insertRemLine(at, text); // v5.45：面板添加的提醒回写正文光标处（时间　事项）
     });
   };
   ok.addEventListener('click', doAdd);
@@ -3043,13 +3089,14 @@ function renderRemPanel() {
   }));
   form.appendChild(item);
   form.appendChild(ok);
-  // 已设条目永远排在设置区之后
-  reminders.filter(r => r.at > Date.now()).forEach(r => {
+  // 已设条目永远排在设置区之后（v5.47：显式升序——距离现在最近的在最上方，用户要求）
+  reminders.filter(r => r.at > Date.now()).sort((a, b) => a.at - b.at).forEach(r => {
     const row = document.createElement('div'); row.className = 'rem-row';
-    // v5.42：「时间 · 事项」改裸文本节点——span 元素盒被用户内核夜间模块吃字
+    // v5.42：「时间　事项」改裸文本节点——span 元素盒被用户内核夜间模块吃字
     // （颜色已字面色+text-fill 双 !important 仍不显示），文本节点无元素盒，
-    // 元素级规则无从命中；颜色由行容器锁定继承，布局改 grid（1fr auto）支持文字居中
-    row.appendChild(document.createTextNode(fmtRemTime(r.at) + (r.text ? ' · ' + r.text : '')));
+    // 元素级规则无从命中；颜色由行容器锁定继承，布局改 grid（1fr auto）；
+    // v5.47：行内容改左对齐（覆盖 .qr-box 的 text-align:center，用户拍板）
+    row.appendChild(document.createTextNode(fmtRemTime(r.at) + (r.text ? '　' + r.text : '')));
     const off = document.createElement('button');
     off.type = 'button'; off.textContent = '×'; off.title = '取消这条提醒';
     off.addEventListener('click', () => {
@@ -3098,18 +3145,19 @@ function toggleRemPanel(force) {
     remMask.classList.add('hidden');
   }
 }
-// v5.45：面板添加提醒成功后，把「时间 · 事项」写回正文光标处（用户拍板）。
+// v5.45：面板添加提醒成功后，把「时间　事项」写回正文光标处（用户拍板）。
 // 先恢复打开面板前保存的编辑器选区，再走 insertNodeAtCaret 纯 DOM 插入——
 // 其内部派发 input 事件，撤销栈单步可撤（Ctrl+Z 撤整行）、800ms 自动保存、
 // 500ms 后 linkify 自动给这一行包上下划线标记，全链路照常。
 // 时间用完整 YYYY-M-D H:MM 格式（分钟两位），保证 chip/标记识别稳定命中。
+// v5.47：分隔符由「 · 」改为全角空格「　」（用户拍板；ASCII 空格在 HTML 里会塌缩成一个）
 function fmtRemInsert(at) {
   const d = new Date(at);
   return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate() + ' ' + d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
 }
 function insertRemLine(at, item) {
   if (!cryptoKey) return;
-  const text = fmtRemInsert(at) + (item ? ' · ' + item : '');
+  const text = fmtRemInsert(at) + (item ? '　' + item : '');
   try {
     if (panelSavedSel) {
       const r = restoreSelectionInBlock(editor, panelSavedSel);

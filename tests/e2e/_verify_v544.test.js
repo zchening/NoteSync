@@ -98,8 +98,8 @@ test('V544-1 到点卡片处于页面正中心，标题「提醒」与正文「�
     assert.strictEqual(m.anim, 'remRise', '#remCard 必须挂 remRise 专用入场（rise to 帧 transform:none 会抹掉居中偏移）');
     assert.strictEqual(m.cardAlign, 'center', '整卡必须 text-align:center');
     assert.strictEqual(m.titleAlign, 'center', '标题「提醒」必须居中');
-    assert.strictEqual(m.whenAlign, 'center', '正文「时间 · 事项」必须居中');
-    assert.ok(m.text.includes('为什么呢') && m.text.includes('·'), '正文应含「时间 · 事项」文案: ' + m.text);
+    assert.strictEqual(m.whenAlign, 'center', '正文「时间　事项」必须居中');
+    assert.ok(m.text.includes('为什么呢') && m.text.includes('　'), '正文应含「时间　事项」文案（v5.47 分隔符=全角空格）: ' + m.text);
     assert.deepStrictEqual(page.__errors, [], '不应有页面 JS 错误');
   } finally { await ctx.close(); }
 }));

@@ -246,7 +246,7 @@ test('TC12 selectionchange 后光标在时间上浮出 chip，移开隐藏', asy
   assert.ok(!chip.classList.contains('hidden'), '光标落在时间上 chip 必须浮出');
   assert.ok(chip.textContent.includes('添加提醒'), 'v5.45 chip 文案必须含蓝色 CTA「添加提醒」（「设提醒」退役）');
   assert.ok(chip.querySelector('.chip-cta'), 'CTA 必须是独立元素（双色需要）');
-  assert.ok(chip.textContent.includes('· 开'), 'chip 文案应含时间后文提取的事项（v5.39）');
+  assert.ok(chip.textContent.includes('　开'), 'chip 文案应含时间后文提取的事项（v5.39；v5.47 分隔符=全角空格）');
   assert.ok(!chip.textContent.includes('设提醒'), '旧文案「设提醒」不得再出现');
 
   place(0);
@@ -347,7 +347,8 @@ test('TC13 chip 点击触发 addReminder（PUT 带 rem）并显示已设反馈',
   assert.strictEqual(payload.list[0].text, '开', '事项必须取时间同行后文（「会议 … 开」→ 开），不再用笔记首行');
   assert.ok(chip.classList.contains('feedback'), 'v5.45 确认反馈必须挂两行卡片态');
   assert.ok(chip.textContent.includes('✅ 提醒已添加'), '第一行必须是「✅ 提醒已添加」');
-  assert.ok(chip.textContent.includes('· 开'), '第二行必须是「时间 · 事项」（分隔符「·」用户拍板）');
+  assert.ok(chip.querySelector('.chip-del'), 'v5.47 确认卡必须带「删除」伪按钮');
+  assert.ok(chip.textContent.includes('　开'), '第二行必须是「时间　事项」（v5.47 分隔符=全角空格）');
 });
 
 // ── TC12d：已添加的未来时间 → 两行展示卡（v5.46：不可点/移开即消失）──
@@ -380,7 +381,8 @@ test('TC12d 光标落已添加的未来时间上显示两行展示卡，点击�
   assert.ok(!chip.classList.contains('hidden'), '已添加的未来时间必须浮出两行展示卡');
   assert.ok(chip.classList.contains('feedback'), '展示卡必须复用两行卡片样式');
   assert.ok(chip.textContent.includes('✅ 提醒已添加'), '第一行「✅ 提醒已添加」');
-  assert.ok(chip.textContent.includes('· 开会'), '第二行「时间 · 事项」');
+  assert.ok(chip.querySelector('.chip-del'), 'v5.47 展示卡必须带「删除」伪按钮');
+  assert.ok(chip.textContent.includes('　开会'), '第二行「时间　事项」（v5.47 分隔符=全角空格）');
   assert.ok(!chip.querySelector('.chip-cta'), '展示卡不得带「添加提醒」CTA（纯展示）');
 
   chip.dispatchEvent(new window.Event('mousedown'));
@@ -393,4 +395,87 @@ test('TC12d 光标落已添加的未来时间上显示两行展示卡，点击�
   document.dispatchEvent(new window.Event('selectionchange'));
   await sleep(400);
   assert.ok(chip.classList.contains('hidden'), '光标移开展示卡必须立即消失（无 3 秒定时器拖尾）');
+});
+
+// ── TC14：v5.47 临近触发 30 秒窗口差修复 ─────────────────
+// 旧逻辑：expired（at<=now+30s）先把 chip 拦掉，但下划线阈值是 at<=now →
+// 「有下划线却不弹卡」。新逻辑：已添加分支优先，口径与下划线一致。
+// 为保证分钟对齐的解析值落在 (now, now+30s] 窗口内，把 Date.now 钉在秒数≥30 的时刻。
+test('TC14 已添加提醒处于临近触发 30 秒窗口内，光标落时间上仍必须弹展示卡', async t => {
+  const app = freshApp();
+  t.after(() => app.dom.window.close());
+  const { window, document, editor } = app;
+  const key = await makeKey();
+  const noteCt = await window.encryptText('x', key);
+  mockCapture(window, { v: 5, ct: noteCt.ct, iv: noteCt.iv, salt: 'x' }, 6);
+  await window.applyUnlocked(key, { v: 5, ct: noteCt.ct, iv: noteCt.iv, salt: 'x' });
+
+  // 把页面世界的 Date.now 钉在「秒数≥30」的时刻，下一个分钟边界必落在 30 秒窗口内
+  const realNow = Date.now();
+  const d0 = new Date(realNow);
+  const fixedNow = d0.getSeconds() < 30 ? realNow + (30 - d0.getSeconds()) * 1000 : realNow;
+  const origDateNow = window.Date.now;
+  window.Date.now = () => fixedNow;
+  t.after(() => { window.Date.now = origDateNow; });
+
+  const boundary = new Date(fixedNow);
+  boundary.setSeconds(0, 0);
+  boundary.setMinutes(boundary.getMinutes() + 1);
+  const S = fmtDate(boundary);
+  const P = window.parseTimeMatches(S)[0].at;
+  assert.ok(P > fixedNow && P - fixedNow <= 30000, '前置：解析值必须落在 (now, now+30s] 过期窗口内');
+
+  editor.innerHTML = '<div>马上 ' + S + ' 开会</div>';
+  const tn = editor.querySelector('div').firstChild;
+  const idx = tn.nodeValue.indexOf(S);
+  await window.addReminder(P, '开会'); // 提醒已添加（真实 PUT 路径）
+
+  const chip = document.getElementById('timeChip');
+  const range = document.createRange();
+  range.setStart(tn, idx + 2); range.setEnd(tn, idx + 2);
+  const sel = window.getSelection();
+  sel.removeAllRanges(); sel.addRange(range);
+  document.dispatchEvent(new window.Event('selectionchange'));
+  await sleep(400);
+  assert.ok(!chip.classList.contains('hidden'), '已添加且未到点的提醒：即使处于 30 秒过期判定窗口，也必须弹展示卡');
+  assert.ok(chip.classList.contains('feedback'), '弹的必须是两行展示卡，不是蓝色 CTA');
+  assert.ok(chip.querySelector('.chip-del'), 'v5.47 展示卡必须带「删除」按钮');
+});
+
+// ── TC15：v5.47 展示卡「删除」按钮 → 彻底移除该提醒 ──────
+test('TC15 点展示卡「删除」→ 提醒彻底移除（PUT rem=null）、chip 收起', async t => {
+  const app = freshApp();
+  t.after(() => app.dom.window.close());
+  const { window, document, editor } = app;
+  const key = await makeKey();
+  const noteCt = await window.encryptText('x', key);
+  const puts = mockCapture(window, { v: 5, ct: noteCt.ct, iv: noteCt.iv, salt: 'x' }, 6);
+  await window.applyUnlocked(key, { v: 5, ct: noteCt.ct, iv: noteCt.iv, salt: 'x' });
+
+  const S = fmtDate(futureDate(1, 7, 5));
+  editor.innerHTML = '<div>会议 ' + S + ' · 开会</div>';
+  const tn = editor.querySelector('div').firstChild;
+  const idx = tn.nodeValue.indexOf(S);
+  const chip = document.getElementById('timeChip');
+
+  const expectedAt = window.parseTimeMatches(S)[0].at;
+  await window.addReminder(expectedAt, '开会');
+  const putsAfterAdd = puts.length;
+  assert.ok(putsAfterAdd >= 1, '前置：添加提醒已持久化');
+
+  const range = document.createRange();
+  range.setStart(tn, idx + 2); range.setEnd(tn, idx + 2);
+  const sel = window.getSelection();
+  sel.removeAllRanges(); sel.addRange(range);
+  document.dispatchEvent(new window.Event('selectionchange'));
+  await sleep(400);
+  const del = chip.querySelector('.chip-del');
+  assert.ok(del, '前置：展示卡带「删除」按钮');
+
+  del.dispatchEvent(new window.Event('mousedown')); // jsdom 无 PointerEvent，走 mousedown
+  await sleep(600);
+  assert.ok(chip.classList.contains('hidden'), '点删除后 chip 必须立即收起');
+  const last = puts[puts.length - 1];
+  assert.ok(puts.length > putsAfterAdd, '删除必须触发持久化');
+  assert.strictEqual(last.rem, null, '提醒清空后 rem 字段必须显式置 null（服务端清除，多端同步）');
 });

@@ -372,23 +372,52 @@ test('v5.45+v5.46：提醒下划线标记由 linkify 管理（先拆后建）并
   assert.ok(/'#timeChip \.chip-cta\{color:#DA9C14!important/.test(SRC), 'SHELL_CSS 必须预反色锁 chip CTA（目标日间蓝 #2563EB）');
 });
 
-test('v5.46：已添加的未来时间悬停两行展示卡（不可点、移开即消失），回写分隔符保持「 · 」', () => {
-  assert.ok((SRC.match(/l1\.textContent = '✅ 提醒已添加'/g) || []).length === 2, '两行卡出现两处：点添加后的确认卡 + 悬停已添加时间的展示卡');
+test('v5.46+v5.47：已添加的未来时间悬停两行展示卡（不可点、移开即消失），分隔符改全角空格「　」', () => {
+  assert.ok((SRC.match(/createTextNode\('✅ 提醒已添加'\)/g) || []).length === 2, '两行卡出现两处：点添加后的确认卡 + 悬停已添加时间的展示卡（v5.47 起第一行为文本节点+删除按钮）');
   assert.ok(/if \(reminders\.some\(r => r\.at === m\.at\)\) \{/.test(SRC), 'chip 必须分支已添加的时间（浮两行展示卡）');
-  assert.ok(/fmtRemTime\(m\.at\) \+ \(item \? ' · ' \+ item : ''\)/.test(SRC), '展示卡第二行「时间 · 事项」（事项空只显时间）');
+  assert.ok(/fmtRemTime\(m\.at\) \+ \(item \? '　' \+ item : ''\)/.test(SRC), '展示卡第二行「时间　事项」（事项空只显时间；v5.47 分隔符=全角空格）');
   assert.ok(/chipData = null; \/\/ 清残留/.test(SRC), '展示卡必须清 chipData（纯展示不可点，防旧目标误触）');
   assert.ok(/timeChip\.classList\.add\('feedback'\)/.test(SRC), '展示卡复用两行卡片样式（圆角/居中/默认光标）');
   assert.ok(!/'设提醒：'/.test(SRC), '旧文案「设提醒：」不得回归');
-  assert.ok(/fmtRemInsert\(at\) \+ \(item \? ' · ' \+ item : ''\)/.test(SRC), '面板回写格式保持「时间 · 事项」（· 两侧空格，用户拍板不变）');
+  assert.ok(/fmtRemInsert\(at\) \+ \(item \? '　' \+ item : ''\)/.test(SRC), '面板回写格式「时间　事项」（v5.47 分隔符=全角空格，用户拍板）');
+});
+
+test('v5.47：chip 两行卡带「删除」伪按钮（三板锁色）+ 30 秒窗口差修复 + 面板列表左对齐显式升序 + 全角空格分隔', () => {
+  // ── 删除按钮：构建函数 + 三事件 + 键盘可达 ──
+  assert.ok(/function buildChipDeleteBtn\(\)/.test(SRC), '删除按钮必须有独立构建函数（确认卡/展示卡两处复用）');
+  assert.ok(/function chipDeleteActivate\(e\)/.test(SRC), '删除必须有独立激活函数');
+  assert.ok(/e\.stopPropagation\(\); \/\/ 阻止冒泡到 timeChip 的 chipActivate/.test(SRC), '删除点击必须阻止冒泡（不落入整卡 chipActivate 路径）');
+  assert.ok(/d\.addEventListener\('pointerdown', chipDeleteActivate\)/.test(SRC) && /d\.addEventListener\('mousedown', chipDeleteActivate\)/.test(SRC), '删除按钮必须挂 pointerdown/mousedown（jsdom 兼容触屏套路）');
+  assert.ok(/d\.setAttribute\('tabindex', '0'\)/.test(SRC), '删除伪按钮必须键盘可达（v5.39 铁律）');
+  assert.ok(/removeReminder\(at\); \/\/ 异步/.test(SRC), '删除必须走 removeReminder（列表移除+持久化+下划线重算）');
+  // ── 三板锁色（静态 CSS / 动态板 / SHELL_CSS 预反色）──
+  assert.ok(/#timeChip \.chip-del\{[^}]*border:1px solid var\(--line\)/.test(SRC), '静态 CSS：删除按钮 span+描边（原生 button 国产夜间全黑铁律）');
+  assert.ok(/#timeChip \.chip-del\{color:\$\{p\.fg\}!important.*border:1px solid \$\{p\.line\}!important/.test(SRC), '动态板必须锁删除按钮前景/描边');
+  assert.ok(/'#timeChip \.chip-del\{color:#E3E3E5!important[^}]*border:1px solid #13151D!important/.test(SRC), 'SHELL_CSS 必须预反色锁删除按钮（目标日间前景/描边）');
+  // ── chipDeleteAt 生命周期 ──
+  assert.ok(/let chipData = null, chipTimer = null, chipDeleteAt = null;/.test(SRC), 'chipDeleteAt 必须与 chipData 同址声明');
+  assert.ok(/function hideTimeChip\(\) \{ chipData = null; chipDeleteAt = null;/.test(SRC), 'hideTimeChip 必须同时清 chipDeleteAt（防旧目标误删）');
+  assert.ok((SRC.match(/chipDeleteAt = /g) || []).length >= 4, 'chipDeleteAt 赋值点：声明+清除+展示卡+确认卡');
+  // ── 30 秒窗口差修复：已添加分支优先，口径与下划线一致 ──
+  assert.ok(/if \(m\.at <= now\) \{ hideTimeChip\(\); return; \}/.test(SRC), '已添加分支以 at<=now 拦截（与下划线阈值一致，修 30s 窗口差）');
+  assert.ok(/if \(m\.expired\) \{ hideTimeChip\(\); return; \}/.test(SRC), '未添加的过期时间仍零打扰（硬规则不变）');
+  assert.ok(/const now = Date\.now\(\);\s*\n\s*\/\/ v5\.47/.test(SRC), '过期口径判断必须取自当前时刻');
+  // ── 面板列表：左对齐 + 显式升序 ──
+  assert.ok(/#remBoxList \.rem-row\{[^}]*text-align:left\}/.test(SRC), '面板已设列表必须左对齐（覆盖 .qr-box 居中，用户拍板）');
+  assert.ok(/reminders\.filter\(r => r\.at > Date\.now\(\)\)\.sort\(\(a, b\) => a\.at - b\.at\)\.forEach/.test(SRC), '面板列表渲染必须显式升序（最近的最上方，用户要求）');
+  // ── 分隔符：remCard 与面板列表同步全角空格 ──
+  assert.ok(/t\.textContent = fmtRemTime\(r\.at\) \+ \(r\.text \? '　' \+ r\.text : ''\)/.test(SRC), '到点卡片条目分隔符=全角空格');
+  assert.ok(/row\.appendChild\(document\.createTextNode\(fmtRemTime\(r\.at\) \+ \(r\.text \? '　' \+ r\.text : ''\)\)\)/.test(SRC), '面板列表条目分隔符=全角空格');
+  assert.ok(!/' · ' \+ (item|r\.text)/.test(SRC), '时间与事项之间的「 · 」分隔符必须全部退役');
 });
 
 test('v5.45：chip 文案改版（蓝色 CTA）+ 两行确认卡 + 过期零打扰 + 面板添加回写正文', () => {
   assert.ok(/cta\.textContent = '添加提醒'/.test(SRC), 'chip CTA 必须是「添加提醒」（与面板按钮统一，「设提醒」退役）');
   assert.ok(!/'设提醒：'/.test(SRC), '旧文案「设提醒：」必须删除');
   assert.ok(!/已过期 ' \+ fmtRemTime/.test(SRC), '旧「已过期」chip 文案必须删除（过期不再浮 chip）');
-  assert.ok(/if \(!m \|\| m\.expired\) \{ hideTimeChip\(\); return; \}/.test(SRC), '过期命中直接不显示 chip（零打扰，用户拍板）');
-  assert.ok(/l1\.textContent = '✅ 提醒已添加'/.test(SRC), '确认卡第一行必须是「✅ 提醒已添加」');
-  assert.ok(/l2\.textContent = fmtRemTime\(at\) \+ \(item \? ' · ' \+ item : ''\)/.test(SRC), '确认卡第二行必须是「时间 · 事项」（分隔符「·」用户拍板）');
+  assert.ok(/if \(m\.expired\) \{ hideTimeChip\(\); return; \}/.test(SRC), '过期命中直接不显示 chip（零打扰，用户拍板；v5.47 起该判断移到已添加分支之后）');
+  assert.ok(/createTextNode\('✅ 提醒已添加'\)/.test(SRC), '确认卡第一行必须是「✅ 提醒已添加」（v5.47：文本节点+删除按钮）');
+  assert.ok(/l2\.textContent = fmtRemTime\(at\) \+ \(item \? '　' \+ item : ''\)/.test(SRC), '确认卡第二行必须是「时间　事项」（v5.47 分隔符=全角空格）');
   assert.ok(/chipFeedbackUntil = Date\.now\(\) \+ 3000/.test(SRC), '确认卡停留 3 秒');
   assert.ok(/insertRemLine\(at, text\)/.test(SRC), '面板添加成功必须回写正文光标处');
   assert.ok(/insertNodeAtCaret\(document\.createTextNode\(text\)\)/.test(SRC), '回写走 insertNodeAtCaret 纯 DOM 插入（input 事件链照常：撤销栈/保存/linkify）');
