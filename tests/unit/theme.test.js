@@ -288,3 +288,41 @@ test('v5.38：提示条与版本 toast 背景必须实底 var(--box-bg)，不得
   assert.ok(toast.includes('background:var(--box-bg)'), '#versionToast 背景应为实底 var(--box-bg)');
   assert.ok(!toast.includes('background:var(--hover)'), '#versionToast 不得再用半透明 --hover 背景');
 });
+
+// ── v5.41：提醒 UI 纳入深色对抗保护圈 + 页面内去 ⏰ emoji ──────
+// 根因回顾：#remCard（v5.37）与 #remBoxList（v5.40）不在 v5.29 的覆盖名单里，
+// 国产浏览器夜间 CSS 注入把「知道了」「时间 · 事项」的文字色吃掉 → 黑底黑字；
+// 「×」按钮则被 .box button 反色规则强制成实底黑块。
+// 修复 = 三份覆盖名单（动态日板/夜板 + SHELL_CSS 预反色板）全部补规则。
+test('v5.41：动态覆盖日/夜两板都必须含 #remCard 全家与 #remBoxList 规则（文字带 text-fill 双保险）', () => {
+  const w = openApp(stubModern);
+  w.applyTheme(true);
+  const darkCss = overrideEl(w).textContent;
+  w.applyTheme(false);
+  const lightCss = overrideEl(w).textContent;
+  for (const [tag, css] of [['夜间', darkCss], ['日间', lightCss]]) {
+    assert.ok(/#remCard\{[^}]*background:[^}]*!important/.test(css), tag + '板 #remCard 卡片背景必须实底锁定');
+    assert.ok(/#remCardTitle\{[^}]*-webkit-text-fill-color:[^}]*!important/.test(css), tag + '板 #remCardTitle 文字必须 text-fill 双保险');
+    assert.ok(/#remCardList \.rem-when\{[^}]*-webkit-text-fill-color:[^}]*!important/.test(css), tag + '板到点条目文字必须 text-fill 双保险');
+    assert.ok(/#remCardList \.rem-late\{[^}]*color:[^}]*!important/.test(css), tag + '板"已过 X 分钟"补录文字必须锁定');
+    assert.ok(/#remCardAck\{[^}]*background:[^}]*!important/.test(css), tag + '板「知道了」按钮背景必须锁定');
+    assert.ok(/#remCardAck\{[^}]*-webkit-text-fill-color:[^}]*!important/.test(css), tag + '板「知道了」文字必须 text-fill 双保险（黑底黑字根因）');
+    assert.ok(/#remBoxList \.rem-row span\{[^}]*-webkit-text-fill-color:[^}]*!important/.test(css), tag + '板列表"时间 · 事项"文字必须 text-fill 双保险');
+    assert.ok(/#remBoxList \.rem-row button\{[^}]*background:none!important/.test(css), tag + '板「×」按钮必须恢复描边极简样式，不得被反色规则卷成实底黑块');
+  }
+});
+
+test('v5.41：SHELL_CSS（借壳日间预反色板）也必须含 #remCard / #remBoxList 规则', () => {
+  assert.ok(/'#remCard\{background:#000000!important/.test(SRC), 'SHELL_CSS 应含 #remCard 实底规则（invert 后 = light box）');
+  assert.ok(/'#remCardAck\{background:#E3E3E5!important;color:#040407!important/.test(SRC), 'SHELL_CSS 应含 ack 反色规则（invert 后 = 深底白字）');
+  assert.ok(/'#remBoxList \.rem-row span\{/.test(SRC), 'SHELL_CSS 应含列表文字规则');
+  assert.ok(/'#remBoxList \.rem-row button\{[^}]*background:none!important/.test(SRC), 'SHELL_CSS「×」按钮同样保持描边极简');
+});
+
+test('v5.41：页面 UI 内不得出现 ⏰ emoji（卡片标题/条目/chip 文案），系统通知保留', () => {
+  assert.ok(!/id="remCardTitle">[^<]*⏰/.test(SRC), '到点卡片标题必须去 emoji（同屏与条目重复、风格不符）');
+  assert.ok(!/t\.textContent = '⏰ /.test(SRC), '到点卡片条目必须去 emoji 前缀');
+  assert.ok(!/timeChip\.textContent = '⏰ /.test(SRC), 'chip 浮层文案必须去 emoji 前缀');
+  assert.ok(/showNotification\('⏰ NoteSync 提醒'/.test(SRC), '系统通知栏保留 ⏰（系统层 emoji 醒目，不在页面 UI 内）');
+  assert.ok(/const title = '⏰ '/.test(SRC), '到点系统通知标题保留 ⏰');
+});

@@ -87,10 +87,10 @@ test('内联 qrcode 库可为真实配对 URL 生成模块矩阵', () => {
 });
 
 // ── Q5：版本号 ──────────────────────────────
-test('APP_VERSION 为 5.40', () => {
+test('APP_VERSION 为 5.41', () => {
   const fs = require('fs');
   const src = fs.readFileSync(require('../helpers').INDEX_PATH, 'utf8');
-  assert.ok(src.includes("const APP_VERSION = '5.40';"), 'index.html 应声明 APP_VERSION = 5.40');
+  assert.ok(src.includes("const APP_VERSION = '5.41';"), 'index.html 应声明 APP_VERSION = 5.41');
 });
 
 // ── Q6：v5.26 生产配对二维码走主站 302 短链 ──────────────────────────────

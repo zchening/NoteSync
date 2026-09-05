@@ -205,7 +205,7 @@
   <button type="button" id="lock" title="退出锁定"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="11" x="4" y="11" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></button>
 </header>
 <div id="remCard" class="hidden">
-  <div id="remCardTitle">⏰ 提醒</div>
+  <div id="remCardTitle">提醒</div>
   <div id="remCardList"></div>
   <div id="remCardAck" role="button" tabindex="0">知道了</div>
 </div>
@@ -286,7 +286,7 @@ const PBKDF2_ITER = 200000;
 const FAIL_LIMIT = 10;
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '5.40';
+const APP_VERSION = '5.41';
 const BUILD_DATE = '2026-09-05';
 
 const $ = s => document.querySelector(s);
@@ -362,6 +362,13 @@ function themeOverrideCss(dark) {
     .box p,.box .qr-lock-warn{color:${p.muted}!important;-webkit-text-fill-color:${p.muted}!important}
     .box input{background:${p.bg}!important;color:${p.fg}!important;border-color:${p.line}!important;-webkit-text-fill-color:${p.fg}!important}
     .box button:not(:disabled){background:${p.fg}!important;color:${p.bg}!important;-webkit-text-fill-color:${p.bg}!important}
+    #remCard{background:${p.box}!important;color:${p.fg}!important;border-color:${p.line}!important}
+    #remCardTitle{color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important}
+    #remCardList .rem-when{color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important}
+    #remCardList .rem-late{color:${p.muted}!important;-webkit-text-fill-color:${p.muted}!important}
+    #remCardAck{background:${p.fg}!important;color:${p.bg}!important;-webkit-text-fill-color:${p.bg}!important}
+    #remBoxList .rem-row span{color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important}
+    #remBoxList .rem-row button{background:none!important;color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important;border:1px solid ${p.line}!important}
     #landing{background:radial-gradient(ellipse 720px 480px at 50% 30%,${accentSoft},transparent),${p.bg}!important;color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important}
     #landing h1{color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important}
     #landing .sub,#landing .hint{color:${p.muted}!important;-webkit-text-fill-color:${p.muted}!important}
@@ -430,6 +437,13 @@ const SHELL_CSS = [
   '.box p,.box .qr-lock-warn{color:#676A75!important;-webkit-text-fill-color:#676A75!important}',
   '.box input{background:#040407!important;color:#E3E3E5!important;border-color:#13151D!important;-webkit-text-fill-color:#E3E3E5!important}',
   '.box button:not(:disabled){background:#E3E3E5!important;color:#040407!important;-webkit-text-fill-color:#040407!important}',
+  '#remCard{background:#000000!important;color:#E3E3E5!important;border-color:#13151D!important}',
+  '#remCardTitle{color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important}',
+  '#remCardList .rem-when{color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important}',
+  '#remCardList .rem-late{color:#676A75!important;-webkit-text-fill-color:#676A75!important}',
+  '#remCardAck{background:#E3E3E5!important;color:#040407!important;-webkit-text-fill-color:#040407!important}',
+  '#remBoxList .rem-row span{color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important}',
+  '#remBoxList .rem-row button{background:none!important;color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important;border:1px solid #13151D!important}',
   '#landing{background:radial-gradient(ellipse 720px 480px at 50% 30%,rgba(112,142,217,.07),transparent),#040407!important;color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important}',
   '#landing h1{color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important}',
   '#landing .sub,#landing .hint{color:#676A75!important;-webkit-text-fill-color:#676A75!important}',
@@ -2637,14 +2651,14 @@ function maybeShowTimeChip() {
   if (m.expired) {
     // v5.39：过期时间不再无声无息——灰态标明「已过期」，不可点
     chipData = null;
-    timeChip.textContent = '⏰ 已过期 ' + fmtRemTime(m.at);
+    timeChip.textContent = '已过期 ' + fmtRemTime(m.at);
     timeChip.classList.add('expired');
     timeChip.classList.remove('hidden');
     return;
   }
   const item = itemAfterMatch(info.text, m);
   chipData = { at: m.at, item: item };
-  timeChip.textContent = '⏰ 设提醒：' + fmtRemTime(m.at) + (item ? ' · ' + item : '');
+  timeChip.textContent = '设提醒：' + fmtRemTime(m.at) + (item ? ' · ' + item : '');
   timeChip.classList.remove('expired');
   timeChip.classList.remove('hidden');
 }
@@ -2824,7 +2838,7 @@ function showRemCard(items, isCatchup) {
   items.forEach(r => {
     const item = document.createElement('div'); item.className = 'rem-item';
     const t = document.createElement('span'); t.className = 'rem-when';
-    t.textContent = '⏰ ' + fmtRemTime(r.at) + (r.text ? ' · ' + r.text : '');
+    t.textContent = fmtRemTime(r.at) + (r.text ? ' · ' + r.text : '');
     item.appendChild(t);
     if (isCatchup && r.at <= now) {
       const late = document.createElement('span'); late.className = 'rem-late';
