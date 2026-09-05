@@ -355,16 +355,31 @@ test('v5.44：到点卡片必须居中且文字居中（remRise 专用入场）�
   assert.ok(/!\/remCard\.classList\.contains\('hidden'\)|remCard\.classList\.remove\('hidden'\)/.test(SRC), '到点实底卡片仍是页内主通道');
 });
 
-test('v5.45：提醒下划线标记由 linkify 管理（先拆后建）并纳入双板锁色，未添加的日期绝不包标记', () => {
-  assert.ok(/u\.className = mt\.past \? 'rem-mark rem-past' : 'rem-mark'/.test(SRC), 'buildLinkSafe 必须生成 u.rem-mark（过期/已提醒挂 rem-past）');
+test('v5.45+v5.46：提醒下划线标记由 linkify 管理（先拆后建）并纳入双板锁色，未添加/已过期的日期绝不包标记', () => {
+  assert.ok(/u\.className = 'rem-mark'/.test(SRC), 'buildLinkSafe 必须生成 u.rem-mark（v5.46：不再挂灰态 class）');
+  assert.ok(!/rem-past/.test(SRC), '灰态 class 必须完全退役（v5.46：过期/已提醒过的时间回归普通正文，不变灰）');
+  assert.ok(!/mt\.past/.test(SRC), '包裹区间不得再携带 past 字段（过期匹配直接不进计算）');
+  assert.ok(/filter\(m => !\(isRemDone\(m\.at\) \|\| m\.at <= now\)\)/.test(SRC), '已过期/已提醒过的匹配必须被过滤（v5.46 用户拍板：无下划线不变灰）');
+  assert.ok(!/exec\(txt\.slice\(end\)\)/.test(SRC), '事项延展正则必须删除（v5.46：下划线只包时间串本身）');
   assert.ok(/remMatchesFor\(textNode\.nodeValue\)/.test(SRC), 'linkify 重建时必须传入提醒包裹区间');
   assert.ok(/remMarks\.forEach/.test(SRC), '先拆阶段必须拆 u.rem-mark（删提醒→下划线消失靠整轮重算）');
   assert.ok(/remMatchesFor\(node\.nodeValue\)\.length > 0/.test(SRC), 'walker 必须放行已设提醒命中的纯时间文本节点（否则纯时间行建不出标记）');
   assert.ok(/reminders\.some\(r => r\.at === m\.at\)/.test(SRC), '只有解析值存在于提醒列表才包标记（用户拍板：未添加的日期绝不加下划线）');
-  assert.ok(/#editor u\.rem-mark\.rem-past\{color:\$\{p\.muted\}!important/.test(SRC), '动态板必须锁 rem-past 灰色（正文变灰）');
-  assert.ok(/'#editor u\.rem-mark\.rem-past\{color:#676A75!important/.test(SRC), 'SHELL_CSS 必须预反色锁 rem-past 灰色');
+  assert.ok(/&& !\(isRemDone\(m\.at\) \|\| m\.at <= now\)/.test(SRC), '早退判断必须同步排除过期时间（v5.46：纯过期文本走早退）');
+  assert.ok(/#editor u\.rem-mark\{color:\$\{p\.fg\}!important/.test(SRC), '动态板必须锁 rem-mark 前景色');
+  assert.ok(/'#editor u\.rem-mark\{color:#E3E3E5!important/.test(SRC), 'SHELL_CSS 必须预反色锁 rem-mark（目标日间前景）');
   assert.ok(/#timeChip \.chip-cta\{color:\$\{chipCta\}!important/.test(SRC), '动态板必须锁 chip CTA 蓝色');
   assert.ok(/'#timeChip \.chip-cta\{color:#DA9C14!important/.test(SRC), 'SHELL_CSS 必须预反色锁 chip CTA（目标日间蓝 #2563EB）');
+});
+
+test('v5.46：已添加的未来时间悬停两行展示卡（不可点、移开即消失），回写分隔符保持「 · 」', () => {
+  assert.ok((SRC.match(/l1\.textContent = '✅ 提醒已添加'/g) || []).length === 2, '两行卡出现两处：点添加后的确认卡 + 悬停已添加时间的展示卡');
+  assert.ok(/if \(reminders\.some\(r => r\.at === m\.at\)\) \{/.test(SRC), 'chip 必须分支已添加的时间（浮两行展示卡）');
+  assert.ok(/fmtRemTime\(m\.at\) \+ \(item \? ' · ' \+ item : ''\)/.test(SRC), '展示卡第二行「时间 · 事项」（事项空只显时间）');
+  assert.ok(/chipData = null; \/\/ 清残留/.test(SRC), '展示卡必须清 chipData（纯展示不可点，防旧目标误触）');
+  assert.ok(/timeChip\.classList\.add\('feedback'\)/.test(SRC), '展示卡复用两行卡片样式（圆角/居中/默认光标）');
+  assert.ok(!/'设提醒：'/.test(SRC), '旧文案「设提醒：」不得回归');
+  assert.ok(/fmtRemInsert\(at\) \+ \(item \? ' · ' \+ item : ''\)/.test(SRC), '面板回写格式保持「时间 · 事项」（· 两侧空格，用户拍板不变）');
 });
 
 test('v5.45：chip 文案改版（蓝色 CTA）+ 两行确认卡 + 过期零打扰 + 面板添加回写正文', () => {

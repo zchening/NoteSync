@@ -75,7 +75,7 @@
   #remCardAck:active{opacity:.75}
   /* v5.45：chip 改版——14px 加大更明显；尾部蓝色 CTA「添加提醒」做按钮感；
      点添加后原地变两行确认卡（✅ 提醒已添加 / 时间 · 事项）；
-     过期时间不再浮任何 chip（v5.45 用户拍板：过期文本正文已变灰，光标移上零打扰） */
+     v5.46：已添加的未来时间悬停同款两行展示卡（不可点）；过期时间不浮任何 chip（零打扰） */
   #timeChip{position:fixed;top:54px;left:50%;transform:translateX(-50%);z-index:56;padding:10px 18px;font-size:14px;color:var(--fg);background:var(--box-bg);border:1px solid var(--line);border-radius:999px;box-shadow:0 6px 20px rgba(0,0,0,.18);cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:manipulation;-webkit-tap-highlight-color:transparent;white-space:nowrap;max-width:92vw;overflow:hidden;text-overflow:ellipsis}
   #timeChip .chip-cta{color:#2563EB;font-weight:600;margin-left:12px}
   #timeChip.feedback{border-radius:16px;white-space:normal;text-align:center;cursor:default}
@@ -87,10 +87,10 @@
   #remBoxForm .rem-time-row input[type="date"]{flex:1;min-width:0;color-scheme:inherit}
   #remBoxForm .rem-time-row .rem-hh,#remBoxForm .rem-time-row .rem-mm{width:2.9em;flex:none;text-align:center;padding:0 4px}
   #remBoxForm .rem-time-row .rem-colon{color:var(--muted);font-weight:600;flex:none}
-  /* v5.45：已设提醒的时间文本标记（linkify 统一先拆后建，u 元素）——下划线如链接；
-     已过期/已提醒过的变灰。u 元素盒在该内核夜间可能吃字，纳入三份锁色名单 */
+  /* v5.45：已设提醒的时间文本标记（linkify 统一先拆后建，u 元素）——下划线如链接。
+     v5.46：只包时间串；过期/已提醒过的时间不产标记（回归普通正文），灰态样式退役。
+     u 元素盒在该内核夜间可能吃字，纳入三份锁色名单 */
   #editor u.rem-mark{text-decoration:underline;text-underline-offset:3px;text-decoration-thickness:1.5px}
-  #editor u.rem-mark.rem-past{color:var(--muted);text-decoration-color:var(--muted)}
   /* v5.40：提醒面板升级为扫码配对同款 .mask+.box 模态（复用 .box 输入框/主按钮样式与深色覆盖保护）；
      设置行（时间/事项/添加提醒）永远首行，已设条目列表排后；chip 与模态互斥（遮罩挡正文） */
   #remBoxForm{display:flex;flex-direction:column;gap:12px;margin:2px 0 18px}
@@ -304,7 +304,7 @@ const PBKDF2_ITER = 200000;
 const FAIL_LIMIT = 10;
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '5.45';
+const APP_VERSION = '5.46';
 const BUILD_DATE = '2026-09-05';
 
 const $ = s => document.querySelector(s);
@@ -392,7 +392,6 @@ function themeOverrideCss(dark) {
     #timeChip .chip-cta{color:${chipCta}!important;-webkit-text-fill-color:${chipCta}!important;background:none!important}
     #timeChip .chip-ok1,#timeChip .chip-ok2{color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important;background:none!important}
     #editor u.rem-mark{color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important;text-decoration-color:${p.fg}!important}
-    #editor u.rem-mark.rem-past{color:${p.muted}!important;-webkit-text-fill-color:${p.muted}!important;text-decoration-color:${p.muted}!important;background:none!important}
     #landing{background:radial-gradient(ellipse 720px 480px at 50% 30%,${accentSoft},transparent),${p.bg}!important;color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important}
     #landing h1{color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important}
     #landing .sub,#landing .hint{color:${p.muted}!important;-webkit-text-fill-color:${p.muted}!important}
@@ -472,7 +471,6 @@ const SHELL_CSS = [
   '#timeChip .chip-cta{color:#DA9C14!important;-webkit-text-fill-color:#DA9C14!important;background:none!important}',
   '#timeChip .chip-ok1,#timeChip .chip-ok2{color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important;background:none!important}',
   '#editor u.rem-mark{color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important;text-decoration-color:#E3E3E5!important}',
-  '#editor u.rem-mark.rem-past{color:#676A75!important;-webkit-text-fill-color:#676A75!important;text-decoration-color:#676A75!important;background:none!important}',
   '#landing{background:radial-gradient(ellipse 720px 480px at 50% 30%,rgba(112,142,217,.07),transparent),#040407!important;color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important}',
   '#landing h1{color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important}',
   '#landing .sub,#landing .hint{color:#676A75!important;-webkit-text-fill-color:#676A75!important}',
@@ -1891,8 +1889,9 @@ function trimUrlTrailing(u) {
 // 属性赋值与文本节点天然转义，任何输入都只是纯文本。
 // 规则与旧版对齐：URL 优先于手机号（重叠时取 URL）、denyAsUrl 命中保持纯文本、
 // 链接文本与长词（≥15 连续非空白）插入 ZWSP 断行符。
-// v5.45：remMatches = 已设提醒的时间（+紧随事项）包裹区间，由 linkifyEditor 计算传入。
-// 与 URL/手机号重叠时让位（链接优先）；kind==='rem' 生成 <u class="rem-mark">（过期/已提醒挂 rem-past 变灰）。
+// v5.45：remMatches = 已设提醒的时间包裹区间，由 linkifyEditor 计算传入。
+// v5.46：只包时间串本身（事项不并入）；过期/已提醒过的时间不进 remMatches（回归普通正文）。
+// 与 URL/手机号重叠时让位（链接优先）；kind==='rem' 生成 <u class="rem-mark">。
 // 包裹不改变文本内容（无 ZWSP），块内可见字符偏移不变——选区保存/恢复机制无需特殊处理。
 function buildLinkSafe(text, urlRegex, phoneRegex, breakSeparators, remMatches) {
   const matches = [];
@@ -1924,7 +1923,7 @@ function buildLinkSafe(text, urlRegex, phoneRegex, breakSeparators, remMatches) 
     addText(text.slice(pos, mt.start));
     if (mt.kind === 'rem') {
       const u = document.createElement('u');
-      u.className = mt.past ? 'rem-mark rem-past' : 'rem-mark';
+      u.className = 'rem-mark';
       u.textContent = mt.text;
       frag.appendChild(u);
     } else if (mt.kind === 'url' && denyAsUrl(mt.text)) {
@@ -1949,20 +1948,17 @@ function buildLinkSafe(text, urlRegex, phoneRegex, breakSeparators, remMatches) 
   return frag;
 }
 
-// v5.45：计算文本节点内"已设提醒"的包裹区间——时间解析值必须存在于提醒列表才包
-// （用户拍板：没主动添加的日期绝不加下划线）；紧随「 · 事项」并入整段；
-// 已过期或已提醒过的（REM_DONE）挂 rem-past（正文变灰）。文本节点 ≤4000 字才扫描（与 parseTimeMatches 同限）。
+// v5.46：计算文本节点内"已设提醒且仍有效"的时间串包裹区间——时间解析值必须存在于提醒列表才包
+// （用户拍板：没主动添加的日期绝不加下划线）；下划线只包时间串本身，事项不带（v5.45 整段方案退役）；
+// 已过期或已提醒过的（REM_DONE）完全跳过——视觉与普通正文一致，无下划线不变灰（v5.46 用户拍板）。
+// 文本节点 ≤4000 字才扫描（与 parseTimeMatches 同限）。
 function remMatchesFor(txt) {
   if (!reminders.length || !txt || txt.length > 4000) return [];
   const now = Date.now();
   return parseTimeMatches(txt)
     .filter(m => reminders.some(r => r.at === m.at))
-    .map(m => {
-      let end = m.index + m.length;
-      const im = /^(\s*·\s*[^\n]*)/.exec(txt.slice(end));
-      if (im) end += im[1].length;
-      return { start: m.index, end: end, text: txt.slice(m.index, end), past: isRemDone(m.at) || m.at <= now, kind: 'rem' };
-    });
+    .filter(m => !(isRemDone(m.at) || m.at <= now))
+    .map(m => ({ start: m.index, end: m.index + m.length, text: txt.slice(m.index, m.index + m.length), kind: 'rem' }));
 }
 
 function linkifyEditor(opts) {
@@ -1985,9 +1981,11 @@ function linkifyEditor(opts) {
     const autoLinks = Array.from(editor.querySelectorAll('a[data-url="1"]'));
     const straySpans = Array.from(editor.querySelectorAll('span'));
     const remMarks = Array.from(editor.querySelectorAll('u.rem-mark')); // v5.45：提醒标记也要先拆后建
-    // v5.45：列表里有提醒且正文存在可标记时间时不得早退（否则新增/变灰/拆标记都刷不出来）
+    // v5.45：列表里有提醒且正文存在可标记时间时不得早退（否则新增/拆标记都刷不出来）
+    // v5.46：只看仍有效的（未过期且未确认）——过期时间不再产标记，纯过期文本走早退省一轮拆建
+    const now = Date.now();
     const hasRemText = reminders.length > 0 && editor.textContent.length <= 4000 &&
-      parseTimeMatches(editor.textContent).some(m => reminders.some(r => r.at === m.at));
+      parseTimeMatches(editor.textContent).some(m => reminders.some(r => r.at === m.at) && !(isRemDone(m.at) || m.at <= now));
 
     // 早退：无自动链接可拆解、无杂散 span、无提醒标记要刷新、也无任何可链接文本 → 不碰 DOM（避免污染原生撤销栈）。
     // 普通纯文本输入走此分支；粘贴/输入本身已产生合法块结构，无需 ensureBlockWrapped/normalize。
@@ -2019,7 +2017,7 @@ function linkifyEditor(opts) {
       a.replaceWith(t);
     });
     // 1.5) v5.45：提醒标记 <u.rem-mark> 同样拆回纯文本，与链接同一轮重建——
-    //      删提醒→下划线消失、到点确认→变灰，都靠整轮重算
+    //      删提醒→下划线消失、到点→标记回归普通正文，都靠整轮重算
     remMarks.forEach(u => {
       const t = document.createTextNode(u.textContent);
       u.replaceWith(t);
@@ -2715,8 +2713,21 @@ function maybeShowTimeChip() {
   const info = caretInfoInEditor();
   if (!info) { hideTimeChip(); return; }
   const m = matchTimeAt(info.text, info.offset);
-  // v5.45：过期时间不再浮任何 chip——正文里该文本已由 rem-past 变灰标识，光标移上零打扰（用户拍板）
+  // v5.46：过期时间不浮 chip 且正文无任何标记（回归普通正文），光标移上零打扰（用户拍板）
   if (!m || m.expired) { hideTimeChip(); return; }
+  // v5.46：已添加的未来时间 → 纯展示两行卡（✅ 提醒已添加 / 时间 · 事项，事项空只显时间）。
+  // 不可点：不设 chipData；无定时器：光标移走由 selectionchange 自然隐藏（用户拍板）。
+  if (reminders.some(r => r.at === m.at)) {
+    chipData = null; // 清残留：防此前 CTA chip 的旧目标被误触
+    const item = itemAfterMatch(info.text, m);
+    timeChip.classList.add('feedback'); // 复用两行卡样式（圆角/居中/默认光标）
+    timeChip.textContent = '';
+    const l1 = document.createElement('div'); l1.className = 'chip-ok1'; l1.textContent = '✅ 提醒已添加';
+    const l2 = document.createElement('div'); l2.className = 'chip-ok2'; l2.textContent = fmtRemTime(m.at) + (item ? ' · ' + item : '');
+    timeChip.appendChild(l1); timeChip.appendChild(l2);
+    timeChip.classList.remove('hidden');
+    return;
+  }
   const item = itemAfterMatch(info.text, m);
   chipData = { at: m.at, item: item };
   // v5.45：文案改版（用户拍板）——时间·事项在前（裸文本节点防吃字），「添加提醒」蓝色 CTA 在后

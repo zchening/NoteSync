@@ -1,13 +1,16 @@
-// NoteSync v5.45 独立回归验证（Playwright + 真实 Chromium）
+// NoteSync v5.45+v5.46 独立回归验证（Playwright + 真实 Chromium）
 //
-// 逐字针对用户本轮需求：
+// 逐字针对用户需求（v5.46 调整处已标注）：
 //   ① 面板添加提醒成功 → 正文光标处回写「时间 · 事项」，可 Ctrl+Z 撤销
-//   ② 已设提醒的时间+事项整段带下划线（u.rem-mark，linkify 管理）；未添加的日期无标记
+//   ② 已设提醒的时间串带下划线（u.rem-mark，linkify 管理）；未添加的日期无标记
+//      （v5.46：下划线只包时间串，事项不带）
 //   ③ 正文时间文本上的 chip 更明显（14px + 蓝色 CTA「添加提醒」）
-//   ④ 已过期/已提醒过的文本变灰（u.rem-mark.rem-past）；删除提醒后标记消失
+//   ④ 已过期/已提醒过的时间回归普通正文（v5.46：无下划线不变灰，标记直接消失）；
+//      删除提醒后标记消失
 //   ⑤ 过期时间光标移上 → chip 完全不出现（零打扰）
 //   ⑥ chip 点添加 → 两行确认卡（✅ 提醒已添加 / 时间 · 事项）
 //   ⑦ 面板打开时分钟框默认聚焦且值全选（真选中「16」）
+//   ⑧ 已添加的未来时间悬停 → 两行展示卡（不可点/移开即消失）（v5.46 新增）
 // 不修改任何业务代码。
 const { test, before, after } = require('node:test');
 const assert = require('node:assert');
@@ -111,7 +114,8 @@ test('V545-1 面板添加后正文回写「时间 · 买牛奶」并带 rem-mark
     });
     assert.ok(st.text.includes(expectLine), `正文必须回写「${expectLine}」，实际: ${st.text}`);
     assert.ok(st.hasU, '正文必须出现 u.rem-mark 标记');
-    assert.ok(st.uText.includes('买牛奶') && st.uText.includes('9:30'), '下划线必须覆盖时间+事项整段: ' + st.uText);
+    assert.ok(st.uText.includes('9:30'), '下划线必须覆盖时间串: ' + st.uText);
+    assert.ok(!st.uText.includes('买牛奶') && !st.uText.includes('·'), 'v5.46：下划线只包时间串，事项不带: ' + st.uText);
     assert.strictEqual(st.underline, 'underline', '必须是下划线样式');
 
     await page.click('#editor');
@@ -174,8 +178,8 @@ test('V545-2 光标落时间上 chip 含蓝色「添加提醒」，点后变两�
   } finally { await ctx.close(); }
 }));
 
-// ── ②④ 未添加的日期无标记；到点确认变灰；删除提醒标记消失 ────────────────
-test('V545-3 未添加日期无下划线；确认后变灰 rem-past；删除提醒后标记消失', guard(async () => {
+// ── ②④ 未添加的日期无标记；到点确认/删除提醒后标记消失回归普通正文（v5.46 去灰态）───
+test('V545-3+V546 未添加日期无下划线；确认后标记消失（不变灰）；删除提醒后标记消失', guard(async () => {
   const { ctx, page } = await openDesktopEditor('V545C');
   try {
     await page.evaluate(() => {
@@ -191,18 +195,19 @@ test('V545-3 未添加日期无下划线；确认后变灰 rem-past；删除提�
     await page.waitForTimeout(700);
     const marked = await page.evaluate(() => {
       const u = document.getElementById('editor').querySelector('u.rem-mark');
-      return { has: !!u, past: u ? u.classList.contains('rem-past') : false };
+      return { has: !!u, cls: u ? u.className : '' };
     });
     assert.ok(marked.has, '已设提醒的时间行必须带下划线');
-    assert.strictEqual(marked.past, false, '未来提醒不得是灰色');
+    assert.strictEqual(marked.cls, 'rem-mark', '标记只挂 rem-mark（灰态 class 已退役）');
 
     await page.evaluate((at0) => { window.markRemDone(at0); }, at); // 到点确认（模拟）
     await page.waitForTimeout(700);
-    const grey = await page.evaluate(() => {
-      const u = document.getElementById('editor').querySelector('u.rem-mark');
-      return u ? u.classList.contains('rem-past') : false;
+    const doneState = await page.evaluate(() => {
+      const ed = document.getElementById('editor');
+      return { hasU: !!ed.querySelector('u.rem-mark'), text: ed.textContent };
     });
-    assert.ok(grey, '到点确认后正文必须变灰（rem-past）');
+    assert.ok(!doneState.hasU, 'v5.46：到点确认后标记必须消失（回归普通正文，不变灰）');
+    assert.ok(doneState.text.includes('买牛奶'), '正文文本必须原样保留');
 
     await page.evaluate((at0) => window.removeReminder(at0), at);
     await page.waitForTimeout(700);
@@ -235,6 +240,71 @@ test('V545-4 光标落过期时间上 chip 完全不出现（零打扰）', guar
     });
     assert.ok(st.hidden, '过期时间光标移上 chip 必须完全不出现');
     assert.ok(!st.text.includes('已过期'), '不得再有「已过期」文案');
+    assert.deepStrictEqual(page.__errors, [], '不应有页面 JS 错误');
+  } finally { await ctx.close(); }
+}));
+
+// ── ⑧ v5.46 已添加的未来时间：悬停两行展示卡（不可点/移开即消失）─────────
+test('V546-1 已添加的未来时间悬停两行展示卡，点击不重复添加，移开立即消失', guard(async () => {
+  const { ctx, page } = await openDesktopEditor('V546B');
+  try {
+    await page.evaluate(() => {
+      const ed = document.getElementById('editor');
+      ed.innerHTML = '<div>今天要买</div>';
+    });
+    await page.click('#editor');
+    await page.keyboard.press('Control+End');
+    await addViaPanel(page); // 走面板真实路径添加「明天 9:30 · 买牛奶」（回写+入库）
+    const before = await page.evaluate(() => reminders.length);
+    assert.ok(before >= 1, '前置：提醒已入库');
+
+    // 光标落时间上（linkify 已把时间包进 u.rem-mark，从 u 内部取文本节点）
+    await page.evaluate(() => {
+      const ed = document.getElementById('editor');
+      const u = ed.querySelector('u.rem-mark');
+      const tn = (u || ed.querySelector('div')).firstChild;
+      const idx = tn.nodeValue.indexOf('9:30');
+      const r = document.createRange();
+      r.setStart(tn, idx + 2); r.setEnd(tn, idx + 2);
+      const sel = window.getSelection();
+      sel.removeAllRanges(); sel.addRange(r);
+      document.dispatchEvent(new window.Event('selectionchange'));
+    });
+    await page.waitForTimeout(450);
+    const card = await page.evaluate(() => {
+      const c = document.getElementById('timeChip');
+      const l1 = c.querySelector('.chip-ok1'), l2 = c.querySelector('.chip-ok2');
+      return {
+        visible: !c.classList.contains('hidden'),
+        feedback: c.classList.contains('feedback'),
+        l1: l1 ? l1.textContent : '',
+        l2: l2 ? l2.textContent : '',
+        hasCta: !!c.querySelector('.chip-cta'),
+      };
+    });
+    assert.ok(card.visible, '已添加的未来时间必须浮出两行展示卡');
+    assert.ok(card.feedback, '展示卡必须复用两行卡片样式');
+    assert.strictEqual(card.l1, '✅ 提醒已添加', '第一行必须是「✅ 提醒已添加」');
+    assert.ok(card.l2.includes('9:30') && card.l2.includes('买牛奶'), '第二行必须是「时间 · 买牛奶」: ' + card.l2);
+    assert.ok(!card.hasCta, '展示卡不得带「添加提醒」CTA（纯展示）');
+
+    await page.click('#timeChip');
+    await page.waitForTimeout(200);
+    const after = await page.evaluate(() => reminders.length);
+    assert.strictEqual(after, before, '展示卡不可点：点击不得重复添加');
+
+    await page.evaluate(() => {
+      const ed = document.getElementById('editor');
+      const tn = ed.querySelector('div').firstChild;
+      const r = document.createRange();
+      r.setStart(tn, 0); r.setEnd(tn, 0);
+      const sel = window.getSelection();
+      sel.removeAllRanges(); sel.addRange(r);
+      document.dispatchEvent(new window.Event('selectionchange'));
+    });
+    await page.waitForTimeout(450);
+    const hidden = await page.evaluate(() => document.getElementById('timeChip').classList.contains('hidden'));
+    assert.ok(hidden, '光标移开展示卡必须立即消失（无定时器拖尾）');
     assert.deepStrictEqual(page.__errors, [], '不应有页面 JS 错误');
   } finally { await ctx.close(); }
 }));

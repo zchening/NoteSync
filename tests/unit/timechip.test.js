@@ -254,7 +254,7 @@ test('TC12 selectionchange 后光标在时间上浮出 chip，移开隐藏', asy
   assert.ok(chip.classList.contains('hidden'), '光标移到非时间处 chip 必须隐藏');
 });
 
-// ── TC12b：过期时间 → chip 完全不浮出（v5.45：正文已变灰标识，移上去零打扰）──
+// ── TC12b：过期时间 → chip 完全不浮出（v5.45 定案；v5.46 正文也不再有任何标识，移上去零打扰）──
 test('TC12b 光标落过期时间上 chip 不出现（v5.45 零打扰，旧「已过期」灰态退役）', async t => {
   const app = freshApp();
   t.after(() => app.dom.window.close());
@@ -348,4 +348,49 @@ test('TC13 chip 点击触发 addReminder（PUT 带 rem）并显示已设反馈',
   assert.ok(chip.classList.contains('feedback'), 'v5.45 确认反馈必须挂两行卡片态');
   assert.ok(chip.textContent.includes('✅ 提醒已添加'), '第一行必须是「✅ 提醒已添加」');
   assert.ok(chip.textContent.includes('· 开'), '第二行必须是「时间 · 事项」（分隔符「·」用户拍板）');
+});
+
+// ── TC12d：已添加的未来时间 → 两行展示卡（v5.46：不可点/移开即消失）──
+test('TC12d 光标落已添加的未来时间上显示两行展示卡，点击不重复添加，移开立即消失', async t => {
+  const app = freshApp();
+  t.after(() => app.dom.window.close());
+  const { window, document, editor } = app;
+  const key = await makeKey();
+  const noteCt = await window.encryptText('x', key);
+  const puts = mockCapture(window, { v: 5, ct: noteCt.ct, iv: noteCt.iv, salt: 'x' }, 6);
+  await window.applyUnlocked(key, { v: 5, ct: noteCt.ct, iv: noteCt.iv, salt: 'x' });
+
+  const S = fmtDate(futureDate(1, 7, 5));
+  editor.innerHTML = '<div>会议 ' + S + ' · 开会</div>';
+  const tn = editor.querySelector('div').firstChild;
+  const idx = tn.nodeValue.indexOf(S);
+  const chip = document.getElementById('timeChip');
+
+  // 直接把提醒加进列表（绕过 chip 点击路径）
+  const expectedAt = window.parseTimeMatches(S)[0].at;
+  await window.addReminder(expectedAt, '开会');
+  const putsBefore = puts.length;
+
+  const range = document.createRange();
+  range.setStart(tn, idx + 2); range.setEnd(tn, idx + 2);
+  const sel = window.getSelection();
+  sel.removeAllRanges(); sel.addRange(range);
+  document.dispatchEvent(new window.Event('selectionchange'));
+  await sleep(400);
+  assert.ok(!chip.classList.contains('hidden'), '已添加的未来时间必须浮出两行展示卡');
+  assert.ok(chip.classList.contains('feedback'), '展示卡必须复用两行卡片样式');
+  assert.ok(chip.textContent.includes('✅ 提醒已添加'), '第一行「✅ 提醒已添加」');
+  assert.ok(chip.textContent.includes('· 开会'), '第二行「时间 · 事项」');
+  assert.ok(!chip.querySelector('.chip-cta'), '展示卡不得带「添加提醒」CTA（纯展示）');
+
+  chip.dispatchEvent(new window.Event('mousedown'));
+  await sleep(50);
+  assert.strictEqual(puts.length, putsBefore, '展示卡不可点：点击不得再发 PUT');
+
+  const range2 = document.createRange();
+  range2.setStart(tn, 0); range2.setEnd(tn, 0);
+  sel.removeAllRanges(); sel.addRange(range2);
+  document.dispatchEvent(new window.Event('selectionchange'));
+  await sleep(400);
+  assert.ok(chip.classList.contains('hidden'), '光标移开展示卡必须立即消失（无 3 秒定时器拖尾）');
 });
