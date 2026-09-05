@@ -40,10 +40,10 @@ jobs:
           cp index.html www/index.html
           npx cap sync android
 
-      - name: 解码签名密钥库到 android/app
+      - name: 解码签名密钥库到 android/ 根（与下方 $(pwd) 路径一致）
         env:
           B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-        run: echo "$B64" | base64 -d > android/app/notesync-release.p12
+        run: echo "$B64" | base64 -d > android/notesync-release.p12
 
       - name: 构建 release APK
         working-directory: android
