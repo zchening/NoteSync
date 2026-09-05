@@ -1,8 +1,9 @@
-// v5.36 便签提醒 单元测试（L1+L2 本地方案）
-// 方案要点（用户已拍板）：rem 与正文同一把 key 加密、服务端存密文零知识不变；
-// server.js 对 PUT 的 rem 显式传参才更新、未传则保留（否则正文保存会抹掉提醒）；
-// 触发三通道：页内定时器/SW 通知 + 下次打开补弹（唯一 100% 兜底）+ Triggers 探测；
-// 权限只在用户主动设提醒时申请；多设备重复弹接受、REM_DONE 防同机重复。
+// v5.37 便签提醒 单元测试（多提醒 + 实底卡片 + 响铃）
+// v5.37 变更：rem 明文 {at,text} → {list:[{at,text}...]}（升序、上限 10），旧格式读取自动迁移；
+// REM_DONE 单时间戳 → JSON map（旧值兼容）；remBar 补弹条 → remCard 实底卡片（多条列表）；
+// setReminder/clearReminder → addReminder/removeReminder；fireReminder 卡片无条件弹出。
+// 不变项：rem 与正文同一把 key 加密、服务端存密文零知识不变；server.js 显式传参才更新、未传保留；
+// 权限只在用户主动设提醒时申请；不上 Web Push。
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -38,138 +39,225 @@ function mockCapture(window, note, putV) {
   return puts;
 }
 async function makeKey() { return webcrypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']); }
-async function unlock(window, key, note) { await window.applyUnlocked(key, note); }
 const DK = 'notesync_draft_';
 const DONE = 'notesync_remdone_';
 
-// ── R1：设置提醒 → PUT 带 rem 密文、按钮高亮 ─────────────
-test('R1 setReminder 上传 rem 密文字段并更新状态', async t => {
+// 解密 PUT 里的 rem 密文字段，返回明文对象
+async function remPayload(window, key, put) {
+  const remObj = JSON.parse(put.rem);
+  return JSON.parse(await window.decryptText(remObj.ct, remObj.iv, key));
+}
+
+// ── R1：设提醒 → PUT 带 rem 密文（list 结构）、按钮高亮 ─────
+test('R1 addReminder 上传 rem 密文字段（list 结构）并更新状态', async t => {
   const app = freshApp();
   t.after(() => app.dom.window.close());
   const { window, editor } = app;
   const key = await makeKey();
   const noteCt = await window.encryptText('<div>买牛奶</div>', key);
   const puts = mockCapture(window, {}, 6);
-  await unlock(window, key, { v: 5, ct: noteCt.ct, iv: noteCt.iv, salt: 'x' });
+  await window.applyUnlocked(key, { v: 5, ct: noteCt.ct, iv: noteCt.iv, salt: 'x' });
 
   editor.innerHTML = '<div>买牛奶</div>';
   const at = Date.now() + 3600e3;
-  await window.setReminder(at, '买牛奶');
+  await window.addReminder(at, '买牛奶');
 
   const last = puts[puts.length - 1];
   assert.ok(last.rem, 'PUT 必须携带 rem 字段');
-  const remObj = JSON.parse(last.rem);
-  assert.ok(remObj.ct && remObj.iv, 'rem 必须是 {ct,iv} 密文结构');
-  const payload = JSON.parse(await window.decryptText(remObj.ct, remObj.iv, key));
-  assert.strictEqual(payload.at, at, 'rem 解密后必须是原提醒时间');
-  assert.strictEqual(payload.text, '买牛奶', 'rem 解密后必须是提醒文案');
+  assert.ok(JSON.parse(last.rem).ct && JSON.parse(last.rem).iv, 'rem 必须是 {ct,iv} 密文结构');
+  const payload = await remPayload(window, key, last);
+  assert.ok(Array.isArray(payload.list) && payload.list.length === 1, '明文必须是 {list:[...]} 结构');
+  assert.strictEqual(payload.list[0].at, at, 'list[0].at 必须是原提醒时间');
+  assert.strictEqual(payload.list[0].text, '买牛奶', 'list[0].text 必须是提醒文案');
   assert.ok(window.document.getElementById('remBtn').classList.contains('on'), '有提醒时闹钟按钮应高亮');
 });
 
-// ── R2：解锁恢复未来提醒 → 不弹条、按钮高亮 ───────────────
-test('R2 解锁时从服务端密文恢复未来提醒并重新调度', async t => {
+// ── R2：解锁恢复新格式 list 未来提醒 → 不弹卡片、按钮高亮 ──
+test('R2 解锁时从服务端密文恢复 list 未来提醒并重新调度', async t => {
   const app = freshApp();
   t.after(() => app.dom.window.close());
   const { window } = app;
   const key = await makeKey();
   const noteCt = await window.encryptText('x', key);
   const at = Date.now() + 3600e3;
-  const remEnc = await window.encryptText(JSON.stringify({ at: at, text: '开会' }), key);
-  mockCapture(window, { v: 5, ct: noteCt.ct, iv: noteCt.iv, salt: 'x', rem: JSON.stringify(remEnc) }, 5);
+  const remEnc = await window.encryptText(JSON.stringify({ list: [{ at: at, text: '开会' }] }), key);
+  const note = { v: 5, ct: noteCt.ct, iv: noteCt.iv, salt: 'x', rem: JSON.stringify(remEnc) };
+  mockCapture(window, note, 5);
+  await window.applyUnlocked(key, note);
 
-  await unlock(window, key, { v: 5, ct: noteCt.ct, iv: noteCt.iv, salt: 'x', rem: JSON.stringify(remEnc) });
-
-  assert.ok(window.document.getElementById('remBar').classList.contains('hidden'), '未来提醒绝不弹条');
+  assert.ok(window.document.getElementById('remCard').classList.contains('hidden'), '未来提醒绝不弹卡片');
   assert.ok(window.document.getElementById('remBtn').classList.contains('on'), '按钮应高亮（提醒已从密文恢复为未来时间）');
 });
 
-// ── R3：过期提醒 → 解锁即补弹（唯一 100% 兜底）────────────
-test('R3 过期且未确认的提醒在解锁时补弹提示条', async t => {
+// ── R3：旧格式 {at,text} 自动迁移 + 迁移后写回 list 结构 ────
+test('R3 旧格式单提醒自动迁移：可恢复、再新增时 PUT 变 list 两条', async t => {
+  const app = freshApp();
+  t.after(() => app.dom.window.close());
+  const { window, editor } = app;
+  const key = await makeKey();
+  const noteCt = await window.encryptText('x', key);
+  const atOld = Date.now() + 3600e3;
+  const remEnc = await window.encryptText(JSON.stringify({ at: atOld, text: '旧格式' }), key);
+  const note = { v: 5, ct: noteCt.ct, iv: noteCt.iv, salt: 'x', rem: JSON.stringify(remEnc) };
+  const puts = mockCapture(window, note, 6);
+  await window.applyUnlocked(key, note);
+  assert.ok(window.document.getElementById('remBtn').classList.contains('on'), '旧格式提醒应正常恢复并高亮');
+
+  editor.innerHTML = '<div>y</div>';
+  await window.addReminder(Date.now() + 7200e3, '新格式');
+  const payload = await remPayload(window, key, puts[puts.length - 1]);
+  assert.strictEqual(payload.list.length, 2, '旧条目 + 新条目共存于 list');
+  assert.ok(payload.list.some(r => r.at === atOld && r.text === '旧格式'), '旧格式条目迁移无损');
+  assert.ok(payload.list.every((r, i, a) => i === 0 || a[i - 1].at <= r.at), 'list 必须按时间升序');
+});
+
+// ── R4：多条过期提醒 → 解锁补弹卡片列出全部 + 已过时长 ─────
+test('R4 过期未确认的多条提醒解锁时补弹卡片', async t => {
   const app = freshApp();
   t.after(() => app.dom.window.close());
   const { window } = app;
   const key = await makeKey();
   const noteCt = await window.encryptText('x', key);
-  const past = Date.now() - 7200e3; // 2 小时前
-  const remEnc = await window.encryptText(JSON.stringify({ at: past, text: '过期的事' }), key);
-  mockCapture(window, {}, 5);
-  await unlock(window, key, { v: 5, ct: noteCt.ct, iv: noteCt.iv, salt: 'x', rem: JSON.stringify(remEnc) });
+  const past1 = Date.now() - 7200e3; // 2 小时前
+  const past2 = Date.now() - 600e3;  // 10 分钟前
+  const remEnc = await window.encryptText(JSON.stringify({ list: [{ at: past1, text: '过期的事' }, { at: past2, text: '另一件事' }] }), key);
+  const note = { v: 5, ct: noteCt.ct, iv: noteCt.iv, salt: 'x', rem: JSON.stringify(remEnc) };
+  mockCapture(window, note, 5);
+  await window.applyUnlocked(key, note);
 
-  const bar = window.document.getElementById('remBar');
-  assert.ok(!bar.classList.contains('hidden'), '过期提醒必须补弹');
-  assert.ok(window.document.getElementById('remMsg').textContent.includes('过期的事'), '提示条应显示提醒文案');
-  assert.ok(window.document.getElementById('remMsg').textContent.includes('小时'), '应显示已过期时长');
+  const card = window.document.getElementById('remCard');
+  assert.ok(!card.classList.contains('hidden'), '过期提醒必须补弹卡片');
+  const listText = window.document.getElementById('remCardList').textContent;
+  assert.ok(listText.includes('过期的事'), '卡片应列出第一条文案');
+  assert.ok(listText.includes('另一件事'), '卡片应列出第二条文案');
+  assert.ok(listText.includes('小时') && listText.includes('分钟'), '应显示各自已过期时长');
 });
 
-// ── R4：补弹确认后不再重复弹（REM_DONE 去重）──────────────
-test('R4 确认后记录时间戳，重开不再弹', async t => {
+// ── R5：确认后 REM_DONE 写 map，重开不再弹 ─────────────────
+test('R5 「知道了」写 REM_DONE map，重开不再弹', async t => {
   const app = freshApp();
   t.after(() => app.dom.window.close());
   const { window, localStorage } = app;
   const key = await makeKey();
   const noteCt = await window.encryptText('x', key);
   const past = Date.now() - 600e3;
-  const remEnc = await window.encryptText(JSON.stringify({ at: past, text: '旧事' }), key);
+  const remEnc = await window.encryptText(JSON.stringify({ list: [{ at: past, text: '旧事' }] }), key);
   const note = { v: 5, ct: noteCt.ct, iv: noteCt.iv, salt: 'x', rem: JSON.stringify(remEnc) };
   mockCapture(window, note, 5);
-  await unlock(window, key, note);
+  await window.applyUnlocked(key, note);
 
-  window.document.getElementById('remAck').click();
-  assert.strictEqual(localStorage.getItem(DONE), String(past), '确认必须写入 REM_DONE');
-  assert.ok(window.document.getElementById('remBar').classList.contains('hidden'), '确认后收起');
+  window.document.getElementById('remCardAck').click();
+  const done = JSON.parse(localStorage.getItem(DONE));
+  assert.ok(done[past] === 1, '确认必须写入 REM_DONE map（键为时间戳）');
+  assert.ok(window.document.getElementById('remCard').classList.contains('hidden'), '确认后收起');
 
-  await unlock(window, key, note); // 模拟重开
-  assert.ok(window.document.getElementById('remBar').classList.contains('hidden'), '已确认的过期提醒不再弹');
+  await window.applyUnlocked(key, note); // 模拟重开
+  assert.ok(window.document.getElementById('remCard').classList.contains('hidden'), '已确认的过期提醒不再弹');
 });
 
-// ── R5：取消提醒 → PUT 显式 rem:null（服务端据此清除）─────
-test('R5 clearReminder 显式上传 rem:null', async t => {
+// ── R6：旧格式 REM_DONE（单数字字符串）自动兼容 ────────────
+test('R6 v5.36 旧格式 REM_DONE 单时间戳自动迁移为 map', async t => {
+  const app = freshApp();
+  t.after(() => app.dom.window.close());
+  const { window, localStorage } = app;
+  const key = await makeKey();
+  const noteCt = await window.encryptText('x', key);
+  const past = Date.now() - 600e3;
+  const remEnc = await window.encryptText(JSON.stringify({ at: past, text: '旧事' }), key); // 旧格式顺带覆盖
+  const note = { v: 5, ct: noteCt.ct, iv: noteCt.iv, salt: 'x', rem: JSON.stringify(remEnc) };
+  mockCapture(window, note, 5);
+  localStorage.setItem(DONE, String(past)); // v5.36 遗留的单时间戳
+  await window.applyUnlocked(key, note);
+
+  assert.ok(window.document.getElementById('remCard').classList.contains('hidden'), '旧格式已确认记录应兼容（不重复弹）');
+});
+
+// ── R7：取消最后一条 → PUT 显式 rem:null ───────────────────
+test('R7 removeReminder 清空后显式上传 rem:null', async t => {
   const app = freshApp();
   t.after(() => app.dom.window.close());
   const { window, editor } = app;
   const key = await makeKey();
   const noteCt = await window.encryptText('x', key);
   const puts = mockCapture(window, {}, 6);
-  await unlock(window, key, { v: 5, ct: noteCt.ct, iv: noteCt.iv, salt: 'x' });
+  await window.applyUnlocked(key, { v: 5, ct: noteCt.ct, iv: noteCt.iv, salt: 'x' });
 
   editor.innerHTML = '<div>y</div>';
-  await window.setReminder(Date.now() + 3600e3, 't');
-  await window.clearReminder();
+  const at = Date.now() + 3600e3;
+  await window.addReminder(at, 't');
+  await window.removeReminder(at);
 
   const last = puts[puts.length - 1];
   assert.strictEqual(last.rem, null, '取消必须显式传 null（undefined 是保留语义）');
   assert.ok(!window.document.getElementById('remBtn').classList.contains('on'), '取消后按钮熄灭');
 });
 
-// ── R6：权限被拒 → 降级页面内提示条（不静默丢）────────────
-test('R6 无通知权限时触发降级为页面内提示条', async t => {
+// ── R8：多条管理：排序 / 上限 10 / 同刻覆盖 ────────────────
+test('R8 多条排序、上限 10 条拒绝、同刻再设覆盖', async t => {
   const app = freshApp();
   t.after(() => app.dom.window.close());
-  const { window } = app;
+  const { window, editor } = app;
   const key = await makeKey();
   const noteCt = await window.encryptText('x', key);
-  mockCapture(window, {}, 5);
-  await unlock(window, key, { v: 5, ct: noteCt.ct, iv: noteCt.iv, salt: 'x' });
+  const puts = mockCapture(window, {}, 6);
+  await window.applyUnlocked(key, { v: 5, ct: noteCt.ct, iv: noteCt.iv, salt: 'x' });
 
-  window.Notification = function () {};
-  window.Notification.permission = 'denied';
-  // 注意：reminder 是页面顶层 let（词法绑定，不挂 window），测试必须走真实
-  // setReminder 路径建立状态，不能直接改 window.reminder（那是无效属性）
-  await window.setReminder(Date.now() + 1000, '降级测试');
-  await window.fireReminder();
+  editor.innerHTML = '<div>y</div>';
+  const base = Date.now() + 3600e3;
+  await window.addReminder(base + 2000e3, 'b');
+  await window.addReminder(base, 'a');
+  let payload = await remPayload(window, key, puts[puts.length - 1]);
+  assert.strictEqual(payload.list.length, 2, '两条共存');
+  assert.deepStrictEqual(payload.list.map(r => r.at), [base, base + 2000e3], 'list 按时间升序');
 
-  assert.ok(!window.document.getElementById('remBar').classList.contains('hidden'), '权限被拒必须用提示条兜底');
+  // 同刻再设：覆盖文案不新增
+  await window.addReminder(base, 'a2');
+  payload = await remPayload(window, key, puts[puts.length - 1]);
+  assert.strictEqual(payload.list.length, 2, '同刻再设不得产生重复');
+  assert.strictEqual(payload.list.find(r => r.at === base).text, 'a2', '同刻再设应更新文案');
+
+  // 填满到 10 条后第 11 条拒绝
+  for (let i = 0; i < 8; i++) await window.addReminder(base + 3000e3 + i * 1000e3, 'f' + i);
+  const putCountBefore = puts.length;
+  await window.addReminder(Date.now() + 9e6, '第11条');
+  assert.strictEqual(puts.length, putCountBefore, '超上限必须拒绝且不发 PUT');
+  assert.ok(window.document.getElementById('uploadStatus').textContent.includes('提醒最多'), '超上限应有提示');
 });
 
-// ── R7：有权限 + SW → 走 showNotification ─────────────────
-test('R7 有权限时通过 ServiceWorker 弹系统通知', async t => {
+// ── R9：fireReminder 只弹对应一条 + 卡片无条件弹 ───────────
+test('R9 多条中触发一条：卡片只含该条，权限被拒也有卡片兜底', async t => {
   const app = freshApp();
   t.after(() => app.dom.window.close());
   const { window } = app;
   const key = await makeKey();
   const noteCt = await window.encryptText('x', key);
-  mockCapture(window, {}, 5);
-  await unlock(window, key, { v: 5, ct: noteCt.ct, iv: noteCt.iv, salt: 'x' });
+  mockCapture(window, {}, 6);
+  await window.applyUnlocked(key, { v: 5, ct: noteCt.ct, iv: noteCt.iv, salt: 'x' });
+
+  window.Notification = function () {};
+  window.Notification.permission = 'denied'; // 无通知能力
+  const at1 = Date.now() + 1000;
+  const at2 = Date.now() + 60000;
+  await window.addReminder(at1, '第一条事');
+  await window.addReminder(at2, '第二条事');
+
+  await window.fireReminder(at1);
+  const card = window.document.getElementById('remCard');
+  assert.ok(!card.classList.contains('hidden'), '触发后卡片必须弹出（页内兜底不依赖权限）');
+  const listText = window.document.getElementById('remCardList').textContent;
+  assert.ok(listText.includes('第一条事'), '卡片应含被触发的条目');
+  assert.ok(!listText.includes('第二条事'), '卡片不得含未触发的条目');
+});
+
+// ── R10：有权限 + SW → showNotification，tag 固定 ──────────
+test('R10 有权限时通过 ServiceWorker 弹系统通知且卡片同步弹出', async t => {
+  const app = freshApp();
+  t.after(() => app.dom.window.close());
+  const { window } = app;
+  const key = await makeKey();
+  const noteCt = await window.encryptText('x', key);
+  mockCapture(window, {}, 6);
+  await window.applyUnlocked(key, { v: 5, ct: noteCt.ct, iv: noteCt.iv, salt: 'x' });
 
   const swNotifs = [];
   window.Notification = function () {};
@@ -178,24 +266,25 @@ test('R7 有权限时通过 ServiceWorker 弹系统通知', async t => {
     configurable: true,
     value: { getRegistration: () => Promise.resolve({ active: {}, showNotification: (ti, o) => { swNotifs.push({ ti: ti, o: o }); return Promise.resolve(); } }) }
   });
-  await window.setReminder(Date.now() + 1000, '开会提醒');
-  await window.fireReminder();
+  const at = Date.now() + 1000;
+  await window.addReminder(at, '开会提醒');
+  await window.fireReminder(at);
 
   assert.strictEqual(swNotifs.length, 1, '应通过 SW showNotification 弹出');
   assert.ok(swNotifs[0].ti.includes('开会提醒'), '通知标题应含提醒文案');
   assert.strictEqual(swNotifs[0].o.tag, 'notesync-rem', 'tag 固定便于系统去重');
-  assert.ok(window.document.getElementById('remBar').classList.contains('hidden'), '通知成功后无需提示条');
+  assert.ok(!window.document.getElementById('remCard').classList.contains('hidden'), '通知成功后页内卡片仍应弹出');
 });
 
-// ── R8：默认提醒文案取笔记首行（截 20 字）─────────────────
-test('R8 noteFirstLine 取首行文字并截断 20 字', async t => {
+// ── R11：noteFirstLine 取首行文字并截断 20 字 ──────────────
+test('R11 noteFirstLine 取首行文字并截断 20 字', async t => {
   const app = freshApp();
   t.after(() => app.dom.window.close());
   const { window, editor } = app;
   const key = await makeKey();
   const noteCt = await window.encryptText('x', key);
   mockCapture(window, {}, 5);
-  await unlock(window, key, { v: 5, ct: noteCt.ct, iv: noteCt.iv, salt: 'x' });
+  await window.applyUnlocked(key, { v: 5, ct: noteCt.ct, iv: noteCt.iv, salt: 'x' });
 
   editor.innerHTML = '<div>这是第一行</div><div>第二行</div>';
   assert.strictEqual(window.noteFirstLine(), '这是第一行', '只取首行');
@@ -204,38 +293,73 @@ test('R8 noteFirstLine 取首行文字并截断 20 字', async t => {
   assert.ok(s.length === 21 && s.endsWith('…'), '超长应截断 20 字加省略号');
 });
 
-// ── R9：面板渲染快捷时间（今晚 8 点过点自动变明晚）────────
-test('R9 面板未设状态渲染快捷时间按钮', async t => {
+// ── R12：面板渲染快捷时间 + 已设列表 + 发现性提示 ──────────
+test('R12 面板未设状态渲染快捷按钮与提示，已设状态渲染逐条取消', async t => {
   const app = freshApp();
   t.after(() => app.dom.window.close());
-  const { window } = app;
+  const { window, editor } = app;
   const key = await makeKey();
   const noteCt = await window.encryptText('x', key);
-  mockCapture(window, {}, 5);
-  await unlock(window, key, { v: 5, ct: noteCt.ct, iv: noteCt.iv, salt: 'x' });
+  mockCapture(window, {}, 6);
+  await window.applyUnlocked(key, { v: 5, ct: noteCt.ct, iv: noteCt.iv, salt: 'x' });
 
   window.toggleRemPanel(true);
-  const html = window.document.getElementById('remPanel').textContent;
+  let html = window.document.getElementById('remPanel').textContent;
   assert.ok(html.includes('1 小时后'), '快捷按钮：1 小时后');
   assert.ok(html.includes('今晚 8 点') || html.includes('明晚 8 点'), '快捷按钮：今晚/明晚 8 点（过 20:00 自动切换）');
   assert.ok(html.includes('明天上午 9 点'), '快捷按钮：明天上午 9 点');
+  assert.ok(html.includes('2026-09-02 07:00') || html.includes('点一下') || html.includes('点进去'), '应有时间识别发现性提示');
   window.toggleRemPanel(false);
   assert.ok(window.document.getElementById('remPanel').classList.contains('hidden'), '关闭后收起');
+
+  editor.innerHTML = '<div>y</div>';
+  const at = Date.now() + 3600e3;
+  await window.addReminder(at, '要办的事');
+  window.toggleRemPanel(true);
+  html = window.document.getElementById('remPanel').textContent;
+  assert.ok(html.includes('已设 1 条'), '已设状态显示条数');
+  assert.ok(html.includes('×'), '每条应有单独取消按钮');
+  const cancelBtn = [...window.document.getElementById('remPanel').querySelectorAll('button')].find(b => b.textContent.indexOf('×') === 0);
+  cancelBtn.click();
+  await sleep(30);
+  assert.ok(!window.document.getElementById('remBtn').classList.contains('on'), '逐条取消后按钮熄灭');
+  assert.ok(window.document.getElementById('remPanel').classList.contains('hidden'), '取消最后一条后面板自动收起');
 });
 
-// ── R10：server.js 的 rem 透传语义（显式更新/未传保留）────
-test('R10 server.js 对 rem 显式传参才更新、未传保留旧值', () => {
+// ── R13：server.js 的 rem 透传语义（显式更新/未传保留）────
+test('R13 server.js 对 rem 显式传参才更新、未传保留旧值', () => {
   const src = fs.readFileSync(path.resolve(INDEX_PATH, '..', 'server.js'), 'utf8');
   assert.ok(src.includes('obj.rem !== undefined'), '必须用 !== undefined 判断（null 是显式取消，不能混淆）');
   assert.ok(src.includes('rem = obj.rem'), '显式传参时采用新值');
   assert.ok(src.includes('let rem = cur.rem || null'), '未传时必须保留原值，否则正文保存会抹掉提醒');
 });
 
-// ── R11：sw.js 有通知点击处理；index 注册带版本 ────────────
-test('R11 sw.js 含 notificationclick，提醒不引入 Web Push', () => {
+// ── R14：sw.js 有通知点击处理；index 注册带版本；无 Web Push ─
+test('R14 sw.js 含 notificationclick，提醒不引入 Web Push', () => {
   const sw = fs.readFileSync(path.resolve(INDEX_PATH, '..', 'sw.js'), 'utf8');
   assert.ok(sw.includes('notificationclick'), '点击通知应聚焦/打开笔记');
   const src = fs.readFileSync(INDEX_PATH, 'utf8');
   assert.ok(!src.includes('pushManager'), '本地方案不引入 Web Push（零知识不让渡）');
   assert.ok(src.includes("register('/sw.js?v=' + encodeURIComponent(APP_VERSION))"), 'SW 注册仍带版本参数');
+});
+
+// ── R15：退出锁定清提醒态（卡片/chip/面板全收，按钮熄灭）──
+test('R15 退出锁定后提醒态全部清空', async t => {
+  const app = freshApp();
+  t.after(() => app.dom.window.close());
+  const { window } = app;
+  const key = await makeKey();
+  const noteCt = await window.encryptText('x', key);
+  mockCapture(window, {}, 6);
+  await window.applyUnlocked(key, { v: 5, ct: noteCt.ct, iv: noteCt.iv, salt: 'x' });
+
+  const at = Date.now() + 3600e3;
+  await window.addReminder(at, '要办的事');
+  assert.ok(window.document.getElementById('remBtn').classList.contains('on'), '前置：按钮已高亮');
+
+  window.document.getElementById('lock').click();
+  assert.ok(!window.document.getElementById('remBtn').classList.contains('on'), '锁定后按钮熄灭');
+  assert.ok(window.document.getElementById('remCard').classList.contains('hidden'), '锁定后卡片收起');
+  assert.ok(window.document.getElementById('remPanel').classList.contains('hidden'), '锁定后面板收起');
+  assert.ok(window.document.getElementById('timeChip').classList.contains('hidden'), '锁定后 chip 收起');
 });

@@ -49,21 +49,33 @@
   #versionToast{position:fixed;top:54px;left:50%;transform:translateX(-50%);z-index:60;padding:7px 14px;font-size:12px;letter-spacing:.04em;color:var(--fg);background:var(--hover);border:1px solid var(--line);border-radius:20px;opacity:0;pointer-events:none;transition:opacity .35s;box-shadow:0 4px 16px rgba(0,0,0,.12)}
   #versionToast.show{opacity:1}
   /* v5.35 草稿冲突条（顶部）/安装引导条（底部）：颜色全用主题变量——跟随内部主题，
-     借壳滤镜自动翻色，无需进三处反色覆盖块；禁用新颜色值的纪律同待办样式 */
+     借壳滤镜自动翻色，无需进三处反色覆盖块；禁用新颜色值的纪律同提醒卡片 */
   .hintbar{position:fixed;left:50%;transform:translateX(-50%);z-index:55;display:flex;align-items:center;gap:10px;padding:8px 14px;font-size:12.5px;color:var(--fg);background:var(--hover);border:1px solid var(--line);border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.12);max-width:92vw}
   .hintbar.hidden{display:none}
   #draftBar{top:54px}
   #installBar{bottom:16px}
-  /* v5.36 提醒：补弹条与设置面板同为顶部互斥条；面板内含快捷时间按钮 + 自定义输入 */
-  #remBar{top:54px}
+  /* v5.37 提醒：补弹/触发改用居中实底卡片（支持多条提醒列表），颜色全走主题变量（--box-bg 不透明）；
+     时间 chip 是编辑器外的独立浮层，不改正文 DOM（linkify 拍平 span 的约束） */
+  #remCard{position:fixed;top:40%;left:50%;transform:translate(-50%,-50%);z-index:80;display:flex;flex-direction:column;gap:12px;background:var(--box-bg);color:var(--fg);border:1px solid var(--line);border-radius:16px;padding:20px 22px;min-width:min(320px,86vw);max-width:86vw;box-shadow:0 24px 70px rgba(20,20,18,.24)}
+  #remCard.hidden{display:none}
+  #remCardTitle{font-size:15px;font-weight:600;letter-spacing:.02em}
+  #remCardList{display:flex;flex-direction:column;gap:8px;font-size:13.5px;line-height:1.55;max-height:40vh;overflow-y:auto}
+  #remCardList .rem-item{display:flex;flex-direction:column;gap:1px}
+  #remCardList .rem-when{font-size:13.5px}
+  #remCardList .rem-late{color:var(--muted);font-size:11.5px}
+  #remCardAck{align-self:flex-end;padding:7px 18px;font-size:13px;color:var(--bg);background:var(--fg);border:0;border-radius:9px;cursor:pointer;transition:opacity .2s;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+  #remCardAck:hover{opacity:.85}
+  #timeChip{position:fixed;top:54px;left:50%;transform:translateX(-50%);z-index:56;padding:7px 14px;font-size:12.5px;color:var(--fg);background:var(--box-bg);border:1px solid var(--line);border-radius:999px;box-shadow:0 4px 16px rgba(0,0,0,.16);cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:manipulation;-webkit-tap-highlight-color:transparent;white-space:nowrap;max-width:92vw;overflow:hidden;text-overflow:ellipsis}
+  #timeChip.hidden{display:none}
   #remPanel{top:54px;flex-wrap:wrap;row-gap:6px}
   #remPanel input{padding:4px 8px;font-size:12px;font-family:inherit;color:var(--fg);background:transparent;border:1px solid var(--line);border-radius:8px;color-scheme:inherit}
   #remBtn.on{color:var(--fg);background:var(--hover)}
   .hintbar button{flex-shrink:0;padding:4px 10px;font-size:12px;color:var(--fg);background:none;border:1px solid var(--line);border-radius:8px;cursor:pointer;transition:border-color .2s;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
   .hintbar button:hover{border-color:var(--muted)}
   #installDismiss{border:0;padding:2px 6px;font-size:14px;color:var(--muted)}
-  /* v5.34：工具栏由 7 个增至 8 个按钮（新增待办），360px 屏按原尺寸会溢出
-     （40 padding + 17 brand + 90 gap + 8×31 = 395px > 360px），移动端整体收紧 */
+  /* v5.37：工具栏 8 个按钮（v5.34 曾加待办至 8，v5.36 加提醒至 9，v5.37 删待办回 8），
+     360px 屏按原尺寸仍会溢出（40 padding + 17 brand + 90 gap + 8×31 = 395px > 360px），
+     移动端整体收紧 */
   @media (max-width:560px){ header{gap:6px;padding:12px 12px} header .brand b{display:none} header button{width:27px;height:27px} header button svg{width:16px;height:16px} }
 
   /* ── 编辑器 ─────────────────────────── */
@@ -74,16 +86,6 @@
   #editor a{color:var(--accent);text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(169,134,60,.35);transition:text-decoration-color .2s;word-break:break-all;overflow-wrap:break-word}
   #editor a:hover{text-decoration-color:var(--accent)}
   #editor s, #editor strike, #editor del{text-decoration:line-through;text-decoration-color:rgba(152,149,138,.7);color:var(--muted)}
-  /* 待办行（v5.34）：方框与勾全部用 currentColor + opacity 表达，不引入任何新颜色值，
-     因此无需进入 3 处反色对抗覆盖块（那三处只覆盖显式 color 声明）。
-     状态只存在根级块的 class 与 data-done 属性上，linkify 拍平 span / ensureBlockWrapped
-     包裹裸节点都不会触碰根级块的 class，结构安全。 */
-  #editor .todo{position:relative;padding-left:1.9em}
-  #editor .todo::before{content:'';position:absolute;left:.2em;top:.48em;width:1em;height:1em;box-sizing:border-box;border:1.6px solid currentColor;border-radius:3px;opacity:.45;pointer-events:none;transition:opacity .15s}
-  #editor .todo::after{content:'';position:absolute;left:.45em;top:.66em;width:.44em;height:.22em;border-left:1.8px solid currentColor;border-bottom:1.8px solid currentColor;transform:rotate(-45deg);opacity:0;pointer-events:none;transition:opacity .15s}
-  #editor .todo[data-done="1"]{text-decoration:line-through;opacity:.5}
-  #editor .todo[data-done="1"]::before{opacity:.8}
-  #editor .todo[data-done="1"]::after{opacity:.9}
   #editor p{margin:0}
   #editor::-webkit-scrollbar{width:8px}
   #editor::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
@@ -179,7 +181,6 @@
   <span class="sp"></span>
   <button type="button" id="themeBtn" title="切换夜间模式"></button>
   <button type="button" id="strikeBtn" title="删除线"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4H9a3 3 0 0 0-2.83 4"/><path d="M14 12a4 4 0 0 1 0 8H6"/><line x1="4" x2="20" y1="12" y2="12"/></svg></button>
-  <button type="button" id="todoBtn" title="待办（光标放该行即可切换）"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3.5" width="17.5" height="17.5" rx="3.5"/><path d="M7.5 12.2l3.2 3.2 5.8-6.4"/></svg></button>
   <button type="button" id="remBtn" title="提醒（到点通知或下次打开提示）"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="7.5"/><path d="M12 9.5v3.8l2.6 2.2"/><path d="M5.2 3.2 2.8 5.4"/><path d="M18.8 3.2l2.4 2.2"/></svg></button>
   <button type="button" id="uploadBtn" title="上传图片"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg></button>
   <button type="button" id="copyBtn" title="复制到剪贴板"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect width="13" height="13" x="9" y="9" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
@@ -187,10 +188,12 @@
   <button type="button" id="qrBtn" title="二维码配对"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="3" height="3"/><rect x="18" y="14" width="3" height="3"/><rect x="14" y="18" width="3" height="3"/><rect x="18" y="18" width="3" height="3"/></svg></button>
   <button type="button" id="lock" title="退出锁定"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="11" x="4" y="11" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></button>
 </header>
-<div id="remBar" class="hintbar hidden">
-  <span id="remMsg"></span>
-  <button type="button" id="remAck">知道了</button>
+<div id="remCard" class="hidden">
+  <div id="remCardTitle">⏰ 提醒</div>
+  <div id="remCardList"></div>
+  <button type="button" id="remCardAck">知道了</button>
 </div>
+<div id="timeChip" class="hidden"></div>
 <div id="remPanel" class="hintbar hidden"></div>
 <div id="draftBar" class="hintbar hidden">
   <span>本机有未同步的修改，但服务器上已有更新的内容</span>
@@ -261,8 +264,8 @@ const PBKDF2_ITER = 200000;
 const FAIL_LIMIT = 10;
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '5.36';
-const BUILD_DATE = '2026-09-04';
+const APP_VERSION = '5.37';
+const BUILD_DATE = '2026-09-05';
 
 const $ = s => document.querySelector(s);
 const editor = $('#editor'), mask = $('#mask'), pw = $('#pw'), err = $('#err');
@@ -271,7 +274,6 @@ const homeEl = $('#home'), loadingEl = $('#loading');
 const uploadBtn = $('#uploadBtn'), fileInput = $('#fileInput'), uploadStatus = $('#uploadStatus');
 const themeBtn = $('#themeBtn');
 const strikeBtn = $('#strikeBtn');
-const todoBtn = $('#todoBtn');
 const copyBtn = $('#copyBtn'), exportImgBtn = $('#exportImgBtn');
 
 // 输入法组字状态：组字期间（拼音未上屏）任何对选区/caret 的程序化干预都会吞字，一律跳过。
@@ -528,7 +530,6 @@ themeBtn.addEventListener('click', () => {
 // 删除线：纯 DOM Range API 操作，完全弃用 execCommand
 let lastRange = null;
 let strikeBusy = false;
-let todoBusy = false;
 
 document.addEventListener('selectionchange', () => {
   const sel = window.getSelection();
@@ -803,107 +804,14 @@ function moveNodeOutOfS(node, sTag) {
   }
 }
 
-// ===== 待办（v5.34）=====
-// 设计取舍：状态只挂在根级块的 class + data-done 属性上，绝不重建块、不插 contenteditable=false 元素。
-// 理由一：linkifyEditor 会拍平全部 <span>（见其 straySpans 逻辑），任何 span 标记方案都会被它吃掉；
-//        而 ensureBlockWrapped 只包裹裸节点、不碰已有块，根级 div/p 的 class 是唯一安全落点。
-// 理由二：contenteditable=false 的元素会引入删除/换行/撤销的雷区（见 BUG_CHECKLIST 的血泪清单）。
-// 方框与勾由 CSS ::before/::after 绘制，切换完成态只改一个属性值，DOM 结构零变化
-// → 撤销栈（抓 innerHTML）、linkify、同步三者天然兼容。
-
-// 取选区覆盖到的根级块；折叠光标时取光标所在块。
-// 不能只依赖 lastRange：它仅在「非折叠选区」时才被 selectionchange 更新（见第 503 行），
-// 折叠光标下会拿到 null 或上一次的过期选区，导致工具栏操作静默失效。
-// 待办的定位就是「光标停在行内点一下」，所以这里实时读 selection，lastRange 仅作兜底
-// （按钮已 preventDefault，点按时编辑器选区不会被清除，实时读始终有效）。
-function todoBlocksInRange() {
-  let range = null;
-  const sel = window.getSelection();
-  if (sel && sel.rangeCount > 0) {
-    const r = sel.getRangeAt(0);
-    if (editor.contains(r.commonAncestorContainer)) range = r;
-  }
-  if (!range && lastRange) range = lastRange;
-  if (!range) return [];
-  const rootOf = n => {
-    if (!n || n === editor) return null;
-    let p = n.nodeType === 3 ? n.parentNode : n;
-    while (p && p.parentNode && p.parentNode !== editor) p = p.parentNode;
-    return p && p.parentNode === editor ? p : null;
-  };
-  const s = rootOf(range.startContainer);
-  if (!s) return [];
-  if (range.collapsed) return [s];
-  const e = rootOf(range.endContainer);
-  if (!e) return [];
-  const kids = Array.from(editor.children);
-  const i = kids.indexOf(s), j = kids.indexOf(e);
-  if (i < 0 || j < 0) return [];
-  return kids.slice(Math.min(i, j), Math.max(i, j) + 1)
-    .filter(k => k.tagName === 'DIV' || k.tagName === 'P');
-}
-
-// 工具栏按钮：光标所在行（或选区覆盖的多行）在「待办 / 普通」之间切换。
-// 与删除线不同，折叠光标下同样生效——光标停在某一行点一下即可，无需先选中文字。
-function applyTodo() {
-  if (todoBusy) return;
-  const blocks = todoBlocksInRange();
-  if (!blocks.length) return;
-  todoBusy = true;
-  setTimeout(() => { todoBusy = false; }, 300);
-  const htmlBefore = editor.innerHTML;
-  // 只要有一块还不是待办 → 整批变待办；否则整批取消（避免一次操作产生混合态）
-  const make = blocks.some(b => !b.classList.contains('todo'));
-  blocks.forEach(b => {
-    if (make) {
-      b.classList.add('todo');
-      const d = b.getAttribute('data-done');
-      if (d !== '0' && d !== '1') b.setAttribute('data-done', '0');
-    } else {
-      b.classList.remove('todo');
-      b.removeAttribute('data-done');
-    }
-  });
-  if (editor.innerHTML !== htmlBefore) editor.dispatchEvent(new Event('input'));
-}
-
-// 点击方框切换完成态。方框是 CSS 伪元素而非真实节点，故按点击横坐标判定命中：
-// 只有落在块左侧 TODO_HIT_ZONE 内才算点在方框上；行内文字区域照常进入编辑，不影响输入与选区。
-const TODO_HIT_ZONE = 30;
-function toggleTodoDone(block) {
-  if (!block || !editor.contains(block)) return;
-  const htmlBefore = editor.innerHTML;
-  block.setAttribute('data-done', block.getAttribute('data-done') === '1' ? '0' : '1');
-  if (editor.innerHTML !== htmlBefore) editor.dispatchEvent(new Event('input'));
-}
-editor.addEventListener('click', e => {
-  // 锁定态不响应。用 attribute 判断而非 editor.isContentEditable：后者依赖渲染层，
-  // jsdom 未实现（恒为 undefined），会让这条路径彻底无法被单测覆盖。
-  // 锁定/解锁本就是通过设置 contentEditable 实现的（见 unlock/lock），读回 attribute 等价且可靠。
-  if (editor.getAttribute('contenteditable') === 'false') return;
-  const el = e.target;
-  if (!el || !el.closest) return;
-  const block = el.closest('.todo');
-  if (!block || !editor.contains(block)) return;
-  const r = block.getBoundingClientRect();
-  if (e.clientX - r.left > TODO_HIT_ZONE) return;
-  e.preventDefault();
-  toggleTodoDone(block);
-});
-
 // pointerdown：最早触发的事件（Pointer Events 支持的浏览器），在 touchstart/mousedown 之前
 if (window.PointerEvent) {
   strikeBtn.addEventListener('pointerdown', e => { if (e.button !== 0) return; e.preventDefault(); applyStrike(); });
 }
-if (window.PointerEvent) {
-  todoBtn.addEventListener('pointerdown', e => { if (e.button !== 0) return; e.preventDefault(); applyTodo(); });
-}
 // touchstart：移动端真实触摸事件；preventDefault 阻止选区清除 + 阻止后续合成事件
 strikeBtn.addEventListener('touchstart', e => { e.preventDefault(); applyStrike(); }, { passive: false });
-todoBtn.addEventListener('touchstart', e => { e.preventDefault(); applyTodo(); }, { passive: false });
 // mousedown：桌面端；preventDefault 阻止焦点转移
 strikeBtn.addEventListener('mousedown', e => { if (e.button !== 0) return; e.preventDefault(); applyStrike(); });
-todoBtn.addEventListener('mousedown', e => { if (e.button !== 0) return; e.preventDefault(); applyTodo(); });
 
 const bufToB64 = b => btoa(String.fromCharCode(...new Uint8Array(b)));
 const b64ToBuf = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
@@ -2593,17 +2501,25 @@ installDismiss.addEventListener('click', () => {
   installBar.classList.add('hidden');
 });
 
-// ── 便签提醒（v5.36，L1+L2 本地方案）──
+// ── 便签提醒（v5.36 引入，v5.37 升级：多提醒 + 时间识别点击 + 实底卡片 + 响铃）──
 // 数据：与正文同一把 key 加密的 rem 字段（{ct,iv} 的 JSON 串），服务端存密文，零知识不变。
+//       v5.37 明文结构 {at,text} → {list:[{at,text}...]}（按时间升序，上限 REM_MAX 条）；
+//       读取时旧格式自动迁移为单元素列表，服务端依旧只透传密文字节，无需任何改动。
 //       server.js 对 PUT 的 rem 做显式传参才更新、未传则保留——否则任何一台设备的
 //       普通正文保存都会抹掉另一台设备刚设的提醒。
-// 触发通道：页内 setTimeout → SW showNotification / new Notification（页面开着准点弹）；
-//           过期未确认 → 下次打开补弹 remBar（唯一 100% 兜底，Web 的后台限制决定的现实）；
-//           Notification Triggers（L3）支持时注册系统级定时（至今未正式落地，纯探测不指望）。
-// 多设备重复弹：接受（自己多设备弹两次反而保险），REM_DONE 记已触发时间戳防止同机重复。
-const remBtn = $('#remBtn'), remPanel = $('#remPanel'), remBar = $('#remBar'), remMsg = $('#remMsg'), remAck = $('#remAck');
+// 触发通道：页内 setTimeout（调度最近一条，触发后自动排下一条）→ SW showNotification /
+//           new Notification + 页内实底卡片；过期未确认 → 下次打开补弹卡片（唯一 100%
+//           兜底，Web 的后台限制决定的现实）；Notification Triggers（L3）支持时注册系统级
+//           定时（至今未正式落地，纯探测不指望）。
+// 多设备重复弹：接受（自己多设备弹两次反而保险），REM_DONE 记已触发时间戳集合防止同机重复。
+const remBtn = $('#remBtn'), remPanel = $('#remPanel');
+const remCard = $('#remCard'), remCardList = $('#remCardList'), remCardAck = $('#remCardAck');
+const timeChip = $('#timeChip');
 const REM_DONE_KEY = 'notesync_remdone_' + noteId;
-let reminder = null, remTimer = null, remCipher = null, remPanelOpen = false;
+const REM_MAX = 10;
+let reminders = [], remCipher = null, remTimer = null, remPanelOpen = false;
+let cardShownAts = []; // 当前卡片展示的提醒时间戳，「知道了」据此全部标记
+let chipFeedbackUntil = 0; // chip「已设」反馈窗口内不再被 selectionchange 改写
 
 function noteFirstLine() {
   const b = editor.querySelector('div, p');
@@ -2616,56 +2532,203 @@ function fmtRemTime(at) {
   const md = (d.getMonth() + 1) + '月' + d.getDate() + '日';
   return d.toDateString() === now.toDateString() ? '今天 ' + hm : md + ' ' + hm;
 }
-// 设提醒 = 完整保存（正文 + rem 一起 PUT）：v 递增、SSE 广播、其他设备实时拿到
-async function setReminder(at, text) {
-  const enc = await encryptText(JSON.stringify({ at: at, text: text }), cryptoKey);
-  remCipher = JSON.stringify(enc);
-  reminder = { at: at, text: text };
-  const html = editor.innerHTML;
-  const body = await encryptText(html, cryptoKey);
-  writeDraft(body.ct, body.iv);
-  const r = await apiPut({ ct: body.ct, iv: body.iv, salt: bufToB64(serverSalt), rem: remCipher });
-  localVer = r.v; lastHtml = html; clearDraft();
-  setStatus(true, '已同步');
-  scheduleReminder();
-  renderRemBtn();
+
+// ── v5.37 时间文本识别（纯函数，绝不改正文 DOM——linkify 拍平 span 的约束）──
+// 支持格式：2026-09-02 07:00 / 2026/9/2 7:05 / 9-2 07:00 / 9月2日 07:00。
+// 无年份补当年，已过自动进位明年；过去时间（含 30 秒内）一律不命中——提醒没有「提醒过去」的意义。
+// 刻意不做自然语言解析（「明天下午」这类不可靠）。
+function resolveTimeAt(y, mo, d, h, mi) {
+  if (mo < 1 || mo > 12 || h > 23 || mi > 59) return null;
+  if (d < 1 || d > new Date(y, mo, 0).getDate()) return null;
+  return new Date(y, mo - 1, d, h, mi).getTime();
 }
-async function clearReminder() {
-  reminder = null; remCipher = null;
-  clearTimeout(remTimer); remTimer = null;
-  try { localStorage.removeItem(REM_DONE_KEY); } catch (e) {}
-  const html = editor.innerHTML;
-  const body = await encryptText(html, cryptoKey);
-  writeDraft(body.ct, body.iv);
-  const r = await apiPut({ ct: body.ct, iv: body.iv, salt: bufToB64(serverSalt), rem: null }); // 显式 null = 取消
-  localVer = r.v; lastHtml = html; clearDraft();
-  setStatus(true, '已同步');
-  renderRemBtn();
+function collectTimeMatches(text) {
+  const res = [];
+  const spans = []; // 所有「带年份」形态命中的区间（无论时间是否有效都占位），短格式一律避让
+  let m;
+  const reFull = /(\d{4})[-/](\d{1,2})[-/](\d{1,2})[ T](\d{1,2}):(\d{2})/g;
+  while ((m = reFull.exec(text)) !== null) {
+    spans.push([m.index, m.index + m[0].length]);
+    const at = resolveTimeAt(+m[1], +m[2], +m[3], +m[4], +m[5]);
+    if (at === null || at <= Date.now() + 30000) continue; // 非法/过去不命中，但区间已占位防二次命中
+    res.push({ at: at, index: m.index, length: m[0].length });
+  }
+  const overlaps = i => spans.some(s => i >= s[0] && i < s[1]);
+  const pushShort = m => {
+    if (overlaps(m.index)) return;
+    const now = new Date();
+    let at = resolveTimeAt(now.getFullYear(), +m[1], +m[2], +m[3], +m[4]);
+    if (at !== null && at <= Date.now()) at = resolveTimeAt(now.getFullYear() + 1, +m[1], +m[2], +m[3], +m[4]);
+    if (at === null || at <= Date.now() + 30000) return;
+    res.push({ at: at, index: m.index, length: m[0].length });
+  };
+  const reShort = /(\d{1,2})[-/](\d{1,2})[ T](\d{1,2}):(\d{2})/g;
+  while ((m = reShort.exec(text)) !== null) pushShort(m);
+  const reCn = /(\d{1,2})月(\d{1,2})日\s*(\d{1,2}):(\d{2})/g;
+  while ((m = reCn.exec(text)) !== null) pushShort(m);
+  return res.sort((a, b) => a.index - b.index);
+}
+function parseTimeMatches(text) {
+  if (!text || typeof text !== 'string' || text.length > 4000) return [];
+  return collectTimeMatches(text);
+}
+function matchTimeAt(text, offset) {
+  const all = parseTimeMatches(text);
+  // 光标落在时间串上（含紧贴前后沿：点击首个字符/刚输完最后一个字符都在区间内）
+  return all.find(r => offset >= r.index && offset <= r.index + r.length) || null;
+}
+// 光标落点信息：所在根级块 + 块内纯文本偏移（Range.toString 与 textContent 同源，\u200B 两侧一致）
+function caretInfoInEditor() {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return null;
+  const r = sel.getRangeAt(0);
+  if (!r.collapsed || !editor.contains(r.startContainer)) return null;
+  let block = r.startContainer.nodeType === 3 ? r.startContainer.parentNode : r.startContainer;
+  while (block && block.parentNode !== editor) block = block.parentNode;
+  if (!block || block === editor) return null;
+  let off;
+  try {
+    const pre = document.createRange();
+    pre.selectNodeContents(block);
+    pre.setEnd(r.startContainer, r.startOffset);
+    off = pre.toString().length;
+  } catch (e) { return null; }
+  return { block: block, text: block.textContent || '', offset: off };
+}
+
+// ── v5.37 时间 chip：光标落在时间文本上时浮出「设提醒」快捷入口 ──
+// chip 是编辑器外的独立浮层；点 chip 即设提醒（pointerdown 三连 preventDefault，与工具栏按钮同套路防焦点丢失）
+let chipData = null, chipTimer = null;
+function hideTimeChip() { chipData = null; timeChip.classList.add('hidden'); }
+function maybeShowTimeChip() {
+  if (Date.now() < chipFeedbackUntil) return; // 「✓ 已设」反馈展示中
+  if (!cryptoKey || editor.getAttribute('contenteditable') === 'false' || isComposing ||
+      remPanelOpen || !remCard.classList.contains('hidden')) { hideTimeChip(); return; }
+  const info = caretInfoInEditor();
+  const m = info ? matchTimeAt(info.text, info.offset) : null;
+  if (!m) { hideTimeChip(); return; }
+  chipData = m;
+  timeChip.textContent = '⏰ 设提醒：' + fmtRemTime(m.at);
+  timeChip.classList.remove('hidden');
+}
+document.addEventListener('selectionchange', () => {
+  clearTimeout(chipTimer);
+  chipTimer = setTimeout(maybeShowTimeChip, 250);
+});
+function chipActivate(e) {
+  if (e.button !== undefined && e.button !== 0) return;
+  e.preventDefault();
+  if (!chipData) return;
+  const at = chipData.at;
+  chipData = null; // 先消费：pointerdown/touchstart/mousedown 三连触发只生效一次
+  chipFeedbackUntil = Date.now() + 1500;
+  askRemPermission();
+  addReminder(at, noteFirstLine());
+  timeChip.textContent = '✓ 已设 ' + fmtRemTime(at);
+  clearTimeout(chipTimer);
+  setTimeout(hideTimeChip, 1500);
+}
+if (window.PointerEvent) timeChip.addEventListener('pointerdown', chipActivate);
+timeChip.addEventListener('touchstart', chipActivate, { passive: false });
+timeChip.addEventListener('mousedown', chipActivate);
+
+// ── 多提醒数据模型 ──
+// REM_DONE：v5.36 是单时间戳字符串；v5.37 改 JSON map { [at]: 1 }，读到旧值自动兼容。
+function remDoneMap() {
+  try {
+    const s = localStorage.getItem(REM_DONE_KEY);
+    if (!s) return {};
+    const v = JSON.parse(s);
+    if (v && typeof v === 'object') return v;
+    if (typeof v === 'number') { const m = {}; m[v] = 1; return m; }
+    return {};
+  } catch (e) { return {}; }
+}
+function isRemDone(at) { return !!remDoneMap()[at]; }
+function markRemDone(at) {
+  try {
+    const m = remDoneMap(); m[at] = 1;
+    localStorage.setItem(REM_DONE_KEY, JSON.stringify(m));
+  } catch (e) {}
+}
+function unmarkRemDone(at) {
+  try {
+    const m = remDoneMap();
+    if (m[at]) { delete m[at]; localStorage.setItem(REM_DONE_KEY, JSON.stringify(m)); }
+  } catch (e) {}
+}
+// 旧明文 {at,text} → 新 [{at,text}] 的迁移统一在这里做；坏数据当无提醒。
+function normalizeRemList(obj) {
+  let list = [];
+  if (obj && Array.isArray(obj.list)) list = obj.list;
+  else if (obj && typeof obj.at === 'number') list = [obj];
+  return list
+    .filter(r => r && typeof r.at === 'number')
+    .map(r => ({ at: r.at, text: typeof r.text === 'string' ? r.text : '' }))
+    .sort((a, b) => a.at - b.at)
+    .slice(0, REM_MAX);
 }
 // 解锁后从服务端恢复提醒（密文解不开→当无提醒）
 async function loadReminder(note, key) {
-  reminder = null; remCipher = null;
+  reminders = []; remCipher = null;
   if (note.rem) {
     try {
       const enc = JSON.parse(note.rem);
       const obj = JSON.parse(await decryptText(enc.ct, enc.iv, key));
-      if (obj && typeof obj.at === 'number') { reminder = { at: obj.at, text: obj.text || '' }; remCipher = note.rem; }
-    } catch (e) { reminder = null; }
+      reminders = normalizeRemList(obj);
+      if (reminders.length) remCipher = note.rem;
+    } catch (e) { reminders = []; remCipher = null; }
   }
   renderRemBtn();
-  scheduleReminder();
+  scheduleReminders();
 }
-function scheduleReminder() {
-  clearTimeout(remTimer); remTimer = null;
-  if (!reminder) return;
-  let done = 0;
-  try { done = Number(localStorage.getItem(REM_DONE_KEY) || 0); } catch (e) {}
-  if (reminder.at <= Date.now()) {
-    if (done !== reminder.at) showRemBar(); // 过期且本机未确认过 → 补弹
+// 设/改提醒 = 完整保存（正文 + rem 一起 PUT）：v 递增、SSE 广播、其他设备实时拿到
+async function persistReminders() {
+  const html = editor.innerHTML;
+  const body = await encryptText(html, cryptoKey);
+  writeDraft(body.ct, body.iv);
+  let remOut = null;
+  if (reminders.length) {
+    const enc = await encryptText(JSON.stringify({ list: reminders }), cryptoKey);
+    remCipher = JSON.stringify(enc);
+    remOut = remCipher;
+  } else {
+    remCipher = null; remOut = null; // 显式 null = 服务端清除字段
+  }
+  const r = await apiPut({ ct: body.ct, iv: body.iv, salt: bufToB64(serverSalt), rem: remOut });
+  localVer = r.v; lastHtml = html; clearDraft();
+  setStatus(true, '已同步');
+  scheduleReminders();
+  renderRemBtn();
+}
+async function addReminder(at, text) {
+  if (!cryptoKey || typeof at !== 'number') return;
+  if (reminders.some(r => r.at === at)) {
+    reminders = reminders.filter(r => r.at !== at); // 同刻再设 = 更新文案，不产生重复
+  } else if (reminders.length >= REM_MAX) {
+    showUploadStatus('提醒最多 ' + REM_MAX + ' 条，先取消一些吧');
+    setTimeout(() => { if (uploadStatus.textContent.indexOf('提醒最多') === 0) hideUploadStatus(); }, 2600);
     return;
   }
-  remTimer = setTimeout(fireReminder, Math.min(reminder.at - Date.now(), 2147483647));
-  tryRegisterTrigger(reminder.at);
+  reminders.push({ at: at, text: text || '' });
+  reminders.sort((a, b) => a.at - b.at);
+  unmarkRemDone(at); // 重设的同刻提醒，清掉旧的已触发标记
+  try { await persistReminders(); } catch (e) { setStatus(false, '保存失败'); }
+}
+async function removeReminder(at) {
+  reminders = reminders.filter(r => r.at !== at);
+  unmarkRemDone(at);
+  try { await persistReminders(); } catch (e) { setStatus(false, '保存失败'); }
+}
+function scheduleReminders() {
+  clearTimeout(remTimer); remTimer = null;
+  const now = Date.now();
+  const overdue = reminders.filter(r => r.at <= now && !isRemDone(r.at));
+  if (overdue.length) { showRemCard(overdue, true); return; } // 过期且本机未确认 → 补弹
+  const next = reminders.filter(r => r.at > now).sort((a, b) => a.at - b.at)[0];
+  if (!next) return;
+  remTimer = setTimeout(() => fireReminder(next.at), Math.min(next.at - Date.now(), 2147483647));
+  tryRegisterTrigger(next.at);
 }
 async function tryRegisterTrigger(at) {
   // L3 探测：Notification Triggers（TimestampTrigger）至今未在 Chrome 正式落地，
@@ -2677,31 +2740,73 @@ async function tryRegisterTrigger(at) {
     reg.showNotification('⏰ NoteSync 提醒', { body: '该看笔记了', tag: 'notesync-rem-trigger', showTrigger: new window.TimestampTrigger(at) });
   } catch (e) {}
 }
-async function fireReminder() {
-  if (!reminder) return;
-  markRemDone(reminder.at);
-  const title = '⏰ ' + (reminder.text || '该看笔记了');
-  let notified = false;
+async function fireReminder(at) {
+  const entry = reminders.find(r => r.at === at);
+  if (entry) markRemDone(at);
+  scheduleReminders(); // 本条已标 done 不会重复补弹，只排下一条
+  if (!entry) return;
+  playRemSound();
+  const title = '⏰ ' + (entry.text || '该看笔记了');
   if (typeof window.Notification !== 'undefined' && window.Notification.permission === 'granted') {
     try {
       const reg = await navigator.serviceWorker.getRegistration();
-      if (reg) { await reg.showNotification(title, { body: '来自笔记 · ' + noteId, tag: 'notesync-rem' }); notified = true; }
-      else { new window.Notification(title, { body: '来自笔记 · ' + noteId, tag: 'notesync-rem' }); notified = true; }
+      if (reg) await reg.showNotification(title, { body: '来自笔记 · ' + noteId, tag: 'notesync-rem' });
+      else new window.Notification(title, { body: '来自笔记 · ' + noteId, tag: 'notesync-rem' });
     } catch (e) {}
   }
-  if (!notified) showRemBar(); // 无通知能力（权限被拒 / iOS 未装）→ 页面内提示条
+  showRemCard([entry], false); // 实底卡片：页内主通道，无论通知权限如何都弹
 }
-function markRemDone(at) { try { localStorage.setItem(REM_DONE_KEY, String(at)); } catch (e) {} }
-function showRemBar() {
-  if (!reminder) return;
-  const min = Math.max(1, Math.round((Date.now() - reminder.at) / 60000));
-  remMsg.textContent = '⏰ 提醒：' + (reminder.text || '该看笔记了') + '（已过 ' + (min >= 60 ? Math.round(min / 60) + ' 小时' : min + ' 分钟') + '）';
-  remBar.classList.remove('hidden');
+// 响铃：手机震动 + 页面可见时 WebAudio 双音（页面隐藏时不响，系统通知自带提示音，避免双重声响）
+function playRemSound() {
+  try { if (navigator.vibrate) navigator.vibrate([200, 120, 200]); } catch (e) {}
+  try {
+    if (document.visibilityState !== 'visible') return;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    const ctx = new AC();
+    if (ctx.state === 'suspended') { try { ctx.resume(); } catch (e) {} }
+    const t0 = ctx.currentTime + 0.02;
+    [[880, 0], [1318.5, 0.18]].forEach(p => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'sine'; o.frequency.value = p[0];
+      g.gain.setValueAtTime(0.0001, t0 + p[1]);
+      g.gain.exponentialRampToValueAtTime(0.22, t0 + p[1] + 0.025);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + p[1] + 0.38);
+      o.connect(g); g.connect(ctx.destination);
+      o.start(t0 + p[1]); o.stop(t0 + p[1] + 0.42);
+    });
+    setTimeout(() => { try { ctx.close(); } catch (e) {} }, 1500);
+  } catch (e) {}
+}
+function showRemCard(items, isCatchup) {
+  if (!items || !items.length) return;
+  cardShownAts = items.map(r => r.at);
+  remCardList.innerHTML = '';
+  const now = Date.now();
+  items.forEach(r => {
+    const item = document.createElement('div'); item.className = 'rem-item';
+    const t = document.createElement('span'); t.className = 'rem-when';
+    t.textContent = '⏰ ' + fmtRemTime(r.at) + (r.text ? ' · ' + r.text : '');
+    item.appendChild(t);
+    if (isCatchup && r.at <= now) {
+      const late = document.createElement('span'); late.className = 'rem-late';
+      const min = Math.max(1, Math.round((now - r.at) / 60000));
+      late.textContent = '已过 ' + (min >= 60 ? Math.round(min / 60) + ' 小时' : min + ' 分钟');
+      item.appendChild(late);
+    }
+    remCardList.appendChild(item);
+  });
+  remCard.classList.remove('hidden');
   remPanel.classList.add('hidden'); remPanelOpen = false;
+  hideTimeChip();
 }
-remAck.addEventListener('click', () => { remBar.classList.add('hidden'); if (reminder) markRemDone(reminder.at); });
+remCardAck.addEventListener('click', () => {
+  cardShownAts.forEach(at => markRemDone(at));
+  cardShownAts = [];
+  remCard.classList.add('hidden');
+});
 function renderRemBtn() {
-  remBtn.classList.toggle('on', !!(reminder && reminder.at > Date.now()));
+  remBtn.classList.toggle('on', reminders.some(r => r.at > Date.now()));
 }
 function remQuickTargets() {
   const now = new Date();
@@ -2717,27 +2822,34 @@ function remQuickTargets() {
 }
 function renderRemPanel() {
   remPanel.innerHTML = '';
-  if (reminder && reminder.at > Date.now()) {
+  hideTimeChip();
+  const upcoming = reminders.filter(r => r.at > Date.now());
+  if (upcoming.length) {
     const s = document.createElement('span');
-    s.textContent = '⏰ 已设提醒：' + fmtRemTime(reminder.at) + (reminder.text ? ' · ' + reminder.text : '');
+    s.textContent = '已设 ' + upcoming.length + ' 条：' + upcoming.map(r => fmtRemTime(r.at)).join('、');
     remPanel.appendChild(s);
-    const off = document.createElement('button');
-    off.type = 'button'; off.textContent = '取消提醒';
-    off.addEventListener('click', () => { toggleRemPanel(false); clearReminder(); });
-    remPanel.appendChild(off);
-    const cls = document.createElement('button');
-    cls.type = 'button'; cls.textContent = '关闭';
-    cls.addEventListener('click', () => toggleRemPanel(false));
-    remPanel.appendChild(cls);
-    return;
+    upcoming.forEach(r => {
+      const off = document.createElement('button');
+      off.type = 'button';
+      off.textContent = '× ' + fmtRemTime(r.at);
+      off.title = '取消 ' + fmtRemTime(r.at) + (r.text ? ' · ' + r.text : '');
+      off.addEventListener('click', () => {
+        removeReminder(r.at).then(() => toggleRemPanel(reminders.some(x => x.at > Date.now())));
+      });
+      remPanel.appendChild(off);
+    });
+    const addLabel = document.createElement('span');
+    addLabel.textContent = '再加：';
+    remPanel.appendChild(addLabel);
+  } else {
+    const s = document.createElement('span');
+    s.textContent = '提醒我：';
+    remPanel.appendChild(s);
   }
-  const s = document.createElement('span');
-  s.textContent = '提醒我：';
-  remPanel.appendChild(s);
   remQuickTargets().forEach(q => {
     const b = document.createElement('button');
     b.type = 'button'; b.textContent = q.label;
-    b.addEventListener('click', () => { askRemPermission(); setReminder(q.at, noteFirstLine()); toggleRemPanel(false); });
+    b.addEventListener('click', () => { askRemPermission(); addReminder(q.at, noteFirstLine()); toggleRemPanel(false); });
     remPanel.appendChild(b);
   });
   const inp = document.createElement('input');
@@ -2751,14 +2863,17 @@ function renderRemPanel() {
     const at = new Date(v).getTime();
     if (!at || at <= Date.now()) return;
     askRemPermission();
-    setReminder(at, noteFirstLine());
+    addReminder(at, noteFirstLine());
     toggleRemPanel(false);
   });
   remPanel.appendChild(ok);
+  const tip = document.createElement('span');
+  tip.textContent = '提示：笔记里写了时间（如 2026-09-02 07:00），光标点进去就能设提醒';
+  remPanel.appendChild(tip);
   if (isIOSDevice() && !isStandaloneMode() && typeof window.Notification === 'undefined') {
-    const tip = document.createElement('span');
-    tip.textContent = 'iOS 需先添加到主屏幕才能收到通知（仍可设置，下次打开会提示）';
-    remPanel.appendChild(tip);
+    const iosTip = document.createElement('span');
+    iosTip.textContent = 'iOS 需先添加到主屏幕才能收到通知（仍可设置，下次打开会提示）';
+    remPanel.appendChild(iosTip);
   }
 }
 function toggleRemPanel(force) {
@@ -2766,13 +2881,13 @@ function toggleRemPanel(force) {
   if (remPanelOpen) {
     renderRemPanel();
     remPanel.classList.remove('hidden');
-    remBar.classList.add('hidden');
+    remCard.classList.add('hidden');
   } else {
     remPanel.classList.add('hidden');
   }
 }
 function askRemPermission() {
-  // 权限只在用户主动设提醒时申请（加载即弹必然被拒）；被拒也不慌，补弹条仍然工作
+  // 权限只在用户主动设提醒时申请（加载即弹必然被拒）；被拒也不慌，实底卡片仍然工作
   try {
     if (typeof window.Notification !== 'undefined' && window.Notification.permission === 'default') {
       window.Notification.requestPermission();
@@ -2941,6 +3056,11 @@ $('#lock').addEventListener('click', () => {
   localStorage.removeItem(KEY_STORE); cryptoKey = null;
   undoStack = []; redoStack = []; lastState = null; // 退出锁定：清空撤销栈
   editor.innerHTML = ''; editor.contentEditable = false;
+  // v5.37：锁定同时清提醒态（明文仍在内存会泄漏在卡片/chip 上，全部收掉）
+  reminders = []; remCipher = null; clearTimeout(remTimer); remTimer = null;
+  clearTimeout(chipTimer); chipFeedbackUntil = 0; hideTimeChip();
+  cardShownAts = []; remCard.classList.add('hidden');
+  remPanel.classList.add('hidden'); remPanelOpen = false; remBtn.classList.remove('on');
   mask.classList.remove('hidden'); pw.value = ''; err.textContent = '';
   $('#ok').disabled = true; // 退出锁定：清空口令后解锁按钮必须回到禁用态
   setStatus(false, '已退出');
