@@ -197,6 +197,7 @@
   .upload-status{position:fixed;bottom:44px;left:50%;transform:translateX(-50%);background:var(--upload-bg);color:var(--bg);padding:10px 20px;border-radius:999px;font-size:13px;letter-spacing:.03em;z-index:20;opacity:0;transition:opacity .3s;pointer-events:none;box-shadow:0 10px 30px rgba(20,20,18,.2)}
   .offlinebar{position:fixed;left:50%;transform:translateX(-50%);bottom:44px;z-index:20;padding:8px 16px;font-size:12px;letter-spacing:.04em;color:var(--muted);background:var(--box-bg);border:1px solid var(--line);border-radius:999px;box-shadow:0 6px 20px rgba(0,0,0,.12)}
   .offlinebar.hidden{display:none}
+  .offlinebar:not(.hidden)+.upload-status{bottom:88px} /* v5.50：离线条可见时，本地复制/导出等上传提示上移错位，不与离线条叠放 */
   .upload-status.show{opacity:1}
   #loading{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:5;color:var(--muted);font-size:13px;letter-spacing:.2em}
 </style>
@@ -317,7 +318,7 @@ const PBKDF2_ITER = 200000;
 const FAIL_LIMIT = 10;
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '5.49';
+const APP_VERSION = '5.50';
 const BUILD_DATE = '2026-09-05';
 
 const $ = s => document.querySelector(s);
@@ -895,6 +896,7 @@ const bufToB64 = b => btoa(String.fromCharCode(...new Uint8Array(b)));
 const b64ToBuf = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 
 let cryptoKey = null, serverSalt = null, localVer = 0, busy = false, lastHtml = '';
+let lastSyncAt = 0; // v5.50：最近一次「与服务端成功通信」的时刻（仅真实成功点更新；缓存时刻≠同步时刻，离线条不混用）
 
 function setStatus(on, text) { statusEl.className = 'dot' + (on ? ' on' : ''); statusText.textContent = text; }
 function fmtRetry(sec) { const m = Math.ceil(sec / 60); return m + ' 分钟'; }
@@ -1155,6 +1157,8 @@ function urlSafeToB64(s) {
 
 // --- API（含自动重试） ---
 async function fetchRetry(url, opts, retries) {
+  // v5.50：本机离线时零退避快速失败——离线打开 1-2 秒即落缓存正文，离线输口令不再白等退避
+  if (!navigator.onLine) retries = 0;
   for (let i = 0; i <= retries; i++) {
     try {
       const r = await fetch(url, opts);
@@ -1781,6 +1785,7 @@ async function applyUnlocked(key, note) {
   editor.contentEditable = true;
   if (note.ct) { try { lastHtml = await decryptText(note.ct, note.iv, key); editor.innerHTML = lastHtml; } catch (e) {} }
   if (note.ct) cachePut({ ct: note.ct, iv: note.iv, v: note.v, savedAt: Date.now() }); // v5.49：成功解密即缓存正文密文，供离线阅读
+  lastSyncAt = Date.now(); // v5.50：解锁拿到服务端数据=通信成功
   await restoreDraftIfNeeded(key); // v5.35：解锁后检查离线草稿（静默恢复或提示冲突）
   await loadReminder(note, key); // v5.36：解锁后恢复提醒并重新调度（过期则补弹）
   ensureBlockWrapped();
@@ -2557,12 +2562,18 @@ function fmtSyncTime(ts) {
 function showOfflineBar(ts) {
   const bar = document.getElementById('offlineBar');
   const t = document.getElementById('offlineTime');
-  if (t) t.textContent = fmtSyncTime(ts);
+  if (t) t.textContent = ts ? fmtSyncTime(ts) : '—'; // v5.50：无已知同步时刻不显示 1970 假时间
   if (bar) bar.classList.remove('hidden');
 }
 function hideOfflineBar() {
   const bar = document.getElementById('offlineBar');
   if (bar) bar.classList.add('hidden');
+}
+// v5.50：离线条时间来源——优先本次会话真实同步时刻，运行时还没有则回退缓存自带的 savedAt
+function currentSyncTime() {
+  if (lastSyncAt) return lastSyncAt;
+  const c = cacheGet();
+  return (c && c.savedAt) || 0;
 }
 // 离线回退：用本地缓存密文解密填充编辑器；成功返回 true，失败返回 false
 async function loadCachedBody(key) {
@@ -2946,6 +2957,8 @@ async function persistReminders() {
   }
   const r = await apiPut({ ct: body.ct, iv: body.iv, salt: bufToB64(serverSalt), rem: remOut });
   localVer = r.v; lastHtml = html; clearDraft();
+  cachePut({ ct: body.ct, iv: body.iv, v: r.v, savedAt: Date.now() }); // v5.50：提醒保存也是正文保存，同步刷新离线缓存
+  lastSyncAt = Date.now(); hideOfflineBar(); // v5.50：离线转在线后改提醒，不能出现「条挂着、页脚已同步」
   setStatus(true, '已同步');
   scheduleReminders();
   renderRemBtn();
@@ -3257,9 +3270,11 @@ async function saveLocal() {
     clearDraft();
     cachePut({ ct: enc.ct, iv: enc.iv, v: r.v, savedAt: Date.now() }); // v5.49：保存成功即刷新离线缓存
     hideOfflineBar();
+    lastSyncAt = Date.now(); // v5.50：保存成功=与服务端通信成功
     setStatus(true, '已同步');
   } catch (e) {
     if (e.locked) { setStatus(false, '已锁定，请稍后'); editor.contentEditable = false; }
+    else if (!navigator.onLine) { setStatus(false, '离线'); showOfflineBar(currentSyncTime()); } // v5.50：断网保存失败不再显示误导性的「保存失败」循环
     else {
       setStatus(false, '保存失败');
       scheduleSaveRetry(); // I4：失败自动退避重试，不再“失败即永久丢失，须手动再改一笔”
@@ -3280,6 +3295,7 @@ async function saveLocal() {
 // 成功即停（saveLocal 成功分支清零计数），达到上限则保持“保存失败”状态等待用户下一次编辑触发。
 function scheduleSaveRetry() {
   if (saveRetryCount >= SAVE_RETRY_DELAYS.length) return;
+  if (!navigator.onLine) return; // v5.50：离线期间退避重试是空转，恢复联网由 online 侧 flushDirtySave 重踢
   const delay = SAVE_RETRY_DELAYS[saveRetryCount++];
   clearTimeout(saveRetryTimer);
   saveRetryTimer = setTimeout(() => { saveRetryTimer = null; saveLocal(); }, delay);
@@ -3298,6 +3314,7 @@ async function poll() {
   if (!cryptoKey) return; // 已锁定：无密钥无须轮询，避免“同步中断”噪声
   try {
     const note = await apiGet();
+    lastSyncAt = Date.now(); // v5.50：轮询成功=与服务端通信成功
     setStatus(true, '已同步');
     hideOfflineBar();
     if ((note.v || 0) > localVer && note.ct) {
@@ -3347,6 +3364,7 @@ async function poll() {
     }
   } catch (e) {
     if (e.locked) setStatus(false, '已锁定');
+    else if (!navigator.onLine) { setStatus(false, '离线'); showOfflineBar(currentSyncTime()); } // v5.50：本机离线兜底（offline 事件漏网时也挂离线条）
     else setStatus(false, '同步中断');
   }
 }
@@ -3397,6 +3415,21 @@ document.addEventListener('visibilitychange', () => {
 });
 window.addEventListener('pagehide', flushDirtySave);
 
+// v5.50：运行时断网/恢复感知——此前离线只在「打开页面那一刻」判定（init 回退），
+// 用着用着断网零感知（页脚停在残影「已同步」、离线条永不出现）。现在：
+// offline 事件 0 秒感知立即挂条；online 恢复自动重拉+补传，成功后既有逻辑收条回「已同步」。
+window.addEventListener('offline', () => {
+  if (!cryptoKey) return; // 锁定态弹离线条是噪声（守卫对齐 poll 入口）
+  setStatus(false, '离线');
+  showOfflineBar(currentSyncTime());
+  clearTimeout(saveRetryTimer); saveRetryTimer = null; // 离线期间退避重试是空转，恢复联网由 online 侧重踢
+});
+window.addEventListener('online', () => {
+  if (!cryptoKey) return;
+  // 削抖 400ms：WiFi/DHCP 未稳定时立即 poll 可能闪一下「同步中断」；2 秒常驻轮询兜底，无自愈风险
+  setTimeout(() => { poll(); flushDirtySave(); }, 400);
+});
+
 $('#ok').addEventListener('click', () => unlock(pw.value));
 pw.addEventListener('keydown', e => { if (e.key === 'Enter') unlock(pw.value); });
 pw.addEventListener('input', () => { $('#ok').disabled = pw.value.length === 0; });
@@ -3411,6 +3444,7 @@ $('#lock').addEventListener('click', () => {
   remMask.classList.add('hidden'); remPanelOpen = false; remBtn.classList.remove('on');
   mask.classList.remove('hidden'); pw.value = ''; err.textContent = '';
   $('#ok').disabled = true; // 退出锁定：清空口令后解锁按钮必须回到禁用态
+  lastSyncAt = 0; hideOfflineBar(); // v5.50：退出锁定清同步时刻并收离线条，残条不带到下次解锁
   setStatus(false, '已退出');
 });
 
@@ -3488,6 +3522,7 @@ $('#lock').addEventListener('click', () => {
     editor.contentEditable = true;
     if (note.ct) { try { lastHtml = await decryptText(note.ct, note.iv, cryptoKey); editor.innerHTML = lastHtml; } catch (e) {} }
     if (note.ct) cachePut({ ct: note.ct, iv: note.iv, v: note.v, savedAt: Date.now() }); // v5.49：成功加载即缓存正文密文，供离线阅读
+    lastSyncAt = Date.now(); // v5.50：在线加载成功=与服务端通信成功
     ensureBlockWrapped();
     if (note.ct) { try { linkifyEditor(); } catch (e) {} }
     ensureCaret(); // 自动加载后显式重建合法折叠光标

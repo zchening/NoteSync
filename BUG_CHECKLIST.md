@@ -32,7 +32,7 @@
 | F | 光标与编辑 | 13 | 修改 Enter 处理 / cleanupLeadingTrailingBreaks / caretInsideNode / linkifyEditor 块内偏移 / ensureBlockWrapped / ensureCaret / repaintCaret / relocateCaretToVisible / isComposing |
 | G | 撤销栈 | 1 | 修改 自建撤销栈 / captureState / applyState / recordIfChanged / syncCurrentState / undo / redo / keydown 拦截 Ctrl+Z/Y |
 | H | 落地页/解锁/路由/图标/指纹 | 6 | 修改 landing 路由(ID_RE/extractId/导航) / 打开按钮禁用 / 解锁按钮禁用态样式 / 退出锁定禁用态 / 落地页中文输入过滤 / 指纹 WebAuthn PRF 逻辑（v5.15 起彻底移除） |
-| I | 链接转换/粘贴/保存可靠性 | 6 | 修改 linkifyEditor / buildLinkSafe / trimUrlTrailing / urlRegex / paste 处理 / pasteTextNative / input 处理器 busy 分支 / saveLocal / scheduleSaveRetry / flushDirtySave / fetchRetry / copyBtn |
+| I | 链接转换/粘贴/保存可靠性 | 7 | 修改 linkifyEditor / buildLinkSafe / trimUrlTrailing / urlRegex / paste 处理 / pasteTextNative / input 处理器 busy 分支 / saveLocal / scheduleSaveRetry / flushDirtySave / fetchRetry / copyBtn / offline·online 事件监听 / lastSyncAt / currentSyncTime |
 | J | 二维码配对 | 2 | 修改 tryPairingUnlock / parsePairingKey / buildPairingUrl / drawQrTo / revealQr / resetQrHolder / qrBtn 弹层 / b64ToUrlSafe·urlSafeToB64 |
 | K | 服务端遗留缺陷（Open） | 2 | 修改 server.js 静态分支（GET/HEAD、/.well-known/ 路由）——K1/K2 确诊未修复 |
 | L | 提醒与闹钟 UI | 8 | 修改 remPanel / remCard / focusRemTimeInput / 响铃 playRemSound / unlockRemAudio / 时间识别 chip / insertRemLine / rem-mark 标记 / reminder 数据结构 |
@@ -861,6 +861,19 @@
 - **核对要点**:
   - [ ] 含长链接的笔记复制后，粘贴到纯文本环境无不可见字符
 
+### I7 | 离线状态运行时零感知：断网后页脚停在残影「已同步」、误导性「保存失败」循环（v5.50 修复）
+- **版本**: v5.49 引入盲区 / v5.50 修复（2026-09-05）
+- **现象**: Chrome 安装版 PWA 页面开着断网：页脚一直显示「已同步」（实为断网前最后成功同步的残影）；若断网瞬间有保存在途（切窗口触发 visibilitychange→flushDirtySave），页脚进入「保存中…→保存失败」循环约 37 秒（重试间隔 3s/6s/12s，busy 期间 poll 直接 return 连「同步中断」都不出现）；v5.49 的「离线 · 上次同步于 X」条只在打开页面那一刻判定，运行时断网永不出现
+- **根因**: 全文无 online/offline 事件监听、无 navigator.onLine 判断——运行时断网零感知；保存失败重试循环与 busy 守卫叠加掩盖中断
+- **修复**: ① offline/online 事件监听（cryptoKey 守卫）：断网 0 秒页脚「离线」+挂「离线 · 上次同步于 X」条；恢复削抖 400ms 后 poll+flushDirtySave 自动回「已同步」并收条 ② lastSyncAt 只在 5 个真实服务端成功点更新（解锁/在线加载/保存/轮询/提醒保存），loadCachedBody 用缓存自带 savedAt 不混用 ③ poll/saveLocal 失败按 navigator.onLine 分流：本机离线→「离线」+挂条，服务器问题→「同步中断/保存失败」不挂条 ④ fetchRetry 本机离线零退避快速失败；scheduleSaveRetry 离线入口守卫 ⑤ 退出锁定清 lastSyncAt+收条；提醒保存成功也收条+刷新缓存；离线条与 upload-status 同位错位（bottom:88px）
+- **关联文件**: index.html → fetchRetry / saveLocal / scheduleSaveRetry / poll / persistReminders / #lock 处理器 / offline·online 监听 / showOfflineBar / currentSyncTime / .offlinebar CSS
+- **核对要点**:
+  - [ ] 页面开着断网：1 秒内页脚变「离线」+底部弹条且时间为真实同步时刻（e2e offline_live.test.js 固化）
+  - [ ] 恢复联网：自动回「已同步」+条收起；断网期间输入的内容恢复后自动补传
+  - [ ] 锁定态断网：无弹条、页脚不变（零噪声）
+  - [ ] 服务器宕机但本机在线：仍显示「同步中断」，不误挂离线条（unit O5 固化）
+  - [ ] 离线打开提速：1-2 秒内出缓存正文（不再等 3 次退避约 4 秒）
+
 ---
 
 ## J. 二维码配对（v5.20 快速档）
@@ -1062,4 +1075,5 @@
 | v5.45 | L5, L6, L7（提醒功能四连改：自建时分框/正文回写下划线/chip 改版/过期零打扰，e2e _verify_v545 4 项固化） |
 | v5.46 | L6 修订, L8（下划线只包时间串/过期回归普通正文/已添加悬停两行展示卡，e2e _verify_v545 5 项固化） |
 | v5.48 | D7（Chrome 安卓键盘顶飞菜单栏：viewport meta 加 interactive-widget=resizes-content，真机验收待用户） |
+| v5.50 | I7（离线状态运行时零感知：offline/online 事件实时挂收离线条 + 保存失败按本机离线分流 + fetchRetry 离线快败，e2e offline_live + unit offline O1~O6 固化） |
 | v5.14 | H1, H2, H3, H4, C4 |
