@@ -48,6 +48,7 @@ jobs:
       - name: 构建 release APK
         working-directory: android
         run: |
+          chmod +x gradlew   # 兜底：Windows 提交可能丢可执行位
           ./gradlew assembleRelease \
             -Pandroid.injected.signing.store.file=$(pwd)/notesync-release.p12 \
             -Pandroid.injected.signing.store.password=${{ secrets.ANDROID_KEYSTORE_PASSWORD }} \
