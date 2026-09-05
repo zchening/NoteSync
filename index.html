@@ -2,7 +2,12 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, interactive-widget=resizes-content">
+<!-- v5.48：interactive-widget=resizes-content——Chrome 安卓默认键盘只缩视觉视口（resizes-visual），
+     长笔记末尾聚焦弹键盘时视觉视口整体下移平移，文档流顶部的 header（菜单栏）被推出屏幕外。
+     声明 resizes-content 后键盘弹出时布局视口整体压缩（与 QQ/小米自带浏览器的压缩行为看齐），
+     header 恒贴可见区顶部、footer 贴键盘上沿、提醒面板输入框不再被键盘遮挡。
+     Chrome Android 108+（2022-12）生效；旧内核/桌面/iOS 忽略此参数，行为不变。 -->
 <!-- 静态兜底必须声明"只支持浅色"：若 JS 尚未执行，写 light dark 等于主动告诉浏览器"我支持深色"，
      QQ 浏览器 X5 / 小米 WebView 的强制深色引擎会据此判定页面未适配并对浅色页面反色。
      JS 起来后 applyTheme() 会按当前主题精确改写为 only light（支持时）/ light / dark。 -->
@@ -309,7 +314,7 @@ const PBKDF2_ITER = 200000;
 const FAIL_LIMIT = 10;
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '5.47';
+const APP_VERSION = '5.48';
 const BUILD_DATE = '2026-09-05';
 
 const $ = s => document.querySelector(s);

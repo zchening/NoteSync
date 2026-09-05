@@ -167,7 +167,10 @@ test('V545-2 光标落时间上 chip 含蓝色「添加提醒」，点后变两�
     assert.ok(chip.visible, '未来时间 chip 必须浮出');
     assert.ok(chip.text.includes('添加提醒'), 'chip 必须含「添加提醒」CTA: ' + chip.text);
     assert.ok(!chip.text.includes('设提醒'), '旧文案「设提醒」不得出现');
-    assert.strictEqual(chip.ctaColor, 'rgb(37, 99, 235)', 'CTA 必须是蓝色 #2563EB');
+    // CTA 双板锁色：浅 #2563EB / 深 #7EB1FF——主题按时间切换（07:00/19:00），晚间跑套件时页面为夜间，
+    // 断言必须按 body.dark 取对应板色（2026-09-05 19:24 首次暴露：写死浅色板导致晚 7 点后必挂）
+    const expectDark = await page.evaluate(() => document.body.classList.contains('dark'));
+    assert.strictEqual(chip.ctaColor, expectDark ? 'rgb(126, 177, 255)' : 'rgb(37, 99, 235)', 'CTA 必须是当前主题对应板色（浅 #2563EB / 深 #7EB1FF）');
 
     await page.click('#timeChip');
     await page.waitForTimeout(200);

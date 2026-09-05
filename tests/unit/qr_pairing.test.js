@@ -87,10 +87,19 @@ test('内联 qrcode 库可为真实配对 URL 生成模块矩阵', () => {
 });
 
 // ── Q5：版本号 ──────────────────────────────
-test('APP_VERSION 为 5.47', () => {
+test('APP_VERSION 为 5.48', () => {
   const fs = require('fs');
   const src = fs.readFileSync(require('../helpers').INDEX_PATH, 'utf8');
-  assert.ok(src.includes("const APP_VERSION = '5.47';"), 'index.html 应声明 APP_VERSION = 5.47');
+  assert.ok(src.includes("const APP_VERSION = '5.48';"), 'index.html 应声明 APP_VERSION = 5.48');
+});
+
+// ── Q5b：v5.48 键盘视口策略（Chrome 安卓菜单栏被顶飞修复）──
+test('v5.48 viewport meta 声明 interactive-widget=resizes-content', () => {
+  const fs = require('fs');
+  const src = fs.readFileSync(require('../helpers').INDEX_PATH, 'utf8');
+  const META = '<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, interactive-widget=resizes-content">';
+  assert.ok(src.includes(META), 'viewport meta 必须包含 interactive-widget=resizes-content（键盘弹出时压缩布局视口，header 不再被顶出屏幕）');
+  assert.ok(!src.includes('user-scalable=no">'), '旧 viewport 形态（无 interactive-widget）不应残留');
 });
 
 // ── Q6：v5.26 生产配对二维码走主站 302 短链 ──────────────────────────────

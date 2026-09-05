@@ -27,7 +27,7 @@
 | A | 删除线 | 7 | 修改 strikeBtn / addStrikeToRange / removeStrikeFromRange / rangeIntersectsNode / contentHasS / linkifyEditor |
 | B | 导出图片 | 7 | 修改 exportImage / exportImgBtn 事件 / html2canvas 调用 / 临时 div 渲染 |
 | C | 缓存与图标 | 4 | 修改 favicon / manifest.json / Cache-Control 头 / icon-maskable 生成与路由 |
-| D | PWA 与移动端 | 6 | 修改 manifest.json / 触摸事件 / 夜间模式 CSS / applyTheme / THEME_PALETTE / mountThemeOverride / color-scheme 声明（:root 或 meta）/ theme-override 挂载点 |
+| D | PWA 与移动端 | 7 | 修改 manifest.json / 触摸事件 / 夜间模式 CSS / applyTheme / THEME_PALETTE / mountThemeOverride / color-scheme 声明（:root 或 meta）/ theme-override 挂载点 / viewport meta（interactive-widget） |
 | E | 选区与同步 | 4 | 修改 editor 输入/粘贴处理 / linkifyEditor / saveSelectionOffsets·restoreSelectionOffsets / cleanupLeadingTrailingBreaks / insertNodeAtCaret / 删除逻辑 / poll 远端合并 / selectionchange 钳制 |
 | F | 光标与编辑 | 13 | 修改 Enter 处理 / cleanupLeadingTrailingBreaks / caretInsideNode / linkifyEditor 块内偏移 / ensureBlockWrapped / ensureCaret / repaintCaret / relocateCaretToVisible / isComposing |
 | G | 撤销栈 | 1 | 修改 自建撤销栈 / captureState / applyState / recordIfChanged / syncCurrentState / undo / redo / keydown 拦截 Ctrl+Z/Y |
@@ -355,7 +355,19 @@
 - **v5.30/v5.31 真机取证结论（小米浏览器 Chrome 135）**: `computed` 全部正确浅色 + `only light` 声明成功，但整页渲染深色，纯白探针变黑/纯黑变白 → **渲染层强制反色实锤，CSS 无解**。桌面 Chromium `--enable-features=WebContentsForceDark` 模拟尊重豁免、无法复现（反证 MIUI 自研反色层）。**滤镜抵消（v5.30 实验）无效** → 对手是「浅色检测型」：页面浅才反、深色放行（夜间模式一直正常的原因），负负得正不成立。**最终定论：开启"网页夜间"的小米/QQ 浏览器里，日间被强制改色是浏览器功能设计，页面无法阻止**。v5.31 落地：① `setupDarkEnvHint()` 提示条（小米/QQ UA + 系统深色 + 页面日间三条件，一键切夜间 + 白名单引导，会话内可关闭）；② `?themedi` 白块 A(fixed)/B(flow) 对照实验保留——若出现"A 白 B 黑"可推翻定论、走全页 fixed 容器化绕过（待真机复核）
 - **v5.32/v5.33 借壳日间正式落地（用户观察破题）**: 用户真机实验发现「切夜间正常 → 点滤镜后页面显示日间样式」→ 对手放行深色页面 + 滤镜可翻色，两者组合 = 完整日间：内部伪装夜间（body.dark，对手放行）+ html `filter:invert(1)` + `#theme-shell` 预写目标日间色的反色值（像素级精确复原），img/canvas 自带 invert 双重反转保持原样。与对手行为解耦（夜间模式开/关两种设置下显示一致）。v5.33 起正式启用：`darkShellActive()` 判定（小米/QQ UA + 系统深色自动启用，`localStorage['notesync_darkshell']` '1' 强制开 / '0' 强制关）；手动切换走 `themeWantsDark` 语义状态（借壳时 body 恒 dark，读 class 会判错方向）；`matchMedia` change 实时重判；observer 重排保持 shell 压轴；借壳激活时环境提示条不再弹出
 - **用户侧一劳永逸操作**：小米浏览器 → 底部菜单 → 夜间模式 → 设为「关闭」；或 设置 → 网页夜间模式/深色模式 → 把 `note.xuyinji.com.cn`（和 `biji.xuyinji.com.cn`）加入白名单。QQ 浏览器同理（菜单 → 夜间 → 关）
-- **用户侧一劳永逸操作**：小米浏览器 → 底部菜单 → 夜间模式 → 设为「关闭」；或 设置 → 网页夜间模式/深色模式 → 把 `note.xuyinji.com.cn`（和 `biji.xuyinji.com.cn`）加入白名单。QQ 浏览器同理（菜单 → 夜间 → 关）
+
+### D7 | Chrome 安卓：长笔记末尾聚焦弹键盘，顶部菜单栏被顶出屏幕
+- **版本**: v5.48（2026-09-05 发版）
+- **现象**: 笔记内容较长时，小米手机 Chrome 打开笔记、光标定位到末尾、点出软键盘 → 顶部菜单栏（header，含 8 个工具按钮）整行被往上推出屏幕外看不见；QQ 浏览器与小米自带浏览器正常
+- **根因**: header 是 `body`（flex column，height:100%）文档流顶行，`#editor` flex:1 内部滚动，页面无 visualViewport 处理。Chrome 安卓默认 `interactive-widget=resizes-visual`：键盘弹出时**布局视口不缩小**，浏览器把视觉视口整体向下平移以让光标进入可见区 → 整页上移，文档流顶部的 header 被推出屏幕上方。QQ/小米自带浏览器是「压缩布局视口」行为（等效 `resizes-content`），header 恒贴可见区顶部故正常。笔记越长、光标越靠后，平移量越大，症状越明显
+- **修复**: viewport meta 追加 `interactive-widget=resizes-content`——键盘弹出时布局视口整体压缩（与国产浏览器行为看齐），header 恒贴可见区顶部、footer 贴键盘上沿、编辑器内部滚动把光标滚进来。Chrome Android 108+（2022-12）生效；旧内核/桌面/iOS 忽略此参数行为不变。副作用全正向：`.mask` 全屏遮罩与提醒面板以压缩后视口定位，面板输入框不再被键盘遮挡下半截
+- **关联文件**: index.html → 第 5 行 viewport meta
+- **核对要点**:
+  - [ ] 真机（小米+Chrome）：长笔记光标定位末尾弹键盘，header 必须仍可见在顶部，footer 贴键盘上沿
+  - [ ] 真机回归：QQ 浏览器、小米自带浏览器同场景行为不变
+  - [ ] 提醒面板弹键盘输入时间/事项，面板下半截不被键盘遮挡
+  - [ ] 桌面 Chrome / iOS 行为无变化（参数被忽略）
+  - [ ] unit/qr_pairing.test.js Q5b：viewport meta 含 interactive-widget=resizes-content 且旧形态零残留
 
 ---
 
@@ -1049,4 +1061,5 @@
 | v5.44 | L1, L2, L3, L4（用户四连报一次修净，e2e _verify_v544 4 项固化） |
 | v5.45 | L5, L6, L7（提醒功能四连改：自建时分框/正文回写下划线/chip 改版/过期零打扰，e2e _verify_v545 4 项固化） |
 | v5.46 | L6 修订, L8（下划线只包时间串/过期回归普通正文/已添加悬停两行展示卡，e2e _verify_v545 5 项固化） |
+| v5.48 | D7（Chrome 安卓键盘顶飞菜单栏：viewport meta 加 interactive-widget=resizes-content，真机验收待用户） |
 | v5.14 | H1, H2, H3, H4, C4 |
