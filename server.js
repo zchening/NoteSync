@@ -5,7 +5,6 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
 
 const PORT = process.env.PORT || 8080;
 const APP_DIR = __dirname;
@@ -29,8 +28,13 @@ const LOCK_DURATION = 30 * 60 * 1000;    // 锁定 30 分钟
 const failMap = new Map();
 
 function getClientIP(req) {
+  // v5.52：Caddy 反代把真实客户端 IP 追加在 XFF 末尾，首段是客户端可伪造的。
+  // 取首段等于任何人都能靠轮换 XFF 头绕过失败锁定，必须取末段。
   const xff = req.headers['x-forwarded-for'];
-  if (xff) return xff.split(',')[0].trim();
+  if (xff) {
+    const parts = xff.split(',').map(s => s.trim()).filter(Boolean);
+    if (parts.length) return parts[parts.length - 1];
+  }
   return req.socket.remoteAddress || 'unknown';
 }
 
@@ -83,6 +87,8 @@ setInterval(() => {
 // --- SSE 推送 ---
 // Map<noteId, Set<res>> 存所有 SSE 连接
 const sseClients = new Map();
+let sseActive = 0;                  // v5.52：当前活跃 SSE 连接数
+const MAX_SSE = 2000;               // 上限，超出返回 429
 
 function sseBroadcast(noteId, data) {
   const clients = sseClients.get(noteId);
@@ -116,27 +122,6 @@ function sendJSON(res, code, obj) {
   res.end(JSON.stringify(obj));
 }
 
-// v5.51：APK 热更新检查接口——直读磁盘 index.html，正则抓 APP_VERSION 算 sha256
-// 缓存 5 秒（发版后 5 秒内 APK 可见新版本；APK 启动后台轮询友好）
-let appVerCache = null, appVerCacheAt = 0;
-const APP_VER_TTL = 5000;
-function getAppVersionInfo() {
-  const now = Date.now();
-  if (appVerCache && (now - appVerCacheAt) < APP_VER_TTL) return appVerCache;
-  try {
-    const buf = fs.readFileSync(INDEX_FILE);
-    const src = buf.toString('utf8');
-    const m = src.match(/const APP_VERSION\s*=\s*'([^']+)'/);
-    const version = m ? m[1] : '0.0.0';
-    const sha256 = crypto.createHash('sha256').update(buf).digest('hex');
-    appVerCache = { version: version, sha256: sha256, size: buf.length };
-  } catch (e) {
-    appVerCache = { version: 'unknown', sha256: '', size: 0 };
-  }
-  appVerCacheAt = now;
-  return appVerCache;
-}
-
 function extractId(url, prefix) {
   // /api/note/abc123 → abc123（路径段可能含中文等，需先 decodeURIComponent）
   const m = url.match(new RegExp('^' + prefix + '/([^/]+)'));
@@ -159,14 +144,18 @@ const server = http.createServer((req, res) => {
       'X-Accel-Buffering': 'no'
     });
     res.write(': connected\n\n');
+    // v5.52：全局连接上限，防恶意客户端开大量长连接耗尽 fd / 内存
+    if (sseActive >= MAX_SSE) return sendJSON(res, 429, { error: 'too many streams' });
     if (!sseClients.has(id)) sseClients.set(id, new Set());
     sseClients.get(id).add(res);
+    sseActive++;
     // SSE 心跳：每 15 秒发送 ping，防止代理/运营商中断长连接
     const heartbeat = setInterval(() => {
       try { res.write(': ping\n\n'); } catch (e) { clearInterval(heartbeat); }
     }, 15000);
     req.on('close', () => {
       clearInterval(heartbeat);
+      if (sseActive > 0) sseActive--;
       const clients = sseClients.get(id);
       if (clients) { clients.delete(res); if (clients.size === 0) sseClients.delete(id); }
     });
@@ -214,15 +203,15 @@ const server = http.createServer((req, res) => {
   if (req.method === 'POST' && url.startsWith('/api/fail/')) {
     const id = extractId(url, '/api/fail');
     if (!id || !ID_RE.test(id)) return sendJSON(res, 400, { error: 'bad id' });
+    // v5.52：强制要求 JSON content-type，逼浏览器发预检。
+    // 否则这是个 simple 请求，任意恶意网页都能连发 10 次锁死别人的笔记，
+    // 而 CORS 白名单对 simple 请求无效（预检才拦得住）。
+    const ct = req.headers['content-type'] || '';
+    if (!ct.includes('application/json')) return sendJSON(res, 400, { error: 'bad content-type' });
     const limit = recordFail(ip, id);
     if (limit.locked) return sendJSON(res, 429, { locked: true, retryAfter: limit.retryAfter });
     const rec = failMap.get(ip + ':' + id);
     return sendJSON(res, 200, { locked: false, count: rec ? rec.count : 0 });
-  }
-
-  // --- API: 应用版本（APK 热更新用，缓存 5 秒）---
-  if (req.method === 'GET' && url === '/api/app-version') {
-    return sendJSON(res, 200, getAppVersionInfo());
   }
 
   // --- 健康检查 ---

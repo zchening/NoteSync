@@ -1108,10 +1108,71 @@
   - [ ] 私钥遗失→下次 APK 更新必须卸载重装；卸载后**笔记数据不丢**（密文在服务端），仅需输一次口令重新解锁（KEY_STORE 重建）+ 提醒镜像自动从服务端 rem 重建排程
   - [ ] 白名单五项在卸载后**全部重置**——这是真痛点，不是数据；引导页图文引导防漏配
 
+## N. APK 直连改道与原生 P0（v5.52 新增分类，三方评审后 server.url 路线）
+### N1 | APK 架构改道：server.url 直连线上（替代本地 assets + 热更新）
+- **版本**: v5.52
+- **要点与核对**:
+  - [ ] `capacitor.config.json` 的 `server.url = "https://biji.xuyinji.com.cn"`——WebView 直接加载线上页，与 Web 同源同路径
+  - [ ] 一次解决：noteId 恒空导致的四类存储键串台 / 首页打开按钮 404 / QR 配对死循环 / CORS 全链 / manifest 404 / API base 未注入 / SW 被禁止注册
+  - [ ] `NOTESYNC_API_BASE` 变量保留但恒为空串（同源后相对路径天然可用），勿删——NOTE_API/FAIL_API/EventSource 三处拼接依赖它
+  - [ ] **已知代价**：无网且 SW 未缓存 shell 时 APK 白屏 → 原生兜底页（见 N8）缓解
+### N2 | 热更新废弃（P0 安全风险一并消灭）
+- **版本**: v5.52
+- **要点与核对**:
+  - [ ] 热更新 sha256 校验值与文件来自同一接口=服务端自证，MITM/服务器被控可让 APK 执行任意 JS 并读内存明文
+  - [ ] `RemPlugin` 的 `checkUpdate`/`fetchAppVersion`/`downloadAndStore`/`AppVersionInfo` 已删，`MessageDigest` import 已删
+  - [ ] `server.js` 的 `/api/app-version` 路由 + `getAppVersionInfo` + `crypto` require 已删
+  - [ ] 测试 `cap-update.test.js`（C1-C4）已删
+  - [ ] **M6 条目（热更新）自 v5.52 起作废**
+### N3 | POST_NOTIFICATIONS 运行时申请（Android 13+ 不申请=默认拒绝=通知全不弹）
+- **版本**: v5.52
+- **要点与核对**:
+  - [ ] `RemPlugin.load()` 里 SDK≥33 且未授权时 `ActivityCompat.requestPermissions(activity, [POST_NOTIFICATIONS], 1001)`
+  - [ ] manifest 声明只是"安装时可申请"，不等于"已授权"——v5.51 因此在真机上必不弹
+### N4 | PendingIntent requestCode 截断 → 0..9 列表索引
+- **版本**: v5.52
+- **要点与核对**:
+  - [ ] `Reminder` 加 `idx` 字段；`scheduleAlarm`/`cancelAlarm`/通知 ID/clickIntent 全部用 `idx`，`at.toInt()` 零残留
+  - [ ] `readItems` 按 at 升序 `mapIndexed` 重建 idx（历史数据无 idx 也能自愈）；`sync` 落盘前同样重排
+  - [ ] 原理：毫秒时间戳转 int 溢出成负数 + Intent extras 不参与 filterEquals → FLAG_UPDATE_CURRENT 互相覆盖只剩一条
+### N5 | 落盘 .apply() → .commit()
+- **版本**: v5.52
+- **要点与核对**:
+  - [ ] `sync` 与 `cancelAll` 两处 SharedPreferences 写入均改 `.commit()` 同步落盘——异步落盘时进程被杀提醒全丢
+### N6 | 精确闹钟：setAlarmClock + requestExactAlarm 引导
+- **版本**: v5.52
+- **要点与核对**:
+  - [ ] `setExactAndAllowWhileIdle` → `setAlarmClock`（系统最高优先级、必要时退出 Doze 投递；状态栏会显示闹钟图标，属预期）
+  - [ ] `canScheduleExactAlarms()` 是 API 31 方法，minSdk 23——**任何无条件调用都会 NoSuchMethodError**，必须先判 `SDK_INT >= S`
+  - [ ] manifest 已声明 `USE_EXACT_ALARM`（安装即授予、不可撤销、不经 Play 分发不受用例限制）；`requestExactAlarm` 插件方法仅为保险引导
+### N7 | BootReceiver 补时间/时区变更 + goAsync 防 ANR
+- **版本**: v5.52
+- **要点与核对**:
+  - [ ] intent-filter 补 `TIME_SET` + `TIMEZONE_CHANGED`（改时间后 RTC 闹钟错乱）
+  - [ ] `onReceive` 用 `goAsync()` + 后台线程跑 `rescheduleAll`（主线程跑 Keystore/Cipher 提醒多会 ANR），finally 里 `finish()`
+### N8 | 原生断网兜底页
+- **版本**: v5.52
+- **要点与核对**:
+  - [ ] `activity_offline.xml`（居中 TextView+重试按钮，`?android:attr/colorBackground` 跟随主题）叠在 CoordinatorLayout 上层
+  - [ ] 自定义 `BridgeWebViewClient`：`onReceivedError` 主帧错误时显示兜底页，重试 `wv.reload()`；已确认 Capacitor 官方 `errorPath` 未启用，与 `super.onReceivedError()` 不冲突
+  - [ ] `BridgeWebViewClient(Bridge)` 构造签名已联网核实
+### N9 | 冷启通知点击事件丢失 → pending + onResume 补发
+- **版本**: v5.52
+- **要点与核对**:
+  - [ ] App 被杀后点通知冷启，`onNewIntent` 时 WebView 未就绪 → `pendingRemNotifyClick` 缓存，`onResume` 补发
+  - [ ] 派发 JS 带 readyState 感知（未 ready 则等 DOMContentLoaded），防 evaluateJavascript 落空
+### N10 | 服务端安全三修（XFF / fail CSRF / SSE 上限）
+- **版本**: v5.52
+- **要点与核对**:
+  - [ ] `getClientIP` 取 XFF **末段**——Caddy 把真实 IP 追加在末尾，取首段=攻击者可伪造头绕过失败锁定
+  - [ ] `/api/fail` 强制 `application/json` content-type 逼出预检——simple 请求 CORS 白名单挡不住，任意网页可刷锁别人的笔记
+  - [ ] SSE 全局上限 2000（`sseActive` 计数 + close 递减），防恶意长连接耗尽 fd
+
 ## 版本与 bug 对应速查
 
 | 版本 | 涉及 bug 编号 |
 |------|---------------|
+| v5.52 | N1-N10（APK 改 server.url 直连 + 砍热更新 + 原生三 P0：通知权限/requestCode 截断/同步落盘 + setAlarmClock + BootReceiver 补齐 + 断网兜底页 + 冷启事件补发 + 服务端 XFF/fail/SSE） |
 | v4.3 | A1, A2, A3 |
 | v4.3.1 | A4 |
 | v4.4 | D1 |

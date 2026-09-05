@@ -6,10 +6,16 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import cn.xuyinji.notesync.MainActivity
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
@@ -18,7 +24,6 @@ import com.getcapacitor.annotation.CapacitorPlugin
 import org.json.JSONArray
 import org.json.JSONObject
 import java.security.KeyStore
-import java.security.MessageDigest
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -27,8 +32,7 @@ import javax.crypto.spec.GCMParameterSpec
 @CapacitorPlugin(name = "RemBridge")
 class RemPlugin : Plugin() {
 
-    data class Reminder(val at: Long, val text: String)
-    data class AppVersionInfo(val version: String, val sha256: String, val size: Long)
+    data class Reminder(val at: Long, val text: String, val idx: Int = 0)
 
     companion object {
         const val KEYSTORE_ALIAS = "notesync_rem_key"
@@ -63,6 +67,7 @@ class RemPlugin : Plugin() {
                 val o = JSONObject()
                 o.put("at", r.at)
                 o.put("text", r.text)
+                o.put("idx", r.idx)
                 arr.put(o)
             }
             val plain = arr.toString().toByteArray(Charsets.UTF_8)
@@ -95,7 +100,11 @@ class RemPlugin : Plugin() {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val c = prefs.getString(KEY_CIPHER, null) ?: return emptyList()
             val iv = prefs.getString(KEY_IV, null) ?: return emptyList()
-            return try { decryptList(c, iv) } catch (_: Exception) { emptyList() }
+            return try {
+                decryptList(c, iv)
+                    .sortedBy { it.at }
+                    .mapIndexed { i, r -> r.copy(idx = i) }
+            } catch (_: Exception) { emptyList() }
         }
 
         fun scheduleAlarm(context: Context, r: Reminder) {
@@ -104,15 +113,20 @@ class RemPlugin : Plugin() {
                 action = ACTION_FIRE
                 putExtra("at", r.at)
                 putExtra("text", r.text)
+                putExtra("idx", r.idx)
             }
             val pi = PendingIntent.getBroadcast(
-                context, r.at.toInt(), intent,
+                context, r.idx, intent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !am.canScheduleExactAlarms()) {
                 am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, r.at, pi)
             } else {
-                am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, r.at, pi)
+                val showIntent = PendingIntent.getActivity(
+                    context, r.idx, Intent(context, MainActivity::class.java),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                am.setAlarmClock(AlarmManager.AlarmClockInfo(r.at, showIntent), pi)
             }
         }
 
@@ -120,13 +134,13 @@ class RemPlugin : Plugin() {
             val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
             val intent = Intent(context, RemReceiver::class.java).apply { action = ACTION_FIRE }
             val pi = PendingIntent.getBroadcast(
-                context, r.at.toInt(), intent,
+                context, r.idx, intent,
                 PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
             ) ?: return
             am.cancel(pi)
         }
 
-        /** 开机/覆盖安装后重排所有未来提醒；过期跳过 */
+        /** 开机/覆盖安装/时间变更后重排所有未来提醒；过期跳过 */
         fun rescheduleAll(context: Context) {
             val items = readItems(context)
             val now = System.currentTimeMillis()
@@ -155,6 +169,19 @@ class RemPlugin : Plugin() {
     override fun load() {
         super.load()
         createNotificationChannel(context)
+        // P0：Android 13+ 通知权限不自动授予，必须运行时申请，否则提醒一条都不弹
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED
+        ) {
+            getActivity()?.let {
+                ActivityCompat.requestPermissions(
+                    it,
+                    arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
+                    1001
+                )
+            }
+        }
     }
 
     @PluginMethod
@@ -170,17 +197,18 @@ class RemPlugin : Plugin() {
                 if (at > now - 60_000L) items.add(Reminder(at, text))
             }
             items.sortBy { it.at }
+            val itemsWithIdx = items.mapIndexed { i, r -> r.copy(idx = i) }
             // 先清旧 alarm（基于旧 prefs）
             val old = readItems(context)
             for (r in old) cancelAlarm(context, r)
-            // 落盘加密 + 排程
-            val (c, iv) = encryptList(items)
+            // 落盘加密 + 排程（同步落盘，防进程被杀丢提醒）
+            val (c, iv) = encryptList(itemsWithIdx)
             prefs.edit()
                 .putString(KEY_CIPHER, c)
                 .putString(KEY_IV, iv)
-                .apply()
+                .commit()
             var scheduled = 0
-            for (r in items) {
+            for (r in itemsWithIdx) {
                 scheduleAlarm(context, r)
                 scheduled++
             }
@@ -198,7 +226,7 @@ class RemPlugin : Plugin() {
         try {
             val items = readItems(context)
             for (r in items) cancelAlarm(context, r)
-            prefs.edit().remove(KEY_CIPHER).remove(KEY_IV).apply()
+            prefs.edit().remove(KEY_CIPHER).remove(KEY_IV).commit()
             call.resolve()
         } catch (e: Exception) {
             call.reject("cancelAll error: ${e.message}", e)
@@ -218,56 +246,25 @@ class RemPlugin : Plugin() {
         }
     }
 
+    /** 精确闹钟权限未授予时，引导用户到系统设置页授予 */
     @PluginMethod
-    fun checkUpdate(call: PluginCall) {
-        // 在后台线程执行 fetch + 下载 + 校验；本机失败不报错（保留旧版）
-        Thread {
-            try {
-                val current = call.getString("current") ?: ""
-                val base = call.getString("base") ?: ""
-                val info = fetchAppVersion(base)
-                val ret = JSObject()
-                if (info != null && info.version != current && info.sha256.isNotEmpty()) {
-                    val ok = downloadAndStore(base, info)
-                    ret.put("updateAvailable", ok)
-                    ret.put("version", info.version)
-                } else {
-                    ret.put("updateAvailable", false)
-                    ret.put("version", current)
+    fun requestExactAlarm(call: PluginCall) {
+        try {
+            val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !am.canScheduleExactAlarms()) {
+                val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                    data = Uri.parse("package:" + context.packageName)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
-                call.resolve(ret)
-            } catch (e: Exception) {
-                call.reject("checkUpdate error: ${e.message}", e)
+                context.startActivity(intent)
             }
-        }.start()
-    }
-
-    private fun fetchAppVersion(base: String): AppVersionInfo? {
-        val url = (if (base.isEmpty()) "http://127.0.0.1:8080" else base.trimEnd('/')) + "/api/app-version"
-        val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
-        conn.connectTimeout = 5000
-        conn.readTimeout = 5000
-        if (conn.responseCode != 200) return null
-        val body = conn.inputStream.bufferedReader().use { it.readText() }
-        val obj = JSONObject(body)
-        return AppVersionInfo(obj.getString("version"), obj.optString("sha256"), obj.optLong("size"))
-    }
-
-    private fun downloadAndStore(base: String, info: AppVersionInfo): Boolean {
-        val url = if (base.isEmpty()) "http://127.0.0.1:8080/" else "${base.trimEnd('/')}/"
-        val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
-        conn.connectTimeout = 10_000
-        conn.readTimeout = 30_000
-        val bytes = conn.inputStream.readBytes()
-        val md = MessageDigest.getInstance("SHA-256")
-        val digest = md.digest(bytes).joinToString("") { "%02x".format(it) }
-        if (digest != info.sha256) return false
-        val hotDir = java.io.File(context.filesDir, "www-hot")
-        if (!hotDir.exists()) hotDir.mkdirs()
-        val tmp = java.io.File(hotDir, "index.html.tmp")
-        tmp.writeBytes(bytes)
-        val hot = java.io.File(hotDir, "index.html")
-        if (hot.exists()) hot.delete()
-        return tmp.renameTo(hot)
+            val ret = JSObject()
+            // canScheduleExactAlarms() 是 API 31 才有的方法，minSdk 23 —— 低版本必须短路，否则 NoSuchMethodError
+            val canExact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || am.canScheduleExactAlarms()
+            ret.put("canScheduleExactAlarms", canExact)
+            call.resolve(ret)
+        } catch (e: Exception) {
+            call.reject("requestExactAlarm error: ${e.message}", e)
+        }
     }
 }

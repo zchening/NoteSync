@@ -15,6 +15,7 @@ class RemReceiver : BroadcastReceiver() {
         if (intent.action != RemPlugin.ACTION_FIRE) return
         val at = intent.getLongExtra("at", 0)
         val text = intent.getStringExtra("text") ?: "该看笔记了"
+        val idx = intent.getIntExtra("idx", 0)
         RemPlugin.createNotificationChannel(context)
 
         // 点击通知 → 回 MainActivity → onNewIntent → JS 抛 rem-notify-click 事件
@@ -24,7 +25,7 @@ class RemReceiver : BroadcastReceiver() {
             putExtra("at", at)
         }
         val pi = PendingIntent.getActivity(
-            context, at.toInt(), clickIntent,
+            context, idx, clickIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
@@ -41,6 +42,6 @@ class RemReceiver : BroadcastReceiver() {
             .build()
 
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        nm.notify(at.toInt(), notif)
+        nm.notify(idx, notif)
     }
 }

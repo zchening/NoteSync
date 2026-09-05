@@ -2,13 +2,14 @@
   "appId": "cn.xuyinji.notesync",
   "appName": "NoteSync",
   "webDir": "www",
-  "androidScheme": "https",
+  "loggingEnabled": false,
   "android": {
     "cleartext": false,
     "allowMixedContent": false,
     "captureInput": true
   },
   "server": {
+    "url": "https://biji.xuyinji.com.cn",
     "androidScheme": "https"
   }
 }

@@ -311,18 +311,21 @@ const MAX_IMG_WIDTH = 1920;
 const noteId = location.pathname.split('?')[0].replace(/^\/+|\/+$/g, '');
 // 动态 manifest：让每个笔记的 start_url 指向自身路径，Chrome 安装/创建快捷方式时打开正确页面
 document.querySelector('link[rel="manifest"]').href = '/manifest.json?start=/' + encodeURIComponent(noteId);
-// v5.51：APK 注入绝对地址（Capacitor 加载本地 assets 后相对路径失效）
-// Web 环境保持空串=相对路径，167 测试零破坏；定义必须在 NOTE_API 之前以避免 TDZ
+// v5.52：APK 改为 server.url 直连线上，与 Web 同源，相对路径天然可用，无需注入绝对地址。
+// 变量保留（值恒为空串）以免改动三处 API 拼接；定义必须在 NOTE_API 之前以避免 TDZ。
 const NOTESYNC_API_BASE = (typeof window !== 'undefined' && window.NOTESYNC_API_BASE) || '';
 const NOTE_API = NOTESYNC_API_BASE + '/api/note/' + encodeURIComponent(noteId);
 const FAIL_API = NOTESYNC_API_BASE + '/api/fail/' + encodeURIComponent(noteId);
 const KEY_STORE = 'notesync_key_' + noteId;
 const PBKDF2_ITER = 200000;
 const FAIL_LIMIT = 10;
+// v5.52：APK 冷启动自动进入上次笔记（仅原生环境，Web 端不受影响）
+const NOTE_LAST_KEY = 'notesync_last_note';
+const NOTE_JUMPED_KEY = 'notesync_jumped';
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '5.51';
-const BUILD_DATE = '2026-09-05';
+const APP_VERSION = '5.52';
+const BUILD_DATE = '2026-09-06';
 
 const $ = s => document.querySelector(s);
 const editor = $('#editor'), mask = $('#mask'), pw = $('#pw'), err = $('#err');
@@ -1779,6 +1782,8 @@ $('#qrClose').addEventListener('click', () => { resetQrHolder(); qrMask.classLis
 // --- 解锁 ---
 async function applyUnlocked(key, note) {
   cryptoKey = key;
+  // v5.52：记住成功打开过的笔记名，供 APK 冷启动自动进入
+  try { if (noteId) localStorage.setItem(NOTE_LAST_KEY, noteId); } catch (e) {}
   try {
     const raw = await crypto.subtle.exportKey('raw', key);
     localStorage.setItem(KEY_STORE, bufToB64(raw));
@@ -3463,8 +3468,24 @@ $('#lock').addEventListener('click', () => {
   setStatus(false, '已退出');
 });
 
+// v5.52：是否运行在 APK 里。Capacitor 官方注入，零时机问题；Web 端恒 false。
+function isNativeApp() {
+  return !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+}
+
 (async function init() {
   if (!noteId) {
+    // v5.52：APK 冷启动自动进入上次打开的笔记，免掉每次输笔记名。
+    // 用 assign 而非 replace —— 留下历史记录，用户按返回键可退回首页换笔记。
+    // sessionStorage 标记防止「退回首页 → 又自动跳走」的死循环。
+    if (isNativeApp() && !sessionStorage.getItem(NOTE_JUMPED_KEY)) {
+      const last = localStorage.getItem(NOTE_LAST_KEY);
+      if (last && /^[A-Za-z0-9_-]{1,64}$/.test(last)) {
+        sessionStorage.setItem(NOTE_JUMPED_KEY, '1');
+        location.assign('/' + encodeURIComponent(last));
+        return;
+      }
+    }
     // 根路径：显示极简首页，不跳转
     loadingEl.classList.add('hidden');
     document.getElementById('landing').classList.remove('hidden');
@@ -3550,21 +3571,14 @@ $('#lock').addEventListener('click', () => {
   }
 })();
 // PWA Service Worker
-// v5.51：APK 内 WebView 走 Capacitor 离线资源机制（本地 assets + 热更新），不需 SW——
-// 旧 SW 缓存可能与热更新文件打架；仅 Web 环境注册
-if (!window.__NOTESYNC_NATIVE__ && 'serviceWorker' in navigator) {
+// v5.52：APK 改为 server.url 直连线上，与 Web 完全同源同路径，SW 照常注册即可——
+// 这也是断网时 APK 仍能打开的兜底（SW 缓存 shell）
+if ('serviceWorker' in navigator) {
   // v5.35：注册 URL 带上 APP_VERSION，SW 从自身 URL 读版本做缓存名——版本号单一来源
   // （仍是 index.html 的 APP_VERSION），发版即换缓存、旧缓存自动清理，杜绝 v5.34 前
   // "CACHE 硬编码 notesync-v1、发版后离线用户拿旧壳"的隐患
   navigator.serviceWorker.register('/sw.js?v=' + encodeURIComponent(APP_VERSION)).catch(() => {});
 }
-// v5.51：APK 启动热更新检查（原生层 fetch /api/app-version + sha256 + 落盘，下次冷启动生效）
-// Web 环境无 window.RemBridge，静默跳过
-(function () {
-  const rb = (typeof window !== 'undefined' && window.RemBridge) || null;
-  if (!rb || typeof rb.checkUpdate !== 'function') return;
-  try { rb.checkUpdate({ current: APP_VERSION, base: NOTESYNC_API_BASE }); } catch (e) {}
-})();
 </script>
 </body>
 </html>

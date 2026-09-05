@@ -25,12 +25,12 @@
 
         </activity>
 
-        <!-- v5.51：通知触发接收器（AlarmManager setExactAndAllowWhileIdle 唤醒） -->
+        <!-- v5.51：通知触发接收器（AlarmManager setAlarmClock 唤醒） -->
         <receiver
             android:name=".rem.RemReceiver"
             android:exported="false" />
 
-        <!-- v5.51：开机/覆盖安装重排接收器 -->
+        <!-- 开机/覆盖安装/快速开机/时间或时区变更后重排接收器 -->
         <receiver
             android:name=".rem.BootReceiver"
             android:exported="true">
@@ -38,6 +38,8 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
                 <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
             </intent-filter>
         </receiver>
 
