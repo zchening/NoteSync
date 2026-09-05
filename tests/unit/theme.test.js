@@ -324,9 +324,14 @@ test('v5.42：列表行文字必须是裸文本节点（span 元素盒在该内�
   assert.ok(!/#remBoxList \.rem-row span\{/.test(SRC), 'span 级规则必须删除（span 元素已退役）');
   assert.ok(/#remBoxList \.rem-row\{display:grid;grid-template-columns:1fr auto/.test(SRC), '行布局必须 grid 1fr auto（文字列居中 + × 右侧）');
   assert.ok(/class="box qr-box" id="remPanel"/.test(SRC), '提醒面板必须挂 qr-box 居中（与配对弹窗一致）');
-  assert.ok(/#remBoxForm input\{text-align:left\}/.test(SRC), '输入件内容保持左对齐（居中只给展示文字）');
   assert.ok(/new Date\(Date\.now\(\) \+ 5 \* 60 \* 1000\)/.test(SRC), '默认时间必须 = 当前 +5 分钟');
   assert.ok(/row\.appendChild\(document\.createTextNode\(fmtRemTime/.test(SRC), '列表文字必须走裸文本节点渲染');
+});
+
+test('v5.43：输入框内容必须居中（继承 qr-box），面板不得自动聚焦（防键盘弹起挤偏位置）', () => {
+  assert.ok(!/#remBoxForm input\{text-align:left\}/.test(SRC), 'v5.42 的输入框左对齐必须删除（用户要求时间/事项内容居中）');
+  assert.ok(!/inp\.focus\(\)/.test(SRC), '面板打开不得自动聚焦（v5.42 副作用：移动端弹键盘压缩视口，面板不在正中心）');
+  assert.ok(!/showPicker/.test(SRC), 'showPicker 一并退役（依赖聚焦手势，且自动弹选择器过激）');
 });
 
 test('v5.41：页面 UI 内不得出现 ⏰ emoji（卡片标题/条目/chip 文案），系统通知保留', () => {

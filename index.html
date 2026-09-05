@@ -77,7 +77,6 @@
   /* v5.40：提醒面板升级为扫码配对同款 .mask+.box 模态（复用 .box 输入框/主按钮样式与深色覆盖保护）；
      设置行（时间/事项/添加提醒）永远首行，已设条目列表排后；chip 与模态互斥（遮罩挡正文） */
   #remBoxForm{display:flex;flex-direction:column;gap:12px;margin:2px 0 18px}
-  #remBoxForm input{text-align:left} /* v5.42：面板整体挂 qr-box 居中，输入件内容保持左对齐 */
   #remBoxForm input[type="datetime-local"]{color-scheme:inherit}
   #remBoxForm input.bad{border-color:var(--accent);box-shadow:0 0 0 3px var(--ring)}
   #remBoxList{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line);padding-top:14px}
@@ -286,7 +285,7 @@ const PBKDF2_ITER = 200000;
 const FAIL_LIMIT = 10;
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '5.42';
+const APP_VERSION = '5.43';
 const BUILD_DATE = '2026-09-05';
 
 const $ = s => document.querySelector(s);
@@ -2922,9 +2921,9 @@ function renderRemPanel() {
     iosTip.textContent = 'iOS 需先添加到主屏幕才能收到通知（仍可设置，下次打开会提示）';
     list.appendChild(iosTip);
   }
-  // v5.42：自动聚焦时间框（+5 分钟已填好），支持 showPicker 的浏览器直接弹选择器；
-  // 「默认选中分钟段」是浏览器内置控件（UA shadow DOM），无标准 API，此处为尽力行为
-  try { inp.focus(); if (typeof inp.showPicker === 'function') inp.showPicker(); } catch (e) {}
+  // v5.43：不自动聚焦——v5.42 曾在打开面板时对时间框调用聚焦，移动端立即弹起软键盘压缩视口，
+  // 面板在压缩视口内居中导致"不在正中心"（扫码配对无输入框无键盘故无此问题）；
+  // 默认 +5 分钟保留，用户点时间框时自唤选择器
 }
 function toggleRemPanel(force) {
   remPanelOpen = (force !== undefined) ? force : !remPanelOpen;
