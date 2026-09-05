@@ -2627,7 +2627,7 @@ let chipData = null, chipTimer = null;
 function hideTimeChip() { chipData = null; timeChip.classList.add('hidden'); timeChip.classList.remove('expired'); }
 function maybeShowTimeChip() {
   if (Date.now() < chipFeedbackUntil) return; // 「✓ 已设」反馈展示中
-  // v5.40：面板升级为全屏模态——遮罩挡正文，与 chip 回归互斥（below-panel 退役）
+  // v5.40：面板升级为全屏模态——遮罩挡正文，与 chip 回归互斥（下移错位方案退役）
   if (!cryptoKey || editor.getAttribute('contenteditable') === 'false' || isComposing ||
       remPanelOpen || !remCard.classList.contains('hidden')) { hideTimeChip(); return; }
   const info = caretInfoInEditor();
