@@ -35,7 +35,7 @@
 | I | 链接转换/粘贴/保存可靠性 | 6 | 修改 linkifyEditor / buildLinkSafe / trimUrlTrailing / urlRegex / paste 处理 / pasteTextNative / input 处理器 busy 分支 / saveLocal / scheduleSaveRetry / flushDirtySave / fetchRetry / copyBtn |
 | J | 二维码配对 | 2 | 修改 tryPairingUnlock / parsePairingKey / buildPairingUrl / drawQrTo / revealQr / resetQrHolder / qrBtn 弹层 / b64ToUrlSafe·urlSafeToB64 |
 | K | 服务端遗留缺陷（Open） | 2 | 修改 server.js 静态分支（GET/HEAD、/.well-known/ 路由）——K1/K2 确诊未修复 |
-| L | 提醒与闹钟 UI | 4 | 修改 remPanel / remCard / focusRemTimeInput / 响铃 playRemSound / unlockRemAudio / 时间识别 chip / reminder 数据结构 |
+| L | 提醒与闹钟 UI | 7 | 修改 remPanel / remCard / focusRemTimeInput / 响铃 playRemSound / unlockRemAudio / 时间识别 chip / insertRemLine / rem-mark 标记 / reminder 数据结构 |
 
 ---
 
@@ -954,6 +954,42 @@
   - [ ] 响铃后 ctx 仍为 running（复用不重建，e2e V544-4）
   - [ ] 冷启动立即补弹场景（无手势）：卡片/通知仍在，声音可能被内核静默（无手势限制，属浏览器边界，不算回归）
 
+### L5 | 面板时间区：自建时/分输入框，打开面板分钟值全选
+- **版本**: v5.45（用户硬性要求"默认选中 16"；v5.44 聚焦时序修复后仍受内核段选区边界限制）
+- **根因**: 原生时间控件的段选区是内核硬边界（selectionStart=null、段导航只认真实按键），网页永远无法把高亮钉在分钟段
+- **修复**: 时间区改 `日期(原生 date) + 时:分 自建文本框`（inputMode=numeric、两位越界钳制、blur 补零）；`focusRemTimeInput()` 聚焦分钟框并 `select()`（标准文本 API 必中）；桌面守卫（hover+fine）保留，触屏不自动聚焦
+- **关联文件**: index.html → renderRemPanel() / focusRemTimeInput()
+- **核对要点**:
+  - [ ] 桌面打开面板：分钟框聚焦且两位值全选（直接打数字即改）
+  - [ ] 小时输满两位自动跳分钟框；失焦自动补零；25→23/90→59 越界钳制
+  - [ ] 手机打开面板不自动聚焦、面板居中不回归
+  - [ ] 默认时间仍是当前 +5 分钟；已过时刻三框同标 accent 拦截
+
+### L6 | 面板添加提醒 → 正文回写 + 下划线标记 + 过期变灰（linkify 管理制）
+- **版本**: v5.45
+- **要点**:
+  - 面板添加成功 → `insertRemLine` 在**光标所在处**回写 `YYYY-M-D H:MM · 事项`（完整格式保证识别命中；事项空只写时间）；走 `insertNodeAtCaret` 纯 DOM 插入（input 事件链照常：撤销单步可撤/800ms 保存/500ms linkify）
+  - 已设提醒的时间+紧随「· 事项」整段包 `u.rem-mark`（下划线）；**解析值必须存在于提醒列表才包**（未添加的日期绝不标记）；`u.rem-mark` 由 linkify 先拆后建统一管理（删提醒→标记消失）
+  - 已过期/已提醒过（REM_DONE）→ `u.rem-mark.rem-past` 变灰（保留下划线）；markRemDone/unmarkRemDone/addReminder/removeReminder 均挂 `scheduleRemMarkRefresh()`（400ms 防抖 linkify）
+  - u 元素盒在该内核夜间可能吃字 → 动态板+SHELL_CSS 双板锁色（color/text-fill/text-decoration-color/background:none）
+- **关联文件**: index.html → insertRemLine() / remMatchesFor() / buildLinkSafe() / linkifyEditor() / scheduleRemMarkRefresh()
+- **核对要点**:
+  - [ ] 面板添加后正文光标处出现时间行且当场带下划线（e2e V545-1）
+  - [ ] Ctrl+Z 一次撤销整行回写
+  - [ ] 未设提醒的日期无任何标记（e2e V545-3）
+  - [ ] 到点确认后正文对应文本变灰；删除提醒后下划线消失
+  - [ ] linkify 域早退条件含 remMarks/hasRemText（否则标记刷不出来）
+
+### L7 | chip 文案改版 + 两行确认卡 + 过期零打扰
+- **版本**: v5.45
+- **要点**: 未来时间 chip = `时间 · 事项`（裸文本节点）+ 蓝色 CTA「添加提醒」（span，浅 #2563EB/深 #7EB1FF，双板锁色）；点添加 → 两行确认卡（第一行「✅ 提醒已添加」/第二行「时间 · 事项」）停留 3s；过期时间**完全不浮 chip**（零打扰，旧「已过期」灰态退役）；chip 尺寸 14px/10px 18px 更明显
+- **关联文件**: index.html → maybeShowTimeChip() / chipActivate() / #timeChip CSS
+- **核对要点**:
+  - [ ] chip 尾部蓝色「添加提醒」；整 chip 可点
+  - [ ] 点后两行确认卡：✅ 提醒已添加 / 时间 · 事项，3 秒消失
+  - [ ] 过期时间光标移上零 chip（e2e V545-4）
+  - [ ] chip 加大后不遮挡正文操作（仍顶部居中 fixed）
+
 ---
 
 ## 版本与 bug 对应速查
@@ -983,4 +1019,5 @@
 | v5.19 | I1, I2, I3, I4, I5(含 H5 的 ID_RE 修正), I6 |
 | v5.20 | J1, J2（均为发布前独立盲测发现并同版修复） |
 | v5.44 | L1, L2, L3, L4（用户四连报一次修净，e2e _verify_v544 4 项固化） |
+| v5.45 | L5, L6, L7（提醒功能四连改：自建时分框/正文回写下划线/chip 改版/过期零打扰，e2e _verify_v545 4 项固化） |
 | v5.14 | H1, H2, H3, H4, C4 |

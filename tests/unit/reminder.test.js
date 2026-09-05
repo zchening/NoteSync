@@ -314,11 +314,16 @@ test('R12 模态面板：复用 .box+qr-box 居中、设置行首行、时间默
   assert.ok(!text.includes('1 小时后') && !text.includes('8 点') && !text.includes('明天上午 9 点'), '快捷按钮已删');
   assert.ok(!text.includes('提示：') && !text.includes('提醒我：') && !text.includes('再加：'), '标签与提示语已删');
   assert.ok(text.includes('添加提醒'), '按钮名必须是「添加提醒」');
-  const timeInput = panel.querySelector('input[type="datetime-local"]');
-  assert.ok(timeInput && timeInput.value, '时间选择器必须存在且有默认值');
-  const picked = new Date(timeInput.value).getTime();
+  const timeRow = panel.querySelector('.rem-time-row');
+  assert.ok(timeRow, 'v5.45 时间行必须存在（日期 + 时:分 自建控件，datetime-local 退役）');
+  const dateInp = timeRow.querySelector('input[type="date"]');
+  const hhInp = timeRow.querySelector('input.rem-hh');
+  const mmInp = timeRow.querySelector('input.rem-mm');
+  assert.ok(dateInp && dateInp.value, '日期框必须存在且有默认值（今天）');
+  assert.ok(hhInp && mmInp && /^\d{2}$/.test(hhInp.value) && /^\d{2}$/.test(mmInp.value), '时/分框必须存在且默认两位（当前 +5 分钟）');
+  const picked = new Date(+dateInp.value.slice(0, 4), +dateInp.value.slice(5, 7) - 1, +dateInp.value.slice(8, 10), +hhInp.value, +mmInp.value).getTime();
   assert.ok(Math.abs(Date.now() + 300000 - picked) < 120000, 'v5.42 默认时间必须是当前 +5 分钟（±2 分钟容差）');
-  const itemInput = panel.querySelector('input[type="text"]');
+  const itemInput = panel.querySelector('input.rem-item');
   assert.ok(itemInput && itemInput.value === '' && itemInput.placeholder === '事项', 'v5.44 事项框留空且 placeholder 精简为「事项」（括号补语已按用户要求删除）');
   const form = window.document.getElementById('remBoxForm');
   const list = window.document.getElementById('remBoxList');
@@ -354,13 +359,15 @@ test('R12b 定时已过时刻红边拦截；留空事项按空入库', async t =
   editor.innerHTML = '<div>y</div>';
   window.toggleRemPanel(true);
   const panel = window.document.getElementById('remPanel');
-  const timeInput = panel.querySelector('input[type="datetime-local"]');
-  const itemInput = panel.querySelector('input[type="text"]');
+  const dateInp = panel.querySelector('input[type="date"]');
+  const hhInp = panel.querySelector('input.rem-hh');
+  const mmInp = panel.querySelector('input.rem-mm');
+  const itemInput = panel.querySelector('input.rem-item');
 
-  timeInput.value = '2020-01-01T08:00'; // 已过时刻
+  dateInp.value = '2020-01-01'; hhInp.value = '08'; mmInp.value = '00'; // 已过时刻
   [...panel.querySelectorAll('button')].find(b => b.textContent === '添加提醒').click();
   await sleep(30);
-  assert.ok(timeInput.classList.contains('bad'), '已过时刻必须加重提示');
+  assert.ok(dateInp.classList.contains('bad') && mmInp.classList.contains('bad'), '已过时刻必须加重提示（日期/时分框同标）');
   assert.strictEqual(puts.length, 0, '已过时刻不得发出 PUT');
   assert.strictEqual(window.document.getElementById('remBtn').classList.contains('on'), false, '已过时刻不得点亮提醒按钮（未入库）');
 
@@ -368,19 +375,28 @@ test('R12b 定时已过时刻红边拦截；留空事项按空入库', async t =
   window.toggleRemPanel(false);
   window.toggleRemPanel(true);
   const panel2 = window.document.getElementById('remPanel');
-  const timeInput2 = panel2.querySelector('input[type="datetime-local"]');
+  const dateInp2 = panel2.querySelector('input[type="date"]');
+  const hhInp2 = panel2.querySelector('input.rem-hh');
+  const mmInp2 = panel2.querySelector('input.rem-mm');
   const future = new Date(Date.now() + 3600e3);
   const pad2 = n => String(n).padStart(2, '0');
-  timeInput2.value = future.getFullYear() + '-' + pad2(future.getMonth() + 1) + '-' + pad2(future.getDate()) + 'T' + pad2(future.getHours()) + ':' + pad2(future.getMinutes());
+  dateInp2.value = future.getFullYear() + '-' + pad2(future.getMonth() + 1) + '-' + pad2(future.getDate());
+  hhInp2.value = pad2(future.getHours());
+  mmInp2.value = pad2(future.getMinutes());
   // 留空事项直接点「添加提醒」
   [...panel2.querySelectorAll('button')].find(b => b.textContent === '添加提醒').click();
   await sleep(50);
-  assert.strictEqual(timeInput2.classList.contains('bad'), false, '未来时刻不得触发红边');
+  assert.strictEqual(dateInp2.classList.contains('bad'), false, '未来时刻不得触发红边');
   assert.strictEqual(puts.length, 1, '未来时刻 + 留空事项应正常保存');
   const remObj = JSON.parse(puts[0].rem);
   const list = JSON.parse(await window.decryptText(remObj.ct, remObj.iv, key)).list;
   assert.strictEqual(list.length, 1, '应入库 1 条');
   assert.strictEqual(list[0].text, '', '留空事项按空字符串入库，不取笔记首行');
+  // v5.45：面板添加成功后正文必须回写完整时间行（留空事项只写时间）
+  const d = new Date(list[0].at);
+  const expectLine = d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate() + ' ' + d.getHours() + ':' + pad2(d.getMinutes());
+  assert.ok(editor.textContent.includes(expectLine), '正文必须回写时间行: ' + expectLine);
+  assert.ok(!editor.textContent.includes('undefined'), '不得写入 undefined');
 });
 
 // ── R12c：v5.40 Esc / 遮罩空白点击关闭模态；事项框 Enter 直接确认 ──
@@ -407,11 +423,15 @@ test('R12c Esc 与遮罩点击关闭模态；事项框 Enter 等价点「添加�
 
   window.toggleRemPanel(true);
   const panel = window.document.getElementById('remPanel');
-  const timeInput = panel.querySelector('input[type="datetime-local"]');
-  const itemInput = panel.querySelector('input[type="text"]');
+  const dateInp = panel.querySelector('input[type="date"]');
+  const hhInp = panel.querySelector('input.rem-hh');
+  const mmInp = panel.querySelector('input.rem-mm');
+  const itemInput = panel.querySelector('input.rem-item');
   const future = new Date(Date.now() + 3600e3);
   const pad2 = n => String(n).padStart(2, '0');
-  timeInput.value = future.getFullYear() + '-' + pad2(future.getMonth() + 1) + '-' + pad2(future.getDate()) + 'T' + pad2(future.getHours()) + ':' + pad2(future.getMinutes());
+  dateInp.value = future.getFullYear() + '-' + pad2(future.getMonth() + 1) + '-' + pad2(future.getDate());
+  hhInp.value = pad2(future.getHours());
+  mmInp.value = pad2(future.getMinutes());
   itemInput.value = '开会';
   itemInput.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
   await sleep(50);

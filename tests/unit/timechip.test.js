@@ -244,17 +244,18 @@ test('TC12 selectionchange 后光标在时间上浮出 chip，移开隐藏', asy
   place(idx + 2);
   await sleep(400);
   assert.ok(!chip.classList.contains('hidden'), '光标落在时间上 chip 必须浮出');
-  assert.ok(chip.textContent.includes('设提醒'), 'chip 文案应含「设提醒」');
+  assert.ok(chip.textContent.includes('添加提醒'), 'v5.45 chip 文案必须含蓝色 CTA「添加提醒」（「设提醒」退役）');
+  assert.ok(chip.querySelector('.chip-cta'), 'CTA 必须是独立元素（双色需要）');
   assert.ok(chip.textContent.includes('· 开'), 'chip 文案应含时间后文提取的事项（v5.39）');
-  assert.strictEqual(chip.classList.contains('expired'), false, '未来时间 chip 不得是过期态');
+  assert.ok(!chip.textContent.includes('设提醒'), '旧文案「设提醒」不得再出现');
 
   place(0);
   await sleep(400);
   assert.ok(chip.classList.contains('hidden'), '光标移到非时间处 chip 必须隐藏');
 });
 
-// ── TC12b：过期时间 → chip 灰态「已过期」不可点 ───────────
-test('TC12b 光标落过期时间上 chip 显示已过期灰态且点击无效', async t => {
+// ── TC12b：过期时间 → chip 完全不浮出（v5.45：正文已变灰标识，移上去零打扰）──
+test('TC12b 光标落过期时间上 chip 不出现（v5.45 零打扰，旧「已过期」灰态退役）', async t => {
   const app = freshApp();
   t.after(() => app.dom.window.close());
   const { window, document, editor } = app;
@@ -276,14 +277,12 @@ test('TC12b 光标落过期时间上 chip 显示已过期灰态且点击无效',
   sel.removeAllRanges(); sel.addRange(range);
   document.dispatchEvent(new window.Event('selectionchange'));
   await sleep(400);
-  assert.ok(!chip.classList.contains('hidden'), '过期时间也必须浮出 chip（不再无声无息）');
-  assert.ok(chip.textContent.includes('已过期'), '文案必须标明已过期');
-  assert.strictEqual(chip.classList.contains('expired'), true, '必须挂 expired 灰态类');
+  assert.ok(chip.classList.contains('hidden'), 'v5.45 过期时间必须完全不浮 chip（零打扰）');
+  assert.ok(!chip.textContent.includes('已过期'), '旧「已过期」文案不得再出现');
 
   chip.dispatchEvent(new window.Event('mousedown'));
   await sleep(50);
-  assert.strictEqual(puts.length, 0, '过期 chip 点击不得发出 PUT');
-  assert.ok(chip.textContent.includes('已过期'), '点击后仍是过期文案（未设上）');
+  assert.strictEqual(puts.length, 0, '过期时间不得发出 PUT');
 });
 
 // ── TC12c：提醒模态打开时 chip 不浮出（v5.40 模态互斥回归）──
@@ -346,5 +345,7 @@ test('TC13 chip 点击触发 addReminder（PUT 带 rem）并显示已设反馈',
   const payload = await remPayload(window, key, last);
   assert.strictEqual(payload.list[0].at, expectedAt, '提醒时间必须来自被点的时间文本');
   assert.strictEqual(payload.list[0].text, '开', '事项必须取时间同行后文（「会议 … 开」→ 开），不再用笔记首行');
-  assert.ok(chip.textContent.indexOf('✓ 已设') === 0, 'chip 应显示已设反馈');
+  assert.ok(chip.classList.contains('feedback'), 'v5.45 确认反馈必须挂两行卡片态');
+  assert.ok(chip.textContent.includes('✅ 提醒已添加'), '第一行必须是「✅ 提醒已添加」');
+  assert.ok(chip.textContent.includes('· 开'), '第二行必须是「时间 · 事项」（分隔符「·」用户拍板）');
 });

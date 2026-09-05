@@ -333,12 +333,14 @@ test('v5.43：输入框内容必须居中（继承 qr-box），showPicker 退役
   assert.ok(!/showPicker/.test(SRC), 'showPicker 一并退役（依赖聚焦手势，且自动弹选择器过激）');
 });
 
-test('v5.44：打开面板默认选中分钟段，且聚焦必须受桌面环境守卫（触屏设备不得自动弹键盘挤偏面板）', () => {
-  assert.ok(/setSelectionRange\(14,\s*16\)/.test(SRC), '必须把选区放到分钟段（datetime-local value 形如 YYYY-MM-DDTHH:MM，分钟 = 索引 14..16）');
+test('v5.45：打开面板默认聚焦自建分钟框且全选（真选中），聚焦受桌面环境守卫（触屏不聚焦防挤偏）', () => {
+  assert.ok(/input\.rem-mm/.test(SRC), '自建分钟输入框必须存在（datetime-local 已退役——内核段选区硬边界）');
+  assert.ok(!/datetime-local/.test(SRC), '原生 datetime-local 必须彻底移除');
+  assert.ok(/mm\.focus\(\{\s*preventScroll:\s*true\s*\}\)/.test(SRC), '聚焦必须带 preventScroll，不得滚动页面');
+  assert.ok(/mm\.select\(\)/.test(SRC), '分钟值必须全选（select() 标准文本 API，v5.45 真选中「16」）');
   assert.ok(/\(hover:hover\) and \(pointer:fine\)/.test(SRC), '自动聚焦必须限定桌面环境（v5.43 教训：移动端聚焦弹软键盘压缩视口，面板偏离正中心）');
-  assert.ok(/inp\.focus\(\{\s*preventScroll:\s*true\s*\}\)/.test(SRC), '聚焦必须带 preventScroll，不得滚动页面');
   assert.ok(!/inp\.focus\(\)/.test(SRC), '不得出现无参数裸调用（必须 preventScroll 且受桌面守卫包住）');
-  assert.ok((SRC.match(/inp\.focus\(/g) || []).length === 1, '时间框聚焦调用全文件只能出现一次（守卫块内），防止新增无守卫调用');
+  assert.ok((SRC.match(/\.focus\(\{/g) || []).length === 1, '带选项的聚焦调用全文件只能出现一次（守卫块内），防止新增无守卫调用');
 });
 
 test('v5.44：到点卡片必须居中且文字居中（remRise 专用入场），placeholder 精简，音频全局解锁', () => {
@@ -351,6 +353,33 @@ test('v5.44：到点卡片必须居中且文字居中（remRise 专用入场）�
   assert.ok(/createBuffer\(1,\s*1,\s*22050\)/.test(SRC), '音频解锁必须播放静音 buffer（iOS/国产内核手势解锁必需）');
   assert.ok(/\['pointerdown',\s*'touchend',\s*'keydown'\]\.forEach/.test(SRC), '解锁必须挂在首次手势事件（pointerdown/touchend/keydown）上');
   assert.ok(/!\/remCard\.classList\.contains\('hidden'\)|remCard\.classList\.remove\('hidden'\)/.test(SRC), '到点实底卡片仍是页内主通道');
+});
+
+test('v5.45：提醒下划线标记由 linkify 管理（先拆后建）并纳入双板锁色，未添加的日期绝不包标记', () => {
+  assert.ok(/u\.className = mt\.past \? 'rem-mark rem-past' : 'rem-mark'/.test(SRC), 'buildLinkSafe 必须生成 u.rem-mark（过期/已提醒挂 rem-past）');
+  assert.ok(/remMatchesFor\(textNode\.nodeValue\)/.test(SRC), 'linkify 重建时必须传入提醒包裹区间');
+  assert.ok(/remMarks\.forEach/.test(SRC), '先拆阶段必须拆 u.rem-mark（删提醒→下划线消失靠整轮重算）');
+  assert.ok(/remMatchesFor\(node\.nodeValue\)\.length > 0/.test(SRC), 'walker 必须放行已设提醒命中的纯时间文本节点（否则纯时间行建不出标记）');
+  assert.ok(/reminders\.some\(r => r\.at === m\.at\)/.test(SRC), '只有解析值存在于提醒列表才包标记（用户拍板：未添加的日期绝不加下划线）');
+  assert.ok(/#editor u\.rem-mark\.rem-past\{color:\$\{p\.muted\}!important/.test(SRC), '动态板必须锁 rem-past 灰色（正文变灰）');
+  assert.ok(/'#editor u\.rem-mark\.rem-past\{color:#676A75!important/.test(SRC), 'SHELL_CSS 必须预反色锁 rem-past 灰色');
+  assert.ok(/#timeChip \.chip-cta\{color:\$\{chipCta\}!important/.test(SRC), '动态板必须锁 chip CTA 蓝色');
+  assert.ok(/'#timeChip \.chip-cta\{color:#DA9C14!important/.test(SRC), 'SHELL_CSS 必须预反色锁 chip CTA（目标日间蓝 #2563EB）');
+});
+
+test('v5.45：chip 文案改版（蓝色 CTA）+ 两行确认卡 + 过期零打扰 + 面板添加回写正文', () => {
+  assert.ok(/cta\.textContent = '添加提醒'/.test(SRC), 'chip CTA 必须是「添加提醒」（与面板按钮统一，「设提醒」退役）');
+  assert.ok(!/'设提醒：'/.test(SRC), '旧文案「设提醒：」必须删除');
+  assert.ok(!/已过期 ' \+ fmtRemTime/.test(SRC), '旧「已过期」chip 文案必须删除（过期不再浮 chip）');
+  assert.ok(/if \(!m \|\| m\.expired\) \{ hideTimeChip\(\); return; \}/.test(SRC), '过期命中直接不显示 chip（零打扰，用户拍板）');
+  assert.ok(/l1\.textContent = '✅ 提醒已添加'/.test(SRC), '确认卡第一行必须是「✅ 提醒已添加」');
+  assert.ok(/l2\.textContent = fmtRemTime\(at\) \+ \(item \? ' · ' \+ item : ''\)/.test(SRC), '确认卡第二行必须是「时间 · 事项」（分隔符「·」用户拍板）');
+  assert.ok(/chipFeedbackUntil = Date\.now\(\) \+ 3000/.test(SRC), '确认卡停留 3 秒');
+  assert.ok(/insertRemLine\(at, text\)/.test(SRC), '面板添加成功必须回写正文光标处');
+  assert.ok(/insertNodeAtCaret\(document\.createTextNode\(text\)\)/.test(SRC), '回写走 insertNodeAtCaret 纯 DOM 插入（input 事件链照常：撤销栈/保存/linkify）');
+  assert.ok(/let panelSavedSel = null;/.test(SRC), '必须维护打开面板前的编辑器选区快照');
+  assert.ok(/saveSelectionBlocked\(editor, sel\.getRangeAt\(0\)\)/.test(SRC), '打开面板必须先保存编辑器选区（恢复光标所在处）');
+  assert.ok((SRC.match(/scheduleRemMarkRefresh/g) || []).length >= 5, '提醒状态变化（增删/到点标/取消标）必须触发标记刷新（定义+至少4挂点）');
 });
 
 test('v5.41：页面 UI 内不得出现 ⏰ emoji（卡片标题/条目/chip 文案），系统通知保留', () => {

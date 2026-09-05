@@ -104,34 +104,28 @@ test('V544-1 到点卡片处于页面正中心，标题「提醒」与正文「�
   } finally { await ctx.close(); }
 }));
 
-// ── ①+② 打开面板：时间框默认聚焦（含分钟段尽力定位）+ placeholder 精简 ─────
-// 内核边界（探针实测）：Chromium 对 datetime-local 的 selectionStart=null 且段导航只认
-// 真实按键，网页 JS 无法把选区钉在分钟段；聚焦生效（可直接方向键调整）即网页侧极限。
-test('V544-2 桌面端打开面板时间框默认聚焦（mask 显示后时序），placeholder=「事项」', guard(async () => {
+// ── ①+② 打开面板：时间框默认聚焦（v5.45 起为自建分钟框全选）+ placeholder 精简 ──
+test('V544-2 桌面端打开面板分钟框默认聚焦且全选，placeholder=「事项」', guard(async () => {
   const { ctx, page } = await openDesktopEditor();
   try {
     await page.click('#remBtn'); // 用户真实路径：点菜单栏闹钟图标
     await page.waitForSelector('#remPanel', { timeout: 5000 });
     const m = await page.evaluate(() => {
-      const inp = document.querySelector('#remBoxForm input[type="datetime-local"]');
-      const item = document.querySelector('#remBoxForm input[type="text"]');
+      const mm = document.querySelector('#remBoxForm input.rem-mm');
+      const item = document.querySelector('#remBoxForm input.rem-item');
       return {
-        focused: document.activeElement === inp,
-        selStart: inp ? inp.selectionStart : null,
-        selEnd: inp ? inp.selectionEnd : null,
-        value: inp ? inp.value : '',
+        focused: document.activeElement === mm,
+        selStart: mm ? mm.selectionStart : null,
+        selEnd: mm ? mm.selectionEnd : null,
+        value: mm ? mm.value : '',
         desktop: window.matchMedia('(hover:hover) and (pointer:fine)').matches,
         placeholder: item ? item.placeholder : null,
       };
     });
     assert.ok(m.desktop, 'Playwright 桌面 context 应命中 hover:fine 守卫');
-    assert.ok(m.focused, '桌面端打开面板时间框必须默认聚焦（v5.44 修复：mask 显示后才聚焦，display:none 内聚焦无效）');
-    if (m.selStart !== null && m.selStart !== undefined) {
-      // 内核支持段选区时：必须定位到分钟段（索引 14..16）
-      assert.strictEqual(m.selStart, 14, `分钟段起始索引应为 14（value=${m.value}）`);
-      assert.strictEqual(m.selEnd, 16, '分钟段结束索引应为 16');
-    }
-    // Chromium（selectionStart=null）：聚焦生效 + 尽力调用不抛错即通过（try-catch 静默）
+    assert.ok(m.focused, '桌面端打开面板分钟框必须默认聚焦（v5.44 修复：mask 显示后才聚焦，display:none 内聚焦无效）');
+    assert.strictEqual(m.selStart, 0, 'v5.45 分钟值必须从头全选');
+    assert.strictEqual(m.selEnd, 2, 'v5.45 分钟值必须选到末尾（两位全选=真选中「16」）');
     assert.ok(m.value, '默认 +5 分钟值仍应填好');
     assert.strictEqual(m.placeholder, '事项', 'placeholder 必须精简为「事项」（括号补语已删）');
     assert.deepStrictEqual(page.__errors, [], '不应有页面 JS 错误');
@@ -159,11 +153,11 @@ test('V544-3 移动端（触屏设备模拟）打开面板不自动聚焦（防�
     await page.click('#remBtn');
     await page.waitForSelector('#remPanel', { timeout: 5000 });
     const m = await page.evaluate(() => {
-      const inp = document.querySelector('#remBoxForm input[type="datetime-local"]');
+      const mm = document.querySelector('#remBoxForm input.rem-mm');
       return {
         desktop: window.matchMedia('(hover:hover) and (pointer:fine)').matches,
-        focused: document.activeElement === inp,
-        value: inp ? inp.value : '',
+        focused: document.activeElement === mm,
+        value: mm ? mm.value : '',
       };
     });
     assert.ok(!m.desktop, '移动设备模拟应命中 coarse 指针（非桌面环境）');

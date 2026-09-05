@@ -73,14 +73,28 @@
   #remCardAck{width:100%;height:46px;display:flex;align-items:center;justify-content:center;border:0;border-radius:10px;background:var(--fg);color:var(--bg);font-size:15px;font-weight:500;letter-spacing:.08em;cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:manipulation;-webkit-tap-highlight-color:transparent;margin-top:4px}
   #remCardAck:hover{opacity:.85}
   #remCardAck:active{opacity:.75}
-  #timeChip{position:fixed;top:54px;left:50%;transform:translateX(-50%);z-index:56;padding:7px 14px;font-size:12.5px;color:var(--fg);background:var(--box-bg);border:1px solid var(--line);border-radius:999px;box-shadow:0 4px 16px rgba(0,0,0,.16);cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:manipulation;-webkit-tap-highlight-color:transparent;white-space:nowrap;max-width:92vw;overflow:hidden;text-overflow:ellipsis}
-  /* v5.39：过期时间 chip 灰态（识别到但不可设，不再无声无息） */
-  #timeChip.expired{color:var(--muted);cursor:default;border-style:dashed}
+  /* v5.45：chip 改版——14px 加大更明显；尾部蓝色 CTA「添加提醒」做按钮感；
+     点添加后原地变两行确认卡（✅ 提醒已添加 / 时间 · 事项）；
+     过期时间不再浮任何 chip（v5.45 用户拍板：过期文本正文已变灰，光标移上零打扰） */
+  #timeChip{position:fixed;top:54px;left:50%;transform:translateX(-50%);z-index:56;padding:10px 18px;font-size:14px;color:var(--fg);background:var(--box-bg);border:1px solid var(--line);border-radius:999px;box-shadow:0 6px 20px rgba(0,0,0,.18);cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:manipulation;-webkit-tap-highlight-color:transparent;white-space:nowrap;max-width:92vw;overflow:hidden;text-overflow:ellipsis}
+  #timeChip .chip-cta{color:#2563EB;font-weight:600;margin-left:12px}
+  #timeChip.feedback{border-radius:16px;white-space:normal;text-align:center;cursor:default}
+  #timeChip .chip-ok1{font-size:14px;font-weight:600;line-height:1.5}
+  #timeChip .chip-ok2{font-size:13.5px;line-height:1.5;margin-top:2px}
   #timeChip.hidden{display:none}
+  /* v5.45：面板时间行——日期(原生) + 时:分 自建小输入框（打开面板焦点落分钟框且全选） */
+  #remBoxForm .rem-time-row{display:flex;gap:8px;align-items:center;justify-content:center}
+  #remBoxForm .rem-time-row input[type="date"]{flex:1;min-width:0;color-scheme:inherit}
+  #remBoxForm .rem-time-row .rem-hh,#remBoxForm .rem-time-row .rem-mm{width:2.9em;flex:none;text-align:center;padding:0 4px}
+  #remBoxForm .rem-time-row .rem-colon{color:var(--muted);font-weight:600;flex:none}
+  /* v5.45：已设提醒的时间文本标记（linkify 统一先拆后建，u 元素）——下划线如链接；
+     已过期/已提醒过的变灰。u 元素盒在该内核夜间可能吃字，纳入三份锁色名单 */
+  #editor u.rem-mark{text-decoration:underline;text-underline-offset:3px;text-decoration-thickness:1.5px}
+  #editor u.rem-mark.rem-past{color:var(--muted);text-decoration-color:var(--muted)}
   /* v5.40：提醒面板升级为扫码配对同款 .mask+.box 模态（复用 .box 输入框/主按钮样式与深色覆盖保护）；
      设置行（时间/事项/添加提醒）永远首行，已设条目列表排后；chip 与模态互斥（遮罩挡正文） */
   #remBoxForm{display:flex;flex-direction:column;gap:12px;margin:2px 0 18px}
-  #remBoxForm input[type="datetime-local"]{color-scheme:inherit}
+  #remBoxForm input[type="date"]{color-scheme:inherit}
   #remBoxForm input.bad{border-color:var(--accent);box-shadow:0 0 0 3px var(--ring)}
   #remBoxList{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line);padding-top:14px}
   #remBoxList:empty{display:none}
@@ -290,7 +304,7 @@ const PBKDF2_ITER = 200000;
 const FAIL_LIMIT = 10;
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '5.44';
+const APP_VERSION = '5.45';
 const BUILD_DATE = '2026-09-05';
 
 const $ = s => document.querySelector(s);
@@ -349,6 +363,7 @@ function themeOverrideCss(dark) {
   const accentSoft = dark ? 'rgba(212,176,104,.08)' : 'rgba(143,113,38,.07)';
   const dot = dark ? '#7A786F' : '#C9C7BE';
   const warn = '#C0453E';
+  const chipCta = dark ? '#7EB1FF' : '#2563EB'; // v5.45：chip 蓝色 CTA（浅 #2563EB / 深 #7EB1FF）
   return `
     body{background:${p.bg}!important;color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important}
     #editor{background:transparent!important;color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important}
@@ -373,6 +388,11 @@ function themeOverrideCss(dark) {
     #remCardAck{background:${p.fg}!important;color:${p.bg}!important;-webkit-text-fill-color:${p.bg}!important}
     #remBoxList .rem-row{color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important;background:none!important}
     #remBoxList .rem-row button{background:none!important;color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important;border:1px solid ${p.line}!important}
+    #timeChip{background:${p.box}!important;color:${p.fg}!important;border-color:${p.line}!important;-webkit-text-fill-color:${p.fg}!important}
+    #timeChip .chip-cta{color:${chipCta}!important;-webkit-text-fill-color:${chipCta}!important;background:none!important}
+    #timeChip .chip-ok1,#timeChip .chip-ok2{color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important;background:none!important}
+    #editor u.rem-mark{color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important;text-decoration-color:${p.fg}!important}
+    #editor u.rem-mark.rem-past{color:${p.muted}!important;-webkit-text-fill-color:${p.muted}!important;text-decoration-color:${p.muted}!important;background:none!important}
     #landing{background:radial-gradient(ellipse 720px 480px at 50% 30%,${accentSoft},transparent),${p.bg}!important;color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important}
     #landing h1{color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important}
     #landing .sub,#landing .hint{color:${p.muted}!important;-webkit-text-fill-color:${p.muted}!important}
@@ -448,6 +468,11 @@ const SHELL_CSS = [
   '#remCardAck{background:#E3E3E5!important;color:#040407!important;-webkit-text-fill-color:#040407!important}',
   '#remBoxList .rem-row{color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important;background:none!important}',
   '#remBoxList .rem-row button{background:none!important;color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important;border:1px solid #13151D!important}',
+  '#timeChip{background:#000000!important;color:#E3E3E5!important;border-color:#13151D!important;-webkit-text-fill-color:#E3E3E5!important}',
+  '#timeChip .chip-cta{color:#DA9C14!important;-webkit-text-fill-color:#DA9C14!important;background:none!important}',
+  '#timeChip .chip-ok1,#timeChip .chip-ok2{color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important;background:none!important}',
+  '#editor u.rem-mark{color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important;text-decoration-color:#E3E3E5!important}',
+  '#editor u.rem-mark.rem-past{color:#676A75!important;-webkit-text-fill-color:#676A75!important;text-decoration-color:#676A75!important;background:none!important}',
   '#landing{background:radial-gradient(ellipse 720px 480px at 50% 30%,rgba(112,142,217,.07),transparent),#040407!important;color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important}',
   '#landing h1{color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important}',
   '#landing .sub,#landing .hint{color:#676A75!important;-webkit-text-fill-color:#676A75!important}',
@@ -1866,7 +1891,10 @@ function trimUrlTrailing(u) {
 // 属性赋值与文本节点天然转义，任何输入都只是纯文本。
 // 规则与旧版对齐：URL 优先于手机号（重叠时取 URL）、denyAsUrl 命中保持纯文本、
 // 链接文本与长词（≥15 连续非空白）插入 ZWSP 断行符。
-function buildLinkSafe(text, urlRegex, phoneRegex, breakSeparators) {
+// v5.45：remMatches = 已设提醒的时间（+紧随事项）包裹区间，由 linkifyEditor 计算传入。
+// 与 URL/手机号重叠时让位（链接优先）；kind==='rem' 生成 <u class="rem-mark">（过期/已提醒挂 rem-past 变灰）。
+// 包裹不改变文本内容（无 ZWSP），块内可见字符偏移不变——选区保存/恢复机制无需特殊处理。
+function buildLinkSafe(text, urlRegex, phoneRegex, breakSeparators, remMatches) {
   const matches = [];
   let m;
   while ((m = urlRegex.exec(text)) !== null) {
@@ -1880,6 +1908,9 @@ function buildLinkSafe(text, urlRegex, phoneRegex, breakSeparators) {
       matches.push({ start: s, end: e, text: m[0], kind: 'phone' });
     }
   }
+  (remMatches || []).forEach(rm => {
+    if (!matches.some(u => rm.start < u.end && rm.end > u.start)) matches.push(rm);
+  });
   matches.sort((a, b) => a.start - b.start);
   const frag = document.createDocumentFragment();
   let pos = 0;
@@ -1891,7 +1922,12 @@ function buildLinkSafe(text, urlRegex, phoneRegex, breakSeparators) {
   };
   for (const mt of matches) {
     addText(text.slice(pos, mt.start));
-    if (mt.kind === 'url' && denyAsUrl(mt.text)) {
+    if (mt.kind === 'rem') {
+      const u = document.createElement('u');
+      u.className = mt.past ? 'rem-mark rem-past' : 'rem-mark';
+      u.textContent = mt.text;
+      frag.appendChild(u);
+    } else if (mt.kind === 'url' && denyAsUrl(mt.text)) {
       addText(mt.text); // 文件名/未知裸域名：保持纯文本
     } else {
       const a = document.createElement('a');
@@ -1913,6 +1949,22 @@ function buildLinkSafe(text, urlRegex, phoneRegex, breakSeparators) {
   return frag;
 }
 
+// v5.45：计算文本节点内"已设提醒"的包裹区间——时间解析值必须存在于提醒列表才包
+// （用户拍板：没主动添加的日期绝不加下划线）；紧随「 · 事项」并入整段；
+// 已过期或已提醒过的（REM_DONE）挂 rem-past（正文变灰）。文本节点 ≤4000 字才扫描（与 parseTimeMatches 同限）。
+function remMatchesFor(txt) {
+  if (!reminders.length || !txt || txt.length > 4000) return [];
+  const now = Date.now();
+  return parseTimeMatches(txt)
+    .filter(m => reminders.some(r => r.at === m.at))
+    .map(m => {
+      let end = m.index + m.length;
+      const im = /^(\s*·\s*[^\n]*)/.exec(txt.slice(end));
+      if (im) end += im[1].length;
+      return { start: m.index, end: end, text: txt.slice(m.index, end), past: isRemDone(m.at) || m.at <= now, kind: 'rem' };
+    });
+}
+
 function linkifyEditor(opts) {
   const keepSelection = opts ? opts.keepSelection !== false : true;
   if (isLinkifying) return;
@@ -1932,10 +1984,14 @@ function linkifyEditor(opts) {
 
     const autoLinks = Array.from(editor.querySelectorAll('a[data-url="1"]'));
     const straySpans = Array.from(editor.querySelectorAll('span'));
+    const remMarks = Array.from(editor.querySelectorAll('u.rem-mark')); // v5.45：提醒标记也要先拆后建
+    // v5.45：列表里有提醒且正文存在可标记时间时不得早退（否则新增/变灰/拆标记都刷不出来）
+    const hasRemText = reminders.length > 0 && editor.textContent.length <= 4000 &&
+      parseTimeMatches(editor.textContent).some(m => reminders.some(r => r.at === m.at));
 
-    // 早退：无自动链接可拆解、无杂散 span、也无任何可链接文本 → 不碰 DOM（避免污染原生撤销栈）。
+    // 早退：无自动链接可拆解、无杂散 span、无提醒标记要刷新、也无任何可链接文本 → 不碰 DOM（避免污染原生撤销栈）。
     // 普通纯文本输入走此分支；粘贴/输入本身已产生合法块结构，无需 ensureBlockWrapped/normalize。
-    if (autoLinks.length === 0 && straySpans.length === 0 && !hasLinkableText(editor, urlTest, phoneTest, longWordTest)) {
+    if (autoLinks.length === 0 && straySpans.length === 0 && remMarks.length === 0 && !hasRemText && !hasLinkableText(editor, urlTest, phoneTest, longWordTest)) {
       return;
     }
 
@@ -1962,6 +2018,12 @@ function linkifyEditor(opts) {
       const t = document.createTextNode(a.textContent.replace(/\u200B/g, ''));
       a.replaceWith(t);
     });
+    // 1.5) v5.45：提醒标记 <u.rem-mark> 同样拆回纯文本，与链接同一轮重建——
+    //      删提醒→下划线消失、到点确认→变灰，都靠整轮重算
+    remMarks.forEach(u => {
+      const t = document.createTextNode(u.textContent);
+      u.replaceWith(t);
+    });
     // 2) 把浏览器在块合并/格式保留时自动插入的纯 <span> 包装层拍平（应用本身从不创建 span，
     //    这些 span 无语义）。只拍平 <span>，不动 <s>(删除线) 等语义标签。
     straySpans.forEach(s => {
@@ -1980,7 +2042,8 @@ function linkifyEditor(opts) {
           if (p.tagName === 'A') return NodeFilter.FILTER_REJECT;
           p = p.parentNode;
         }
-        return (urlTest.test(node.nodeValue) || phoneTest.test(node.nodeValue) || longWordTest.test(node.nodeValue)) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+        // v5.45：已设提醒命中的文本节点也必须接受（否则纯时间行三项皆不中，标记建不出来）
+        return (urlTest.test(node.nodeValue) || phoneTest.test(node.nodeValue) || longWordTest.test(node.nodeValue) || remMatchesFor(node.nodeValue).length > 0) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
       }
     });
     const targets = [];
@@ -1990,7 +2053,8 @@ function linkifyEditor(opts) {
       // 清理旧断行符，交由本次重新生成（避免 href 里混入 \u200B）
       textNode.nodeValue = textNode.nodeValue.replace(/\u200B/g, '');
       // I1：DOM API 组装链接（纯文本节点 + 属性赋值，天然转义），不再走 innerHTML 拼接
-      textNode.replaceWith(buildLinkSafe(textNode.nodeValue, urlRegex, phoneRegex, breakSeparators));
+      // v5.45：同轮传入已设提醒的包裹区间（时间+紧随事项 → u.rem-mark）
+      textNode.replaceWith(buildLinkSafe(textNode.nodeValue, urlRegex, phoneRegex, breakSeparators, remMatchesFor(textNode.nodeValue)));
     }
     if (hadFocus) { try { editor.focus(); } catch (e) {} }
 
@@ -2639,31 +2703,30 @@ function caretInfoInEditor() {
   return { block: block, text: block.textContent || '', offset: off };
 }
 
-// ── v5.37 时间 chip：光标落在时间文本上时浮出「设提醒」快捷入口 ──
+// ── v5.37 时间 chip：光标落在时间文本上时浮出快捷入口（v5.45 文案=时间·事项+蓝色「添加提醒」CTA）──
 // chip 是编辑器外的独立浮层；点 chip 即设提醒（pointerdown 三连 preventDefault，与工具栏按钮同套路防焦点丢失）
 let chipData = null, chipTimer = null;
-function hideTimeChip() { chipData = null; timeChip.classList.add('hidden'); timeChip.classList.remove('expired'); }
+function hideTimeChip() { chipData = null; timeChip.classList.add('hidden'); timeChip.classList.remove('feedback'); }
 function maybeShowTimeChip() {
-  if (Date.now() < chipFeedbackUntil) return; // 「✓ 已设」反馈展示中
+  if (Date.now() < chipFeedbackUntil) return; // 「✅ 提醒已添加」两行确认卡展示中
   // v5.40：面板升级为全屏模态——遮罩挡正文，与 chip 回归互斥（下移错位方案退役）
   if (!cryptoKey || editor.getAttribute('contenteditable') === 'false' || isComposing ||
       remPanelOpen || !remCard.classList.contains('hidden')) { hideTimeChip(); return; }
   const info = caretInfoInEditor();
   if (!info) { hideTimeChip(); return; }
   const m = matchTimeAt(info.text, info.offset);
-  if (!m) { hideTimeChip(); return; }
-  if (m.expired) {
-    // v5.39：过期时间不再无声无息——灰态标明「已过期」，不可点
-    chipData = null;
-    timeChip.textContent = '已过期 ' + fmtRemTime(m.at);
-    timeChip.classList.add('expired');
-    timeChip.classList.remove('hidden');
-    return;
-  }
+  // v5.45：过期时间不再浮任何 chip——正文里该文本已由 rem-past 变灰标识，光标移上零打扰（用户拍板）
+  if (!m || m.expired) { hideTimeChip(); return; }
   const item = itemAfterMatch(info.text, m);
   chipData = { at: m.at, item: item };
-  timeChip.textContent = '设提醒：' + fmtRemTime(m.at) + (item ? ' · ' + item : '');
-  timeChip.classList.remove('expired');
+  // v5.45：文案改版（用户拍板）——时间·事项在前（裸文本节点防吃字），「添加提醒」蓝色 CTA 在后
+  //（按钮感；元素盒必需故用 span，动态板+SHELL_CSS 双板锁色防夜间吃字/反色）
+  timeChip.textContent = '';
+  timeChip.appendChild(document.createTextNode(fmtRemTime(m.at) + (item ? ' · ' + item : '')));
+  const cta = document.createElement('span');
+  cta.className = 'chip-cta';
+  cta.textContent = '添加提醒';
+  timeChip.appendChild(cta);
   timeChip.classList.remove('hidden');
 }
 document.addEventListener('selectionchange', () => {
@@ -2673,16 +2736,20 @@ document.addEventListener('selectionchange', () => {
 function chipActivate(e) {
   if (e.button !== undefined && e.button !== 0) return;
   e.preventDefault();
-  if (timeChip.classList.contains('expired')) return; // 过期 chip 不可点
   if (!chipData) return;
   const at = chipData.at, item = chipData.item;
   chipData = null; // 先消费：pointerdown/touchstart/mousedown 三连触发只生效一次
-  chipFeedbackUntil = Date.now() + 1500;
+  chipFeedbackUntil = Date.now() + 3000; // v5.45：两行确认卡停留 3 秒
   askRemPermission();
   addReminder(at, item);
-  timeChip.textContent = '✓ 已设 ' + fmtRemTime(at) + (item ? ' · ' + item : '');
+  // v5.45：确认反馈改两行卡片（用户拍板）——第一行「✅ 提醒已添加」，第二行「时间 · 事项」
+  timeChip.classList.add('feedback');
+  timeChip.textContent = '';
+  const l1 = document.createElement('div'); l1.className = 'chip-ok1'; l1.textContent = '✅ 提醒已添加';
+  const l2 = document.createElement('div'); l2.className = 'chip-ok2'; l2.textContent = fmtRemTime(at) + (item ? ' · ' + item : '');
+  timeChip.appendChild(l1); timeChip.appendChild(l2);
   clearTimeout(chipTimer);
-  setTimeout(hideTimeChip, 1500);
+  setTimeout(hideTimeChip, 3000);
 }
 if (window.PointerEvent) timeChip.addEventListener('pointerdown', chipActivate);
 timeChip.addEventListener('touchstart', chipActivate, { passive: false });
@@ -2701,17 +2768,27 @@ function remDoneMap() {
   } catch (e) { return {}; }
 }
 function isRemDone(at) { return !!remDoneMap()[at]; }
+// v5.45：提醒状态变化（新增/删除/到点标记/取消标记）后，正文里的提醒标记需要重算
+//（新增→包下划线；删除→拆掉；到点/确认/重设→变灰或恢复）。防抖统一走 linkifyEditor。
+let remMarkTimer = null;
+function scheduleRemMarkRefresh() {
+  if (!cryptoKey) return;
+  clearTimeout(remMarkTimer);
+  remMarkTimer = setTimeout(() => { if (!isLinkifying) { try { linkifyEditor(); } catch (e) {} } }, 400);
+}
 function markRemDone(at) {
   try {
     const m = remDoneMap(); m[at] = 1;
     localStorage.setItem(REM_DONE_KEY, JSON.stringify(m));
   } catch (e) {}
+  scheduleRemMarkRefresh(); // v5.45：到点/确认后正文对应文本转灰
 }
 function unmarkRemDone(at) {
   try {
     const m = remDoneMap();
     if (m[at]) { delete m[at]; localStorage.setItem(REM_DONE_KEY, JSON.stringify(m)); }
   } catch (e) {}
+  scheduleRemMarkRefresh(); // v5.45：同刻重设提醒后正文恢复未过期样式
 }
 // 旧明文 {at,text} → 新 [{at,text}] 的迁移统一在这里做；坏数据当无提醒。
 function normalizeRemList(obj) {
@@ -2769,11 +2846,13 @@ async function addReminder(at, text) {
   reminders.push({ at: at, text: text || '' });
   reminders.sort((a, b) => a.at - b.at);
   unmarkRemDone(at); // 重设的同刻提醒，清掉旧的已触发标记
+  scheduleRemMarkRefresh(); // v5.45：新增提醒后正文时间文本包上下划线
   try { await persistReminders(); } catch (e) { setStatus(false, '保存失败'); }
 }
 async function removeReminder(at) {
   reminders = reminders.filter(r => r.at !== at);
   unmarkRemDone(at);
+  scheduleRemMarkRefresh(); // v5.45：删除提醒后正文下划线拆掉
   try { await persistReminders(); } catch (e) { setStatus(false, '保存失败'); }
 }
 function scheduleReminders() {
@@ -2889,34 +2968,68 @@ function renderRemPanel() {
   const list = document.getElementById('remBoxList');
   form.innerHTML = ''; list.innerHTML = '';
   hideTimeChip();
-  const inp = document.createElement('input');
-  inp.type = 'datetime-local';
-  inp.setAttribute('aria-label', '提醒时间');
+  // v5.45：时间区改自建时/分输入框——旧原生时间控件无法把选中钉在分钟段（内核硬边界，
+  // 探针实测 selectionStart=null、段导航只认真实按键）。自建文本框后 select() 标准生效：
+  // 打开面板焦点直接落分钟框且分钟值全选，数字直输/↑↓ 微调；日期保留原生选择器（触屏友好）
+  const timeRow = document.createElement('div'); timeRow.className = 'rem-time-row';
+  const dateInp = document.createElement('input');
+  dateInp.type = 'date'; dateInp.setAttribute('aria-label', '提醒日期');
+  const hhInp = document.createElement('input');
+  hhInp.type = 'text'; hhInp.inputMode = 'numeric'; hhInp.maxLength = 2; hhInp.className = 'rem-hh'; hhInp.setAttribute('aria-label', '小时');
+  const colon = document.createElement('span'); colon.className = 'rem-colon'; colon.textContent = ':';
+  const mmInp = document.createElement('input');
+  mmInp.type = 'text'; mmInp.inputMode = 'numeric'; mmInp.maxLength = 2; mmInp.className = 'rem-mm'; mmInp.setAttribute('aria-label', '分钟');
   const nd = new Date(Date.now() + 5 * 60 * 1000); // v5.42：默认 = 当前 +5 分钟（用户要求 12:35 → 12:40）；已过时刻由「添加提醒」accent 提示拦截
-  inp.value = nd.getFullYear() + '-' + String(nd.getMonth() + 1).padStart(2, '0') + '-' + String(nd.getDate()).padStart(2, '0') + 'T' + String(nd.getHours()).padStart(2, '0') + ':' + String(nd.getMinutes()).padStart(2, '0');
-  form.appendChild(inp);
+  dateInp.value = nd.getFullYear() + '-' + String(nd.getMonth() + 1).padStart(2, '0') + '-' + String(nd.getDate()).padStart(2, '0');
+  hhInp.value = String(nd.getHours()).padStart(2, '0');
+  mmInp.value = String(nd.getMinutes()).padStart(2, '0');
+  const segMax = x => (x === hhInp ? 23 : 59);
+  const clampSeg = inp => { // 输入期：只留数字、两位越界钳制（25→23 / 90→59）
+    const v = inp.value.replace(/\D/g, '').slice(0, 2);
+    inp.value = (v.length === 2 && +v > segMax(inp)) ? String(segMax(inp)) : v;
+  };
+  const padSeg = inp => { // 失焦/提交前：补零成两位
+    if (inp.value) inp.value = String(Math.min(+inp.value, segMax(inp))).padStart(2, '0');
+  };
+  hhInp.addEventListener('input', () => { clampSeg(hhInp); if (hhInp.value.length === 2) { mmInp.focus(); mmInp.select(); } });
+  mmInp.addEventListener('input', () => clampSeg(mmInp));
+  hhInp.addEventListener('blur', () => padSeg(hhInp));
+  mmInp.addEventListener('blur', () => padSeg(mmInp));
+  timeRow.appendChild(dateInp); timeRow.appendChild(hhInp); timeRow.appendChild(colon); timeRow.appendChild(mmInp);
+  form.appendChild(timeRow);
   const item = document.createElement('input');
   item.type = 'text';
+  item.className = 'rem-item'; // v5.45：专属类名——时分框同为 type=text，选择器需区分
   item.placeholder = '事项'; // v5.44：placeholder 精简，去掉括号补语
   item.maxLength = 20;
   item.setAttribute('aria-label', '提醒事项');
   const ok = document.createElement('button');
   ok.type = 'button'; ok.textContent = '添加提醒';
   const doAdd = () => {
-    const at = inp.value ? new Date(inp.value).getTime() : 0;
+    padSeg(hhInp); padSeg(mmInp);
+    const dv = dateInp.value; // YYYY-MM-DD
+    const at = (dv && hhInp.value && mmInp.value)
+      ? new Date(+dv.slice(0, 4), +dv.slice(5, 7) - 1, +dv.slice(8, 10), +hhInp.value, +mmInp.value).getTime()
+      : 0;
     if (!at || at <= Date.now()) {
-      inp.classList.add('bad'); // 已过/无效：accent 提示，不设
-      setTimeout(() => inp.classList.remove('bad'), 900);
+      [dateInp, hhInp, mmInp].forEach(x => x.classList.add('bad')); // 已过/无效：accent 提示，不设
+      setTimeout(() => [dateInp, hhInp, mmInp].forEach(x => x.classList.remove('bad')), 900);
       return;
     }
+    const text = item.value.trim();
     askRemPermission();
-    addReminder(at, item.value.trim());
-    toggleRemPanel(false);
+    addReminder(at, text).then(() => {
+      toggleRemPanel(false);
+      insertRemLine(at, text); // v5.45：面板添加的提醒回写正文光标处（时间 · 事项）
+    });
   };
   ok.addEventListener('click', doAdd);
   item.addEventListener('keydown', e => { // v5.40：事项框 Enter 直接确认
     if (e.key === 'Enter') { e.preventDefault(); doAdd(); }
   });
+  [dateInp, hhInp, mmInp].forEach(x => x.addEventListener('keydown', e => { // v5.45：时间区 Enter 同样直接确认
+    if (e.key === 'Enter') { e.preventDefault(); doAdd(); }
+  }));
   form.appendChild(item);
   form.appendChild(ok);
   // 已设条目永远排在设置区之后
@@ -2943,26 +3056,29 @@ function renderRemPanel() {
   // v5.44：聚焦逻辑挪至 focusRemTimeInput()，由 toggleRemPanel 在 mask 显示后调用——
   // 在本函数末尾聚焦时 remMask 仍为 hidden，display:none 容器内的元素聚焦静默无效（探针实测）
 }
-// v5.44：打开提醒面板时时间框默认聚焦（用户硬性要求「默认选中分钟」的网页侧极限实现）。三层要点：
-// ① 时序——必须由 toggleRemPanel 在 remMask 显示（remove hidden）之后调用：
-//    display:none 容器内对子元素调用聚焦静默无效（探针实测），故不能放在 renderRemPanel 末尾；
-// ② 守卫——仅桌面环境（鼠标悬停+细指针，无软键盘路径）聚焦；触屏设备不自动聚焦，
-//    移动端对时间框自动聚焦曾弹软键盘压缩视口致面板偏离正中心（v5.43 教训）；
-// ③ 分钟段定位——尽力把选区放到分钟位（value 形如 YYYY-MM-DDTHH:MM，分钟 = 索引 14..16）；
-//    内核若不支持对时间控件的段选区（Chromium 实测 selectionStart=null 且写入抛错）则静默跳过，
-//    聚焦仍生效：用户可直接按方向键/数字键调整，点分钟段即改分钟
+// v5.45：打开提醒面板时焦点直接落在「分钟」输入框且分钟值全选（用户硬性要求：如 15:16 默认选中 16）。
+// 旧原生时间控件时代选区钉不住分钟段（selectionStart=null 内核硬边界），自建文本框后 select() 标准生效必中。
+// 时序/守卫要点沿 v5.44：必须由 toggleRemPanel 在 remMask 显示后调用（display:none 容器内聚焦静默无效）；
+// 仅桌面环境执行，触屏设备不自动聚焦（防软键盘挤偏面板复发——v5.43 教训）
 function focusRemTimeInput() {
   try {
     if (!(window.matchMedia && window.matchMedia('(hover:hover) and (pointer:fine)').matches)) return;
-    const inp = document.querySelector('#remBoxForm input[type="datetime-local"]');
-    if (!inp) return;
-    inp.focus({ preventScroll: true });
-    inp.setSelectionRange(14, 16);
+    const mm = document.querySelector('#remBoxForm input.rem-mm');
+    if (!mm) return;
+    mm.focus({ preventScroll: true });
+    mm.select();
   } catch (e) {}
 }
+// v5.45：打开面板前保存编辑器选区（块内偏移），插入提醒行时恢复到"光标所在处"
+let panelSavedSel = null;
 function toggleRemPanel(force) {
   remPanelOpen = (force !== undefined) ? force : !remPanelOpen;
   if (remPanelOpen) {
+    try {
+      const sel = window.getSelection();
+      panelSavedSel = (sel && sel.rangeCount > 0 && editor.contains(sel.getRangeAt(0).commonAncestorContainer))
+        ? saveSelectionBlocked(editor, sel.getRangeAt(0)) : null;
+    } catch (e) { panelSavedSel = null; }
     renderRemPanel();
     remMask.classList.remove('hidden');
     remCard.classList.add('hidden');
@@ -2970,6 +3086,27 @@ function toggleRemPanel(force) {
   } else {
     remMask.classList.add('hidden');
   }
+}
+// v5.45：面板添加提醒成功后，把「时间 · 事项」写回正文光标处（用户拍板）。
+// 先恢复打开面板前保存的编辑器选区，再走 insertNodeAtCaret 纯 DOM 插入——
+// 其内部派发 input 事件，撤销栈单步可撤（Ctrl+Z 撤整行）、800ms 自动保存、
+// 500ms 后 linkify 自动给这一行包上下划线标记，全链路照常。
+// 时间用完整 YYYY-M-D H:MM 格式（分钟两位），保证 chip/标记识别稳定命中。
+function fmtRemInsert(at) {
+  const d = new Date(at);
+  return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate() + ' ' + d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+function insertRemLine(at, item) {
+  if (!cryptoKey) return;
+  const text = fmtRemInsert(at) + (item ? ' · ' + item : '');
+  try {
+    if (panelSavedSel) {
+      const r = restoreSelectionInBlock(editor, panelSavedSel);
+      if (r) { editor.focus(); setSel(r); }
+    }
+  } catch (e) {}
+  panelSavedSel = null;
+  insertNodeAtCaret(document.createTextNode(text));
 }
 // v5.40：点遮罩空白处或 Esc 关闭提醒模态
 remMask.addEventListener('click', e => { if (e.target === remMask) toggleRemPanel(false); });
