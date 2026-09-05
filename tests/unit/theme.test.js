@@ -328,10 +328,29 @@ test('v5.42：列表行文字必须是裸文本节点（span 元素盒在该内�
   assert.ok(/row\.appendChild\(document\.createTextNode\(fmtRemTime/.test(SRC), '列表文字必须走裸文本节点渲染');
 });
 
-test('v5.43：输入框内容必须居中（继承 qr-box），面板不得自动聚焦（防键盘弹起挤偏位置）', () => {
+test('v5.43：输入框内容必须居中（继承 qr-box），showPicker 退役', () => {
   assert.ok(!/#remBoxForm input\{text-align:left\}/.test(SRC), 'v5.42 的输入框左对齐必须删除（用户要求时间/事项内容居中）');
-  assert.ok(!/inp\.focus\(\)/.test(SRC), '面板打开不得自动聚焦（v5.42 副作用：移动端弹键盘压缩视口，面板不在正中心）');
   assert.ok(!/showPicker/.test(SRC), 'showPicker 一并退役（依赖聚焦手势，且自动弹选择器过激）');
+});
+
+test('v5.44：打开面板默认选中分钟段，且聚焦必须受桌面环境守卫（触屏设备不得自动弹键盘挤偏面板）', () => {
+  assert.ok(/setSelectionRange\(14,\s*16\)/.test(SRC), '必须把选区放到分钟段（datetime-local value 形如 YYYY-MM-DDTHH:MM，分钟 = 索引 14..16）');
+  assert.ok(/\(hover:hover\) and \(pointer:fine\)/.test(SRC), '自动聚焦必须限定桌面环境（v5.43 教训：移动端聚焦弹软键盘压缩视口，面板偏离正中心）');
+  assert.ok(/inp\.focus\(\{\s*preventScroll:\s*true\s*\}\)/.test(SRC), '聚焦必须带 preventScroll，不得滚动页面');
+  assert.ok(!/inp\.focus\(\)/.test(SRC), '不得出现无参数裸调用（必须 preventScroll 且受桌面守卫包住）');
+  assert.ok((SRC.match(/inp\.focus\(/g) || []).length === 1, '时间框聚焦调用全文件只能出现一次（守卫块内），防止新增无守卫调用');
+});
+
+test('v5.44：到点卡片必须居中且文字居中（remRise 专用入场），placeholder 精简，音频全局解锁', () => {
+  assert.ok(/#remCard\{[^}]*animation:remRise/.test(SRC), '#remCard 必须挂 remRise 专用入场（通用 rise 的 to 帧 transform:none 会抹掉 translate 居中偏移，动画结束卡片偏离正中心）');
+  assert.ok(/@keyframes remRise\{from\{[^}]*translate\(-50%,-50%\)[^}]*\}to\{[^}]*translate\(-50%,-50%\)/.test(SRC), 'remRise 的 from/to 两帧都必须保留 translate(-50%,-50%) 居中偏移');
+  assert.ok(/#remCard\{[^}]*text-align:center/.test(SRC), '到点卡片标题「提醒」与正文「时间 · 事项」必须居中（用户反复要求）');
+  assert.ok(!/#remCard\{[^}]*animation:rise /.test(SRC), '#remCard 不得再挂通用 rise 动画');
+  assert.ok(/item\.placeholder = '事项'/.test(SRC), '事项框 placeholder 必须精简为「事项」（去掉括号补语）');
+  assert.ok((SRC.match(/new AC\(\)/g) || []).length === 1, 'AudioContext 只允许在解锁函数里创建一次（响铃时复用全局 ctx，不得再新建 suspended 实例）');
+  assert.ok(/createBuffer\(1,\s*1,\s*22050\)/.test(SRC), '音频解锁必须播放静音 buffer（iOS/国产内核手势解锁必需）');
+  assert.ok(/\['pointerdown',\s*'touchend',\s*'keydown'\]\.forEach/.test(SRC), '解锁必须挂在首次手势事件（pointerdown/touchend/keydown）上');
+  assert.ok(/!\/remCard\.classList\.contains\('hidden'\)|remCard\.classList\.remove\('hidden'\)/.test(SRC), '到点实底卡片仍是页内主通道');
 });
 
 test('v5.41：页面 UI 内不得出现 ⏰ emoji（卡片标题/条目/chip 文案），系统通知保留', () => {

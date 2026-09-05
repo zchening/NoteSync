@@ -35,6 +35,7 @@
 | I | 链接转换/粘贴/保存可靠性 | 6 | 修改 linkifyEditor / buildLinkSafe / trimUrlTrailing / urlRegex / paste 处理 / pasteTextNative / input 处理器 busy 分支 / saveLocal / scheduleSaveRetry / flushDirtySave / fetchRetry / copyBtn |
 | J | 二维码配对 | 2 | 修改 tryPairingUnlock / parsePairingKey / buildPairingUrl / drawQrTo / revealQr / resetQrHolder / qrBtn 弹层 / b64ToUrlSafe·urlSafeToB64 |
 | K | 服务端遗留缺陷（Open） | 2 | 修改 server.js 静态分支（GET/HEAD、/.well-known/ 路由）——K1/K2 确诊未修复 |
+| L | 提醒与闹钟 UI | 4 | 修改 remPanel / remCard / focusRemTimeInput / 响铃 playRemSound / unlockRemAudio / 时间识别 chip / reminder 数据结构 |
 
 ---
 
@@ -906,6 +907,55 @@
 
 ---
 
+## L. 提醒与闹钟 UI（v5.44 新增分类，四连报沉淀）
+
+> v5.37–v5.43 的提醒 UI 改动曾多次踩坑（吃字/挤偏/反色黑块/不居中），v5.44 起独立成类：**任何触及提醒面板/到点卡片/响铃的改动，必须逐条核对 L1–L4**。
+
+### L1 | 提醒面板：打开时时间框必须默认聚焦（分钟段尽力定位）
+- **版本**: v5.44（用户反复要求"默认选中分钟"；v5.42 首做、v5.43 因移动端键盘挤偏回退、v5.44 定案）
+- **根因**:
+  1. **聚焦时序 bug（三代未察觉）**：v5.42/v5.43 的聚焦都写在 `renderRemPanel()` 末尾，此刻 `remMask` 还挂着 `hidden`——**display:none 容器内对子元素调用聚焦静默无效**（Playwright 探针实测 `focused:false`）
+  2. **内核硬边界**：Chromium 对 `datetime-local` 的 `selectionStart` 返回 null、UA shadow DOM 段导航只认真实按键（非受信 keydown 无效），**网页 JS 无法把选区钉死在分钟段**（探针实测：非受信 ArrowRight×5 后受信 ArrowDown 仍改"年"段）
+- **修复**: 新增 `focusRemTimeInput()`，由 `toggleRemPanel(true)` 在 `remMask.classList.remove('hidden')` **之后**调用；仅桌面环境（`(hover:hover) and (pointer:fine)`）聚焦，触屏设备不聚焦（防 v5.43 软键盘挤偏复发）；`setSelectionRange(14,16)` 尽力定位分钟段，不支持段选区的内核抛错被静默吞掉
+- **关联文件**: index.html → focusRemTimeInput() / toggleRemPanel()
+- **核对要点**:
+  - [ ] 桌面浏览器打开面板：时间框处于聚焦态（activeElement=时间框），可直接按方向键/数字键调整，点分钟段即改分钟
+  - [ ] 手机打开面板：不弹软键盘、面板仍在正中心（移动端守卫反向断言 e2e V544-3）
+  - [ ] 打开面板默认时间 = 当前 +5 分钟（v5.42 行为不回归）
+  - [ ] 全文件 `inp.focus(` 调用仅 1 处（守卫块内），不得新增无守卫调用
+
+### L2 | 到点卡片：必须处于页面正中心，标题/正文居中
+- **版本**: v5.44（用户说"说了无数遍"）
+- **根因**: `#remCard` 复用通用 `rise` 入场动画——**to 帧 `transform:none` 在动画结束时抹掉 `translate(-50%,-50%)` 居中偏移**，卡片左上角钉在屏幕中心点（视觉"不在正中心"）；且标题 `#remCardTitle` 与正文列表从未设置居中（v5.43 只修了面板输入框居中，漏了到点卡片）
+- **修复**: `#remCard` 改挂 `remRise` 专用入场（from/to 两帧均保留 `translate(-50%,-50%)`）+ 整卡 `text-align:center`（标题/正文/「已过 X 分钟」补录全居中）
+- **关联文件**: index.html → #remCard CSS / @keyframes remRise
+- **核对要点**:
+  - [ ] 到点卡片出现在屏幕正中心（动画结束后 rect 中心=视口中心，e2e V544-1 已固化）
+  - [ ] 标题「提醒」居中；正文「时间 · 事项」居中
+  - [ ] 深色模式下卡片样式不回归（三份覆盖名单 #remCard 系列仍在）
+  - [ ] 落地页/弹窗仍用 rise 动画不回归
+
+### L3 | 事项框 placeholder 不得有括号补语
+- **版本**: v5.44（用户明确要求删除「（可留空）」）
+- **修复**: placeholder 精简为「事项」
+- **关联文件**: index.html → renderRemPanel()
+- **核对要点**:
+  - [ ] 打开面板，事项框 placeholder 仅显示「事项」
+  - [ ] 事项框留空直接点「添加提醒」仍可设纯时间提醒
+
+### L4 | 到点提醒必须有声音（音频全局解锁）
+- **版本**: v5.44
+- **根因**: 此前每次响铃新建 AudioContext——到点时刻通常已无近期用户手势，新 ctx 恒为 `suspended` → 静音（浏览器 autoplay 政策）
+- **修复**: 首次手势（pointerdown/touchend/keydown）解锁全局 `remAudioCtx`（含 iOS/国产内核必需的静音 buffer），响铃复用不再关闭；到点前用户必有交互（打开笔记），ctx 已 running
+- **关联文件**: index.html → unlockRemAudio() / playRemSound()
+- **核对要点**:
+  - [ ] 打开笔记后（有过任意点击）等到点：有双音提示音 + 震动
+  - [ ] 页面切后台标签页后到点：声音照常（ctx 不随可见性关闭）
+  - [ ] 响铃后 ctx 仍为 running（复用不重建，e2e V544-4）
+  - [ ] 冷启动立即补弹场景（无手势）：卡片/通知仍在，声音可能被内核静默（无手势限制，属浏览器边界，不算回归）
+
+---
+
 ## 版本与 bug 对应速查
 
 | 版本 | 涉及 bug 编号 |
@@ -932,4 +982,5 @@
 | v5.16 | C4(还原备案前透明金 logo；删 maskable PNG + 路由) |
 | v5.19 | I1, I2, I3, I4, I5(含 H5 的 ID_RE 修正), I6 |
 | v5.20 | J1, J2（均为发布前独立盲测发现并同版修复） |
+| v5.44 | L1, L2, L3, L4（用户四连报一次修净，e2e _verify_v544 4 项固化） |
 | v5.14 | H1, H2, H3, H4, C4 |

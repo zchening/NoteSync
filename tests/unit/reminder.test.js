@@ -319,7 +319,7 @@ test('R12 模态面板：复用 .box+qr-box 居中、设置行首行、时间默
   const picked = new Date(timeInput.value).getTime();
   assert.ok(Math.abs(Date.now() + 300000 - picked) < 120000, 'v5.42 默认时间必须是当前 +5 分钟（±2 分钟容差）');
   const itemInput = panel.querySelector('input[type="text"]');
-  assert.ok(itemInput && itemInput.value === '' && itemInput.placeholder.includes('可留空'), '事项框留空且标可留空');
+  assert.ok(itemInput && itemInput.value === '' && itemInput.placeholder === '事项', 'v5.44 事项框留空且 placeholder 精简为「事项」（括号补语已按用户要求删除）');
   const form = window.document.getElementById('remBoxForm');
   const list = window.document.getElementById('remBoxList');
   assert.ok(!!(form.compareDocumentPosition(list) & window.Node.DOCUMENT_POSITION_FOLLOWING), '设置行必须固定在已设条目区之前');

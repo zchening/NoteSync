@@ -58,7 +58,10 @@
   #installBar{bottom:16px}
   /* v5.40：到点提醒卡片对齐扫码配对弹窗（.box）视觉——圆角 18 / rise 入场 / 同款阴影与标题层级；
      不加遮罩：到点提醒是通知不是操作门槛，不打断正在输入的用户；颜色全走主题变量（--box-bg 不透明） */
-  #remCard{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:80;width:min(90vw,380px);max-width:86vw;background:var(--box-bg);color:var(--fg);border:1px solid var(--line);border-radius:18px;padding:30px 30px 26px;box-shadow:0 24px 70px rgba(20,20,18,.16);display:flex;flex-direction:column;gap:14px;animation:rise .5s cubic-bezier(.2,.7,.3,1) both}
+  /* v5.44：remCard 必须用 remRise 专用入场——通用 rise 的 to 帧是 transform:none，
+     动画结束会抹掉 translate(-50%,-50%) 居中偏移，卡片左上角钉在屏幕中心点（="不在正中心"）；
+     text-align:center 让标题「提醒」与正文「时间 · 事项」整体居中（用户反复要求） */
+  #remCard{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:80;width:min(90vw,380px);max-width:86vw;background:var(--box-bg);color:var(--fg);border:1px solid var(--line);border-radius:18px;padding:30px 30px 26px;box-shadow:0 24px 70px rgba(20,20,18,.16);display:flex;flex-direction:column;gap:14px;text-align:center;animation:remRise .5s cubic-bezier(.2,.7,.3,1) both}
   #remCard.hidden{display:none!important}
   #remCardTitle{font-size:18px;font-weight:600;margin:0;letter-spacing:.02em}
   #remCardList{display:flex;flex-direction:column;gap:10px;font-size:13.5px;line-height:1.55;max-height:40vh;overflow-y:auto}
@@ -163,6 +166,8 @@
   #landing .warn{color:#C0453E;font-size:12px;margin:14px 0 0;letter-spacing:.04em}
   #landing .hint{color:var(--muted);font-size:12px;margin:26px 0 0;line-height:1.7;letter-spacing:.05em;opacity:.8}
   @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  /* v5.44：remCard 专用入场——to 帧保留 translate(-50%,-50%)，动画结束不丢居中偏移 */
+  @keyframes remRise{from{opacity:0;transform:translate(-50%,-50%) translateY(14px)}to{opacity:1;transform:translate(-50%,-50%)}}
 
   /* ── 提示气泡 / 加载 ────────────────── */
   .upload-status{position:fixed;bottom:44px;left:50%;transform:translateX(-50%);background:var(--upload-bg);color:var(--bg);padding:10px 20px;border-radius:999px;font-size:13px;letter-spacing:.03em;z-index:20;opacity:0;transition:opacity .3s;pointer-events:none;box-shadow:0 10px 30px rgba(20,20,18,.2)}
@@ -285,7 +290,7 @@ const PBKDF2_ITER = 200000;
 const FAIL_LIMIT = 10;
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '5.43';
+const APP_VERSION = '5.44';
 const BUILD_DATE = '2026-09-05';
 
 const $ = s => document.querySelector(s);
@@ -2557,7 +2562,7 @@ let cardShownAts = []; // 当前卡片展示的提醒时间戳，「知道了」
 let chipFeedbackUntil = 0; // chip「已设」反馈窗口内不再被 selectionchange 改写
 
 // v5.39：提醒事项 = 时间串同行的后文（trim 后截 20 字），无后文为空——
-// 不再自动用笔记首行（用户拍板：留空就留空）；面板事项输入框同样可留空
+// 不再自动用笔记首行（用户拍板：留空就留空）；面板事项输入框同样允许留空
 function itemAfterMatch(text, m) {
   let s = (text || '').slice(m.index + m.length).trim();
   if (!s) return '';
@@ -2807,26 +2812,40 @@ async function fireReminder(at) {
   }
   showRemCard([entry], false); // 实底卡片：页内主通道，无论通知权限如何都弹
 }
-// 响铃：手机震动 + 页面可见时 WebAudio 双音（页面隐藏时不响，系统通知自带提示音，避免双重声响）
+// 响铃：手机震动 + WebAudio 双音两轮。v5.44 全局音频解锁——此前每次响铃新建 AudioContext，
+// 到点时无用户手势，ctx 恒为 suspended 直接哑火；现于首次手势（pointerdown/touchend/keydown）
+// 解锁全局 remAudioCtx（含 iOS/国产内核必需的静音 buffer），响铃时复用不再 close，后台也照常响
+let remAudioCtx = null;
+function unlockRemAudio() {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    if (!remAudioCtx) remAudioCtx = new AC();
+    if (remAudioCtx.state === 'suspended') remAudioCtx.resume().catch(() => {});
+    const b = remAudioCtx.createBuffer(1, 1, 22050); // 静音 buffer：iOS/国产内核解锁必需
+    const s = remAudioCtx.createBufferSource();
+    s.buffer = b; s.connect(remAudioCtx.destination);
+    if (s.start) s.start(0);
+  } catch (e) {}
+}
+['pointerdown', 'touchend', 'keydown'].forEach(ev =>
+  document.addEventListener(ev, unlockRemAudio, { passive: true }));
 function playRemSound() {
   try { if (navigator.vibrate) navigator.vibrate([200, 120, 200]); } catch (e) {}
   try {
-    if (document.visibilityState !== 'visible') return;
-    const AC = window.AudioContext || window.webkitAudioContext;
-    if (!AC) return;
-    const ctx = new AC();
-    if (ctx.state === 'suspended') { try { ctx.resume(); } catch (e) {} }
-    const t0 = ctx.currentTime + 0.02;
-    [[880, 0], [1318.5, 0.18]].forEach(p => {
-      const o = ctx.createOscillator(), g = ctx.createGain();
+    unlockRemAudio();
+    if (!remAudioCtx || remAudioCtx.state === 'closed') return;
+    if (remAudioCtx.state === 'suspended') remAudioCtx.resume().catch(() => {});
+    const t0 = remAudioCtx.currentTime + 0.02;
+    [[880, 0], [1318.5, 0.18], [880, 0.55], [1318.5, 0.73]].forEach(p => {
+      const o = remAudioCtx.createOscillator(), g = remAudioCtx.createGain();
       o.type = 'sine'; o.frequency.value = p[0];
       g.gain.setValueAtTime(0.0001, t0 + p[1]);
       g.gain.exponentialRampToValueAtTime(0.22, t0 + p[1] + 0.025);
       g.gain.exponentialRampToValueAtTime(0.0001, t0 + p[1] + 0.38);
-      o.connect(g); g.connect(ctx.destination);
+      o.connect(g); g.connect(remAudioCtx.destination);
       o.start(t0 + p[1]); o.stop(t0 + p[1] + 0.42);
     });
-    setTimeout(() => { try { ctx.close(); } catch (e) {} }, 1500);
   } catch (e) {}
 }
 function showRemCard(items, isCatchup) {
@@ -2878,7 +2897,7 @@ function renderRemPanel() {
   form.appendChild(inp);
   const item = document.createElement('input');
   item.type = 'text';
-  item.placeholder = '事项（可留空）';
+  item.placeholder = '事项'; // v5.44：placeholder 精简，去掉括号补语
   item.maxLength = 20;
   item.setAttribute('aria-label', '提醒事项');
   const ok = document.createElement('button');
@@ -2921,9 +2940,25 @@ function renderRemPanel() {
     iosTip.textContent = 'iOS 需先添加到主屏幕才能收到通知（仍可设置，下次打开会提示）';
     list.appendChild(iosTip);
   }
-  // v5.43：不自动聚焦——v5.42 曾在打开面板时对时间框调用聚焦，移动端立即弹起软键盘压缩视口，
-  // 面板在压缩视口内居中导致"不在正中心"（扫码配对无输入框无键盘故无此问题）；
-  // 默认 +5 分钟保留，用户点时间框时自唤选择器
+  // v5.44：聚焦逻辑挪至 focusRemTimeInput()，由 toggleRemPanel 在 mask 显示后调用——
+  // 在本函数末尾聚焦时 remMask 仍为 hidden，display:none 容器内的元素聚焦静默无效（探针实测）
+}
+// v5.44：打开提醒面板时时间框默认聚焦（用户硬性要求「默认选中分钟」的网页侧极限实现）。三层要点：
+// ① 时序——必须由 toggleRemPanel 在 remMask 显示（remove hidden）之后调用：
+//    display:none 容器内对子元素调用聚焦静默无效（探针实测），故不能放在 renderRemPanel 末尾；
+// ② 守卫——仅桌面环境（鼠标悬停+细指针，无软键盘路径）聚焦；触屏设备不自动聚焦，
+//    移动端对时间框自动聚焦曾弹软键盘压缩视口致面板偏离正中心（v5.43 教训）；
+// ③ 分钟段定位——尽力把选区放到分钟位（value 形如 YYYY-MM-DDTHH:MM，分钟 = 索引 14..16）；
+//    内核若不支持对时间控件的段选区（Chromium 实测 selectionStart=null 且写入抛错）则静默跳过，
+//    聚焦仍生效：用户可直接按方向键/数字键调整，点分钟段即改分钟
+function focusRemTimeInput() {
+  try {
+    if (!(window.matchMedia && window.matchMedia('(hover:hover) and (pointer:fine)').matches)) return;
+    const inp = document.querySelector('#remBoxForm input[type="datetime-local"]');
+    if (!inp) return;
+    inp.focus({ preventScroll: true });
+    inp.setSelectionRange(14, 16);
+  } catch (e) {}
 }
 function toggleRemPanel(force) {
   remPanelOpen = (force !== undefined) ? force : !remPanelOpen;
@@ -2931,6 +2966,7 @@ function toggleRemPanel(force) {
     renderRemPanel();
     remMask.classList.remove('hidden');
     remCard.classList.add('hidden');
+    focusRemTimeInput(); // v5.44：mask 显示后再聚焦（display:none 容器内聚焦静默无效）
   } else {
     remMask.classList.add('hidden');
   }

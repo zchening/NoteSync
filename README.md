@@ -326,6 +326,7 @@ bash install.sh
 
 | 版本 | 日期 | 摘要 |
 |------|------|------|
+| v5.44 | 2026-09-05 | 到点卡片回正中心且标题正文居中；面板打开默认聚焦时间框；事项框提示精简；到点提醒恢复声音 |
 | v5.43 | 2026-09-05 | 去掉打开面板自动弹键盘，面板回正中心；时间/事项内容居中 |
 | v5.42 | 2026-09-05 | 提醒列表文字改文本节点彻底防吃字，面板居中对齐配对弹窗，时间默认+5分钟 |
 | v5.41 | 2026-09-05 | 提醒卡片和列表纳入夜间保护，文字不再被吃；去重复闹钟图标 |
@@ -387,8 +388,9 @@ bash install.sh
 | v1.0 | 2026-07-21 | 初始版本，纯文字端到端加密同步 |
 
 <details>
-<summary>完整更新详情（共 54 个版本）</summary>
+<summary>完整更新详情（共 55 个版本）</summary>
 
+- **v5.44**：一次性解决用户四连报（提醒 UI 四项，BUG_CHECKLIST 新增 L 类固化）。① **到点卡片不在正中心 + 标题/正文不居中**——根因：`#remCard` 复用通用 rise 入场，to 帧 transform:none 在动画结束抹掉 translate(-50%,-50%) 居中偏移，卡片左上角钉在屏幕中心点；改挂 **remRise 专用入场**（from/to 两帧保留偏移）+ 整卡 text-align:center（标题「提醒」/正文「时间 · 事项」/「已过 X 分钟」全居中）。② **打开面板默认选中分钟**——聚焦三代未真正生效：写在 renderRemPanel 末尾时 remMask 仍 hidden，**display:none 容器内聚焦静默无效**（探针实测）；新增 focusRemTimeInput() 由 toggleRemPanel 在 mask 显示后调用，仅桌面环境（hover+fine）聚焦防移动端键盘挤偏复发；实测 Chromium 对时间控件 selectionStart=null、段导航只认真实按键，"选区钉死分钟段"为内核硬边界，**聚焦生效即网页侧极限**（方向键/数字键直调、点分钟段即改）。③ **事项框「（可留空）」删除**——placeholder 精简为「事项」。④ **到点没声音**——每次响铃新建 AudioContext，到点无手势 ctx 恒 suspended 静音；**首次手势解锁全局 remAudioCtx**（含 iOS/国产内核必需静音 buffer），响铃复用不关闭。测试：theme.test.js v5.44 断言组（remRise 挂载/整卡居中/桌面守卫聚焦/placeholder/单次 ctx 创建/静音 buffer）+ reminder placeholder 断言更新 + e2e 新增 `_verify_v544.test.js` 4 项（真实 Chromium 实测卡片正中心±2px/文字居中/聚焦时序/音频 running）；jsdom 128/128 + E2E 22/22 = 150 全绿
 - **v5.43**：修复 v5.42 两处自伤——① **面板不在正中心**：v5.42 的「打开面板自动聚焦时间框」在移动端立即弹起软键盘压缩视口，`.mask` 在压缩视口内居中导致面板整体偏上（扫码配对弹窗无输入框无键盘故无此问题），删除自动聚焦与 showPicker，用户点时间框自唤选择器；默认 +5 分钟保留 ② **时间/事项内容不居中**：v5.42 把 `#remBoxForm input` 锁成 text-align:left（"输入件惯例"自作主张，用户实际要居中），删除后输入框内容继承 `.qr-box` 的 text-align:center。上线前子代理核对 11/11 全过；踩坑复刻：v5.43 断言「禁 inp.focus()」被**注释里的 inp.focus() 字样**命中（与 v5.40 forbidden 命中注释同源），注释改措辞后通过——源码断言/禁串写法均须考虑注释。测试：theme.test.js 新增 v5.43 断言组；jsdom 126/126 + E2E 18/18 = 144 全绿
 
 - **v5.42**：修复提醒列表文字在该用户内核仍被吃字 + 面板居中 + 默认 +5 分钟。**列表文字换实现**——v5.41 的 span 颜色双保险（字面色+text-fill 双 !important）在该内核仍失效（标题能看到、唯独列表 span 被吃，判定为内核对 span 元素盒的独立 bug），改**裸文本节点**渲染（`document.createTextNode`，无元素盒，元素级夜间规则无从命中）；颜色改由行容器 `.rem-row` 锁定（color+text-fill+`background:none!important` 三保险，动态两板 + SHELL_CSS 三份名单同步）；行布局 flex→**grid 1fr auto**（文字列 + × 列），支撑文字居中。**面板居中**——remPanel 补挂 `qr-box` class（v5.40 复用 .box 时漏挂，配对弹窗整体 text-align:center 而提醒面板左对齐），标题「提醒」/列表文字居中，输入件内容保持左对齐（`#remBoxForm input{text-align:left}`）。**默认时间**——当前 +5 分钟（12:35 开面板默认 12:40），打开面板自动聚焦时间框、支持 showPicker 的浏览器直接弹选择器；「默认选中分钟段」为浏览器内置控件（UA shadow DOM）无标准 API，如实告知用户为尽力行为。上线前**子代理逐项核对 17 项全过**（用户硬性要求新增流程）；唯一低风险备注（匿名 grid item 无 min-width:0 理论可撑宽）已被事项 maxLength=20 从数据源封死。测试：R12 断言更新（+5min/qr-box/无 span）+ theme.test.js 新增 v5.42 断言组 + 版本断言 5.42；jsdom 125/125 + E2E 18/18 = 143 全绿
