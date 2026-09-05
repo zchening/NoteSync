@@ -276,25 +276,26 @@ test('R10 有权限时通过 ServiceWorker 弹系统通知且卡片同步弹出'
   assert.ok(!window.document.getElementById('remCard').classList.contains('hidden'), '通知成功后页内卡片仍应弹出');
 });
 
-// ── R11：noteFirstLine 取首行文字并截断 20 字 ──────────────
-test('R11 noteFirstLine 取首行文字并截断 20 字', async t => {
+// ── R11：itemAfterMatch 提取时间同行后文作事项（v5.39 取代 noteFirstLine）──
+test('R11 itemAfterMatch 取时间后文作事项，无后文为空（不再用笔记首行）', async t => {
   const app = freshApp();
   t.after(() => app.dom.window.close());
-  const { window, editor } = app;
+  const { window } = app;
   const key = await makeKey();
   const noteCt = await window.encryptText('x', key);
   mockCapture(window, {}, 5);
   await window.applyUnlocked(key, { v: 5, ct: noteCt.ct, iv: noteCt.iv, salt: 'x' });
 
-  editor.innerHTML = '<div>这是第一行</div><div>第二行</div>';
-  assert.strictEqual(window.noteFirstLine(), '这是第一行', '只取首行');
-  editor.innerHTML = '<div>' + '很'.repeat(30) + '</div>';
-  const s = window.noteFirstLine();
-  assert.ok(s.length === 21 && s.endsWith('…'), '超长应截断 20 字加省略号');
+  const m = { index: 3, length: 16 }; // '会议 ' 之后 16 字的时间串
+  assert.strictEqual(window.itemAfterMatch('会议 2026-09-06 07:00 开会讨论', m), '开会讨论', '取时间同行后文');
+  assert.strictEqual(window.itemAfterMatch('会议 2026-09-06 07:00   ', m), '', '后文只有空白 → 空');
+  assert.strictEqual(window.itemAfterMatch('会议 2026-09-06 07:00', m), '', '无后文 → 空（不再退回笔记首行）');
+  const long = window.itemAfterMatch('会议 2026-09-06 07:00 ' + '很'.repeat(30), m);
+  assert.ok(long.length === 21 && long.endsWith('…'), '超长截断 20 字加省略号');
 });
 
-// ── R12：面板渲染快捷时间 + 已设列表 + 发现性提示 ──────────
-test('R12 面板未设状态渲染快捷按钮与提示，已设状态渲染逐条取消', async t => {
+// ── R12：v5.39 面板极简：无快捷按钮/提示语，时间默认当前，事项输入可留空 ──
+test('R12 面板极简形态：时间默认当前、事项框留空、已设条目含事项、无废话文案', async t => {
   const app = freshApp();
   t.after(() => app.dom.window.close());
   const { window, editor } = app;
@@ -304,26 +305,79 @@ test('R12 面板未设状态渲染快捷按钮与提示，已设状态渲染逐�
   await window.applyUnlocked(key, { v: 5, ct: noteCt.ct, iv: noteCt.iv, salt: 'x' });
 
   window.toggleRemPanel(true);
-  let html = window.document.getElementById('remPanel').textContent;
-  assert.ok(html.includes('1 小时后'), '快捷按钮：1 小时后');
-  assert.ok(html.includes('今晚 8 点') || html.includes('明晚 8 点'), '快捷按钮：今晚/明晚 8 点（过 20:00 自动切换）');
-  assert.ok(html.includes('明天上午 9 点'), '快捷按钮：明天上午 9 点');
-  assert.ok(html.includes('2026-09-02 07:00') || html.includes('点一下') || html.includes('点进去'), '应有时间识别发现性提示');
+  const panel = window.document.getElementById('remPanel');
+  let text = panel.textContent;
+  assert.ok(!text.includes('1 小时后'), '快捷按钮已删：1 小时后');
+  assert.ok(!text.includes('8 点'), '快捷按钮已删：今晚/明晚 8 点');
+  assert.ok(!text.includes('明天上午 9 点'), '快捷按钮已删：明天上午 9 点');
+  assert.ok(!text.includes('提示：'), '常驻发现性提示已删');
+  assert.ok(!text.includes('提醒我：') && !text.includes('再加：'), '标签文案已删');
+  const timeInput = panel.querySelector('input[type="datetime-local"]');
+  assert.ok(timeInput && timeInput.value, '时间选择器必须存在且有默认值');
+  const v = timeInput.value; // YYYY-MM-DDTHH:MM
+  assert.ok(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(v), '默认值必须是合法 datetime-local 格式');
+  const picked = new Date(v).getTime();
+  assert.ok(Math.abs(Date.now() - picked) < 120000, '默认时间必须是当前时间（±2 分钟）');
+  const itemInput = panel.querySelector('input[type="text"]');
+  assert.ok(itemInput, '必须有事项输入框');
+  assert.strictEqual(itemInput.value, '', '事项默认留空（不取笔记首行）');
+  assert.ok(itemInput.placeholder.includes('可留空'), 'placeholder 应标明可留空');
   window.toggleRemPanel(false);
-  assert.ok(window.document.getElementById('remPanel').classList.contains('hidden'), '关闭后收起');
 
   editor.innerHTML = '<div>y</div>';
   const at = Date.now() + 3600e3;
   await window.addReminder(at, '要办的事');
   window.toggleRemPanel(true);
-  html = window.document.getElementById('remPanel').textContent;
-  assert.ok(html.includes('已设 1 条'), '已设状态显示条数');
-  assert.ok(html.includes('×'), '每条应有单独取消按钮');
+  text = window.document.getElementById('remPanel').textContent;
+  assert.ok(!text.includes('已设'), '不再显示「已设 N 条」前缀');
   const cancelBtn = [...window.document.getElementById('remPanel').querySelectorAll('button')].find(b => b.textContent.indexOf('×') === 0);
+  assert.ok(cancelBtn.textContent.includes('要办的事'), '取消按钮应含事项文案');
   cancelBtn.click();
   await sleep(30);
   assert.ok(!window.document.getElementById('remBtn').classList.contains('on'), '逐条取消后按钮熄灭');
   assert.ok(window.document.getElementById('remPanel').classList.contains('hidden'), '取消最后一条后面板自动收起');
+});
+
+// ── R12b：「定时」对已过时刻加重提示且不设；留空事项正常入库 ──
+test('R12b 定时已过时刻红边拦截；留空事项按空入库', async t => {
+  const app = freshApp();
+  t.after(() => app.dom.window.close());
+  const { window, editor } = app;
+  const key = await makeKey();
+  const noteCt = await window.encryptText('x', key);
+  const puts = mockCapture(window, { v: 5, ct: noteCt.ct, iv: noteCt.iv, salt: 'x' }, 6);
+  await window.applyUnlocked(key, { v: 5, ct: noteCt.ct, iv: noteCt.iv, salt: 'x' });
+
+  editor.innerHTML = '<div>y</div>';
+  window.toggleRemPanel(true);
+  const panel = window.document.getElementById('remPanel');
+  const timeInput = panel.querySelector('input[type="datetime-local"]');
+  const itemInput = panel.querySelector('input[type="text"]');
+
+  timeInput.value = '2020-01-01T08:00'; // 已过时刻
+  [...panel.querySelectorAll('button')].find(b => b.textContent === '定时').click();
+  await sleep(30);
+  assert.ok(timeInput.classList.contains('bad'), '已过时刻必须加重提示');
+  assert.strictEqual(puts.length, 0, '已过时刻不得发出 PUT');
+  assert.strictEqual(window.document.getElementById('remBtn').classList.contains('on'), false, '已过时刻不得点亮提醒按钮（未入库）');
+
+  // 重建面板（摆脱上一场景 bad 类的 900ms 消退窗口），填未来时刻
+  window.toggleRemPanel(false);
+  window.toggleRemPanel(true);
+  const panel2 = window.document.getElementById('remPanel');
+  const timeInput2 = panel2.querySelector('input[type="datetime-local"]');
+  const future = new Date(Date.now() + 3600e3);
+  const pad2 = n => String(n).padStart(2, '0');
+  timeInput2.value = future.getFullYear() + '-' + pad2(future.getMonth() + 1) + '-' + pad2(future.getDate()) + 'T' + pad2(future.getHours()) + ':' + pad2(future.getMinutes());
+  // 留空事项直接点定时
+  [...panel2.querySelectorAll('button')].find(b => b.textContent === '定时').click();
+  await sleep(50);
+  assert.strictEqual(timeInput2.classList.contains('bad'), false, '未来时刻不得触发红边');
+  assert.strictEqual(puts.length, 1, '未来时刻 + 留空事项应正常保存');
+  const remObj = JSON.parse(puts[0].rem);
+  const list = JSON.parse(await window.decryptText(remObj.ct, remObj.iv, key)).list;
+  assert.strictEqual(list.length, 1, '应入库 1 条');
+  assert.strictEqual(list[0].text, '', '留空事项按空字符串入库，不取笔记首行');
 });
 
 // ── R13：server.js 的 rem 透传语义（显式更新/未传保留）────

@@ -88,14 +88,20 @@ test('TC3 无年份 1-1 07:00 今年已过自动进位明年', t => {
   assert.strictEqual(res[0].at, expSame > Date.now() + 30000 ? expSame : expNext);
 });
 
-// ── TC4：过去时间不命中 ───────────────────────────────────
-test('TC4 带年份的过去时间不命中（提醒没有提醒过去的意义）', t => {
+// ── TC4：过去时间 → 过期标记（v5.39：仍返回但标 expired，chip 显示灰态）──
+test('TC4 带年份的过去时间标 expired，不作为可设提醒命中', t => {
   const app = freshApp();
   t.after(() => app.dom.window.close());
   const { window } = app;
   const yest = new Date(Date.now() - 86400e3);
   yest.setHours(7, 0, 0, 0);
-  assert.strictEqual(window.parseTimeMatches('昨天 ' + fmtDate(yest) + ' 开过会').length, 0);
+  const res = window.parseTimeMatches('昨天 ' + fmtDate(yest) + ' 开过会');
+  assert.strictEqual(res.length, 1, 'v5.39 起过期时间仍返回（供 chip 显示「已过期」）');
+  assert.strictEqual(res[0].expired, true, '必须带 expired 标记');
+  assert.strictEqual(res[0].at, yest.getTime(), '时间戳精确');
+  // 未来时间不得带 expired
+  const fu = window.parseTimeMatches(fmtDate(futureDate(1, 7, 5)));
+  assert.strictEqual(fu[0].expired, false, '未来时间 expired 必须为 false');
 });
 
 // ── TC5：非法值不命中 ─────────────────────────────────────
@@ -239,10 +245,74 @@ test('TC12 selectionchange 后光标在时间上浮出 chip，移开隐藏', asy
   await sleep(400);
   assert.ok(!chip.classList.contains('hidden'), '光标落在时间上 chip 必须浮出');
   assert.ok(chip.textContent.includes('设提醒'), 'chip 文案应含「设提醒」');
+  assert.ok(chip.textContent.includes('· 开'), 'chip 文案应含时间后文提取的事项（v5.39）');
+  assert.strictEqual(chip.classList.contains('expired'), false, '未来时间 chip 不得是过期态');
 
   place(0);
   await sleep(400);
   assert.ok(chip.classList.contains('hidden'), '光标移到非时间处 chip 必须隐藏');
+});
+
+// ── TC12b：过期时间 → chip 灰态「已过期」不可点 ───────────
+test('TC12b 光标落过期时间上 chip 显示已过期灰态且点击无效', async t => {
+  const app = freshApp();
+  t.after(() => app.dom.window.close());
+  const { window, document, editor } = app;
+  const key = await makeKey();
+  const noteCt = await window.encryptText('x', key);
+  const puts = mockCapture(window, { v: 5, ct: noteCt.ct, iv: noteCt.iv, salt: 'x' }, 6);
+  await window.applyUnlocked(key, { v: 5, ct: noteCt.ct, iv: noteCt.iv, salt: 'x' });
+
+  const past = new Date(Date.now() - 3600e3);
+  const S = fmtDate(past);
+  editor.innerHTML = '<div>昨天开会 ' + S + '</div>';
+  const tn = editor.querySelector('div').firstChild;
+  const idx = tn.nodeValue.indexOf(S);
+  const chip = document.getElementById('timeChip');
+
+  const range = document.createRange();
+  range.setStart(tn, idx + 2); range.setEnd(tn, idx + 2);
+  const sel = window.getSelection();
+  sel.removeAllRanges(); sel.addRange(range);
+  document.dispatchEvent(new window.Event('selectionchange'));
+  await sleep(400);
+  assert.ok(!chip.classList.contains('hidden'), '过期时间也必须浮出 chip（不再无声无息）');
+  assert.ok(chip.textContent.includes('已过期'), '文案必须标明已过期');
+  assert.strictEqual(chip.classList.contains('expired'), true, '必须挂 expired 灰态类');
+
+  chip.dispatchEvent(new window.Event('mousedown'));
+  await sleep(50);
+  assert.strictEqual(puts.length, 0, '过期 chip 点击不得发出 PUT');
+  assert.ok(chip.textContent.includes('已过期'), '点击后仍是过期文案（未设上）');
+});
+
+// ── TC12c：提醒面板开着时 chip 仍浮出（v5.39 去互斥）──────
+test('TC12c 面板打开时光标落时间上 chip 照常浮出且下移错位', async t => {
+  const app = freshApp();
+  t.after(() => app.dom.window.close());
+  const { window, document, editor } = app;
+  const key = await makeKey();
+  const noteCt = await window.encryptText('x', key);
+  mockCapture(window, { v: 5, ct: noteCt.ct, iv: noteCt.iv, salt: 'x' }, 5);
+  await window.applyUnlocked(key, { v: 5, ct: noteCt.ct, iv: noteCt.iv, salt: 'x' });
+
+  const S = fmtDate(futureDate(1, 7, 5));
+  editor.innerHTML = '<div>会议 ' + S + ' 开</div>';
+  const tn = editor.querySelector('div').firstChild;
+  const idx = tn.nodeValue.indexOf(S);
+  const chip = document.getElementById('timeChip');
+
+  window.toggleRemPanel(true);
+  assert.ok(!document.getElementById('remPanel').classList.contains('hidden'), '前置：面板已开');
+
+  const range = document.createRange();
+  range.setStart(tn, idx + 2); range.setEnd(tn, idx + 2);
+  const sel = window.getSelection();
+  sel.removeAllRanges(); sel.addRange(range);
+  document.dispatchEvent(new window.Event('selectionchange'));
+  await sleep(400);
+  assert.ok(!chip.classList.contains('hidden'), '面板开着 chip 也必须浮出（去互斥）');
+  assert.strictEqual(chip.classList.contains('below-panel'), true, '面板开着时 chip 必须下移错位');
 });
 
 // ── TC13：集成：点 chip → addReminder 走真实 PUT ──────────
@@ -276,5 +346,6 @@ test('TC13 chip 点击触发 addReminder（PUT 带 rem）并显示已设反馈',
   assert.ok(last.rem, '点 chip 必须走 addReminder 完整保存');
   const payload = await remPayload(window, key, last);
   assert.strictEqual(payload.list[0].at, expectedAt, '提醒时间必须来自被点的时间文本');
+  assert.strictEqual(payload.list[0].text, '开', '事项必须取时间同行后文（「会议 … 开」→ 开），不再用笔记首行');
   assert.ok(chip.textContent.indexOf('✓ 已设') === 0, 'chip 应显示已设反馈');
 });

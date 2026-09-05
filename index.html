@@ -65,12 +65,21 @@
   #remCardList .rem-item{display:flex;flex-direction:column;gap:1px}
   #remCardList .rem-when{font-size:13.5px}
   #remCardList .rem-late{color:var(--muted);font-size:11.5px}
-  #remCardAck{align-self:flex-end;padding:7px 18px;font-size:13px;color:var(--bg);background:var(--fg);border:0;border-radius:9px;cursor:pointer;transition:opacity .2s;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
-  #remCardAck:hover{opacity:.85}
+  /* v5.39：button→div 伪按钮 + 描边样式（border/文字同源 --fg、透明底）——
+     原反色对（color:var(--bg);background:var(--fg)）在国产浏览器夜间模式强制深色下被改成"全黑"；
+     div 不受表单控件强制样式影响，描边方案任何反色环境下边框与文字都可见 */
+  #remCardAck{align-self:flex-end;padding:7px 18px;font-size:13px;color:var(--fg);background:transparent;border:1px solid var(--fg);border-radius:9px;cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+  #remCardAck:hover,#remCardAck:active{opacity:.75}
   #timeChip{position:fixed;top:54px;left:50%;transform:translateX(-50%);z-index:56;padding:7px 14px;font-size:12.5px;color:var(--fg);background:var(--box-bg);border:1px solid var(--line);border-radius:999px;box-shadow:0 4px 16px rgba(0,0,0,.16);cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:manipulation;-webkit-tap-highlight-color:transparent;white-space:nowrap;max-width:92vw;overflow:hidden;text-overflow:ellipsis}
+  /* v5.39：chip 与提醒面板去互斥——面板开着时 chip 下移一行错位显示 */
+  #timeChip.below-panel{top:104px}
+  /* v5.39：过期时间 chip 灰态（识别到但不可设，不再无声无息） */
+  #timeChip.expired{color:var(--muted);cursor:default;border-style:dashed}
   #timeChip.hidden{display:none}
   #remPanel{top:54px;flex-wrap:wrap;row-gap:6px}
   #remPanel input{padding:4px 8px;font-size:12px;font-family:inherit;color:var(--fg);background:transparent;border:1px solid var(--line);border-radius:8px;color-scheme:inherit}
+  /* v5.39：所选时刻已过时输入框加深提示（不引新颜色值，用 --fg 加重边框） */
+  #remPanel input.bad{border-color:var(--fg);border-width:2px}
   #remBtn.on{color:var(--fg);background:var(--hover)}
   .hintbar button{flex-shrink:0;padding:4px 10px;font-size:12px;color:var(--fg);background:none;border:1px solid var(--line);border-radius:8px;cursor:pointer;transition:border-color .2s;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
   .hintbar button:hover{border-color:var(--muted)}
@@ -193,7 +202,7 @@
 <div id="remCard" class="hidden">
   <div id="remCardTitle">⏰ 提醒</div>
   <div id="remCardList"></div>
-  <button type="button" id="remCardAck">知道了</button>
+  <div id="remCardAck" role="button" tabindex="0">知道了</div>
 </div>
 <div id="timeChip" class="hidden"></div>
 <div id="remPanel" class="hintbar hidden"></div>
@@ -266,7 +275,7 @@ const PBKDF2_ITER = 200000;
 const FAIL_LIMIT = 10;
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '5.38';
+const APP_VERSION = '5.39';
 const BUILD_DATE = '2026-09-05';
 
 const $ = s => document.querySelector(s);
@@ -2523,10 +2532,12 @@ let reminders = [], remCipher = null, remTimer = null, remPanelOpen = false;
 let cardShownAts = []; // 当前卡片展示的提醒时间戳，「知道了」据此全部标记
 let chipFeedbackUntil = 0; // chip「已设」反馈窗口内不再被 selectionchange 改写
 
-function noteFirstLine() {
-  const b = editor.querySelector('div, p');
-  const t = ((b || editor).textContent || '').trim();
-  return t ? (t.length > 20 ? t.slice(0, 20) + '…' : t) : '';
+// v5.39：提醒事项 = 时间串同行的后文（trim 后截 20 字），无后文为空——
+// 不再自动用笔记首行（用户拍板：留空就留空）；面板事项输入框同样可留空
+function itemAfterMatch(text, m) {
+  let s = (text || '').slice(m.index + m.length).trim();
+  if (!s) return '';
+  return s.length > 20 ? s.slice(0, 20) + '…' : s;
 }
 function fmtRemTime(at) {
   const d = new Date(at), now = new Date();
@@ -2552,8 +2563,9 @@ function collectTimeMatches(text) {
   while ((m = reFull.exec(text)) !== null) {
     spans.push([m.index, m.index + m[0].length]);
     const at = resolveTimeAt(+m[1], +m[2], +m[3], +m[4], +m[5]);
-    if (at === null || at <= Date.now() + 30000) continue; // 非法/过去不命中，但区间已占位防二次命中
-    res.push({ at: at, index: m.index, length: m[0].length });
+    if (at === null) continue; // 非法值不命中（区间已占位防二次命中）
+    // v5.39：过期时间仍返回但标 expired——chip 显示「已过期」灰态，不再无声无息
+    res.push({ at: at, index: m.index, length: m[0].length, expired: at <= Date.now() + 30000 });
   }
   const overlaps = i => spans.some(s => i >= s[0] && i < s[1]);
   const pushShort = m => {
@@ -2561,8 +2573,8 @@ function collectTimeMatches(text) {
     const now = new Date();
     let at = resolveTimeAt(now.getFullYear(), +m[1], +m[2], +m[3], +m[4]);
     if (at !== null && at <= Date.now()) at = resolveTimeAt(now.getFullYear() + 1, +m[1], +m[2], +m[3], +m[4]);
-    if (at === null || at <= Date.now() + 30000) return;
-    res.push({ at: at, index: m.index, length: m[0].length });
+    if (at === null) return;
+    res.push({ at: at, index: m.index, length: m[0].length, expired: at <= Date.now() + 30000 });
   };
   const reShort = /(\d{1,2})[-/](\d{1,2})[ T](\d{1,2}):(\d{2})/g;
   while ((m = reShort.exec(text)) !== null) pushShort(m);
@@ -2601,16 +2613,29 @@ function caretInfoInEditor() {
 // ── v5.37 时间 chip：光标落在时间文本上时浮出「设提醒」快捷入口 ──
 // chip 是编辑器外的独立浮层；点 chip 即设提醒（pointerdown 三连 preventDefault，与工具栏按钮同套路防焦点丢失）
 let chipData = null, chipTimer = null;
-function hideTimeChip() { chipData = null; timeChip.classList.add('hidden'); }
+function hideTimeChip() { chipData = null; timeChip.classList.add('hidden'); timeChip.classList.remove('expired'); }
 function maybeShowTimeChip() {
   if (Date.now() < chipFeedbackUntil) return; // 「✓ 已设」反馈展示中
+  // v5.39：去掉与提醒面板的互斥（面板开着也出 chip，CSS 下移错位）；卡片打开仍互斥
   if (!cryptoKey || editor.getAttribute('contenteditable') === 'false' || isComposing ||
-      remPanelOpen || !remCard.classList.contains('hidden')) { hideTimeChip(); return; }
+      !remCard.classList.contains('hidden')) { hideTimeChip(); return; }
   const info = caretInfoInEditor();
-  const m = info ? matchTimeAt(info.text, info.offset) : null;
+  if (!info) { hideTimeChip(); return; }
+  const m = matchTimeAt(info.text, info.offset);
   if (!m) { hideTimeChip(); return; }
-  chipData = m;
-  timeChip.textContent = '⏰ 设提醒：' + fmtRemTime(m.at);
+  timeChip.classList.toggle('below-panel', remPanelOpen);
+  if (m.expired) {
+    // v5.39：过期时间不再无声无息——灰态标明「已过期」，不可点
+    chipData = null;
+    timeChip.textContent = '⏰ 已过期 ' + fmtRemTime(m.at);
+    timeChip.classList.add('expired');
+    timeChip.classList.remove('hidden');
+    return;
+  }
+  const item = itemAfterMatch(info.text, m);
+  chipData = { at: m.at, item: item };
+  timeChip.textContent = '⏰ 设提醒：' + fmtRemTime(m.at) + (item ? ' · ' + item : '');
+  timeChip.classList.remove('expired');
   timeChip.classList.remove('hidden');
 }
 document.addEventListener('selectionchange', () => {
@@ -2620,13 +2645,14 @@ document.addEventListener('selectionchange', () => {
 function chipActivate(e) {
   if (e.button !== undefined && e.button !== 0) return;
   e.preventDefault();
+  if (timeChip.classList.contains('expired')) return; // 过期 chip 不可点
   if (!chipData) return;
-  const at = chipData.at;
+  const at = chipData.at, item = chipData.item;
   chipData = null; // 先消费：pointerdown/touchstart/mousedown 三连触发只生效一次
   chipFeedbackUntil = Date.now() + 1500;
   askRemPermission();
-  addReminder(at, noteFirstLine());
-  timeChip.textContent = '✓ 已设 ' + fmtRemTime(at);
+  addReminder(at, item);
+  timeChip.textContent = '✓ 已设 ' + fmtRemTime(at) + (item ? ' · ' + item : '');
   clearTimeout(chipTimer);
   setTimeout(hideTimeChip, 1500);
 }
@@ -2807,71 +2833,54 @@ remCardAck.addEventListener('click', () => {
   cardShownAts = [];
   remCard.classList.add('hidden');
 });
+remCardAck.addEventListener('keydown', e => { // v5.39 div 伪按钮保留键盘可达性
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); remCardAck.click(); }
+});
 function renderRemBtn() {
   remBtn.classList.toggle('on', reminders.some(r => r.at > Date.now()));
 }
-function remQuickTargets() {
-  const now = new Date();
-  const eve = new Date(now); eve.setHours(20, 0, 0, 0);
-  const evePast = eve.getTime() <= now.getTime();
-  if (evePast) eve.setDate(eve.getDate() + 1);
-  const mor = new Date(now); mor.setDate(mor.getDate() + 1); mor.setHours(9, 0, 0, 0);
-  return [
-    { label: '1 小时后', at: Date.now() + 3600e3 },
-    { label: evePast ? '明晚 8 点' : '今晚 8 点', at: eve.getTime() },
-    { label: '明天上午 9 点', at: mor.getTime() }
-  ];
-}
+// v5.39 面板极简重构（用户拍板）：删快捷按钮/「提醒我：」「再加：」标签/常驻发现性提示；
+// 时间选择器默认=当前时间；新增事项输入框（可留空，placeholder 不再取笔记首行）；
+// 所选时刻已过 → 时间框加重提示且不设；iOS 通知提示保留（仅适用环境出现）
 function renderRemPanel() {
   remPanel.innerHTML = '';
   hideTimeChip();
-  const upcoming = reminders.filter(r => r.at > Date.now());
-  if (upcoming.length) {
-    const s = document.createElement('span');
-    s.textContent = '已设 ' + upcoming.length + ' 条：' + upcoming.map(r => fmtRemTime(r.at)).join('、');
-    remPanel.appendChild(s);
-    upcoming.forEach(r => {
-      const off = document.createElement('button');
-      off.type = 'button';
-      off.textContent = '× ' + fmtRemTime(r.at);
-      off.title = '取消 ' + fmtRemTime(r.at) + (r.text ? ' · ' + r.text : '');
-      off.addEventListener('click', () => {
-        removeReminder(r.at).then(() => toggleRemPanel(reminders.some(x => x.at > Date.now())));
-      });
-      remPanel.appendChild(off);
+  reminders.filter(r => r.at > Date.now()).forEach(r => {
+    const off = document.createElement('button');
+    off.type = 'button';
+    off.textContent = '× ' + fmtRemTime(r.at) + (r.text ? ' ' + r.text : '');
+    off.title = '取消这条提醒';
+    off.addEventListener('click', () => {
+      removeReminder(r.at).then(() => toggleRemPanel(reminders.some(x => x.at > Date.now())));
     });
-    const addLabel = document.createElement('span');
-    addLabel.textContent = '再加：';
-    remPanel.appendChild(addLabel);
-  } else {
-    const s = document.createElement('span');
-    s.textContent = '提醒我：';
-    remPanel.appendChild(s);
-  }
-  remQuickTargets().forEach(q => {
-    const b = document.createElement('button');
-    b.type = 'button'; b.textContent = q.label;
-    b.addEventListener('click', () => { askRemPermission(); addReminder(q.at, noteFirstLine()); toggleRemPanel(false); });
-    remPanel.appendChild(b);
+    remPanel.appendChild(off);
   });
   const inp = document.createElement('input');
-  inp.type = 'datetime-local'; inp.setAttribute('aria-label', '自定义提醒时间');
+  inp.type = 'datetime-local';
+  inp.setAttribute('aria-label', '提醒时间');
+  const nd = new Date(); // 默认 = 当前时间（用户要求）；已过时刻由「定时」红边拦截
+  inp.value = nd.getFullYear() + '-' + String(nd.getMonth() + 1).padStart(2, '0') + '-' + String(nd.getDate()).padStart(2, '0') + 'T' + String(nd.getHours()).padStart(2, '0') + ':' + String(nd.getMinutes()).padStart(2, '0');
   remPanel.appendChild(inp);
+  const item = document.createElement('input');
+  item.type = 'text';
+  item.placeholder = '事项（可留空）';
+  item.maxLength = 20;
+  item.setAttribute('aria-label', '提醒事项');
+  remPanel.appendChild(item);
   const ok = document.createElement('button');
   ok.type = 'button'; ok.textContent = '定时';
   ok.addEventListener('click', () => {
-    const v = inp.value;
-    if (!v) return;
-    const at = new Date(v).getTime();
-    if (!at || at <= Date.now()) return;
+    const at = inp.value ? new Date(inp.value).getTime() : 0;
+    if (!at || at <= Date.now()) {
+      inp.classList.add('bad'); // 已过/无效：加重边框提示，不设
+      setTimeout(() => inp.classList.remove('bad'), 900);
+      return;
+    }
     askRemPermission();
-    addReminder(at, noteFirstLine());
+    addReminder(at, item.value.trim());
     toggleRemPanel(false);
   });
   remPanel.appendChild(ok);
-  const tip = document.createElement('span');
-  tip.textContent = '提示：笔记里写了时间（如 2026-09-02 07:00），光标点进去就能设提醒';
-  remPanel.appendChild(tip);
   if (isIOSDevice() && !isStandaloneMode() && typeof window.Notification === 'undefined') {
     const iosTip = document.createElement('span');
     iosTip.textContent = 'iOS 需先添加到主屏幕才能收到通知（仍可设置，下次打开会提示）';
