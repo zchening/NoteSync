@@ -270,3 +270,21 @@ test('无校准 + 非高风险 UA（jsdom 默认）：darkShellActive 判定为�
   assert.strictEqual(w.document.getElementById('theme-shell'), null);
   assert.strictEqual(schemeOf(w), 'only light');
 });
+
+// ── v5.38：浮层提示条背景必须实底 ──────────────────────────────
+// 根因回顾：.hintbar（remPanel/draftBar/installBar）与 #versionToast 原用 var(--hover)
+// = rgba(...,.05)，95% 透明，浮在正文上透出笔记文字，被误认为"面板沉到文字后面"。
+// 修复 = 背景改 var(--box-bg)（实底、随主题）；按钮 hover 态的 --hover 不受影响。
+test('v5.38：提示条与版本 toast 背景必须实底 var(--box-bg)，不得用半透明 --hover', () => {
+  const grab = re => {
+    const m = SRC.match(re);
+    assert.ok(m, '应能在 index.html 中匹配到规则');
+    return m[0];
+  };
+  const hintbar = grab(/\.hintbar\{[^}]*\}/);
+  assert.ok(hintbar.includes('background:var(--box-bg)'), '.hintbar 背景应为实底 var(--box-bg)');
+  assert.ok(!hintbar.includes('background:var(--hover)'), '.hintbar 不得再用半透明 --hover 背景');
+  const toast = grab(/#versionToast\{[^}]*\}/);
+  assert.ok(toast.includes('background:var(--box-bg)'), '#versionToast 背景应为实底 var(--box-bg)');
+  assert.ok(!toast.includes('background:var(--hover)'), '#versionToast 不得再用半透明 --hover 背景');
+});

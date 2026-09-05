@@ -46,11 +46,13 @@
   header button{display:flex;align-items:center;justify-content:center;width:31px;height:31px;color:var(--muted);background:none;border:0;border-radius:8px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:color .2s,background .2s}
   header button:hover{color:var(--fg);background:var(--hover)}
   header button svg{width:17px;height:17px;pointer-events:none}
-  #versionToast{position:fixed;top:54px;left:50%;transform:translateX(-50%);z-index:60;padding:7px 14px;font-size:12px;letter-spacing:.04em;color:var(--fg);background:var(--hover);border:1px solid var(--line);border-radius:20px;opacity:0;pointer-events:none;transition:opacity .35s;box-shadow:0 4px 16px rgba(0,0,0,.12)}
+  #versionToast{position:fixed;top:54px;left:50%;transform:translateX(-50%);z-index:60;padding:7px 14px;font-size:12px;letter-spacing:.04em;color:var(--fg);background:var(--box-bg);border:1px solid var(--line);border-radius:20px;opacity:0;pointer-events:none;transition:opacity .35s;box-shadow:0 4px 16px rgba(0,0,0,.12)}
   #versionToast.show{opacity:1}
   /* v5.35 草稿冲突条（顶部）/安装引导条（底部）：颜色全用主题变量——跟随内部主题，
-     借壳滤镜自动翻色，无需进三处反色覆盖块；禁用新颜色值的纪律同提醒卡片 */
-  .hintbar{position:fixed;left:50%;transform:translateX(-50%);z-index:55;display:flex;align-items:center;gap:10px;padding:8px 14px;font-size:12.5px;color:var(--fg);background:var(--hover);border:1px solid var(--line);border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.12);max-width:92vw}
+     借壳滤镜自动翻色，无需进三处反色覆盖块；禁用新颜色值的纪律同提醒卡片。
+     v5.38：背景由 rgba(--hover)（95% 透明）改实底 var(--box-bg)——透明背景浮在正文上
+     会透出笔记文字，被误认为"面板沉到文字后面"（z-index 无问题） */
+  .hintbar{position:fixed;left:50%;transform:translateX(-50%);z-index:55;display:flex;align-items:center;gap:10px;padding:8px 14px;font-size:12.5px;color:var(--fg);background:var(--box-bg);border:1px solid var(--line);border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.12);max-width:92vw}
   .hintbar.hidden{display:none}
   #draftBar{top:54px}
   #installBar{bottom:16px}
@@ -264,7 +266,7 @@ const PBKDF2_ITER = 200000;
 const FAIL_LIMIT = 10;
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '5.37';
+const APP_VERSION = '5.38';
 const BUILD_DATE = '2026-09-05';
 
 const $ = s => document.querySelector(s);

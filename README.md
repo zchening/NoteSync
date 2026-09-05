@@ -326,6 +326,7 @@ bash install.sh
 
 | 版本 | 日期 | 摘要 |
 |------|------|------|
+| v5.38 | 2026-09-05 | 提醒面板/草稿条/安装条/版本提示改实底，不再透出笔记文字 |
 | v5.37 | 2026-09-05 | 多条提醒 + 笔记时间点按设提醒 + 醒目卡片响铃；移除待办 |
 | v5.36 | 2026-09-05 | 便签提醒：快捷时间一键设，到点通知，关页下次补弹 |
 | v5.35 | 2026-09-04 | 离线草稿：断网写不丢，冲突时弹条自选；安装引导 |
@@ -381,7 +382,9 @@ bash install.sh
 | v1.0 | 2026-07-21 | 初始版本，纯文字端到端加密同步 |
 
 <details>
-<summary>完整更新详情（共 48 个版本）</summary>
+<summary>完整更新详情（共 49 个版本）</summary>
+
+- **v5.38**：修复浮层提示条透出笔记文字——用户报「点闹钟弹出框在笔记文字后面」，取证为 `.hintbar`（remPanel/draftBar/installBar 三条共用）与 `#versionToast` 背景用 `var(--hover)`=rgba(...,.05)（95% 透明），浮在正文上文字透出被误判层级（z-index:55/60 本身无问题，v5.24 起就存在，v5.37 面板变大变常用才显眼）。修复：两处背景改实底 `var(--box-bg)`（随日/夜主题，与提醒卡片/时间 chip 同材质）；按钮 hover 态的 `--hover` 半透明不动；深色壳覆盖块（动态 `${p.bg}` 与静态 `#040407`）本就是实底无需改。测试：theme.test.js 新增实底断言（正则抓规则文本，断言含 `var(--box-bg)` 且不含 `var(--hover)`），jsdom 117/117 + E2E 18/18 = 135 全绿。⚠ 工程坑：同一文件多处 Edit 并行下发会竞态覆盖（.hintbar 改动把 versionToast 改动冲掉，回归断言当场抓住），同文件多处修改必须串行执行
 
 - **v5.37**：多条提醒 + 笔记时间识别点击设提醒 + 实底提醒卡片；移除待办功能。**多条提醒**——rem 密文字段不变（服务端零改动、零知识不破），明文 `{at,text}` → `{list:[{at,text}...]}`（升序、上限 10 条），读取旧格式自动迁移；REM_DONE 由单时间戳改 JSON map（旧值兼容）；调度最近一条、触发后自动排下一条；面板逐条「×」取消、快捷按钮变「再加」。**时间识别**——纯函数 `parseTimeMatches`/`matchTimeAt`：支持 `2026-09-02 07:00`、`2026/9/6 7:05`、`9-6 07:00`（无年份补当年、已过进位明年）、`9月8日 08:30`；过去时间（含 30 秒内）不命中；光标落在时间文本上（selectionchange 防抖 250ms）浮出 `#timeChip`「⏰ 设提醒」，点 chip 即 addReminder（pointerdown/touchstart/mousedown 三连 preventDefault 防焦点丢失，chipData 先消费防三连双触发）；**不改正文 DOM**（linkify 拍平 span 的约束），chip 是编辑器外浮层。**提醒卡片**——remBar 半透明提示条退役，改 `#remCard` 居中实底卡片（var(--box-bg)/var(--fg)/var(--line) 主题变量，不进三处反色覆盖块），多条列表 + 已过时长 + 「知道了」全清；fireReminder 无条件弹卡片（页内主通道不再依赖通知权限）+ WebAudio 双音（页面可见时）+ navigator.vibrate 震动。**移除待办**（v5.34 引入，整体下线）——删 todoBtn 按钮 + 创建链 + 勾选链 + 方框 CSS + 11 项测试；工具栏回 8 个按钮；旧笔记里 class="todo" 残留无害，渲染退化普通文本。锁定时同步清提醒态（卡片/chip/面板全收）。测试：reminder.test.js 重写 15 项（list 上传/迁移/多条补弹/REM_DONE map/旧 done 兼容/显式 null/上限/同刻覆盖/单条触发/SW 通知/面板/server 语义/锁定清理），新增 timechip.test.js 13 项（正则解析/边界/集成 chip），jsdom 116/116 + E2E 18/18 = 134 全绿。⚠ 跨 realm 坑：jsdom window 创建的数组与 Node 数组 deepStrictEqual 原型不等，断言空数组改用 length；jsdom 无 PointerEvent，pointerdown 监听未挂载，集成测试走 mousedown
 - **v5.36**：便签提醒（L1+L2 本地方案，不上 Web Push——那需要服务端存明文提醒时间，零知识破防）。**数据**：`rem` 字段与正文同一把 key 加密的 `{ct,iv}` JSON 串，`server.js` PUT 透传时**显式传参才更新、未传保留原值**（`obj.rem !== undefined` 判断，null 是显式取消）——否则任何一台设备的普通正文保存都会抹掉另一台设备刚设的提醒；服务端依旧只见密文。**设置**：工具栏第 9 个按钮（闹钟），面板快捷「1 小时后 / 今晚 8 点（过 20:00 自动变明晚）/ 明天上午 9 点 / datetime-local 自定义」，默认文案取笔记首行截 20 字；设置即完整保存（正文 + rem 一起 PUT，v 递增 SSE 广播其他设备实时拿到）；权限 `requestPermission` 只在用户主动设提醒时申请，被拒自动降级。**触发三通道**：① 页内 `setTimeout` → SW `showNotification`（tag 固定 `notesync-rem` 系统去重）或 `new Notification`；② 过期未确认 → 解锁时 `loadReminder` 补弹 `remBar` 提示条「已过 N 分钟」（唯一 100% 兜底，`REM_DONE` 时间戳防同机重复弹，跨设备重复弹接受）；③ Notification Triggers API 探测性支持（`showTrigger` in Notification.prototype，至今未正式落地，不指望）。**iOS 未装 PWA**：面板内如实提示「需先添加到主屏幕才能收到通知」，不装糊涂；sw.js 补 `notificationclick`（聚焦已开窗口否则打开）；`Math.min(at-now, 2^31-1)` 防 setTimeout 溢出。按钮高亮态 `#remBtn.on` 用 `var(--fg)/var(--hover)` 不引新色。测试：新增 `unit/reminder.test.js` 11 项（rem 上传/恢复调度/过期补弹/确认去重/显式 null 取消/权限降级/SW 通知/首行截断/面板渲染/server 透传语义/无 pushManager），jsdom 110/110 + E2E 18/18 = 128 全绿。⚠ 测试教训：页面顶层 `let` 声明（reminder 等）是**词法绑定不挂 window**，测试不能 `window.reminder` 读/写——必须走真实函数路径（`setReminder`）建立状态，直接赋值 `window.reminder=x` 是无效属性
