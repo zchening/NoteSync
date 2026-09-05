@@ -60,8 +60,9 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
+    // 必须是 public：BridgeActivity.onResume() 是 public，override 收窄为 protected 会编译失败
     @Override
-    protected void onResume() {
+    public void onResume() {
         super.onResume();
         if (pendingRemNotifyClick) {
             dispatchRemNotifyClick();
