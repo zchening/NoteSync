@@ -35,7 +35,7 @@
 | I | 链接转换/粘贴/保存可靠性 | 6 | 修改 linkifyEditor / buildLinkSafe / trimUrlTrailing / urlRegex / paste 处理 / pasteTextNative / input 处理器 busy 分支 / saveLocal / scheduleSaveRetry / flushDirtySave / fetchRetry / copyBtn |
 | J | 二维码配对 | 2 | 修改 tryPairingUnlock / parsePairingKey / buildPairingUrl / drawQrTo / revealQr / resetQrHolder / qrBtn 弹层 / b64ToUrlSafe·urlSafeToB64 |
 | K | 服务端遗留缺陷（Open） | 2 | 修改 server.js 静态分支（GET/HEAD、/.well-known/ 路由）——K1/K2 确诊未修复 |
-| L | 提醒与闹钟 UI | 7 | 修改 remPanel / remCard / focusRemTimeInput / 响铃 playRemSound / unlockRemAudio / 时间识别 chip / insertRemLine / rem-mark 标记 / reminder 数据结构 |
+| L | 提醒与闹钟 UI | 8 | 修改 remPanel / remCard / focusRemTimeInput / 响铃 playRemSound / unlockRemAudio / 时间识别 chip / insertRemLine / rem-mark 标记 / reminder 数据结构 |
 
 ---
 
@@ -965,23 +965,24 @@
   - [ ] 手机打开面板不自动聚焦、面板居中不回归
   - [ ] 默认时间仍是当前 +5 分钟；已过时刻三框同标 accent 拦截
 
-### L6 | 面板添加提醒 → 正文回写 + 下划线标记 + 过期变灰（linkify 管理制）
-- **版本**: v5.45
+### L6 | 面板添加提醒 → 正文回写 + 下划线标记（linkify 管理制；v5.46 只包时间串）
+- **版本**: v5.45（v5.46 语义修订：下划线只包时间串、过期完全回归普通正文）
 - **要点**:
   - 面板添加成功 → `insertRemLine` 在**光标所在处**回写 `YYYY-M-D H:MM · 事项`（完整格式保证识别命中；事项空只写时间）；走 `insertNodeAtCaret` 纯 DOM 插入（input 事件链照常：撤销单步可撤/800ms 保存/500ms linkify）
-  - 已设提醒的时间+紧随「· 事项」整段包 `u.rem-mark`（下划线）；**解析值必须存在于提醒列表才包**（未添加的日期绝不标记）；`u.rem-mark` 由 linkify 先拆后建统一管理（删提醒→标记消失）
-  - 已过期/已提醒过（REM_DONE）→ `u.rem-mark.rem-past` 变灰（保留下划线）；markRemDone/unmarkRemDone/addReminder/removeReminder 均挂 `scheduleRemMarkRefresh()`（400ms 防抖 linkify）
-  - u 元素盒在该内核夜间可能吃字 → 动态板+SHELL_CSS 双板锁色（color/text-fill/text-decoration-color/background:none）
+  - 已设提醒的**时间串**包 `u.rem-mark`（下划线）——v5.45 整段（时间+·事项）方案退役，事项不带下划线；**解析值必须存在于提醒列表才包**（未添加的日期绝不标记）；`u.rem-mark` 由 linkify 先拆后建统一管理（删提醒→标记消失）
+  - v5.46：已过期/已提醒过（REM_DONE）→ **完全不产标记**（视觉与普通正文一致，无下划线不变灰；v5.45 的 rem-past 灰态样式三处退役）；markRemDone/unmarkRemDone/addReminder/removeReminder 均挂 `scheduleRemMarkRefresh()`（400ms 防抖 linkify）；hasRemText 早退条件同步排除过期时间
+  - u 元素盒在该内核夜间可能吃字 → 动态板+SHELL_CSS 双板锁色（color/text-fill/text-decoration-color）
 - **关联文件**: index.html → insertRemLine() / remMatchesFor() / buildLinkSafe() / linkifyEditor() / scheduleRemMarkRefresh()
 - **核对要点**:
   - [ ] 面板添加后正文光标处出现时间行且当场带下划线（e2e V545-1）
+  - [ ] 下划线只覆盖时间串，` · 事项` 不带（e2e V545-1）
   - [ ] Ctrl+Z 一次撤销整行回写
   - [ ] 未设提醒的日期无任何标记（e2e V545-3）
-  - [ ] 到点确认后正文对应文本变灰；删除提醒后下划线消失
+  - [ ] 到点确认后标记消失回归普通正文（不变灰）；删除提醒后下划线消失
   - [ ] linkify 域早退条件含 remMarks/hasRemText（否则标记刷不出来）
 
 ### L7 | chip 文案改版 + 两行确认卡 + 过期零打扰
-- **版本**: v5.45
+- **版本**: v5.45（v5.46 补充：已添加时间悬停展示卡，见 L8）
 - **要点**: 未来时间 chip = `时间 · 事项`（裸文本节点）+ 蓝色 CTA「添加提醒」（span，浅 #2563EB/深 #7EB1FF，双板锁色）；点添加 → 两行确认卡（第一行「✅ 提醒已添加」/第二行「时间 · 事项」）停留 3s；过期时间**完全不浮 chip**（零打扰，旧「已过期」灰态退役）；chip 尺寸 14px/10px 18px 更明显
 - **关联文件**: index.html → maybeShowTimeChip() / chipActivate() / #timeChip CSS
 - **核对要点**:
@@ -989,6 +990,20 @@
   - [ ] 点后两行确认卡：✅ 提醒已添加 / 时间 · 事项，3 秒消失
   - [ ] 过期时间光标移上零 chip（e2e V545-4）
   - [ ] chip 加大后不遮挡正文操作（仍顶部居中 fixed）
+
+### L8 | 已添加的未来时间悬停两行展示卡（纯展示/移开即消失）
+- **版本**: v5.46（用户拍板：已添加的时间不再显示「时间·事项 添加提醒」CTA，改两行展示卡）
+- **要点**:
+  - `maybeShowTimeChip` 在 `m.expired` 早退之后新增分支：`reminders.some(r => r.at === m.at)` → chip 复用 `feedback` 两行样式（圆角/居中/默认光标），第一行「✅ 提醒已添加」、第二行「时间 · 事项」（事项空只显时间）
+  - **纯展示不可点**：分支内 `chipData = null`（同时清掉此前 CTA chip 的残留目标，防误触旧 at）；点击走 chipActivate 的 `!chipData` 早退，不发 PUT
+  - **无定时器**：不设 chipFeedbackUntil、不挂 3s setTimeout——光标移开由 selectionchange → maybeShowTimeChip → hideTimeChip 立即消失（与点添加后的 3s 确认卡区分）
+  - 开发期真 bug：hasRemText 引用了 remMatchesFor 的局部 `now` → ReferenceError → 整轮 linkify 罢工、标记建不出；**单测全是源码断言测不出，只有真实浏览器 e2e 暴露**（教训：跨函数引用运行时标识符，必须跑 e2e）
+- **关联文件**: index.html → maybeShowTimeChip() / chipActivate() / linkifyEditor()
+- **核对要点**:
+  - [ ] 已添加的未来时间悬停：两行卡（✅ 提醒已添加 / 时间 · 事项），无 CTA（e2e V546-1）
+  - [ ] 点击展示卡不重复添加（PUT 数不变）
+  - [ ] 光标移开立即消失（无 3 秒拖尾）
+  - [ ] 未添加的未来时间仍是 CTA 形态（e2e V545-2 不回归）；过期时间零打扰（V545-4 不回归）
 
 ---
 
@@ -1020,4 +1035,5 @@
 | v5.20 | J1, J2（均为发布前独立盲测发现并同版修复） |
 | v5.44 | L1, L2, L3, L4（用户四连报一次修净，e2e _verify_v544 4 项固化） |
 | v5.45 | L5, L6, L7（提醒功能四连改：自建时分框/正文回写下划线/chip 改版/过期零打扰，e2e _verify_v545 4 项固化） |
+| v5.46 | L6 修订, L8（下划线只包时间串/过期回归普通正文/已添加悬停两行展示卡，e2e _verify_v545 5 项固化） |
 | v5.14 | H1, H2, H3, H4, C4 |
