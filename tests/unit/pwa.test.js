@@ -2,7 +2,7 @@
 // 草稿是本轮的核心数据保护：此前"离线能写"是假的——保存失败只有退避重试，页面一关内容蒸发。
 // 现在加密成功即落盘 localStorage（密文），本组测试锁死四条生命线：
 //   ① 保存失败 → 草稿在（密文）② 保存成功 → 草稿清
-//   ③ 无冲突重开 → 静默恢复并补传 ④ 有冲突 → 弹条让用户选，绝不自动覆盖
+//   ③ 无冲突重开 → 也弹冲突条确认，不再静默覆盖 ④ 有冲突 → 弹条让用户选，绝不自动覆盖
 // jsdom 无 Web Crypto（http 非 secure context）、无 TextEncoder，注入 Node 的等价实现走真实加解密。
 // ⚠ 所有用例必须 t.after(close)：测试中途 throw 时若不关 jsdom 实例，其内部定时器会让
 //   事件循环永不排空，整个测试进程挂死到超时（todo.test.js 曾踩过同一坑）。
@@ -99,8 +99,8 @@ test('P2 保存成功后草稿被清除', async t => {
   assert.strictEqual(draftOf(localStorage), null, '上传成功后草稿必须清除');
 });
 
-// ── P3：无冲突重开 → 静默恢复 + 自动补传 ─────────────────
-test('P3 无冲突时解锁自动恢复草稿内容并调度补传', async t => {
+// ── P3：无冲突重开 → 也弹冲突条，绝不静默覆盖 ─────────────────
+test('P3 无冲突草稿重开也不再静默覆盖：弹冲突条且编辑器保持服务端内容', async t => {
   const app = freshApp();
   t.after(() => app.dom.window.close());
   const { window, editor, localStorage } = app;
@@ -109,17 +109,18 @@ test('P3 无冲突时解锁自动恢复草稿内容并调度补传', async t => 
   mockOfflinePut(window, {});
   await unlock(window, key, { v: 5, ct: noteCt.ct, iv: noteCt.iv, salt: 'x' });
 
-  // 构造草稿：用户离线写过、关页前的残留
+  // 构造草稿：用户离线写过、关页前的残留（baseV=5 与服务端一致）
   const d = await window.encryptText('<div>离线写的草稿</div>', key);
   window.writeDraft(d.ct, d.iv);
 
   // 模拟重开：服务端版本没变（baseV=5 == note.v=5）
   await unlock(window, key, { v: 5, ct: noteCt.ct, iv: noteCt.iv, salt: 'x' });
 
-  assert.ok(editor.innerHTML.includes('离线写的草稿'), '解锁后应静默恢复草稿到编辑器');
-  // 补传失败（仍离线）时草稿必须保留——这是再下次打开还能恢复的保证
-  await sleep(600); // scheduleDraftResave 400ms 后 saveLocal（失败，重新写草稿）
-  assert.ok(draftOf(localStorage), '补传失败时草稿不能被清掉');
+  const bar = window.document.getElementById('draftBar');
+  assert.ok(!bar.classList.contains('hidden'), '无冲突草稿也必须经用户确认：弹冲突条');
+  assert.ok(!editor.innerHTML.includes('离线写的草稿'), '绝不静默把草稿塞进编辑器');
+  assert.ok(editor.innerHTML.includes('服务端内容'), '编辑器保持服务端内容不动');
+  // 恢复路径仍可用（由 P5 覆盖）；此处仅锁死「不静默覆盖」
 });
 
 // ── P4：有冲突 → 弹条让用户选，绝不自动覆盖 ──────────────
