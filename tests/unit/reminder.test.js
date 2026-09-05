@@ -294,8 +294,8 @@ test('R11 itemAfterMatch 取时间后文作事项，无后文为空（不再用�
   assert.ok(long.length === 21 && long.endsWith('…'), '超长截断 20 字加省略号');
 });
 
-// ── R12：v5.40 模态面板：设置行固定首行、时间默认当前、事项留空、条目排后 ──
-test('R12 模态面板：复用 .box 视觉、设置行首行、时间默认当前、无废话文案', async t => {
+// ── R12：v5.40 模态面板：设置行固定首行、时间默认 +5 分钟、事项留空、条目排后 ──
+test('R12 模态面板：复用 .box+qr-box 居中、设置行首行、时间默认当前+5分钟、无废话文案', async t => {
   const app = freshApp();
   t.after(() => app.dom.window.close());
   const { window, editor } = app;
@@ -309,6 +309,7 @@ test('R12 模态面板：复用 .box 视觉、设置行首行、时间默认当�
   const panel = window.document.getElementById('remPanel');
   assert.ok(!mask.classList.contains('hidden'), '打开后模态可见');
   assert.ok(panel.classList.contains('box'), '面板必须复用 .box 视觉（与扫码配对一致）');
+  assert.ok(panel.classList.contains('qr-box'), 'v5.42 面板必须挂 qr-box（标题/列表文字居中，与配对弹窗一致）');
   let text = panel.textContent;
   assert.ok(!text.includes('1 小时后') && !text.includes('8 点') && !text.includes('明天上午 9 点'), '快捷按钮已删');
   assert.ok(!text.includes('提示：') && !text.includes('提醒我：') && !text.includes('再加：'), '标签与提示语已删');
@@ -316,7 +317,7 @@ test('R12 模态面板：复用 .box 视觉、设置行首行、时间默认当�
   const timeInput = panel.querySelector('input[type="datetime-local"]');
   assert.ok(timeInput && timeInput.value, '时间选择器必须存在且有默认值');
   const picked = new Date(timeInput.value).getTime();
-  assert.ok(Math.abs(Date.now() - picked) < 120000, '默认时间必须是当前时间（±2 分钟）');
+  assert.ok(Math.abs(Date.now() + 300000 - picked) < 120000, 'v5.42 默认时间必须是当前 +5 分钟（±2 分钟容差）');
   const itemInput = panel.querySelector('input[type="text"]');
   assert.ok(itemInput && itemInput.value === '' && itemInput.placeholder.includes('可留空'), '事项框留空且标可留空');
   const form = window.document.getElementById('remBoxForm');
@@ -331,6 +332,7 @@ test('R12 模态面板：复用 .box 视觉、设置行首行、时间默认当�
   window.toggleRemPanel(true);
   const row = list.querySelector('.rem-row');
   assert.ok(row && row.textContent.includes('要办的事'), '已设条目应含事项文案');
+  assert.strictEqual(row.querySelector('span'), null, 'v5.42 行内文字必须是裸文本节点（span 元素盒会被内核夜间模块吃字）');
   const cancelBtn = row.querySelector('button');
   assert.strictEqual(cancelBtn.textContent, '×', '取消按钮为独立 ×');
   cancelBtn.click();

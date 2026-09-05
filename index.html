@@ -77,13 +77,13 @@
   /* v5.40：提醒面板升级为扫码配对同款 .mask+.box 模态（复用 .box 输入框/主按钮样式与深色覆盖保护）；
      设置行（时间/事项/添加提醒）永远首行，已设条目列表排后；chip 与模态互斥（遮罩挡正文） */
   #remBoxForm{display:flex;flex-direction:column;gap:12px;margin:2px 0 18px}
+  #remBoxForm input{text-align:left} /* v5.42：面板整体挂 qr-box 居中，输入件内容保持左对齐 */
   #remBoxForm input[type="datetime-local"]{color-scheme:inherit}
   #remBoxForm input.bad{border-color:var(--accent);box-shadow:0 0 0 3px var(--ring)}
   #remBoxList{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line);padding-top:14px}
   #remBoxList:empty{display:none}
-  #remBoxList .rem-row{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px}
-  #remBoxList .rem-row span{color:var(--fg);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  #remBoxList .rem-row button{flex-shrink:0;padding:4px 12px;font-size:12px;color:var(--fg);background:none;border:1px solid var(--line);border-radius:8px;cursor:pointer;transition:border-color .2s;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+  #remBoxList .rem-row{display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px;font-size:13px;line-height:1.5;color:var(--fg);background:none}
+  #remBoxList .rem-row button{padding:4px 12px;font-size:12px;color:var(--fg);background:none;border:1px solid var(--line);border-radius:8px;cursor:pointer;transition:border-color .2s;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
   #remBoxList .rem-row button:hover{border-color:var(--muted)}
   #remBtn.on{color:var(--fg);background:var(--hover)}
   .hintbar button{flex-shrink:0;padding:4px 10px;font-size:12px;color:var(--fg);background:none;border:1px solid var(--line);border-radius:8px;cursor:pointer;transition:border-color .2s;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
@@ -211,7 +211,7 @@
 </div>
 <div id="timeChip" class="hidden"></div>
 <div class="mask hidden" id="remMask">
-  <div class="box" id="remPanel">
+  <div class="box qr-box" id="remPanel">
     <h1>提醒</h1>
     <div id="remBoxForm"></div>
     <div id="remBoxList"></div>
@@ -286,7 +286,7 @@ const PBKDF2_ITER = 200000;
 const FAIL_LIMIT = 10;
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '5.41';
+const APP_VERSION = '5.42';
 const BUILD_DATE = '2026-09-05';
 
 const $ = s => document.querySelector(s);
@@ -367,7 +367,7 @@ function themeOverrideCss(dark) {
     #remCardList .rem-when{color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important}
     #remCardList .rem-late{color:${p.muted}!important;-webkit-text-fill-color:${p.muted}!important}
     #remCardAck{background:${p.fg}!important;color:${p.bg}!important;-webkit-text-fill-color:${p.bg}!important}
-    #remBoxList .rem-row span{color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important}
+    #remBoxList .rem-row{color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important;background:none!important}
     #remBoxList .rem-row button{background:none!important;color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important;border:1px solid ${p.line}!important}
     #landing{background:radial-gradient(ellipse 720px 480px at 50% 30%,${accentSoft},transparent),${p.bg}!important;color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important}
     #landing h1{color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important}
@@ -442,7 +442,7 @@ const SHELL_CSS = [
   '#remCardList .rem-when{color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important}',
   '#remCardList .rem-late{color:#676A75!important;-webkit-text-fill-color:#676A75!important}',
   '#remCardAck{background:#E3E3E5!important;color:#040407!important;-webkit-text-fill-color:#040407!important}',
-  '#remBoxList .rem-row span{color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important}',
+  '#remBoxList .rem-row{color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important;background:none!important}',
   '#remBoxList .rem-row button{background:none!important;color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important;border:1px solid #13151D!important}',
   '#landing{background:radial-gradient(ellipse 720px 480px at 50% 30%,rgba(112,142,217,.07),transparent),#040407!important;color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important}',
   '#landing h1{color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important}',
@@ -2874,7 +2874,7 @@ function renderRemPanel() {
   const inp = document.createElement('input');
   inp.type = 'datetime-local';
   inp.setAttribute('aria-label', '提醒时间');
-  const nd = new Date(); // 默认 = 当前时间（用户要求）；已过时刻由「添加提醒」accent 提示拦截
+  const nd = new Date(Date.now() + 5 * 60 * 1000); // v5.42：默认 = 当前 +5 分钟（用户要求 12:35 → 12:40）；已过时刻由「添加提醒」accent 提示拦截
   inp.value = nd.getFullYear() + '-' + String(nd.getMonth() + 1).padStart(2, '0') + '-' + String(nd.getDate()).padStart(2, '0') + 'T' + String(nd.getHours()).padStart(2, '0') + ':' + String(nd.getMinutes()).padStart(2, '0');
   form.appendChild(inp);
   const item = document.createElement('input');
@@ -2904,9 +2904,10 @@ function renderRemPanel() {
   // 已设条目永远排在设置区之后
   reminders.filter(r => r.at > Date.now()).forEach(r => {
     const row = document.createElement('div'); row.className = 'rem-row';
-    const label = document.createElement('span');
-    label.textContent = fmtRemTime(r.at) + (r.text ? ' · ' + r.text : '');
-    row.appendChild(label);
+    // v5.42：「时间 · 事项」改裸文本节点——span 元素盒被用户内核夜间模块吃字
+    // （颜色已字面色+text-fill 双 !important 仍不显示），文本节点无元素盒，
+    // 元素级规则无从命中；颜色由行容器锁定继承，布局改 grid（1fr auto）支持文字居中
+    row.appendChild(document.createTextNode(fmtRemTime(r.at) + (r.text ? ' · ' + r.text : '')));
     const off = document.createElement('button');
     off.type = 'button'; off.textContent = '×'; off.title = '取消这条提醒';
     off.addEventListener('click', () => {
@@ -2921,6 +2922,9 @@ function renderRemPanel() {
     iosTip.textContent = 'iOS 需先添加到主屏幕才能收到通知（仍可设置，下次打开会提示）';
     list.appendChild(iosTip);
   }
+  // v5.42：自动聚焦时间框（+5 分钟已填好），支持 showPicker 的浏览器直接弹选择器；
+  // 「默认选中分钟段」是浏览器内置控件（UA shadow DOM），无标准 API，此处为尽力行为
+  try { inp.focus(); if (typeof inp.showPicker === 'function') inp.showPicker(); } catch (e) {}
 }
 function toggleRemPanel(force) {
   remPanelOpen = (force !== undefined) ? force : !remPanelOpen;

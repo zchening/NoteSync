@@ -307,7 +307,8 @@ test('v5.41：动态覆盖日/夜两板都必须含 #remCard 全家与 #remBoxLi
     assert.ok(/#remCardList \.rem-late\{[^}]*color:[^}]*!important/.test(css), tag + '板"已过 X 分钟"补录文字必须锁定');
     assert.ok(/#remCardAck\{[^}]*background:[^}]*!important/.test(css), tag + '板「知道了」按钮背景必须锁定');
     assert.ok(/#remCardAck\{[^}]*-webkit-text-fill-color:[^}]*!important/.test(css), tag + '板「知道了」文字必须 text-fill 双保险（黑底黑字根因）');
-    assert.ok(/#remBoxList \.rem-row span\{[^}]*-webkit-text-fill-color:[^}]*!important/.test(css), tag + '板列表"时间 · 事项"文字必须 text-fill 双保险');
+    assert.ok(/#remBoxList \.rem-row\{[^}]*-webkit-text-fill-color:[^}]*!important/.test(css), tag + '板列表行容器必须 text-fill 双保险（v5.42 文字改裸文本节点靠行容器继承）');
+    assert.ok(/#remBoxList \.rem-row\{[^}]*background:none!important/.test(css), tag + '板列表行容器必须锁透明底（防注入上底色）');
     assert.ok(/#remBoxList \.rem-row button\{[^}]*background:none!important/.test(css), tag + '板「×」按钮必须恢复描边极简样式，不得被反色规则卷成实底黑块');
   }
 });
@@ -315,8 +316,17 @@ test('v5.41：动态覆盖日/夜两板都必须含 #remCard 全家与 #remBoxLi
 test('v5.41：SHELL_CSS（借壳日间预反色板）也必须含 #remCard / #remBoxList 规则', () => {
   assert.ok(/'#remCard\{background:#000000!important/.test(SRC), 'SHELL_CSS 应含 #remCard 实底规则（invert 后 = light box）');
   assert.ok(/'#remCardAck\{background:#E3E3E5!important;color:#040407!important/.test(SRC), 'SHELL_CSS 应含 ack 反色规则（invert 后 = 深底白字）');
-  assert.ok(/'#remBoxList \.rem-row span\{/.test(SRC), 'SHELL_CSS 应含列表文字规则');
+  assert.ok(/'#remBoxList \.rem-row\{/.test(SRC), 'SHELL_CSS 应含列表行规则（v5.42 文字节点靠行容器锁色）');
   assert.ok(/'#remBoxList \.rem-row button\{[^}]*background:none!important/.test(SRC), 'SHELL_CSS「×」按钮同样保持描边极简');
+});
+
+test('v5.42：列表行文字必须是裸文本节点（span 元素盒在该内核被吃字）+ 面板居中 + 默认 +5 分钟', () => {
+  assert.ok(!/#remBoxList \.rem-row span\{/.test(SRC), 'span 级规则必须删除（span 元素已退役）');
+  assert.ok(/#remBoxList \.rem-row\{display:grid;grid-template-columns:1fr auto/.test(SRC), '行布局必须 grid 1fr auto（文字列居中 + × 右侧）');
+  assert.ok(/class="box qr-box" id="remPanel"/.test(SRC), '提醒面板必须挂 qr-box 居中（与配对弹窗一致）');
+  assert.ok(/#remBoxForm input\{text-align:left\}/.test(SRC), '输入件内容保持左对齐（居中只给展示文字）');
+  assert.ok(/new Date\(Date\.now\(\) \+ 5 \* 60 \* 1000\)/.test(SRC), '默认时间必须 = 当前 +5 分钟');
+  assert.ok(/row\.appendChild\(document\.createTextNode\(fmtRemTime/.test(SRC), '列表文字必须走裸文本节点渲染');
 });
 
 test('v5.41：页面 UI 内不得出现 ⏰ emoji（卡片标题/条目/chip 文案），系统通知保留', () => {
