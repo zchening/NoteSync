@@ -1307,10 +1307,74 @@
   - [ ] APP 菜单点「诊断」浮层出现，再点消失；重开后状态保持
   - [ ] bridge=ok 且 scheduled>0（闹钟真排上）、mainDocCache 非 none
 
+## R 类 | v5.57 真机验收九连修（2026-09-06）
+
+### R1 | 点通知进 APP 又弹提醒面板（重复打扰）
+- **版本**: v5.57
+- **根因**: v5.54（G5）设计失误——`rem-notify-click` 监听直接 `toggleRemPanel()`；通知本身就是提醒，进正文再弹一层=重复打扰
+- **修复**: 监听整体退役（v554.test.js E6 改写为「不再弹面板」护栏）
+- **关联文件**: index.html
+- **核对要点**: 设 1 分钟后提醒 → 到点弹通知 → 点通知 → 只进笔记正文，无提醒面板
+
+### R2 | 他端只改提醒时本端正文无下划线（「有时候没有」）
+- **版本**: v5.57
+- **根因**: poll/用服务器版恢复提醒（loadReminder）后，下划线重绘只在正文 html 也变化的分支里跑；远端只动提醒没动正文 → 列表有、下划线无
+- **修复**: 两处 loadReminder 后无条件补 `scheduleRemMarkRefresh()`
+- **关联文件**: index.html → poll / remoteTake
+- **核对要点**: PC 加提醒（不改正文）→ APP poll 后列表有且正文时间有下划线
+
+### R3 | 光标落在时间上「有时候」不弹提醒卡
+- **版本**: v5.57
+- **根因**: 双嫌疑——①`caretInfoInEditor` 要求光标所在块是 editor 直接子节点，裸文本节点（未包块）直接 return null；②中文输入法组合态内 selectionchange 触发的 chip 全被 isComposing 拦掉，组合结束后不再触发
+- **修复**: ①裸文本兜底（取节点自身文本+节点内偏移——时间串必在单文本节点内连续）；②compositionend 监听补一次 chip 触发
+- **关联文件**: index.html → caretInfoInEditor / compositionend
+- **核对要点**: 手输日期时间后光标点回时间上必弹卡；中文输完事项后光标在时间附近也弹
+
+### R4 | 冲突条排版崩坏（文案压竖条、按钮出框）+ 风格不一致 + 文案不统一
+- **版本**: v5.57
+- **根因**: hintbar 是单行 flex 条，文案一长被压成竖条、按钮挤出；且与扫码配对弹窗风格不一；「本机有未保存的修改」vs 按钮「保留我的」口径不一
+- **修复**: hintbar 条式退役 → 扫码配对同款浮卡（.conflictbar+.confcard：圆角 18+rise+同款阴影，无遮罩不挡输入，须显式二选一）；文案统一「发现冲突：选哪边？/ 保留本机修改 / 使用服务器版本」；draftBar 同款同文案
+- **关联文件**: index.html → conflictbar CSS / draftBar / remoteBar
+- **核对要点**: 两端同改一篇 → 浮卡居中、标题一句话、双按钮在卡内并排；草稿冲突同款
+
+### R5 | 口令框无「返回首页」出口
+- **版本**: v5.57
+- **根因**: 口令框只有「解 锁」一个按钮，APP 里不想解锁只能杀进程
+- **修复**: 「解 锁」下加次级按钮「返回首页」（ghost-btn）→ location.assign('/')
+- **关联文件**: index.html → mask / unlockHome
+- **核对要点**: APP 点退出锁定 → 口令框点「返回首页」→ 回首页可换笔记
+
+### R6 | 冷启动不回最后打开的笔记
+- **版本**: v5.57
+- **根因**: v5.52 自动跳转依赖 notesync_last_note，但该键只在口令解锁路径（applyUnlocked）写——记住密钥/扫码配对进来的设备键从不更新，跳转形同虚设
+- **修复**: 自动解锁路径补写 NOTE_LAST_KEY（配对成功 replace 重载后走同路，一处盖两条）
+- **关联文件**: index.html → init 自动解锁分支
+- **核对要点**: APP 打开笔记 A → 杀进程 → 重开 → 直进 A；按返回键回首页不死循环
+
+### R7 | 主文档磁盘缓存从未落盘（mainDocCache=none，离线兜底形同虚设）
+- **版本**: v5.57
+- **根因**: `super.onCreate()` 一执行 Capacitor 立刻发起首次主文档加载，`setWebViewClient` 装得太晚——每次冷启动主文档都绕过拦截器，缓存永远写不进（intercept 计数恒 0）
+- **修复**: 装完 client 后缓存不存在即 `wv.reload()` 一次（进程内 didCacheBootstrapReload 布尔防循环），此后拦截器接管、缓存落盘、三级兜底激活
+- **关联文件**: android/.../MainActivity.java
+- **核对要点**: 新装 APK 联网开一次 → 诊断 mainDocCache 非 none、intercept>0 → 断网杀进程重开看到缓存正文+离线条
+
+### R8 | APP 顶栏图标太小 + 日夜间/退出锁定无处放
+- **版本**: v5.57
+- **修复**: 日夜间切换/退出锁定收进菜单（native-only 项，PC 不变）；菜单项行高 ≥46px 字号 15；☰ 放大；原生端顶栏隐藏这两枚
+- **关联文件**: index.html → native-app CSS / menuTheme / menuLock
+- **核对要点**: APP 菜单点两项均生效；PC 顶栏与菜单不变
+
+### R9 | APP 无法扫码开笔记
+- **版本**: v5.57
+- **修复**: 菜单新增「扫一扫」（仅原生）→ @capacitor-mlkit/barcode-scanning（ML Kit 打进 APK）→ 扫 PC 配对码 → parsePairLink 解析（短链/双域直链/裸路径；id 兼容百分号编码、解码后按 ID_RE 严校）→ assign 走配对接收端自动解锁
+- **关联文件**: index.html → menuScan / parsePairLink；package.json
+- **核对要点**: PC 开配对码 → APP 扫一扫 → 直开笔记免口令；扫外站二维码提示「不是 NoteSync 配对二维码」
+
 ## 版本与 bug 对应速查
 
 | 版本 | 涉及 bug 编号 |
 |------|---------------|
+| v5.57 | R1-R9（通知点击不弹面板 + 下划线补重绘 + chip 裸文本/组字兜底 + 冲突草稿浮卡 + 口令框返回首页 + 自动解锁记最后笔记 + MainActivity 缓存引导 reload + APP 菜单收纳 + 扫一扫，unit v557.test.js G1-G10 固化） |
 | v5.56 | Q1-Q6（合并吞噬修冲突条 + 自动解锁补提醒恢复 + poll 同步 note.rem + 离线三级兜底+cacheInfo + 版本号双 bump/CI 注入 + APP 诊断入口，unit v556.test.js F1-F8 固化） |
 | v5.54 | P1-P5（过期补弹删+REM_DONE 退役纯时间过滤 + RemReceiver 60s 迟到容差 + 离线口令解本地缓存回退 + rem-notify-click JS 监听 + 页脚菜单收藏体系） |
 | v5.53 | O1-O5（删 captureInput 修 IME 组字链 + editor isComposing 旁路零 DOM 手术 + 首页 250ms 轮询兜底 + windowOptOutEdgeToEdgeEnforcement 退出 edge-to-edge + 返回键 OnBackPressedCallback 接 WebView 历史 + webContentsDebuggingEnabled 排障） |

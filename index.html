@@ -60,6 +60,16 @@
   .hintbar{position:fixed;left:50%;transform:translateX(-50%);z-index:55;display:flex;align-items:center;gap:10px;padding:8px 14px;font-size:12.5px;color:var(--fg);background:var(--box-bg);border:1px solid var(--line);border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.12);max-width:92vw}
   .hintbar.hidden{display:none}
   #draftBar{top:54px}
+  /* v5.57：冲突/草稿提示弃单行条、改扫码配对同款浮卡（圆角18+rise+同款阴影）——
+     旧 hintbar 是单行 flex，文案一长被压成竖条、按钮挤出框外（用户截图实锤）。
+     无遮罩不挡输入：容器 pointer-events:none，仅卡片可点；必须显式二选一，铁律不变 */
+  .conflictbar{position:fixed;left:50%;transform:translateX(-50%);z-index:55;pointer-events:none;max-width:92vw}
+  .conflictbar.hidden{display:none}
+  .confcard{pointer-events:auto;background:var(--box-bg);border:1px solid var(--line);border-radius:18px;box-shadow:0 24px 70px rgba(20,20,18,.16);padding:20px 22px 16px;width:min(88vw,340px);text-align:center;animation:rise .5s cubic-bezier(.2,.7,.3,1) both}
+  .confcard .conf-title{font-size:16px;font-weight:600;margin:0 0 6px;color:var(--fg)}
+  .confcard .conf-msg{font-size:13px;color:var(--muted);margin:0 0 14px;line-height:1.5}
+  .confcard .conf-btns{display:flex;gap:10px}
+  .confcard .conf-btns button{flex:1;padding:10px 0;font-size:14px;color:var(--fg);background:none;border:1px solid var(--line);border-radius:10px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
   #remoteBar{top:96px} /* v5.56 远端冲突条：与草稿条同族错位，避免双条叠盖 */
   #installBar{bottom:16px}
   /* v5.40：到点提醒卡片对齐扫码配对弹窗（.box）视觉——圆角 18 / rise 入场 / 同款阴影与标题层级；
@@ -148,6 +158,13 @@
   #menuBox{width:min(90vw,320px);text-align:left;padding:26px 22px 22px}
   .menu-item{padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;cursor:pointer;color:var(--fg);font-size:13.5px;text-align:center;touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:border-color .2s}
   .menu-item:active{background:var(--hover)}
+  /* v5.57：APP 端菜单扩容——①日夜间/退出锁定收进菜单（顶栏 8 枚图标太小点着累）
+     ②菜单项触控区加大（行高≥46px/字号 15）③☰ 按钮放大 ④扫一扫仅原生可见 */
+  .native-only{display:none!important}
+  body.native-app .native-only{display:block!important}
+  body.native-app #themeBtn, body.native-app #lock{display:none}
+  body.native-app .menu-item{padding:14px 12px;font-size:15px;min-height:46px;line-height:1.4}
+  body.native-app #menuBtn{font-size:22px;padding:6px 12px}
   .fav-row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid var(--line);color:var(--fg);font-size:13px;cursor:pointer}
   .fav-row:active{background:var(--hover)}
   #menuFavEmpty{text-align:center;color:var(--muted);font-size:12px;padding:8px 0}
@@ -165,6 +182,8 @@
   .box input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--ring)}
   .box .err{color:#C0453E;font-size:13px;min-height:20px;margin:10px 0 6px}
   .box button{width:100%;height:46px;border:0;border-radius:10px;background:var(--fg);color:var(--bg);font-size:15px;font-weight:500;letter-spacing:.08em;cursor:pointer;transition:opacity .2s}
+  /* v5.57：口令框「返回首页」次级按钮——此前只有解锁一个出口，APP 里不想解锁只能杀进程 */
+  .box button.ghost-btn{margin-top:10px;background:none;color:var(--muted);border:1px solid var(--line);font-weight:400}
   .box button:hover{opacity:.85}
   .box button:active{opacity:.75}
   /* 统一禁用态：保留品牌色但弱化（暖灰底+弱化金字），深浅色自动跟随，不破坏整体风格 */
@@ -270,6 +289,9 @@
       <div id="menuHome" class="menu-item" role="button" tabindex="0">⌂ 返回首页</div>
       <div id="menuFav" class="menu-item" role="button" tabindex="0">★ 收藏笔记</div>
       <div id="menuFavEntry" class="menu-item" role="button" tabindex="0">▸ 收藏夹</div>
+      <div id="menuScan" class="menu-item native-only" role="button" tabindex="0">▣ 扫一扫</div>
+      <div id="menuTheme" class="menu-item native-only" role="button" tabindex="0">◐ 日夜间切换</div>
+      <div id="menuLock" class="menu-item native-only" role="button" tabindex="0">⎋ 退出锁定</div>
       <div id="menuDiag" class="menu-item" role="button" tabindex="0">⌁ 诊断</div>
     </div>
     <div id="menuFavView" class="hidden">
@@ -279,15 +301,19 @@
     </div>
   </div>
 </div>
-<div id="draftBar" class="hintbar hidden">
-  <span id="draftMsg">本机有未同步的修改，但服务器上已有更新的内容</span>
-  <button type="button" id="draftRestore">恢复我的修改</button>
-  <button type="button" id="draftDiscard">丢弃</button>
+<div id="draftBar" class="conflictbar hidden">
+  <div class="confcard">
+    <div class="conf-title">发现冲突：选哪边？</div>
+    <div class="conf-msg" id="draftMsg">服务器上有更新的内容，本机还有未保存的修改。</div>
+    <div class="conf-btns"><button type="button" id="draftRestore">保留本机修改</button><button type="button" id="draftDiscard">使用服务器版本</button></div>
+  </div>
 </div>
-<div id="remoteBar" class="hintbar hidden">
-  <span id="remoteMsg">服务器上有更新的内容，但本机有未保存的修改</span>
-  <button type="button" id="remoteKeep">保留我的</button>
-  <button type="button" id="remoteTake">用服务器版</button>
+<div id="remoteBar" class="conflictbar hidden">
+  <div class="confcard">
+    <div class="conf-title">发现冲突：选哪边？</div>
+    <div class="conf-msg">服务器上有更新的内容，本机还有未保存的修改。</div>
+    <div class="conf-btns"><button type="button" id="remoteKeep">保留本机修改</button><button type="button" id="remoteTake">使用服务器版本</button></div>
+  </div>
 </div>
 <div id="installBar" class="hintbar hidden">
   <span id="installMsg"></span>
@@ -315,6 +341,7 @@
     <input id="pw" type="password" autocomplete="off" autofocus>
     <div class="err" id="err"></div>
     <button id="ok" disabled>解 锁</button>
+    <button id="unlockHome" class="ghost-btn">返回首页</button>
   </div>
 </div>
 
@@ -360,7 +387,7 @@ const NOTE_LAST_KEY = 'notesync_last_note';
 const NOTE_JUMPED_KEY = 'notesync_jumped';
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '5.56';
+const APP_VERSION = '5.57';
 const BUILD_DATE = '2026-09-06';
 
 const $ = s => document.querySelector(s);
@@ -379,6 +406,10 @@ editor.addEventListener('compositionend', () => {
   isComposing = false;
   // 组字结束时 DOM 刚被 IME 改过，补一次绘制刷新（位置不动）
   try { repaintCaret(); } catch (e) {}
+  // v5.57：组合态内 selectionchange 发的 chip 触发全被 isComposing 拦掉，
+  // 结束后补一次——否则中文输完事项后光标在时间附近 chip 不弹（「有时候不弹」嫌疑之二）
+  clearTimeout(chipTimer);
+  chipTimer = setTimeout(maybeShowTimeChip, 250);
 });
 
 // 回车换行统一产出 <div> 块，与 cleanupLeadingTrailingBreaks / currentBlock 对块结构的预期一致
@@ -1183,6 +1214,8 @@ function hideUploadStatus() { uploadStatus.classList.remove('show'); }
           '  skip=' + (window.__pollSkipCount || 0));
         // v5.56：提醒数/远端挂起/版本 + 主文档缓存与拦截计数（cacheInfo 为 v5.56 APK 新增，旧 APK 静默 '?'）
         L.push('rem=' + (typeof reminders !== 'undefined' ? reminders.length : '?') +
+          '  future=' + (typeof reminders !== 'undefined' ? reminders.filter(r => r.at > Date.now()).length : '?') + // v5.57：scheduled=0 时分辨「全部过期」vs「没同步」
+          '  lastNativeSync=' + (window.__lastNativeSync || 'never') +
           '  pendingRemote=' + (typeof pendingRemoteNote !== 'undefined' && pendingRemoteNote ? 1 : 0) +
           '  localVer=' + (typeof localVer !== 'undefined' ? localVer : '?'));
         const ci = window.__remCacheInfo;
@@ -1944,6 +1977,20 @@ async function loadStoredKey() {
 function parsePairingKey() {
   const m = (location.hash || '').match(/^#k=([A-Za-z0-9_-]+)$/);
   return m ? urlSafeToB64(m[1]) : null;
+}
+// v5.57：APP「扫一扫」——解析扫码内容为站内笔记路径。
+// 兼容三种出码形态：主站短链 xuyinji.com.cn/note/<id>#k=（v5.26 起配对弹窗实际出码）、
+// 双域直链 note./biji.xuyinji.com.cn/<id>#k=、以及裸路径 /<id>#k=；
+// 无 #k= 也放行（打开笔记走口令解锁），非本系统二维码返回 null。
+function parsePairLink(raw) {
+  if (!raw || typeof raw !== 'string') return null;
+  // id 段允许百分号编码：配对弹窗出码用 encodeURIComponent(noteId)，中文名笔记的二维码必是编码形态
+  const m = raw.match(/(?:xuyinji\.com\.cn\/note\/|note\.xuyinji\.com\.cn\/|biji\.xuyinji\.com\.cn\/|^\/)((?:[A-Za-z0-9_-]|%[0-9A-Fa-f]{2}){1,128})(#k=[A-Za-z0-9_-]+)?/);
+  if (!m) return null;
+  let id = m[1];
+  try { id = decodeURIComponent(id); } catch (e) { return null; }
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) return null; // 与服务端 ID_RE 同规则（落地页 sanitize 剔非 ASCII）
+  return '/' + id + (m[2] || '');
 }
 async function tryPairingUnlock() {
   if (!(location.hash || '').startsWith('#k=')) return false; // 无配对意图，零开销退出
@@ -2731,10 +2778,11 @@ async function restoreDraftIfNeeded(key) {
   if (!html) { clearDraft(); return; }
   if (html === lastHtml) { clearDraft(); return; }
   // v5.49：任何与当前内容不符的草稿都不再静默覆盖，统一交给冲突条由用户决定
+  // v5.57：文案统一「本机 vs 服务器」口径，按钮=保留本机修改/使用服务器版本
   const msg = document.getElementById('draftMsg');
   if (msg) msg.textContent = (d.baseV !== localVer)
-    ? '本机有未同步的修改，但服务器上已有更新的内容'
-    : '发现本机离线草稿，是否用草稿内容覆盖当前内容？';
+    ? '服务器上有更新的内容，本机还有未保存的修改。'
+    : '本机有一份离线草稿，与当前内容不一致。';
   showDraftBar();
 }
 draftRestoreBtn.addEventListener('click', async () => {
@@ -2773,7 +2821,7 @@ $('#remoteTake').addEventListener('click', async () => {
     editor.innerHTML = html;
     clearDraft();
     ensureBlockWrapped(); try { linkifyEditor(); } catch (e) {} ensureCaret();
-    if ((note.rem || null) !== remCipher) { try { await loadReminder(note, cryptoKey); } catch (e) {} }
+    if ((note.rem || null) !== remCipher) { try { await loadReminder(note, cryptoKey); scheduleRemMarkRefresh(); } catch (e) {} } // v5.57：同 poll，补下划线重绘
     undoStack = []; redoStack = []; lastState = captureState();
     setStatus(true, '已同步');
   } catch (e) { setStatus(false, '应用远端失败'); }
@@ -2912,6 +2960,12 @@ function caretInfoInEditor() {
   if (!sel || sel.rangeCount === 0) return null;
   const r = sel.getRangeAt(0);
   if (!r.collapsed || !editor.contains(r.startContainer)) return null;
+  // v5.57：裸文本节点（未包块的直接子文本）兜底——此前 block===editor 直接 return null，
+  // 光标落在裸文本里的时间上 chip 永不弹（用户实测「有时候不弹」实锤）。
+  // 时间串必在单个文本节点内连续输入，用该节点自身文本+节点内偏移即可精确匹配。
+  if (r.startContainer.nodeType === 3 && r.startContainer.parentNode === editor) {
+    return { block: editor, text: r.startContainer.data || '', offset: r.startOffset };
+  }
   let block = r.startContainer.nodeType === 3 ? r.startContainer.parentNode : r.startContainer;
   while (block && block.parentNode !== editor) block = block.parentNode;
   if (!block || block === editor) return null;
@@ -3001,6 +3055,7 @@ document.addEventListener('selectionchange', () => {
   clearTimeout(chipTimer);
   chipTimer = setTimeout(maybeShowTimeChip, 250);
 });
+// v5.57：chip 补触发已并入 editor 的 compositionend 监听（isComposing 复位处），此处不重复挂
 function chipActivate(e) {
   if (e.button !== undefined && e.button !== 0) return;
   e.preventDefault();
@@ -3059,10 +3114,12 @@ async function syncRemindersToNative() {
   const cap = (typeof window !== 'undefined' && window.Capacitor) || null;
   const rb = (cap && cap.Plugins && cap.Plugins.RemBridge) ||
              (typeof window !== 'undefined' && window.RemBridge) || null;
-  if (!rb || typeof rb.sync !== 'function') return;
+  if (!rb || typeof rb.sync !== 'function') { window.__lastNativeSync = 'no-bridge'; return; } // v5.57：诊断可读
   try {
     const ret = await rb.sync({ list: reminders.map(r => ({ at: r.at, text: r.text })) });
     if (ret && typeof ret.scheduled === 'number') window.__remNativeScheduled = ret.scheduled; // ?diag 读数
+    // v5.57：记录最近同步时刻与条数——scheduled=0 时能分辨「没同步过/同步了但全部过期/桥异常」
+    window.__lastNativeSync = new Date().toLocaleTimeString() + ' n=' + reminders.length;
     window.__remNativeErr = null;
   } catch (e) { window.__remNativeErr = String((e && e.message) || e); /* 原生层异常不污染前端流程 */ }
 }
@@ -3517,6 +3574,33 @@ $('#menuDiag').addEventListener('click', () => {
   try { turningOn ? localStorage.setItem('notesync_diag', '1') : localStorage.removeItem('notesync_diag'); } catch (e) {}
   if (window.__toggleDiag) window.__toggleDiag();
 });
+// v5.57：APP 端收纳——日夜间切换/退出锁定移入菜单（顶栏图标在手机上太小）；
+// native-app 类驱动 CSS：顶栏隐藏这两枚 + 菜单项触控区加大（见样式区 v5.57 块）
+if (isNativeApp()) { try { document.body.classList.add('native-app'); } catch (e) {} }
+$('#menuTheme').addEventListener('click', () => { menuMask.classList.add('hidden'); themeBtn.click(); });
+$('#menuLock').addEventListener('click', () => { menuMask.classList.add('hidden'); document.getElementById('lock').click(); });
+// v5.57：APP「扫一扫」——ML Kit 插件（@capacitor-mlkit/barcode-scanning）原生侧挂
+// Capacitor.Plugins.BarcodeScanner（与 RemBridge 同套路，单文件无打包器不走 import）。
+// 扫 PC「二维码配对」弹窗 → 解析出 /笔记名#k=密钥 → assign 后走既有配对接收端自动解锁。
+$('#menuScan').addEventListener('click', async () => {
+  menuMask.classList.add('hidden');
+  const cap = window.Capacitor;
+  const bs = (cap && cap.Plugins && cap.Plugins.BarcodeScanner) || null;
+  if (!bs || typeof bs.scan !== 'function') { setStatus(false, '扫一扫不可用'); return; }
+  try {
+    if (typeof bs.requestPermissions === 'function') {
+      try {
+        const p = await bs.requestPermissions();
+        if (p && p.camera === 'denied') { setStatus(false, '相机权限被拒绝'); return; }
+      } catch (e) {}
+    }
+    const ret = await bs.scan();
+    const raw = (ret && ret.barcodes && ret.barcodes[0] && (ret.barcodes[0].rawValue || ret.barcodes[0].displayValue)) || '';
+    const dest = parsePairLink(raw);
+    if (dest) location.assign(dest);
+    else if (raw) setStatus(false, '不是 NoteSync 配对二维码');
+  } catch (e) { /* 用户取消扫码/相机关闭等，静默 */ }
+});
 $('#menuFav').addEventListener('click', () => {
   if (!noteId) return;
   const favs = readFavs(); const i = favs.indexOf(noteId);
@@ -3524,8 +3608,8 @@ $('#menuFav').addEventListener('click', () => {
   writeFavs(favs);
   renderMenu();
 });
-// v5.54（G5）：原生通知点击补发事件至此落地——已解锁时打开提醒面板，直接看到提醒列表
-window.addEventListener('rem-notify-click', () => { if (cryptoKey && !remPanelOpen) toggleRemPanel(); });
+// v5.57：通知点击不再弹提醒面板——通知本身就是提醒，进正文即可（用户实测：重复打扰）
+// rem-notify-click 事件仍由原生侧补发，此处不再监听；响铃卡 remCard 的「知道了」链路不受影响
 
 async function saveLocal() {
   clearTimeout(saveRetryTimer); saveRetryTimer = null;
@@ -3614,7 +3698,9 @@ async function poll() {
       pendingRemoteNote = null; hideRemoteBar();
       // v5.56：应用远端时同步恢复提醒——此前 poll 只更新正文、从不碰 note.rem，
       // 其他设备新增/取消的提醒本端永远看不到（PC 加的提醒手机有文字无下划线实锤）
-      if ((note.rem || null) !== remCipher) { try { await loadReminder(note, cryptoKey); } catch (e) {} }
+      // v5.57：恢复后无条件重绘下划线——远端只动提醒没动正文时 html 相等、
+      // linkify 分支不跑，列表有下划线无（用户实测「有时候没下划线」实锤）
+      if ((note.rem || null) !== remCipher) { try { await loadReminder(note, cryptoKey); scheduleRemMarkRefresh(); } catch (e) {} }
       if (html !== editor.innerHTML) {
         const wasFocused = document.activeElement === editor;
         // 用字符偏移保存光标，而非 cloneRange：替换 innerHTML 后旧 Range 指向的节点被 detach，
@@ -3723,6 +3809,8 @@ window.addEventListener('online', () => {
 });
 
 $('#ok').addEventListener('click', () => unlock(pw.value));
+// v5.57：口令框给「返回首页」出口——APP 里不想解锁时不必杀进程（用户实测无出口实锤）
+$('#unlockHome').addEventListener('click', () => { location.assign('/'); });
 pw.addEventListener('keydown', e => { if (e.key === 'Enter') unlock(pw.value); });
 pw.addEventListener('input', () => { $('#ok').disabled = pw.value.length === 0; });
 $('#lock').addEventListener('click', () => {
@@ -3835,6 +3923,9 @@ function isNativeApp() {
       return;
     }
     localVer = note.v || 0;
+    // v5.57：自动解锁路径也记「最后打开的笔记」——此前仅口令解锁路径（applyUnlocked）写，
+    // 记住密钥/扫码配对进来的设备 NOTE_LAST_KEY 从不更新，冷启动自动跳转形同虚设（用户实测实锤）
+    try { if (noteId) localStorage.setItem(NOTE_LAST_KEY, noteId); } catch (e) {}
     loadingEl.classList.add('hidden');
     editor.contentEditable = true;
     if (note.ct) { try { lastHtml = await decryptText(note.ct, note.iv, cryptoKey); editor.innerHTML = lastHtml; } catch (e) {} }

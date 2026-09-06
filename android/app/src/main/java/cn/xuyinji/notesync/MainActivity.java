@@ -112,7 +112,20 @@ public class MainActivity extends BridgeActivity {
                 if (request.isForMainFrame()) fallback.setVisibility(View.VISIBLE);
             }
         });
+
+        // v5.57 离线 P0 根治：super.onCreate() 一执行 Capacitor 立刻发起首次主文档加载，
+        // 上面 setWebViewClient 装得太晚 → 每次冷启动主文档都绕过拦截器，
+        // 磁盘缓存永远写不进（真机诊断 mainDocCache=none 实锤，intercept 计数恒 0）。
+        // 装完 client 后发现缓存不存在就补一次 reload：这次加载走拦截器，缓存落盘，
+        // 三级兜底（联网→磁盘→APK 内置壳）自此真正激活。进程内布尔防循环。
+        if (!didCacheBootstrapReload && !new java.io.File(getFilesDir(), MAIN_DOC_CACHE).exists()) {
+            didCacheBootstrapReload = true;
+            wv.reload();
+        }
     }
+
+    /** v5.57：缓存引导 reload 只跑一次（防循环），进程重建后若仍无缓存允许再试 */
+    private boolean didCacheBootstrapReload = false;
 
     /** 联网时 native 侧抓主文档；无网络直接返回 null 快败（不阻塞拦截层） */
     private byte[] fetchMainDoc(String urlStr) throws Exception {

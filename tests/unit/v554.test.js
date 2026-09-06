@@ -134,13 +134,10 @@ test('E5 jsdom：收藏 writeFavs/readFavs 读写与 20 条截断；首页 rende
   dom.window.close(); // 释放 jsdom 资源，否则 node --test 进程不退出（SIGTERM）
 });
 
-// ── E6：G5 原生通知点击事件落地（有解锁守卫 + 面板互斥） ──
-test('E6 通知点击监听：rem-notify-click 有 cryptoKey 守卫且避免与面板双开', () => {
+// ── E6：原生通知点击事件落地（v5.57 起不再弹提醒面板——通知本身就是提醒，进正文即可） ──
+test('E6 通知点击不再 toggleRemPanel（v5.57 行为变更护栏）', () => {
   const src = readSrc();
-  const idx = src.indexOf("window.addEventListener('rem-notify-click'");
-  assert.ok(idx > -1, '应存在 rem-notify-click 监听');
-  const seg = src.slice(idx, idx + 160);
-  assert.ok(seg.includes('cryptoKey &&'), '处理器必须有已解锁守卫');
-  assert.ok(seg.includes('!remPanelOpen'), '面板已开时不得重复 toggle');
-  assert.ok(seg.includes('toggleRemPanel()'), '应打开提醒面板');
+  assert.ok(!src.includes("addEventListener('rem-notify-click'"), 'v5.57 起不应再有 rem-notify-click 监听（用户实测：点通知进正文却再弹一层提醒面板=重复打扰）');
+  // 退役符号防回潮：rem-notify-click 后紧跟 toggleRemPanel 的旧形态不得再现
+  assert.ok(!/rem-notify-click'[^\n]*toggleRemPanel/.test(src), '通知点击不得再打开提醒面板');
 });

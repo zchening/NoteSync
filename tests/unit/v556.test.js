@@ -69,10 +69,13 @@ test('F3 saveLocal：pendingRemoteNote 闸门必须先于 apiPut，且草稿已�
 test('F4 remoteBar 冲突条：DOM + 错位 CSS + 双按钮 wiring', () => {
   const src = readSrc();
   assert.ok(src.includes('id="remoteBar"'), '应有 remoteBar DOM');
-  assert.ok(src.includes('id="remoteKeep"') && src.includes('id="remoteTake"'), '应有保留我的/用服务器版两按钮');
+  assert.ok(src.includes('id="remoteKeep"') && src.includes('id="remoteTake"'), '应有保留本机修改/使用服务器版本两按钮');
   assert.ok(src.includes('#remoteBar{top:96px}'), 'remoteBar 应与 draftBar 错位（top:96px）');
   assert.ok(src.includes("$('#remoteKeep').addEventListener('click'"), 'remoteKeep 应有 wiring');
   assert.ok(src.includes("$('#remoteTake').addEventListener('click'"), 'remoteTake 应有 wiring');
+  // v5.57：条式退役，改扫码配对同款浮卡（排版挤压/按钮出框实锤后的重做）
+  assert.ok(src.includes('class="conflictbar hidden"'), 'remoteBar/draftBar 应为 conflictbar 浮卡');
+  assert.ok(!/id="remoteBar" class="hintbar/.test(src), 'remoteBar 不应再是 hintbar 单行条');
 });
 
 // ── F5：APP 内诊断入口形态（无地址栏/笔记名不能含 ? 的解法）──
@@ -188,8 +191,8 @@ test('F8 MainActivity assets 兜底 + RemPlugin.cacheInfo + build.gradle/CI 版�
   assert.ok(plugin.includes('MainActivity.interceptCount'), 'cacheInfo 应读 MainActivity 计数');
 
   const gradle = fs.readFileSync(path.join(__dirname, '..', '..', 'android', 'app', 'build.gradle'), 'utf8');
-  assert.ok(gradle.includes('versionCode 56'), 'build.gradle versionCode 应 bump 为 56');
-  assert.ok(gradle.includes('versionName "5.56"'), 'build.gradle versionName 应 bump 为 5.56');
+  assert.ok(gradle.includes('versionCode 57'), 'build.gradle versionCode 应 bump 为 57（v5.57）');
+  assert.ok(gradle.includes('versionName "5.57"'), 'build.gradle versionName 应 bump 为 5.57');
 
   const wf = fs.readFileSync(path.join(__dirname, '..', '..', '.github', 'workflows', 'build-apk.yml'), 'utf8');
   assert.ok(wf.includes('GITHUB_REF_NAME#v'), 'CI 应从 tag 注入 versionName（v5.55 APK 自报 5.54 的治本）');
