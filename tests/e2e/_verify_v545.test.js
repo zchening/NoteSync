@@ -193,7 +193,7 @@ test('V545-2 光标落时间上 chip 含蓝色「添加提醒」，点后变两�
 }));
 
 // ── ②④ 未添加的日期无标记；到点确认/删除提醒后标记消失回归普通正文（v5.46 去灰态）───
-test('V545-3+V546 未添加日期无下划线；确认后标记消失（不变灰）；删除提醒后标记消失', guard(async () => {
+test('V545-3+V546 未添加日期无下划线；过期后标记消失（不变灰）；删除提醒后标记消失', guard(async () => {
   const { ctx, page } = await openDesktopEditor('V545C');
   try {
     await page.evaluate(() => {
@@ -214,13 +214,16 @@ test('V545-3+V546 未添加日期无下划线；确认后标记消失（不变�
     assert.ok(marked.has, '已设提醒的时间行必须带下划线');
     assert.strictEqual(marked.cls, 'rem-mark', '标记只挂 rem-mark（灰态 class 已退役）');
 
-    await page.evaluate((at0) => { window.markRemDone(at0); }, at); // 到点确认（模拟）
+    await page.evaluate((at0) => { // v5.54：REM_DONE 退役，改模拟时间流逝至过期（纯时间判断）
+      reminders[0].at = Date.now() - 60e3;
+      if (typeof linkifyEditor === 'function') linkifyEditor();
+    }, at);
     await page.waitForTimeout(700);
     const doneState = await page.evaluate(() => {
       const ed = document.getElementById('editor');
       return { hasU: !!ed.querySelector('u.rem-mark'), text: ed.textContent };
     });
-    assert.ok(!doneState.hasU, 'v5.46：到点确认后标记必须消失（回归普通正文，不变灰）');
+    assert.ok(!doneState.hasU, 'v5.54：时间过期后标记必须消失（回归普通正文，不变灰）');
     assert.ok(doneState.text.includes('买牛奶'), '正文文本必须原样保留');
 
     await page.evaluate((at0) => window.removeReminder(at0), at);

@@ -16,6 +16,10 @@ class RemReceiver : BroadcastReceiver() {
         val at = intent.getLongExtra("at", 0)
         val text = intent.getStringExtra("text") ?: "该看笔记了"
         val idx = intent.getIntExtra("idx", 0)
+        // v5.54：过期提醒彻底静默——精确闹钟正常触发时 now-at≈0；
+        // 非 precise 兜底（setAndAllowWhileIdle）在系统深睡后补触发会晚到数分钟，
+        // 晚到超过 60 秒一律丢弃不发通知（用户拍板：错过的不再弹）。
+        if (at <= 0 || System.currentTimeMillis() - at > 60_000L) return
         RemPlugin.createNotificationChannel(context)
 
         // 点击通知 → 回 MainActivity → onNewIntent → JS 抛 rem-notify-click 事件

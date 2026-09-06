@@ -1,6 +1,6 @@
 // v5.37 便签提醒 单元测试（多提醒 + 实底卡片 + 响铃）
 // v5.37 变更：rem 明文 {at,text} → {list:[{at,text}...]}（升序、上限 10），旧格式读取自动迁移；
-// REM_DONE 单时间戳 → JSON map（旧值兼容）；remBar 补弹条 → remCard 实底卡片（多条列表）；
+// v5.54：REM_DONE 退役（过期静默）；remCard 实底卡片（多条列表）保留为到点主通道；
 // setReminder/clearReminder → addReminder/removeReminder；fireReminder 卡片无条件弹出。
 // 不变项：rem 与正文同一把 key 加密、服务端存密文零知识不变；server.js 显式传参才更新、未传保留；
 // 权限只在用户主动设提醒时申请；不上 Web Push。
@@ -111,8 +111,8 @@ test('R3 旧格式单提醒自动迁移：可恢复、再新增时 PUT 变 list 
   assert.ok(payload.list.every((r, i, a) => i === 0 || a[i - 1].at <= r.at), 'list 必须按时间升序');
 });
 
-// ── R4：多条过期提醒 → 解锁补弹卡片列出全部 + 已过时长 ─────
-test('R4 过期未确认的多条提醒解锁时补弹卡片', async t => {
+// ── R4：过期提醒解锁时彻底静默（v5.54 拍板 A：不再补弹）────
+test('R4 过期提醒解锁时不补弹卡片（v5.54 过期静默）', async t => {
   const app = freshApp();
   t.after(() => app.dom.window.close());
   const { window } = app;
@@ -126,37 +126,32 @@ test('R4 过期未确认的多条提醒解锁时补弹卡片', async t => {
   await window.applyUnlocked(key, note);
 
   const card = window.document.getElementById('remCard');
-  assert.ok(!card.classList.contains('hidden'), '过期提醒必须补弹卡片');
-  const listText = window.document.getElementById('remCardList').textContent;
-  assert.ok(listText.includes('过期的事'), '卡片应列出第一条文案');
-  assert.ok(listText.includes('另一件事'), '卡片应列出第二条文案');
-  assert.ok(listText.includes('小时') && listText.includes('分钟'), '应显示各自已过期时长');
+  assert.ok(card.classList.contains('hidden'), 'v5.54 起过期提醒不再补弹卡片');
 });
 
-// ── R5：确认后 REM_DONE 写 map，重开不再弹 ─────────────────
-test('R5 「知道了」写 REM_DONE map，重开不再弹', async t => {
+// ── R5：「知道了」收起确认卡（正常触发路径的确认卡仍工作）──
+test('R5 正常触发弹卡后「知道了」收起卡片', async t => {
   const app = freshApp();
   t.after(() => app.dom.window.close());
-  const { window, localStorage } = app;
+  const { window } = app;
   const key = await makeKey();
   const noteCt = await window.encryptText('x', key);
-  const past = Date.now() - 600e3;
-  const remEnc = await window.encryptText(JSON.stringify({ list: [{ at: past, text: '旧事' }] }), key);
+  const future = Date.now() + 3600e3;
+  const remEnc = await window.encryptText(JSON.stringify({ list: [{ at: future, text: '未来事' }] }), key);
   const note = { v: 5, ct: noteCt.ct, iv: noteCt.iv, salt: 'x', rem: JSON.stringify(remEnc) };
   mockCapture(window, note, 5);
   await window.applyUnlocked(key, note);
 
+  // 模拟到点正常触发（时间已到，卡片无条件弹——页内主通道）
+  await window.fireReminder(future);
+  const card = window.document.getElementById('remCard');
+  assert.ok(!card.classList.contains('hidden'), '到点触发的卡片必须弹出');
   window.document.getElementById('remCardAck').click();
-  const done = JSON.parse(localStorage.getItem(DONE));
-  assert.ok(done[past] === 1, '确认必须写入 REM_DONE map（键为时间戳）');
-  assert.ok(window.document.getElementById('remCard').classList.contains('hidden'), '确认后收起');
-
-  await window.applyUnlocked(key, note); // 模拟重开
-  assert.ok(window.document.getElementById('remCard').classList.contains('hidden'), '已确认的过期提醒不再弹');
+  assert.ok(card.classList.contains('hidden'), '确认后收起');
 });
 
-// ── R6：旧格式 REM_DONE（单数字字符串）自动兼容 ────────────
-test('R6 v5.36 旧格式 REM_DONE 单时间戳自动迁移为 map', async t => {
+// ── R6：旧 REM_DONE 数据留置无害，过期判断一律按时间 ────────
+test('R6 旧格式 REM_DONE localStorage 数据不影响 v5.54 静默判断', async t => {
   const app = freshApp();
   t.after(() => app.dom.window.close());
   const { window, localStorage } = app;
@@ -166,10 +161,10 @@ test('R6 v5.36 旧格式 REM_DONE 单时间戳自动迁移为 map', async t => {
   const remEnc = await window.encryptText(JSON.stringify({ at: past, text: '旧事' }), key); // 旧格式顺带覆盖
   const note = { v: 5, ct: noteCt.ct, iv: noteCt.iv, salt: 'x', rem: JSON.stringify(remEnc) };
   mockCapture(window, note, 5);
-  localStorage.setItem(DONE, String(past)); // v5.36 遗留的单时间戳
+  localStorage.setItem(DONE, String(past)); // v5.36 遗留格式
   await window.applyUnlocked(key, note);
 
-  assert.ok(window.document.getElementById('remCard').classList.contains('hidden'), '旧格式已确认记录应兼容（不重复弹）');
+  assert.ok(window.document.getElementById('remCard').classList.contains('hidden'), '旧数据留置无害：过期按时间判断不弹');
 });
 
 // ── R7：取消最后一条 → PUT 显式 rem:null ───────────────────

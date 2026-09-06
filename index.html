@@ -134,7 +134,17 @@
   @media (max-width:560px){ #editor{padding:24px 18px 100px;font-size:16px} }
 
   /* ── 页脚（v5.21：纯状态条「● 状态字」，状态自顶栏移入；解锁态已由状态字编码，加密标语已在落地页/解锁弹窗表达）── */
-  footer{display:flex;align-items:center;justify-content:center;gap:7px;padding:10px 16px;border-top:1px solid var(--line);font-size:11px;color:var(--muted);letter-spacing:.14em}
+  footer{display:flex;align-items:center;justify-content:center;gap:7px;padding:10px 16px;border-top:1px solid var(--line);font-size:11px;color:var(--muted);letter-spacing:.14em;position:relative}
+  #menuBtn{position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:15px;line-height:1;cursor:pointer;padding:6px 12px;touch-action:manipulation;-webkit-tap-highlight-color:transparent;letter-spacing:0}
+  #menuBtn:active{opacity:.6}
+  #menuBox{width:min(90vw,320px);text-align:left;padding:26px 22px 22px}
+  .menu-item{padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;cursor:pointer;color:var(--fg);font-size:13.5px;text-align:center;touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:border-color .2s}
+  .menu-item:active{background:var(--hover)}
+  #menuFavHead{font-size:11px;color:var(--muted);letter-spacing:.12em;margin:14px 0 4px;text-align:center}
+  .fav-row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid var(--line);color:var(--fg);font-size:13px;cursor:pointer}
+  .fav-row:active{background:var(--hover)}
+  .fav-del{color:var(--muted);padding:2px 10px;flex-shrink:0}
+  #menuFavEmpty{text-align:center;color:var(--muted);font-size:12px;padding:8px 0}
   footer .dot{width:7px;height:7px;border-radius:50%;background:#C9C7BE;flex-shrink:0;transition:background .3s}
   footer .dot.on{background:#2FA866}
 
@@ -248,6 +258,16 @@
     <div id="remBoxList"></div>
   </div>
 </div>
+<div class="mask hidden" id="menuMask">
+  <div class="box" id="menuBox">
+    <h1>菜单</h1>
+    <div id="menuHome" class="menu-item" role="button" tabindex="0">⌂ 返回首页</div>
+    <div id="menuFav" class="menu-item" role="button" tabindex="0">★ 收藏笔记</div>
+    <div id="menuFavHead">收藏夹</div>
+    <div id="menuFavList"></div>
+    <div id="menuFavEmpty" class="hidden">暂无收藏</div>
+  </div>
+</div>
 <div id="draftBar" class="hintbar hidden">
   <span id="draftMsg">本机有未同步的修改，但服务器上已有更新的内容</span>
   <button type="button" id="draftRestore">恢复我的修改</button>
@@ -260,7 +280,7 @@
 </div>
 <div id="editor" data-ph="开始输入，自动同步到所有设备…" contenteditable="true"></div>
 <input type="file" id="fileInput" accept="image/*" style="display:none">
-<footer id="foot"><span class="dot" id="status"></span><span id="statustext">连接中…</span></footer>
+<footer id="foot"><span id="menuBtn" title="菜单">☰</span><span class="dot" id="status"></span><span id="statustext">连接中…</span></footer>
 <div id="offlineBar" class="offlinebar hidden">离线 · 上次同步于 <span id="offlineTime"></span></div>
 <div class="upload-status" id="uploadStatus"></div>
 
@@ -324,7 +344,7 @@ const NOTE_LAST_KEY = 'notesync_last_note';
 const NOTE_JUMPED_KEY = 'notesync_jumped';
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '5.53';
+const APP_VERSION = '5.54';
 const BUILD_DATE = '2026-09-06';
 
 const $ = s => document.querySelector(s);
@@ -1792,10 +1812,10 @@ async function applyUnlocked(key, note) {
   mask.classList.add('hidden');
   editor.contentEditable = true;
   if (note.ct) { try { lastHtml = await decryptText(note.ct, note.iv, key); editor.innerHTML = lastHtml; } catch (e) {} }
-  if (note.ct) cachePut({ ct: note.ct, iv: note.iv, v: note.v, savedAt: Date.now() }); // v5.49：成功解密即缓存正文密文，供离线阅读
+  if (note.ct) cachePut({ ct: note.ct, iv: note.iv, v: note.v, salt: note.salt, savedAt: Date.now() }); // v5.49：成功解密即缓存正文密文，供离线阅读；v5.54 附盐
   lastSyncAt = Date.now(); // v5.50：解锁拿到服务端数据=通信成功
   await restoreDraftIfNeeded(key); // v5.35：解锁后检查离线草稿（静默恢复或提示冲突）
-  await loadReminder(note, key); // v5.36：解锁后恢复提醒并重新调度（过期则补弹）
+  await loadReminder(note, key); // v5.36：解锁后恢复提醒并重新调度（v5.54 起过期不再补弹，纯静默）
   ensureBlockWrapped();
   if (note.ct) { try { linkifyEditor(); } catch (e) {} }
   ensureCaret(); // 关键：解密内容载入后显式重建合法折叠光标（避免"解锁后无光标/无法输入"）
@@ -1812,6 +1832,28 @@ async function unlock(pass) {
   catch (e) {
     if (e.locked) { err.textContent = '尝试过多，请 ' + fmtRetry(e.retryAfter) + ' 后再试'; return; }
     if (e.status === 400) { err.textContent = '笔记名不合法（仅英文、数字、下划线、短横线）'; return; }
+    // v5.54：离线 + 本地缓存含盐 → 口令直接解本地缓存进离线模式，不再卡死在口令框。
+    // 此前该场景（点过退出/清数据/重装后离线打开）是死路：apiGet 失败即无路可走，
+    // 明明本地密文缓存还在。salt 随缓存明文存储（PBKDF2 盐非机密）。
+    if (!navigator.onLine) {
+      const c = cacheGet();
+      if (c && c.ct && c.salt) {
+        try {
+          const key = await deriveKey(pass, b64ToBuf(c.salt));
+          await decryptText(c.ct, c.iv, key); // 口令校验：不匹配此处抛出
+          cryptoKey = key;
+          try { localStorage.setItem(KEY_STORE, bufToB64(await crypto.subtle.exportKey('raw', key))); } catch (e2) {}
+          const ok = await loadCachedBody(key);
+          if (ok) {
+            loadingEl.classList.add('hidden');
+            mask.classList.add('hidden');
+            editor.contentEditable = true;
+            startSync();
+            return;
+          }
+        } catch (e2) { err.textContent = '口令与本地缓存不符'; return; }
+      }
+    }
     err.textContent = '无法连接服务器'; return;
   }
   serverSalt = note.salt ? b64ToBuf(note.salt) : crypto.getRandomValues(new Uint8Array(16));
@@ -1979,14 +2021,15 @@ function buildLinkSafe(text, urlRegex, phoneRegex, breakSeparators, remMatches) 
 
 // v5.46：计算文本节点内"已设提醒且仍有效"的时间串包裹区间——时间解析值必须存在于提醒列表才包
 // （用户拍板：没主动添加的日期绝不加下划线）；下划线只包时间串本身，事项不带（v5.45 整段方案退役）；
-// 已过期或已提醒过的（REM_DONE）完全跳过——视觉与普通正文一致，无下划线不变灰（v5.46 用户拍板）。
+// 已过期的（at<=now）完全跳过——视觉与普通正文一致，无下划线不变灰（v5.46 用户拍板；
+// v5.54 起按时间实时判断，REM_DONE 已确认标记退役）。
 // 文本节点 ≤4000 字才扫描（与 parseTimeMatches 同限）。
 function remMatchesFor(txt) {
   if (!reminders.length || !txt || txt.length > 4000) return [];
   const now = Date.now();
   return parseTimeMatches(txt)
     .filter(m => reminders.some(r => r.at === m.at))
-    .filter(m => !(isRemDone(m.at) || m.at <= now))
+    .filter(m => m.at > now)
     .map(m => ({ start: m.index, end: m.index + m.length, text: txt.slice(m.index, m.index + m.length), kind: 'rem' }));
 }
 
@@ -2014,7 +2057,7 @@ function linkifyEditor(opts) {
     // v5.46：只看仍有效的（未过期且未确认）——过期时间不再产标记，纯过期文本走早退省一轮拆建
     const now = Date.now();
     const hasRemText = reminders.length > 0 && editor.textContent.length <= 4000 &&
-      parseTimeMatches(editor.textContent).some(m => reminders.some(r => r.at === m.at) && !(isRemDone(m.at) || m.at <= now));
+      parseTimeMatches(editor.textContent).some(m => reminders.some(r => r.at === m.at) && m.at > now);
 
     // 早退：无自动链接可拆解、无杂散 span、无提醒标记要刷新、也无任何可链接文本 → 不碰 DOM（避免污染原生撤销栈）。
     // 普通纯文本输入走此分支；粘贴/输入本身已产生合法块结构，无需 ensureBlockWrapped/normalize。
@@ -2560,7 +2603,8 @@ function clearDraft() { try { localStorage.removeItem(DRAFT_KEY); } catch (e) {}
 // 仅存密文：与服务器、与离线草稿同理，密钥不出浏览器，零知识属性不变。
 const CACHE_KEY = 'notesync_cache_' + noteId;
 function cachePut(obj) {
-  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ct: obj.ct, iv: obj.iv, v: obj.v, savedAt: obj.savedAt || Date.now() })); } catch (e) {}
+  // v5.54：缓存附带 salt（PBKDF2 盐非机密，明文存储无风险）——离线输口令时派生密钥必需
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ct: obj.ct, iv: obj.iv, v: obj.v, salt: obj.salt || null, savedAt: obj.savedAt || Date.now() })); } catch (e) {}
 }
 function cacheGet() {
   try { const s = localStorage.getItem(CACHE_KEY); return s ? JSON.parse(s) : null; } catch (e) { return null; }
@@ -2704,11 +2748,11 @@ installDismiss.addEventListener('click', () => {
 //           new Notification + 页内实底卡片；过期未确认 → 下次打开补弹卡片（唯一 100%
 //           兜底，Web 的后台限制决定的现实）；Notification Triggers（L3）支持时注册系统级
 //           定时（至今未正式落地，纯探测不指望）。
-// 多设备重复弹：接受（自己多设备弹两次反而保险），REM_DONE 记已触发时间戳集合防止同机重复。
+// 多设备重复弹：接受（自己多设备弹两次反而保险）。v5.54：REM_DONE 退役——
+// 过期提醒彻底静默（用户拍板 A），不再需要"已触发/已确认"标记防重复补弹。
 const remBtn = $('#remBtn'), remPanel = $('#remPanel'), remMask = $('#remMask');
 const remCard = $('#remCard'), remCardList = $('#remCardList'), remCardAck = $('#remCardAck');
 const timeChip = $('#timeChip');
-const REM_DONE_KEY = 'notesync_remdone_' + noteId;
 const REM_MAX = 10;
 let reminders = [], remCipher = null, remTimer = null, remPanelOpen = false;
 let cardShownAts = []; // 当前卡片展示的提醒时间戳，「知道了」据此全部标记
@@ -2897,39 +2941,15 @@ timeChip.addEventListener('touchstart', chipActivate, { passive: false });
 timeChip.addEventListener('mousedown', chipActivate);
 
 // ── 多提醒数据模型 ──
-// REM_DONE：v5.36 是单时间戳字符串；v5.37 改 JSON map { [at]: 1 }，读到旧值自动兼容。
-function remDoneMap() {
-  try {
-    const s = localStorage.getItem(REM_DONE_KEY);
-    if (!s) return {};
-    const v = JSON.parse(s);
-    if (v && typeof v === 'object') return v;
-    if (typeof v === 'number') { const m = {}; m[v] = 1; return m; }
-    return {};
-  } catch (e) { return {}; }
-}
-function isRemDone(at) { return !!remDoneMap()[at]; }
-// v5.45：提醒状态变化（新增/删除/到点标记/取消标记）后，正文里的提醒标记需要重算
-//（新增→包下划线；删除→拆掉；到点/确认/重设→变灰或恢复）。防抖统一走 linkifyEditor。
+// v5.54：REM_DONE（已触发标记 map）整体退役——过期提醒彻底静默后无补弹语义，
+// 过期与否一律以 at<=now 实时判断，localStorage 里的旧 notesync_remdone_* 数据留置无害。
+// v5.45：提醒状态变化（新增/删除）后，正文里的提醒标记需要重算
+//（新增→包下划线；删除→拆掉）。防抖统一走 linkifyEditor。
 let remMarkTimer = null;
 function scheduleRemMarkRefresh() {
   if (!cryptoKey) return;
   clearTimeout(remMarkTimer);
   remMarkTimer = setTimeout(() => { if (!isLinkifying) { try { linkifyEditor(); } catch (e) {} } }, 400);
-}
-function markRemDone(at) {
-  try {
-    const m = remDoneMap(); m[at] = 1;
-    localStorage.setItem(REM_DONE_KEY, JSON.stringify(m));
-  } catch (e) {}
-  scheduleRemMarkRefresh(); // v5.45：到点/确认后正文对应文本转灰
-}
-function unmarkRemDone(at) {
-  try {
-    const m = remDoneMap();
-    if (m[at]) { delete m[at]; localStorage.setItem(REM_DONE_KEY, JSON.stringify(m)); }
-  } catch (e) {}
-  scheduleRemMarkRefresh(); // v5.45：同刻重设提醒后正文恢复未过期样式
 }
 // 旧明文 {at,text} → 新 [{at,text}] 的迁移统一在这里做；坏数据当无提醒。
 function normalizeRemList(obj) {
@@ -2982,7 +3002,7 @@ async function persistReminders() {
   }
   const r = await apiPut({ ct: body.ct, iv: body.iv, salt: bufToB64(serverSalt), rem: remOut });
   localVer = r.v; lastHtml = html; clearDraft();
-  cachePut({ ct: body.ct, iv: body.iv, v: r.v, savedAt: Date.now() }); // v5.50：提醒保存也是正文保存，同步刷新离线缓存
+  cachePut({ ct: body.ct, iv: body.iv, v: r.v, salt: serverSalt ? bufToB64(serverSalt) : null, savedAt: Date.now() }); // v5.50：提醒保存也是正文保存，同步刷新离线缓存；v5.54 附盐
   lastSyncAt = Date.now(); hideOfflineBar(); // v5.50：离线转在线后改提醒，不能出现「条挂着、页脚已同步」
   setStatus(true, '已同步');
   scheduleReminders();
@@ -3000,21 +3020,18 @@ async function addReminder(at, text) {
   }
   reminders.push({ at: at, text: text || '' });
   reminders.sort((a, b) => a.at - b.at);
-  unmarkRemDone(at); // 重设的同刻提醒，清掉旧的已触发标记
   scheduleRemMarkRefresh(); // v5.45：新增提醒后正文时间文本包上下划线
   try { await persistReminders(); } catch (e) { setStatus(false, '保存失败'); }
 }
 async function removeReminder(at) {
   reminders = reminders.filter(r => r.at !== at);
-  unmarkRemDone(at);
   scheduleRemMarkRefresh(); // v5.45：删除提醒后正文下划线拆掉
   try { await persistReminders(); } catch (e) { setStatus(false, '保存失败'); }
 }
 function scheduleReminders() {
   clearTimeout(remTimer); remTimer = null;
   const now = Date.now();
-  const overdue = reminders.filter(r => r.at <= now && !isRemDone(r.at));
-  if (overdue.length) { showRemCard(overdue, true); return; } // 过期且本机未确认 → 补弹
+  // v5.54 过期彻底静默（用户拍板 A）：过期提醒不再补弹卡片，直接排下一条未来提醒
   const next = reminders.filter(r => r.at > now).sort((a, b) => a.at - b.at)[0];
   if (!next) return;
   remTimer = setTimeout(() => fireReminder(next.at), Math.min(next.at - Date.now(), 2147483647));
@@ -3032,8 +3049,7 @@ async function tryRegisterTrigger(at) {
 }
 async function fireReminder(at) {
   const entry = reminders.find(r => r.at === at);
-  if (entry) markRemDone(at);
-  scheduleReminders(); // 本条已标 done 不会重复补弹，只排下一条
+  scheduleReminders(); // v5.54：过期静默，无 REM_DONE 补弹语义，只排下一条
   if (!entry) return;
   playRemSound();
   const title = '⏰ ' + (entry.text || '该看笔记了');
@@ -3105,7 +3121,6 @@ function showRemCard(items, isCatchup) {
   hideTimeChip();
 }
 remCardAck.addEventListener('click', () => {
-  cardShownAts.forEach(at => markRemDone(at));
   cardShownAts = [];
   remCard.classList.add('hidden');
 });
@@ -3280,6 +3295,49 @@ function askRemPermission() {
 }
 remBtn.addEventListener('click', () => { if (!cryptoKey) return; toggleRemPanel(); });
 
+// ── 页脚 ☰ 菜单（v5.54）：返回首页 / 收藏切换 / 收藏夹 ──
+// 收藏纯本机（localStorage，不碰服务器——笔记名本就明文在 URL，无新增暴露面）；
+// 清除本机密钥仍是左上角「退出锁定」唯一职责，菜单不重复（用户拍板）。
+const menuMask = $('#menuMask');
+const FAVS_KEY = 'notesync_favs', FAVS_MAX = 20;
+function readFavs() {
+  try { const a = JSON.parse(localStorage.getItem(FAVS_KEY) || '[]'); return Array.isArray(a) ? a.filter(n => typeof n === 'string') : []; } catch (e) { return []; }
+}
+function writeFavs(a) { try { localStorage.setItem(FAVS_KEY, JSON.stringify(a.slice(0, FAVS_MAX))); } catch (e) {} }
+function renderMenu() {
+  const favBtn = document.getElementById('menuFav');
+  if (!noteId) { favBtn.classList.add('hidden'); } // 首页无笔记可收藏
+  else {
+    favBtn.classList.remove('hidden');
+    favBtn.textContent = readFavs().indexOf(noteId) >= 0 ? '☆ 取消收藏' : '★ 收藏笔记';
+  }
+  const list = document.getElementById('menuFavList');
+  list.innerHTML = '';
+  const favs = readFavs();
+  document.getElementById('menuFavEmpty').classList.toggle('hidden', favs.length > 0);
+  favs.forEach(name => {
+    const row = document.createElement('div'); row.className = 'fav-row';
+    const label = document.createElement('span'); label.textContent = name;
+    const del = document.createElement('span'); del.className = 'fav-del'; del.textContent = '✕';
+    del.addEventListener('click', e => { e.stopPropagation(); writeFavs(readFavs().filter(n => n !== name)); renderMenu(); });
+    row.addEventListener('click', () => { menuMask.classList.add('hidden'); location.assign('/' + encodeURIComponent(name)); });
+    row.appendChild(label); row.appendChild(del);
+    list.appendChild(row);
+  });
+}
+$('#menuBtn').addEventListener('click', () => { renderMenu(); menuMask.classList.remove('hidden'); });
+menuMask.addEventListener('click', e => { if (e.target === menuMask) menuMask.classList.add('hidden'); });
+$('#menuHome').addEventListener('click', () => { menuMask.classList.add('hidden'); location.assign('/'); });
+$('#menuFav').addEventListener('click', () => {
+  if (!noteId) return;
+  const favs = readFavs(); const i = favs.indexOf(noteId);
+  if (i >= 0) favs.splice(i, 1); else favs.unshift(noteId);
+  writeFavs(favs);
+  renderMenu();
+});
+// v5.54（G5）：原生通知点击补发事件至此落地——已解锁时打开提醒面板，直接看到提醒列表
+window.addEventListener('rem-notify-click', () => { if (cryptoKey && !remPanelOpen) toggleRemPanel(); });
+
 async function saveLocal() {
   clearTimeout(saveRetryTimer); saveRetryTimer = null;
   const html = editor.innerHTML;
@@ -3294,7 +3352,7 @@ async function saveLocal() {
     localVer = r.v; lastHtml = html;
     saveRetryCount = 0;
     clearDraft();
-    cachePut({ ct: enc.ct, iv: enc.iv, v: r.v, savedAt: Date.now() }); // v5.49：保存成功即刷新离线缓存
+    cachePut({ ct: enc.ct, iv: enc.iv, v: r.v, salt: serverSalt ? bufToB64(serverSalt) : null, savedAt: Date.now() }); // v5.49：保存成功即刷新离线缓存；v5.54 附盐
     hideOfflineBar();
     lastSyncAt = Date.now(); // v5.50：保存成功=与服务端通信成功
     setStatus(true, '已同步');
@@ -3571,7 +3629,7 @@ function isNativeApp() {
     loadingEl.classList.add('hidden');
     editor.contentEditable = true;
     if (note.ct) { try { lastHtml = await decryptText(note.ct, note.iv, cryptoKey); editor.innerHTML = lastHtml; } catch (e) {} }
-    if (note.ct) cachePut({ ct: note.ct, iv: note.iv, v: note.v, savedAt: Date.now() }); // v5.49：成功加载即缓存正文密文，供离线阅读
+    if (note.ct) cachePut({ ct: note.ct, iv: note.iv, v: note.v, salt: note.salt, savedAt: Date.now() }); // v5.49：成功加载即缓存正文密文，供离线阅读；v5.54 附盐
     lastSyncAt = Date.now(); // v5.50：在线加载成功=与服务端通信成功
     ensureBlockWrapped();
     if (note.ct) { try { linkifyEditor(); } catch (e) {} }

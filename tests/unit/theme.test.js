@@ -359,13 +359,13 @@ test('v5.45+v5.46：提醒下划线标记由 linkify 管理（先拆后建）并
   assert.ok(/u\.className = 'rem-mark'/.test(SRC), 'buildLinkSafe 必须生成 u.rem-mark（v5.46：不再挂灰态 class）');
   assert.ok(!/rem-past/.test(SRC), '灰态 class 必须完全退役（v5.46：过期/已提醒过的时间回归普通正文，不变灰）');
   assert.ok(!/mt\.past/.test(SRC), '包裹区间不得再携带 past 字段（过期匹配直接不进计算）');
-  assert.ok(/filter\(m => !\(isRemDone\(m\.at\) \|\| m\.at <= now\)\)/.test(SRC), '已过期/已提醒过的匹配必须被过滤（v5.46 用户拍板：无下划线不变灰）');
+  assert.ok(/filter\(m => m\.at > now\)/.test(SRC), '已过期匹配必须被过滤（v5.54：纯时间判断，REM_DONE 退役）');
   assert.ok(!/exec\(txt\.slice\(end\)\)/.test(SRC), '事项延展正则必须删除（v5.46：下划线只包时间串本身）');
   assert.ok(/remMatchesFor\(textNode\.nodeValue\)/.test(SRC), 'linkify 重建时必须传入提醒包裹区间');
   assert.ok(/remMarks\.forEach/.test(SRC), '先拆阶段必须拆 u.rem-mark（删提醒→下划线消失靠整轮重算）');
   assert.ok(/remMatchesFor\(node\.nodeValue\)\.length > 0/.test(SRC), 'walker 必须放行已设提醒命中的纯时间文本节点（否则纯时间行建不出标记）');
   assert.ok(/reminders\.some\(r => r\.at === m\.at\)/.test(SRC), '只有解析值存在于提醒列表才包标记（用户拍板：未添加的日期绝不加下划线）');
-  assert.ok(/&& !\(isRemDone\(m\.at\) \|\| m\.at <= now\)/.test(SRC), '早退判断必须同步排除过期时间（v5.46：纯过期文本走早退）');
+  assert.ok(/&& m\.at > now/.test(SRC), '早退判断必须同步排除过期时间（v5.54：纯时间判断）');
   assert.ok(/#editor u\.rem-mark\{color:\$\{p\.fg\}!important/.test(SRC), '动态板必须锁 rem-mark 前景色');
   assert.ok(/'#editor u\.rem-mark\{color:#E3E3E5!important/.test(SRC), 'SHELL_CSS 必须预反色锁 rem-mark（目标日间前景）');
   assert.ok(/#timeChip \.chip-cta\{color:\$\{chipCta\}!important/.test(SRC), '动态板必须锁 chip CTA 蓝色');
@@ -423,7 +423,7 @@ test('v5.45：chip 文案改版（蓝色 CTA）+ 两行确认卡 + 过期零打�
   assert.ok(/insertNodeAtCaret\(document\.createTextNode\(text\)\)/.test(SRC), '回写走 insertNodeAtCaret 纯 DOM 插入（input 事件链照常：撤销栈/保存/linkify）');
   assert.ok(/let panelSavedSel = null;/.test(SRC), '必须维护打开面板前的编辑器选区快照');
   assert.ok(/saveSelectionBlocked\(editor, sel\.getRangeAt\(0\)\)/.test(SRC), '打开面板必须先保存编辑器选区（恢复光标所在处）');
-  assert.ok((SRC.match(/scheduleRemMarkRefresh/g) || []).length >= 5, '提醒状态变化（增删/到点标/取消标）必须触发标记刷新（定义+至少4挂点）');
+  assert.ok((SRC.match(/scheduleRemMarkRefresh/g) || []).length >= 3, '提醒状态变化（增删）必须触发标记刷新（定义+2 挂点；v5.54 REM_DONE 退役后挂点减少）');
 });
 
 test('v5.41：页面 UI 内不得出现 ⏰ emoji（卡片标题/条目/chip 文案），系统通知保留', () => {

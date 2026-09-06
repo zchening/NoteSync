@@ -1207,10 +1207,51 @@
 - **要点与核对**:
   - [ ] capacitor.config.json 含 webContentsDebuggingEnabled:true（USB + chrome://inspect 直接看 APK 内 WebView 报错）
 
+## P. 过期静默/离线解锁/菜单收藏（v5.54 新增分类）
+
+### P1 | 过期提醒重开必弹骚扰
+- **版本**: v5.54
+- **现象**: 已过期提醒每次打开笔记都弹补弹卡（用户拍板：彻底静默，只在面板列表可见）
+- **根因**: scheduleReminders 开头 overdue 补弹 + REM_DONE「本机已确认」map 双机制叠加；REM_DONE 只记本机确认，重装/清数据后照旧复弹
+- **要点与核对**:
+  - [ ] scheduleReminders 内无 showRemCard 补弹分支
+  - [ ] isRemDone/remDoneMap/markRemDone/unmarkRemDone/REM_DONE_KEY 定义全退役（grep 为 0，注释提及允许）
+  - [ ] 正文提醒匹配与过滤统一 `filter(m => m.at > now)` 纯时间判断
+  - [ ] remCardAck 处理器只剩清空 cardShownAts + 收卡
+
+### P2 | 原生迟到闹钟补发过期通知
+- **版本**: v5.54
+- **现象**: 系统深睡后闹钟被推迟、唤醒时集中补触发，过期提醒在通知栏「诈尸」
+- **根因**: AlarmManager setExactAndAllowWhileIdle 被系统推迟后批量补触发，接收器无时效校验
+- **要点与核对**:
+  - [ ] RemReceiver.onReceive 开头 `at <= 0 || System.currentTimeMillis() - at > 60_000L` 直接 return（且在 createNotificationChannel 之前）
+
+### P3 | 点过退出后离线输口令死路
+- **版本**: v5.54
+- **现象**: 退出（清本机密钥）/清浏览器数据/重装后离线打开，输口令 → 程序先请求服务器 → 离线必失败 → 卡在口令框，本地缓存明明有密文
+- **根因**: unlock 的 apiGet catch 无离线回退路径
+- **要点与核对**:
+  - [ ] unlock catch 内 !navigator.onLine 分支：cacheGet → c.ct && c.salt 双守卫 → deriveKey(pass, b64ToBuf(c.salt)) → decryptText 口令校验 → 写 KEY_STORE → loadCachedBody → startSync
+  - [ ] cachePut 定义含 salt 字段，全部调用点均传盐
+  - [ ] 旧缓存（无 salt）安全回落「无法连接服务器」提示
+
+### P4 | 原生通知点击无 JS 响应
+- **版本**: v5.54
+- **现象**: APK 点系统通知回跳后提醒面板不自动打开（v5.52 遗留 P2：MainActivity 补发 rem-notify-click 事件但 JS 侧无监听）
+- **要点与核对**:
+  - [ ] window.addEventListener('rem-notify-click', ...) 存在，cryptoKey && !remPanelOpen 守卫后 toggleRemPanel()
+
+### P5 | 双击返回退出交互生硬（交互替代，用户提案）
+- **版本**: v5.54
+- **要点与核对**:
+  - [ ] footer 左侧 menuBtn + menuMask/menuBox 模态面板：返回首页（location.assign 留历史）/收藏切换/收藏夹列表（notesync_favs 上限 20，行点击 encodeURIComponent 跳转，✕ stopPropagation，空态文案）
+  - [ ] 菜单 CSS 全 var() 深色自适配；列表 DOM 用 textContent 构建（无 innerHTML 注入面）
+
 ## 版本与 bug 对应速查
 
 | 版本 | 涉及 bug 编号 |
 |------|---------------|
+| v5.54 | P1-P5（过期补弹删+REM_DONE 退役纯时间过滤 + RemReceiver 60s 迟到容差 + 离线口令解本地缓存回退 + rem-notify-click JS 监听 + 页脚菜单收藏体系） |
 | v5.53 | O1-O5（删 captureInput 修 IME 组字链 + editor isComposing 旁路零 DOM 手术 + 首页 250ms 轮询兜底 + windowOptOutEdgeToEdgeEnforcement 退出 edge-to-edge + 返回键 OnBackPressedCallback 接 WebView 历史 + webContentsDebuggingEnabled 排障） |
 | v5.52 | N1-N10（APK 改 server.url 直连 + 砍热更新 + 原生三 P0：通知权限/requestCode 截断/同步落盘 + setAlarmClock + BootReceiver 补齐 + 断网兜底页 + 冷启事件补发 + 服务端 XFF/fail/SSE） |
 | v4.3 | A1, A2, A3 |
