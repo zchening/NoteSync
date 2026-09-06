@@ -41,14 +41,14 @@ test('H2 offlineBar 在 footer 内 + 新文案 + 悬浮条 CSS 退役', () => {
 });
 
 // ── H3：页脚加高 + ☰/菜单项全端加大（不再只限 APP）──
-test('H3 页脚 min-height 46 + menuBtn 22px/44px 触控 + 菜单项 46px 全局', () => {
+test('H3 页脚 min-height 46 + menuBtn 22px/44px 触控 + 菜单项 54px 全局（v6.1 再加大）', () => {
   const src = readSrc();
   assert.ok(/footer\{[^}]*min-height:46px/.test(src), '页脚应 min-height 46px');
   assert.ok(/footer\{[^}]*padding:14px 18px/.test(src), '页脚应加高（padding 14px）');
   assert.ok(/#menuBtn\{[^}]*font-size:22px/.test(src), '☰ 应放大到 22px');
   assert.ok(/#menuBtn\{[^}]*min-height:44px/.test(src), '☰ 点击区应 ≥44px');
-  assert.ok(/\.menu-item\{[^}]*min-height:46px/.test(src), '菜单项应 min-height 46px（全局）');
-  assert.ok(/\.menu-item\{[^}]*font-size:15px/.test(src), '菜单项应 15px（全局）');
+  assert.ok(/\.menu-item\{[^}]*min-height:54px/.test(src), 'v6.1 菜单项应 min-height 54px（46→54 用户拍板）');
+  assert.ok(/\.menu-item\{[^}]*font-size:16px/.test(src), 'v6.1 菜单项应 16px（15→16）');
   assert.ok(!src.includes('body.native-app .menu-item') && !src.includes('body.native-app #menuBtn'), 'APP 专属加大规则应并入全局');
 });
 
@@ -60,7 +60,10 @@ test('H4 native-only 退役 + 顶栏两枚全平台隐藏 + scanWithWebCamera', 
   assert.ok(src.includes('#themeBtn, #lock{display:none}'), '顶栏日夜间/退出锁定应全平台隐藏（v5.58 起不只 APP）');
   assert.ok(src.includes('async function scanWithWebCamera()'), '应有网页端扫码函数');
   assert.ok(src.includes("typeof window.BarcodeDetector !== 'undefined'"), '网页扫码应探测 BarcodeDetector 支持（v6.0 起不支持时走 jsQR 兜底而非直接劝退）');
-  assert.ok(src.includes('当前浏览器不支持扫码，请用 APP'), '不支持时应明确提示而非静默');
+  // v6.1：提示文案分流——不再一律「请用 APP」（PC 网页端本就支持扫码）
+  assert.ok(src.includes('当前环境无法调用摄像头（需 HTTPS）'), 'mediaDevices 缺失应提示 HTTPS 而非「请用 APP」');
+  assert.ok(src.includes('扫码组件加载失败，请稍后重试'), 'jsQR 加载失败应有独立提示');
+  assert.ok(src.includes('未检测到可用摄像头'), '无摄像头设备应有独立提示');
   assert.ok(src.includes('await scanWithWebCamera()'), 'menuScan 应有网页端分支（无插件时走自写扫码层）');
   assert.ok(src.includes('getUserMedia({ video: { facingMode: \'environment\' } })'), '网页扫码应走后置摄像头');
 });

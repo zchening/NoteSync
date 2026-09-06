@@ -156,24 +156,35 @@
   footer{display:flex;align-items:center;justify-content:center;gap:7px;padding:14px 18px;min-height:46px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);letter-spacing:.14em;position:relative} /* v5.58：状态栏加高、字号加大（用户要求三端都更方便点击/阅读） */
   #menuBtn{position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:22px;line-height:1;cursor:pointer;padding:10px 14px;min-height:44px;display:flex;align-items:center;touch-action:manipulation;-webkit-tap-highlight-color:transparent;letter-spacing:0}
   #menuBtn:active{opacity:.6}
-  #menuBox{width:min(90vw,320px);text-align:left;padding:26px 22px 22px}
+  #menuBox{width:min(90vw,320px);text-align:left;padding:26px 22px 22px;position:relative}
   /* v5.58：菜单项触控区全端加大（原 v5.57 只在 APP 端加大，用户要求三端一致） */
-  .menu-item{padding:14px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:9px;cursor:pointer;color:var(--fg);font-size:15px;min-height:46px;line-height:1.4;text-align:center;touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:border-color .2s}
+  .menu-item{padding:16px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:9px;cursor:pointer;color:var(--fg);font-size:16px;min-height:54px;line-height:1.4;text-align:center;touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:border-color .2s}
   .menu-item:active{background:var(--hover)}
   /* v6.0：菜单前缀换 1.7px 细线 SVG（与顶栏同族）——Unicode 字形（⌂ ★ ▣ ◐…）本身比汉字小一圈，
      行高加再大字形也不会变大；20px SVG 与 15px 文字基线对齐才是真正的「加大」 */
-  .menu-item svg{width:20px;height:20px;vertical-align:-4.5px;margin-right:8px}
+  .menu-item svg{width:26px;height:26px;vertical-align:-6.5px;margin-right:8px}
   /* v5.58：三端菜单与左下角布局统一——扫一扫/日夜间切换/退出锁定全平台进菜单（平台差异化机制退役），
      顶栏 themeBtn/lock 全平台移除（不再只在 APP 端隐藏）；菜单项与 ☰ 加大已在上方全局生效 */
   #themeBtn, #lock{display:none}
   .fav-row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid var(--line);color:var(--fg);font-size:13px;cursor:pointer}
   .fav-row:active{background:var(--hover)}
-  /* v6.0：历史版本行——meta 一行说明（时间·来源·版本·体积），预览内联展开，恢复走正常保存 */
-  .hist-row{padding:8px 4px;border-bottom:1px solid var(--line);font-size:13px;color:var(--fg)}
+  /* v6.1：历史版本单行——「时间 · 手动 [预览][恢复]」（自动不标注），预览内联展开，恢复走正常保存 */
+  .hist-item{padding:8px 4px;border-bottom:1px solid var(--line);font-size:13px;color:var(--fg)}
   .hist-meta{color:var(--muted);font-size:12px;letter-spacing:.02em}
   .hist-preview{margin-top:6px;padding:8px 10px;background:var(--hover);border-radius:8px;font-size:12px;color:var(--muted);white-space:pre-wrap;word-break:break-all;max-height:120px;overflow-y:auto}
-  .hist-btns{display:flex;gap:8px;margin-top:6px}
-  .hist-btns button{flex:1;min-height:34px;padding:6px 0;font-size:12.5px;color:var(--fg);background:none;border:1px solid var(--line);border-radius:8px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+  .hist-line{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .hist-btns{display:flex;gap:6px;flex-shrink:0}
+  .hist-btns button{min-height:32px;padding:4px 12px;font-size:12.5px;color:var(--fg);background:none;border:1px solid var(--line);border-radius:8px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+  /* v6.1：历史/收藏列表独立滚动——条目多时不再撑爆 menuBox（返回按钮常驻顶部，移动端内滚流畅） */
+  #menuHistList,#menuFavList{max-height:min(52vh,420px);overflow-y:auto;-webkit-overflow-scrolling:touch}
+  /* v6.1：弹窗右上角通用 X（口令弹窗 + 菜单盒），40px 热区 */
+  .box-x{position:absolute;top:8px;right:8px;width:40px;height:40px;display:flex;align-items:center;justify-content:center;background:none;border:none;color:var(--muted);cursor:pointer;border-radius:10px;padding:0;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+  .box-x:hover{color:var(--fg);background:var(--hover)}
+  .box-x svg{width:22px;height:22px}
+  /* v6.1：修改口令相邻输入框间距——此前 .box input 无 margin，两框贴死（用户实测"重合"） */
+  #cpNew,#cpNew2{margin-top:12px}
+  /* v6.1：诊断模态——居中弹窗、主题前景色（日夜都可读），替代右下角黑底绿字浮层在日间不可读的问题 */
+  #diagContent{margin:0 0 14px;padding:12px;background:var(--hover);border-radius:10px;font:13px/1.6 ui-monospace,Consolas,monospace;color:var(--fg);white-space:pre-wrap;word-break:break-all;max-height:52vh;overflow-y:auto;text-align:left}
   #menuFavEmpty{text-align:center;color:var(--muted);font-size:12px;padding:8px 0}
   footer .dot{width:7px;height:7px;border-radius:50%;background:#C9C7BE;flex-shrink:0;transition:background .3s}
   footer .dot.on{background:#2FA866}
@@ -182,7 +193,7 @@
   .mask{position:fixed;inset:0;background:rgba(20,20,18,.42);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:center;z-index:10}
   .mask.hidden{display:none!important}
   .box{background:var(--box-bg);border:1px solid var(--line);border-radius:18px;padding:34px 30px 28px;width:min(90vw,380px);box-shadow:0 24px 70px rgba(20,20,18,.16);transition:background .3s;animation:rise .5s cubic-bezier(.2,.7,.3,1) both}
-  .box .mark{width:40px;height:40px;color:var(--accent);margin-bottom:16px}
+  /* v6.1：.box .mark 退役——口令弹窗去图标后全站无 mark 使用者（用户拍板方案 A） */
   .box h1{font-size:18px;font-weight:600;margin:0 0 8px;letter-spacing:.02em}
   .box p{font-size:13px;color:var(--muted);margin:0 0 20px;line-height:1.7}
   .box input{width:100%;padding:0 14px;height:46px;border:1px solid var(--line);border-radius:10px;font-size:15px;outline:0;background:var(--bg);color:var(--fg);transition:border-color .2s,box-shadow .2s}
@@ -303,27 +314,28 @@
 </div>
 <div class="mask hidden" id="menuMask">
   <div class="box" id="menuBox">
+    <button type="button" id="menuClose" class="box-x" title="关闭" aria-label="关闭菜单"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12"/><path d="M18 6L6 18"/></svg></button>
     <div id="menuMainView">
-      <div id="menuHome" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11.5 12 4l8 7.5"/><path d="M6.5 10.5V20h11v-9.5"/></svg>返回首页</div>
-      <div id="menuFav" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.8l2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4-3.9-3.8 5.4-.8z"/></svg>收藏笔记</div>
-      <div id="menuFavEntry" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 18.5V6.5h5.5l2 2h9.5v10z"/></svg>收藏夹</div>
-      <div id="menuHistEntry" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>历史版本</div>
-      <div id="menuScan" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8V4h4"/><path d="M16 4h4v4"/><path d="M20 16v4h-4"/><path d="M8 20H4v-4"/><path d="M7.5 12h9"/></svg>扫一扫</div>
-      <div id="menuTheme" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg>日夜间切换</div>
-      <div id="menuPass" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7.5" cy="15.5" r="4.5"/><path d="M11 12l9.5-9.5"/><path d="M16.5 6.5 20 10"/></svg>修改口令</div>
-      <div id="menuLock" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8.5 10.5V7.2a3.5 3.5 0 0 1 6.9-.8"/></svg>退出锁定</div>
-      <div id="menuDiag" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12.5h4l2.5-6.5 4.5 12 2.5-5.5H21"/></svg>诊断</div>
+      <div id="menuHome" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11.5 12 4l8 7.5"/><path d="M6.5 10.5V20h11v-9.5"/></svg>返回首页</div>
+      <div id="menuFav" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.8l2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4-3.9-3.8 5.4-.8z"/></svg>收藏笔记</div>
+      <div id="menuFavEntry" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 18.5V6.5h5.5l2 2h9.5v10z"/></svg>收藏夹</div>
+      <div id="menuHistEntry" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>历史版本</div>
+      <div id="menuScan" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8V4h4"/><path d="M16 4h4v4"/><path d="M20 16v4h-4"/><path d="M8 20H4v-4"/><path d="M7.5 12h9"/></svg>扫一扫</div>
+      <div id="menuTheme" class="menu-item" role="button" tabindex="0"><span id="menuThemeIcon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg></span><span id="menuThemeLabel">夜间模式</span></div>
+      <div id="menuPass" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7.5" cy="15.5" r="4.5"/><path d="M11 12l9.5-9.5"/><path d="M16.5 6.5 20 10"/></svg>修改口令</div>
+      <div id="menuLock" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8.5 10.5V7.2a3.5 3.5 0 0 1 6.9-.8"/></svg>退出锁定</div>
+      <div id="menuAbout" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 7.5v.5"/></svg>关于 NoteSync</div>
     </div>
     <div id="menuFavView" class="hidden">
-      <div id="menuFavBack" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg>返回</div>
+      <div id="menuFavBack" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg>返回</div>
       <div id="menuFavList"></div>
       <div id="menuFavEmpty" class="hidden">暂无收藏</div>
     </div>
     <div id="menuHistView" class="hidden">
-      <div id="menuHistBack" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg>返回</div>
+      <div id="menuHistBack" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg>返回</div>
       <div id="menuHistList"></div>
       <div id="menuHistEmpty" class="hidden">暂无历史版本</div>
-      <div id="menuHistSave" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>新增历史版本</div>
+      <div id="menuHistSave" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>新增历史版本</div>
     </div>
   </div>
 </div>
@@ -359,14 +371,13 @@
 </div>
 
 <div class="mask hidden" id="mask">
-  <div class="box">
-    <svg class="mark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M38.5 21.5A15 15 0 0 0 13 13.6"/><path d="M12.5 6.5v7.5H20"/><path d="M9.5 26.5A15 15 0 0 0 35 34.4"/><path d="M35.5 41.5V34H28"/><line x1="17.5" y1="24" x2="30.5" y2="24"/></svg>
-    <h1>输入访问口令</h1>
+  <div class="box" style="position:relative">
+    <button type="button" id="maskClose" class="box-x" title="返回首页" aria-label="返回首页"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12"/><path d="M18 6L6 18"/></svg></button>
+    <h1>输入口令</h1>
     <p>此口令用于在本机派生加密密钥，不会发送到服务器。每台新设备首次打开需输入一次，之后自动记住。</p>
     <input id="pw" type="password" autocomplete="off" autofocus>
     <div class="err" id="err"></div>
     <button id="ok" disabled>解 锁</button>
-    <button id="unlockHome" class="ghost-btn">返回首页</button>
   </div>
 </div>
 
@@ -385,11 +396,28 @@
     <h1>修改口令</h1>
     <p>修改后本机立即用新口令重新加密；<br>其他设备需用<b>新口令</b>重新打开此笔记。</p>
     <input id="cpOld" type="password" placeholder="当前口令" autocomplete="off">
-    <input id="cpNew" type="password" placeholder="新口令（至少 4 位）" autocomplete="off" class="hidden">
-    <input id="cpNew2" type="password" placeholder="再输一遍新口令" autocomplete="off" class="hidden">
+    <input id="cpNew" type="password" placeholder="新口令" autocomplete="off" class="hidden">
+    <input id="cpNew2" type="password" placeholder="再次输入" autocomplete="off" class="hidden">
     <div class="err" id="cpErr"></div>
     <button id="cpOk" disabled>下一步</button>
     <button id="cpCancel" class="ghost-btn">取消</button>
+  </div>
+</div>
+
+<div class="mask hidden" id="aboutMask">
+  <div class="box qr-box">
+    <h1 class="qr-title" id="aboutTitle">关于Note'Sync</h1>
+    <p id="aboutVer"></p>
+    <p id="aboutAppVer" class="hidden" style="margin-top:-8px"></p>
+    <p style="margin-top:2px">产品作者：zchening</p>
+  </div>
+</div>
+
+<div class="mask hidden" id="diagMask">
+  <div class="box">
+    <h1 class="qr-title">诊断信息</h1>
+    <pre id="diagContent"></pre>
+    <button id="diagCopy">复制诊断信息</button>
   </div>
 </div>
 
@@ -425,8 +453,8 @@ const NOTE_LAST_KEY = 'notesync_last_note';
 const NOTE_JUMPED_KEY = 'notesync_jumped';
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '6.0';
-const BUILD_DATE = '2026-09-06';
+const APP_VERSION = '6.1';
+const BUILD_DATE = '2026-09-07';
 
 const $ = s => document.querySelector(s);
 const editor = $('#editor'), mask = $('#mask'), pw = $('#pw'), err = $('#err');
@@ -627,7 +655,15 @@ function unmountShellOverride() {
   const sh = document.getElementById('theme-shell');
   if (sh) sh.remove();
 }
+// v6.1：菜单日夜间项随主题语义翻转——日间显示「夜间模式」（点它去夜间），夜间显示「日间模式」
+// 用户拍板文案反转；图标同语义（复用 ICON_SUN/ICON_MOON，与顶栏旧按钮一致的目标态语义）
+function syncThemeMenuItem(dark) {
+  const ic = document.getElementById('menuThemeIcon'), lb = document.getElementById('menuThemeLabel');
+  if (ic) ic.innerHTML = dark ? ICON_SUN : ICON_MOON;
+  if (lb) lb.textContent = dark ? '日间模式' : '夜间模式';
+}
 function applyTheme(dark) {
+  syncThemeMenuItem(dark);       // v6.1：菜单「日夜间」项文案/图标随语义翻转（日间显「夜间模式」）
   const shell = darkShellActive();          // 反色环境（小米/QQ + 系统深色，或手动开关）
   const internalDark = dark || shell;       // 借壳日间：内部也是夜间（骗对手放行）
   document.body.classList.toggle('dark', internalDark);
@@ -1203,19 +1239,12 @@ function hideUploadStatus() { uploadStatus.classList.remove('show'); }
   // v5.56：APP 无地址栏、笔记名不能含 ?——菜单「诊断」项经 __toggleDiag 免 URL 开关浮层，
   // localStorage 标记让浮层跨重载保持（真机反复取证）；?diag 查询参数仍然有效。
   let diagBox = null, diagTimer = null;
-  function bootDiag() {
-    if (diagBox) return;
-    diagBox = document.createElement('div');
-    diagBox.id = 'caretDiag';
-    diagBox.style.cssText = 'position:fixed;right:8px;bottom:8px;z-index:99999;max-width:46vw;' +
-      'padding:8px 10px;border-radius:8px;background:rgba(0,0,0,.82);color:#0f0;' +
-      'font:11px/1.5 ui-monospace,Consolas,monospace;white-space:pre-wrap;word-break:break-all;' +
-      'pointer-events:none;user-select:none';
-    document.body.appendChild(diagBox);
+  // v6.1：采样逻辑抽成 collectDiagLines()——?diag 常驻浮层与「关于Note'Sync」彩蛋诊断模态共用。
+  // 浮层保持 250ms 实时刷新；诊断模态为一次性快照（打开时取一拍）。
+  window.collectDiagLines = function () {
     const cut = (s, n) => (s.length > n ? s.slice(0, n) + '…' : s);
-    diagTimer = setInterval(() => {
-      const L = [];
-      try {
+    const L = [];
+    try {
         L.push('v' + APP_VERSION + '  composing=' + (typeof isComposing !== 'undefined' ? isComposing : '?'));
         const ae = document.activeElement;
         L.push('focus=' + (ae ? (ae.id || ae.nodeName) : 'null') + '  docFocus=' + document.hasFocus());
@@ -1273,8 +1302,21 @@ function hideUploadStatus() { uploadStatus.classList.remove('show'); }
             if (typeof r.scheduled === 'number') window.__remNativeScheduled = r.scheduled;
           }).catch(() => {});
         }
-      } catch (e) { L.push('ERR ' + e.message); }
-      diagBox.textContent = L.join('\n');
+
+    } catch (e) { L.push('ERR ' + e.message); }
+    return L;
+  };
+  function bootDiag() {
+    if (diagBox) return;
+    diagBox = document.createElement('div');
+    diagBox.id = 'caretDiag';
+    diagBox.style.cssText = 'position:fixed;right:8px;bottom:8px;z-index:99999;max-width:46vw;' +
+      'padding:8px 10px;border-radius:8px;background:rgba(0,0,0,.82);color:#0f0;' +
+      'font:11px/1.5 ui-monospace,Consolas,monospace;white-space:pre-wrap;word-break:break-all;' +
+      'pointer-events:none;user-select:none';
+    document.body.appendChild(diagBox);
+    diagTimer = setInterval(() => {
+      diagBox.textContent = window.collectDiagLines().join('\n');
     }, 250);
   }
   function stopDiag() {
@@ -3658,6 +3700,7 @@ function writeFavs(a) { try { localStorage.setItem(FAVS_KEY, JSON.stringify(a.sl
 const STAR_OUT_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.8l2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4-3.9-3.8 5.4-.8z"/></svg>';
 const STAR_IN_SVG = STAR_OUT_SVG.replace('fill="none"', 'fill="currentColor"');
 function renderMenu() {
+  syncThemeMenuItem(themeWantsDark); // v6.1：打开菜单即刷新日夜间项文案（applyTheme 已实时同步，这里双保险）
   const favBtn = document.getElementById('menuFav');
   if (!noteId) { favBtn.classList.add('hidden'); } // 首页无笔记可收藏
   else {
@@ -3687,6 +3730,8 @@ function renderMenu() {
 }
 $('#menuBtn').addEventListener('click', () => { renderMenu(); menuMask.classList.remove('hidden'); });
 menuMask.addEventListener('click', e => { if (e.target === menuMask) menuMask.classList.add('hidden'); });
+// v6.1：菜单盒右上角 X——三视图（主/收藏夹/历史）通用关闭出口，移动端不再依赖遮罩窄边
+$('#menuClose').addEventListener('click', () => { menuMask.classList.add('hidden'); });
 // v5.55：主视图 ↔ 收藏夹二级视图
 $('#menuFavEntry').addEventListener('click', () => {
   renderMenu(); // 先刷新列表（renderMenu 会重置视图，这里再切到二级）
@@ -3698,13 +3743,64 @@ $('#menuFavBack').addEventListener('click', () => {
   document.getElementById('menuMainView').classList.remove('hidden');
 });
 $('#menuHome').addEventListener('click', () => { menuMask.classList.add('hidden'); location.assign('/'); });
-// v5.56：APP 内诊断入口（无地址栏无法加 ?diag，笔记名也不能含 ?）——开关浮层并跨重载保持标记
-$('#menuDiag').addEventListener('click', () => {
+// v6.1：菜单「诊断」一级项退役（用户拍板）——诊断入口收进「关于Note'Sync」弹窗彩蛋（标题连点 4 次）
+// 与 ?diag URL 通道；v5.56 的免 URL 开关浮层逻辑（__toggleDiag/localStorage 标记）保留供 ?diag 使用。
+const aboutMask = $('#aboutMask'), diagMask = $('#diagMask');
+$('#menuAbout').addEventListener('click', async () => {
   menuMask.classList.add('hidden');
-  const turningOn = !document.getElementById('caretDiag');
-  try { turningOn ? localStorage.setItem('notesync_diag', '1') : localStorage.removeItem('notesync_diag'); } catch (e) {}
-  if (window.__toggleDiag) window.__toggleDiag();
+  $('#aboutVer').textContent = '网页 v' + APP_VERSION;
+  const av = $('#aboutAppVer');
+  av.classList.add('hidden'); av.textContent = '';
+  if (isNativeApp()) {
+    // APP 端补 APP 版本号——RemPlugin.getVersion 现成桥方法；旧 APK 无此方法则静默跳过
+    try {
+      const cap = window.Capacitor;
+      const rb = (cap && cap.Plugins && cap.Plugins.RemBridge) || (typeof window !== 'undefined' && window.RemBridge) || null;
+      if (rb && typeof rb.getVersion === 'function') {
+        const ret = await rb.getVersion();
+        const nv = ret && ret.nativeVersion;
+        if (nv) { av.textContent = 'APP v' + nv; av.classList.remove('hidden'); }
+      }
+    } catch (e) {}
+  }
+  aboutMask.classList.remove('hidden');
 });
+// 彩蛋：800ms 内连点标题「关于Note'Sync」4 次 → 关闭关于弹窗 → 弹诊断模态（v6.1 用户需求）
+let aboutTaps = 0, aboutTapTimer = null;
+$('#aboutTitle').addEventListener('click', () => {
+  aboutTaps++;
+  clearTimeout(aboutTapTimer);
+  aboutTapTimer = setTimeout(() => { aboutTaps = 0; }, 800);
+  if (aboutTaps >= 4) {
+    aboutTaps = 0; clearTimeout(aboutTapTimer);
+    aboutMask.classList.add('hidden');
+    openDiagModal();
+  }
+});
+aboutMask.addEventListener('click', e => { if (e.target === aboutMask) aboutMask.classList.add('hidden'); });
+// 诊断模态：居中弹窗 + 主题前景色（修复右下角黑底浮层日间不可读）+ 复制按钮 + 自动关闭
+function openDiagModal() {
+  const pre = $('#diagContent');
+  try { pre.textContent = window.collectDiagLines().join('\n'); }
+  catch (e) { pre.textContent = '诊断信息生成失败: ' + (e && e.message || e); }
+  diagMask.classList.remove('hidden');
+}
+$('#diagCopy').addEventListener('click', () => {
+  const txt = $('#diagContent').textContent || '';
+  const done = () => showUploadStatus('已复制诊断信息');
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done, () => fallbackCopyText(txt, done));
+  else fallbackCopyText(txt, done);
+});
+function fallbackCopyText(txt, done) {
+  const ta = document.createElement('textarea');
+  ta.value = txt; ta.style.cssText = 'position:fixed;left:-9999px';
+  document.body.appendChild(ta); ta.select();
+  try { if (document.execCommand('copy')) done(); } catch (e) {}
+  ta.remove();
+}
+diagMask.addEventListener('click', e => { if (e.target === diagMask) diagMask.classList.add('hidden'); });
+// 滚动笔记自动关闭诊断模态（用户拍板：滚动即视为离开诊断）
+editor.addEventListener('scroll', () => { if (!diagMask.classList.contains('hidden')) diagMask.classList.add('hidden'); });
 // v5.58：三端菜单/左下角布局统一——扫一扫、日夜间切换、退出锁定全平台可见（平台差异化机制退役），
 // 顶栏 themeBtn/lock 全平台移除（见样式区 #themeBtn, #lock{display:none}）
 $('#menuTheme').addEventListener('click', () => { menuMask.classList.add('hidden'); themeBtn.click(); });
@@ -3758,7 +3854,7 @@ async function cpVerify() {
 }
 async function cpRotate() {
   const p1 = cpNew.value, p2 = cpNew2.value;
-  if (!p1 || p1.length < 4) { cpErr.textContent = '新口令至少 4 位'; return; }
+  if (!p1) { cpErr.textContent = '新口令不能为空'; return; } // v6.1：最低位数要求取消（用户拍板，1 位即可）
   if (p1 !== p2) { cpErr.textContent = '两次输入的新口令不一致'; return; }
   cpOk.disabled = true; cpErr.textContent = '重新加密中…';
   try {
@@ -3817,12 +3913,14 @@ async function loadHistList() {
   document.getElementById('menuHistEmpty').classList.toggle('hidden', list.length > 0);
   histPreviewTs = null;
   list.slice().reverse().forEach(item => { // 最新在上
-    const row = document.createElement('div'); row.className = 'hist-row';
-    const meta = document.createElement('div'); meta.className = 'hist-meta';
-    meta.textContent = fmtSyncShort(item.ts) + ' · ' + (item.manual ? '手动' : '自动') + ' · v' + (item.v || 0) + ' · ' + Math.max(1, Math.round((item.size || 0) * 3 / 4 / 1024)) + 'KB';
+    // v6.1：单行布局「时间 · 手动 [预览][恢复]」——自动不标注，v/KB 冗余信息删除（用户拍板）
+    const row = document.createElement('div'); row.className = 'hist-item';
+    const line = document.createElement('div'); line.className = 'hist-line';
+    const meta = document.createElement('span'); meta.className = 'hist-meta';
+    meta.textContent = fmtSyncShort(item.ts) + (item.manual ? ' · 手动' : '');
     const btns = document.createElement('div'); btns.className = 'hist-btns';
     const pv = document.createElement('button'); pv.type = 'button'; pv.textContent = '预览';
-    const rs = document.createElement('button'); rs.type = 'button'; rs.textContent = '恢复此版本';
+    const rs = document.createElement('button'); rs.type = 'button'; rs.textContent = '恢复';
     pv.addEventListener('click', async () => {
       const old = row.querySelector('.hist-preview');
       if (old) { old.remove(); if (histPreviewTs === item.ts) { histPreviewTs = null; return; } }
@@ -3849,7 +3947,8 @@ async function loadHistList() {
       } catch (e) { showUploadStatus('恢复失败'); setTimeout(() => { if (uploadStatus.textContent === '恢复失败') hideUploadStatus(); }, 2200); }
     });
     btns.appendChild(pv); btns.appendChild(rs);
-    row.appendChild(meta); row.appendChild(btns);
+    line.appendChild(meta); line.appendChild(btns);
+    row.appendChild(line);
     menuHistList.appendChild(row);
   });
 }
@@ -3871,10 +3970,10 @@ $('#menuHistSave').addEventListener('click', async () => {
   await loadHistList();
 });
 // v5.58：网页端扫码——BarcodeDetector（形状检测 API）+ getUserMedia 自写全屏扫描层。
-// Chrome/Edge/安卓 Chrome 支持；iOS Safari 无 BarcodeDetector → 明确提示「请用 APP」，不静默失败。
+// Chrome/Edge/安卓 Chrome 支持；iOS Safari 无 BarcodeDetector → 明确提示失败，不静默。
 // v6.0：桌面 Chrome/Edge 与 iOS Safari 均无 BarcodeDetector（形状检测 API 仅安卓/macOS Chrome）。
 // 兜底 = 动态加载同源 /jsQR.js 纯 JS 解码（约 127KB，immutable 缓存，只在扫码时拉一次）；
-// jsQR 都不可用（服务端旧版/断网）才提示「请用 APP」。逐帧 canvas 解码节流与 detector 一致。
+// v6.1：jsQR 也不可用（服务端旧版/断网）才提示「扫码组件加载失败」，PC 网页端本就支持扫码。逐帧 canvas 解码节流与 detector 一致。
 function loadJsQR() {
   return new Promise(resolve => {
     if (typeof window.jsQR === 'function') return resolve(true);
@@ -3887,12 +3986,13 @@ function loadJsQR() {
 }
 async function scanWithWebCamera() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    setStatus(false, '当前浏览器不支持扫码，请用 APP');
+    // v6.1：文案不再误导为「请用 APP」——PC 网页端本就支持扫码，此提示只可能因非安全上下文（HTTP）
+    setStatus(false, '当前环境无法调用摄像头（需 HTTPS）');
     return null;
   }
   const useDetector = typeof window.BarcodeDetector !== 'undefined';
   if (!useDetector && !(await loadJsQR())) {
-    setStatus(false, '当前浏览器不支持扫码，请用 APP');
+    setStatus(false, '扫码组件加载失败，请稍后重试'); // v6.1：多为 /jsQR.js 不可达，与「不支持扫码」区分
     return null;
   }
   const overlay = document.createElement('div');
@@ -3942,7 +4042,10 @@ async function scanWithWebCamera() {
     });
   } catch (e) {
     cleanup();
-    setStatus(false, (e && e.name === 'NotAllowedError') ? '相机权限被拒绝' : '扫码启动失败');
+    // v6.1：错误分流——权限拒绝 / 无摄像头设备 / 其他，不再一律「扫码启动失败」
+    setStatus(false,
+      (e && e.name === 'NotAllowedError') ? '相机权限被拒绝' :
+      (e && e.name === 'NotFoundError') ? '未检测到可用摄像头' : '扫码启动失败');
     return null;
   }
 }
@@ -4190,8 +4293,8 @@ window.addEventListener('online', () => {
 });
 
 $('#ok').addEventListener('click', () => unlock(pw.value));
-// v5.57：口令框给「返回首页」出口——APP 里不想解锁时不必杀进程（用户实测无出口实锤）
-$('#unlockHome').addEventListener('click', () => { location.assign('/'); });
+// v6.1：口令框「返回首页」按钮退役（用户拍板）——右上角 X 接管该出口，行为不变（回首页）
+$('#maskClose').addEventListener('click', () => { location.assign('/'); });
 pw.addEventListener('keydown', e => { if (e.key === 'Enter') unlock(pw.value); });
 pw.addEventListener('input', () => { $('#ok').disabled = pw.value.length === 0; });
 $('#lock').addEventListener('click', () => {

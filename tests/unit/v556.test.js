@@ -81,10 +81,11 @@ test('F4 remoteBar 冲突条：DOM + 错位 CSS + 双按钮 wiring', () => {
 // ── F5：APP 内诊断入口形态（无地址栏/笔记名不能含 ? 的解法）──
 test('F5 菜单诊断项 + __toggleDiag 免 URL 开关 + 跨重载标记 + 缓存诊断行', () => {
   const src = readSrc();
-  assert.ok(src.includes('id="menuDiag"'), '菜单应有「诊断」项');
-  assert.ok(src.includes('window.__toggleDiag'), 'diag 浮层应暴露免 URL 开关');
+  // v6.1：菜单「诊断」一级项退役（入口收进「关于Note'Sync」彩蛋），浮层开关与标记保留给 ?diag
+  assert.ok(!src.includes('id="menuDiag"'), 'v6.1 菜单不应再有「诊断」一级项');
+  assert.ok(src.includes('id="menuAbout"'), 'v6.1 菜单应有「关于 NoteSync」项');
+  assert.ok(src.includes('window.__toggleDiag'), 'diag 浮层应暴露免 URL 开关（?diag 通道保留）');
   assert.ok(src.includes('notesync_diag'), '应有跨重载保持标记');
-  assert.ok(src.includes("$('#menuDiag').addEventListener('click'"), '菜单诊断项应有 wiring');
   assert.ok(src.includes('mainDocCache='), '诊断应含主文档缓存读数');
   assert.ok(src.includes('pendingRemote='), '诊断应含远端挂起读数');
 });
@@ -191,8 +192,8 @@ test('F8 MainActivity assets 兜底 + RemPlugin.cacheInfo + build.gradle/CI 版�
   assert.ok(plugin.includes('MainActivity.interceptCount'), 'cacheInfo 应读 MainActivity 计数');
 
   const gradle = fs.readFileSync(path.join(__dirname, '..', '..', 'android', 'app', 'build.gradle'), 'utf8');
-  assert.ok(gradle.includes('versionCode 60'), 'build.gradle versionCode 应 bump 为 60（v6.0）');
-  assert.ok(gradle.includes('versionName "6.0"'), 'build.gradle versionName 应 bump 为 6.0');
+  assert.ok(gradle.includes('versionCode 61'), 'build.gradle versionCode 应 bump 为 61（v6.1）');
+  assert.ok(gradle.includes('versionName "6.1"'), 'build.gradle versionName 应 bump 为 6.1');
 
   const wf = fs.readFileSync(path.join(__dirname, '..', '..', '.github', 'workflows', 'build-apk.yml'), 'utf8');
   assert.ok(wf.includes('GITHUB_REF_NAME#v'), 'CI 应从 tag 注入 versionName（v5.55 APK 自报 5.54 的治本）');

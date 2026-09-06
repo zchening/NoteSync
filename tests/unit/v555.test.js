@@ -212,7 +212,10 @@ test('E8 ?diag 诊断行：bridge/scheduled/exact + sse/lastSync/skip', () => {
   const src = readSrc();
   const diagIdx = src.indexOf("id = 'caretDiag'");
   assert.ok(diagIdx > -1, '应存在 caretDiag 浮层');
-  const seg = src.slice(diagIdx, diagIdx + 4600);
+  // v6.1：采样体抽到 window.collectDiagLines（浮层与诊断模态共用），从函数定义处取段断言
+  const clIdx = src.indexOf('window.collectDiagLines = function');
+  assert.ok(clIdx > -1, 'v6.1 应存在 collectDiagLines 共用采样函数');
+  const seg = src.slice(clIdx, clIdx + 4600);
   assert.ok(seg.includes("bridge="), '诊断应含 bridge 连通读数');
   assert.ok(seg.includes("scheduled="), '诊断应含原生排程数');
   assert.ok(seg.includes("exact="), '诊断应含精确闹针权限读数');

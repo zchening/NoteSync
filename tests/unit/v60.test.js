@@ -68,11 +68,12 @@ test('T3 右下角刷新按钮：1.7px 细线 + 44px 触控 + 复用 poll 冲突
 // ── T4：菜单前缀 Unicode 字形 → 1.7px 细线 SVG ──
 test('T4 菜单项细线 SVG 图标 + Unicode 字形前缀退役 + 收藏按钮动态图标', () => {
   const src = readSrc();
-  assert.ok(src.includes('.menu-item svg{width:20px;height:20px'), '菜单 SVG 应 20px 与 15px 文字对齐');
+  // v6.1：菜单图标 20→26px、线宽 1.7→1.9（用户拍板「图标太小点击费劲」）
+  assert.ok(src.includes('.menu-item svg{width:26px;height:26px'), 'v6.1 菜单 SVG 应 26px（20→26）');
   assert.ok(!src.includes('>⌂ ') && !src.includes('>▸ ') && !src.includes('>▣ ') && !src.includes('>◐ ') && !src.includes('>⎋ ') && !src.includes('>⌁ ') && !src.includes('>‹ '), 'Unicode 字形前缀应全部退役');
   assert.ok(!src.includes("'★ 收藏笔记'") && !src.includes("'☆ 取消收藏'"), '收藏按钮不再用纯文本（textContent 会清掉 SVG）');
   assert.ok(src.includes("favBtn.innerHTML = (faved ? STAR_IN_SVG : STAR_OUT_SVG) + (faved ? '取消收藏' : '收藏笔记');"), '收藏按钮图标应随状态用 innerHTML 重写');
-  assert.ok((src.match(/<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"/g) || []).length >= 8, '7 个菜单项 + 返回 + 两个星形常量应均为 1.7px 细线 SVG');
+  assert.ok((src.match(/<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"/g) || []).length >= 12, 'v6.1 菜单全部条目图标（含返回/新增/关于）应升级为 1.9px 线宽');
 });
 
 // ── T5：修改口令（Y 简单式）──
@@ -154,7 +155,7 @@ test('T7 扫码兜底：jsQR 动态加载 + 逐帧 canvas 解码 + 服务端静�
   // 入口：不再见 BarcodeDetector 就劝退——先给 jsQR 一次机会
   assert.ok(src.includes('function loadJsQR()'), '应有 jsQR 动态加载函数');
   assert.ok(src.includes("s.src = '/jsQR.js';"), '脚本应从同源 /jsQR.js 加载');
-  assert.ok(/if \(!useDetector && !\(await loadJsQR\(\)\)\)/.test(src), '无 BarcodeDetector 应先尝试 jsQR，都不可用才提示请用 APP');
+  assert.ok(/if \(!useDetector && !\(await loadJsQR\(\)\)\)/.test(src), '无 BarcodeDetector 应先尝试 jsQR，都不可用才给失败提示（v6.1 文案分流）');
   assert.ok(!/typeof window\.BarcodeDetector === 'undefined' \|\| !navigator\.mediaDevices/.test(src), '旧入口（无 BarcodeDetector 即劝退）应退役');
   // getUserMedia 检查必须独立保留（连摄像头 API 都没有才直接退出）
   assert.ok(src.includes("if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {"), '摄像头 API 缺失仍应直接退出');

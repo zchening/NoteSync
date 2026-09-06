@@ -51,18 +51,18 @@ LAUNCHER = [('mdpi', 48), ('hdpi', 72), ('xhdpi', 96), ('xxhdpi', 144), ('xxxhdp
 FOREGROUND = [('mdpi', 108), ('hdpi', 162), ('xhdpi', 216), ('xxhdpi', 324), ('xxxhdpi', 432)]
 
 for dpi, size in LAUNCHER:
-    # 正方形：N 占 52%（linewidth 随尺寸粗化保可读）
-    img = render(size, 0.52, 0.048 if size <= 72 else 0.040)
+    # 正方形：v6.1 用户拍板 B 参数——N 从 52% 缩到 44%（原"太大"），线宽加粗到 5.6%（原"太瘦"）
+    img = render(size, 0.44, 0.056)
     img.save(os.path.join(RES, 'mipmap-' + dpi, 'ic_launcher.png'))
-    render(size, 0.52, 0.048 if size <= 72 else 0.040, round_mask=True).save(
+    render(size, 0.44, 0.056, round_mask=True).save(
         os.path.join(RES, 'mipmap-' + dpi, 'ic_launcher_round.png'))
 
 for dpi, size in FOREGROUND:
-    # adaptive 前景：内容须落在中心 66dp/108dp 安全区 → N 占 34%
-    render(size, 0.34, 0.040).save(os.path.join(RES, 'mipmap-' + dpi, 'ic_launcher_foreground.png'))
+    # adaptive 前景：内容须落在中心 66dp/108dp 安全区 → N 占 30%、线宽 5.0%（v6.1 B 参数，与 launcher 44%/5.6% 同拍板）
+    render(size, 0.30, 0.050).save(os.path.join(RES, 'mipmap-' + dpi, 'ic_launcher_foreground.png'))
 
 # Play Store 512
-render(512, 0.46, 0.036).save(os.path.join(RES, 'ic_launcher-playstore.png'))
+render(512, 0.40, 0.048).save(os.path.join(RES, 'ic_launcher-playstore.png'))
 
 print('icons generated:')
 for root, _, files in os.walk(RES):

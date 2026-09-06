@@ -58,12 +58,13 @@ test('G4 conflictbar/confcard 浮卡形态 + hintbar 退役', () => {
 });
 
 // ── G5：口令框「返回首页」出口（APP 里不想解锁只能杀进程实锤）──
-test('G5 unlockHome 按钮 DOM + 次按钮样式 + wiring', () => {
+test('G5 口令框右上角 X 出口（v6.1：返回首页按钮退役）', () => {
   const src = readSrc();
-  assert.ok(src.includes('id="unlockHome"'), '口令框应有「返回首页」按钮');
-  assert.ok(src.includes('.ghost-btn'), '应有次按钮样式');
-  assert.ok(src.includes("$('#unlockHome').addEventListener('click'"), 'unlockHome 应有 wiring');
-  assert.ok(/unlockHome'\)\.addEventListener\('click'[^}]*location\.assign\('\/'\)/.test(src), '点击应回首页');
+  assert.ok(!src.includes('id="unlockHome"'), 'v6.1「返回首页」按钮应退役');
+  assert.ok(src.includes('id="maskClose"'), '口令框应有右上角 X');
+  assert.ok(src.includes("$('#maskClose').addEventListener('click'"), 'maskClose 应有 wiring');
+  assert.ok(/maskClose'\)\.addEventListener\('click'[^}]*location\.assign\('\/'\)/.test(src), '点击 X 应回首页');
+  assert.ok(src.includes('class="box-x"'), 'X 应为右上角通用关闭样式');
 });
 
 // ── G6：自动解锁路径也写「最后打开的笔记」（冷启动跳转形同虚设实锤）──
