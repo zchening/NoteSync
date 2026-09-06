@@ -27,28 +27,24 @@ function openDiagViaEasterEgg(document) {
   for (let i = 0; i < 4; i++) aboutTitle.click(); // 同步连点，必落 800ms 窗口
 }
 
-// ── a. 菜单右上角 X ───────────────────────────────────────
-test('V61B-a 菜单 X：menuBox 内 box-x 样式，点击关整个菜单', t => {
+// ── a. 菜单 X 退役 + 遮罩关闭 ─────────────────────────────
+test('V61B-a 菜单：menuClose 退役，遮罩空白点击关整个菜单', t => {
   const app = freshApp();
   t.after(() => app.dom.window.close());
   const { window, document } = app;
 
   const menuMask = document.getElementById('menuMask');
-  const menuBox = document.getElementById('menuBox');
-  const menuClose = document.getElementById('menuClose');
-  assert.ok(menuClose, '#menuClose 应存在');
-  assert.ok(menuBox.contains(menuClose), '#menuClose 应在 #menuBox 内');
-  assert.strictEqual(menuClose.className, 'box-x', 'X 应为右上角通用关闭热区样式');
+  assert.strictEqual(document.getElementById('menuClose'), null, 'menuClose X 应退役（v6.2）');
   assert.ok(menuMask.classList.contains('hidden'), '前置：菜单初始隐藏');
 
   document.getElementById('menuBtn').click();
   assert.ok(!menuMask.classList.contains('hidden'), 'menuBtn 打开菜单');
-  menuClose.click();
-  assert.ok(menuMask.classList.contains('hidden'), '点 X 后整个菜单关闭');
+  menuMask.click(); // e.target === menuMask
+  assert.ok(menuMask.classList.contains('hidden'), '点遮罩空白后整个菜单关闭');
 });
 
 // ── b. 关于弹窗 ───────────────────────────────────────────
-test('V61B-b 关于弹窗：菜单入口打开，版本行含「网页 v6.1」', async t => {
+test('V61B-b 关于弹窗：菜单入口打开，版本行含「网页 v6.2」', async t => {
   const app = freshApp();
   t.after(() => app.dom.window.close());
   const { window, document } = app;
@@ -60,7 +56,7 @@ test('V61B-b 关于弹窗：菜单入口打开，版本行含「网页 v6.1」',
   assert.ok(!aboutMask.classList.contains('hidden'), '关于弹窗应打开');
   assert.ok(document.getElementById('menuMask').classList.contains('hidden'), '打开关于时菜单应关闭');
   assert.strictEqual(document.getElementById('aboutTitle').textContent, "关于Note'Sync");
-  assert.ok(document.getElementById('aboutVer').textContent.includes('网页 v6.1'), '版本行应含「网页 v6.1」');
+  assert.ok(document.getElementById('aboutVer').textContent.includes('网页 v6.2'), '版本行应含「网页 v6.2」');
 });
 
 // ── c. 彩蛋：连点标题 4 次 → 诊断模态 ─────────────────────
@@ -77,7 +73,7 @@ test("V61B-c 彩蛋：800ms 内连点「关于Note'Sync」4 次关关于弹 abou
   assert.ok(!diagMask.classList.contains('hidden'), '诊断模态应打开');
   const txt = document.getElementById('diagContent').textContent;
   assert.ok(txt.length > 0, '#diagContent 应非空');
-  assert.ok(txt.includes('v6.1'), '诊断信息应含 v6.1 版本行');
+  assert.ok(txt.includes('v6.2'), '诊断信息应含 v6.2 版本行');
 });
 
 // ── d. 诊断自动关闭：editor 滚动 ──────────────────────────
@@ -177,6 +173,7 @@ test('V61B-g 口令弹窗：unlockHome 退役、maskClose 在位、landing 分�
   const maskClose = document.getElementById('maskClose');
   assert.ok(maskClose, '#maskClose X 应存在');
   assert.ok(mask.contains(maskClose), '#maskClose 应在 #mask 弹窗内');
-  assert.strictEqual(maskClose.className, 'box-x', 'X 应为右上角通用关闭热区样式');
+  assert.strictEqual(maskClose.className, 'box-x', 'X 应为关闭热区样式');
+  assert.strictEqual(maskClose.parentElement.className, 'modal-head', 'v6.2 X 应融入标题行（.modal-head 内）');
   assert.ok(mask.classList.contains('hidden'), 'landing 分支（无 noteId）口令弹窗初始隐藏');
 });

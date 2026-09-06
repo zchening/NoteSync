@@ -40,7 +40,10 @@ test('V61-3 口令弹窗：无圆环图标、标题「输入口令」、右上�
   assert.ok(!src.includes('id="unlockHome"'), '「返回首页」按钮应退役');
   assert.ok(/id="mask"[\s\S]{0,400}id="maskClose"/.test(src), '口令弹窗内应有 maskClose X');
   assert.ok(src.includes("$('#maskClose').addEventListener('click', () => { location.assign('/'); });"), 'X 点击应回首页');
-  assert.ok(src.includes('.box-x{position:absolute;top:8px;right:8px;width:40px;height:40px'), 'X 应为右上角 40px 热区通用样式');
+  assert.ok(src.includes('.modal-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 8px}'), 'v6.2 X 应融入标题行（flex 头部：标题左、X 右）');
+  assert.ok(src.includes('.box-x{width:36px;height:36px'), 'v6.2 X 应为 36px 热区流内按钮');
+  assert.ok(!src.includes('.box-x{position:absolute'), 'v6.1 绝对定位悬浮式应退役');
+  assert.ok(src.includes('.box button:not(.box-x){'), '通栏按钮规则应排除关闭 X（否则按优先级覆盖 X 样式）');
 });
 
 // ── 4. 修改口令：1 位即可 + 文案精简 + 输入框间距 ──
@@ -55,12 +58,12 @@ test('V61-4 修改口令：非空即可、placeholder 精简、相邻输入框 1
 });
 
 // ── 5. 菜单图标加大（用户：点击费劲）──
-test('V61-5 菜单图标加大：26px/1.9 线宽、条目 54px/16px', () => {
+test('V61-5 菜单尺寸：图标 22px/1.9 线宽、条目 48px/15px（v6.2 瘦身回调）', () => {
   const src = readSrc();
-  assert.ok(src.includes('.menu-item svg{width:26px;height:26px;vertical-align:-6.5px;margin-right:8px}'), 'SVG 应 26px');
-  assert.ok(/\.menu-item\{[^}]*min-height:54px/.test(src), '条目应 54px');
-  assert.ok(/\.menu-item\{[^}]*padding:16px 12px/.test(src), '条目 padding 应 16px');
-  assert.ok(/\.menu-item\{[^}]*font-size:16px/.test(src), '条目字号应 16px');
+  assert.ok(src.includes('.menu-item svg{width:22px;height:22px;vertical-align:-5.5px;margin-right:7px}'), 'SVG 应 22px');
+  assert.ok(/\.menu-item\{[^}]*min-height:48px/.test(src), '条目应 48px');
+  assert.ok(/\.menu-item\{[^}]*padding:13px 12px/.test(src), '条目 padding 应 13px 12px');
+  assert.ok(/\.menu-item\{[^}]*font-size:15px/.test(src), '条目字号应 15px');
 });
 
 // ── 6. 日夜间切换文案反转（用户拍板：显示点击后将切换到的模式）──
@@ -129,16 +132,17 @@ test('V61-11 历史版本：单行「时间 · 手动 | 预览/恢复」、删�
   assert.ok(!src.includes('恢复此版本'), '旧文案「恢复此版本」应退役');
   assert.ok(src.includes('.hist-line{display:flex;align-items:center;justify-content:space-between;gap:8px}'), '单行 flex 布局');
   assert.ok(src.includes('.hist-btns{display:flex;gap:6px;flex-shrink:0}'), '按钮组不挤压');
-  assert.ok(src.includes('#menuHistList,#menuFavList{max-height:min(52vh,420px);overflow-y:auto;-webkit-overflow-scrolling:touch}'), '历史/收藏列表应独立滚动');
+  assert.ok(src.includes('#menuHistList,#menuFavList{max-height:min(50vh,400px);overflow-y:auto;-webkit-overflow-scrolling:touch}'), '历史/收藏列表应独立滚动');
+  assert.ok(src.includes('#menuMainView{max-height:min(58vh,520px);overflow-y:auto;-webkit-overflow-scrolling:touch}'), '菜单主视图应限高内滚');
 });
 
-// ── 12. menuBox 全局 X（用户拍板：全局）──
-test('V61-12 menuBox 右上角全局 X：三视图通用关闭', () => {
+// ── 12. menuBox X 退役（v6.2 用户拍板：遮罩点击已覆盖退出）──
+test('V61-12 menuBox X 退役：menuClose 全链路移除 + menuBox 瘦身', () => {
   const src = readSrc();
-  assert.ok(src.includes('id="menuClose"'), '菜单盒应有 menuClose X');
-  assert.ok(/id="menuBox"[\s\S]{0,200}id="menuClose"/.test(src), 'X 应在 menuBox 内');
-  assert.ok(src.includes("$('#menuClose').addEventListener('click', () => { menuMask.classList.add('hidden'); });"), '点击应关整个菜单');
-  assert.ok(src.includes('#menuBox{width:min(90vw,320px);text-align:left;padding:26px 22px 22px;position:relative}'), 'menuBox 应 relative 定位');
+  assert.ok(!src.includes('id="menuClose"'), 'menuClose 按钮应退役');
+  assert.ok(!src.includes("$('#menuClose')"), 'menuClose wiring 应移除');
+  assert.ok(src.includes('#menuBox{width:min(86vw,300px);text-align:left;padding:20px 18px}'), 'menuBox 应瘦身（300px/20px 18px）');
+  assert.ok(src.includes("menuMask.addEventListener('click', e => { if (e.target === menuMask) menuMask.classList.add('hidden'); });"), '遮罩点击关闭应保留为退出路径');
 });
 
 // ── 13. 扫码文案分流（PC 扫码修复配套）──
@@ -152,15 +156,15 @@ test('V61-13 扫码提示分流：HTTPS/组件失败/无摄像头/权限拒绝 �
 });
 
 // ── 14. 版本升格 6.1/61 + 日期 ──
-test('V61-14 版本升格：APP_VERSION 6.1 / BUILD_DATE / gradle 61+6.1 / README 条目 ≤40 汉字', () => {
+test('V61-14 版本升格：APP_VERSION 6.2 / BUILD_DATE / gradle 62+6.2 / README 条目 ≤40 汉字', () => {
   const src = readSrc();
-  assert.ok(src.includes("const APP_VERSION = '6.1';"), 'APP_VERSION 应 6.1');
+  assert.ok(src.includes("const APP_VERSION = '6.2';"), 'APP_VERSION 应 6.2');
   assert.ok(src.includes("const BUILD_DATE = '2026-09-07';"), 'BUILD_DATE 应更新');
   const gradle = readRel('android/app/build.gradle');
-  assert.ok(gradle.includes('versionCode 61') && gradle.includes('versionName "6.1"'), 'gradle 应 61/6.1');
+  assert.ok(gradle.includes('versionCode 62') && gradle.includes('versionName "6.2"'), 'gradle 应 62/6.2');
   const readme = readRel('README.md');
-  const row = (readme.match(/^\| v6\.1 \|[^|]+\|([^|]+)\|/m) || [])[1] || '';
+  const row = (readme.match(/^\| v6\.2 \|[^|]+\|([^|]+)\|/m) || [])[1] || '';
   const hz = (row.match(/[一-龥]/g) || []).length;
-  assert.ok(hz > 0 && hz <= 40, 'README v6.1 摘要应为 1-40 汉字（实测 ' + hz + '）');
-  assert.ok(readme.includes('| v6.1 | 2026-09-07 |'), 'README 应有 v6.1 条目');
+  assert.ok(hz > 0 && hz <= 40, 'README v6.2 摘要应为 1-40 汉字（实测 ' + hz + '）');
+  assert.ok(readme.includes('| v6.2 | 2026-09-07 |'), 'README 应有 v6.2 条目');
 });

@@ -68,8 +68,8 @@ test('T3 右下角刷新按钮：1.7px 细线 + 44px 触控 + 复用 poll 冲突
 // ── T4：菜单前缀 Unicode 字形 → 1.7px 细线 SVG ──
 test('T4 菜单项细线 SVG 图标 + Unicode 字形前缀退役 + 收藏按钮动态图标', () => {
   const src = readSrc();
-  // v6.1：菜单图标 20→26px、线宽 1.7→1.9（用户拍板「图标太小点击费劲」）
-  assert.ok(src.includes('.menu-item svg{width:26px;height:26px'), 'v6.1 菜单 SVG 应 26px（20→26）');
+  // v6.2：菜单图标随瘦身回调 26→22px（线宽仍 1.9）
+  assert.ok(src.includes('.menu-item svg{width:22px;height:22px'), 'v6.2 菜单 SVG 应 22px（26→22 回调）');
   assert.ok(!src.includes('>⌂ ') && !src.includes('>▸ ') && !src.includes('>▣ ') && !src.includes('>◐ ') && !src.includes('>⎋ ') && !src.includes('>⌁ ') && !src.includes('>‹ '), 'Unicode 字形前缀应全部退役');
   assert.ok(!src.includes("'★ 收藏笔记'") && !src.includes("'☆ 取消收藏'"), '收藏按钮不再用纯文本（textContent 会清掉 SVG）');
   assert.ok(src.includes("favBtn.innerHTML = (faved ? STAR_IN_SVG : STAR_OUT_SVG) + (faved ? '取消收藏' : '收藏笔记');"), '收藏按钮图标应随状态用 innerHTML 重写');

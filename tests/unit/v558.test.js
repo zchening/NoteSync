@@ -41,14 +41,14 @@ test('H2 offlineBar 在 footer 内 + 新文案 + 悬浮条 CSS 退役', () => {
 });
 
 // ── H3：页脚加高 + ☰/菜单项全端加大（不再只限 APP）──
-test('H3 页脚 min-height 46 + menuBtn 22px/44px 触控 + 菜单项 54px 全局（v6.1 再加大）', () => {
+test('H3 页脚 min-height 46 + menuBtn 22px/44px 触控 + 菜单项 48px 全局（v6.2 回调）', () => {
   const src = readSrc();
   assert.ok(/footer\{[^}]*min-height:46px/.test(src), '页脚应 min-height 46px');
   assert.ok(/footer\{[^}]*padding:14px 18px/.test(src), '页脚应加高（padding 14px）');
   assert.ok(/#menuBtn\{[^}]*font-size:22px/.test(src), '☰ 应放大到 22px');
   assert.ok(/#menuBtn\{[^}]*min-height:44px/.test(src), '☰ 点击区应 ≥44px');
-  assert.ok(/\.menu-item\{[^}]*min-height:54px/.test(src), 'v6.1 菜单项应 min-height 54px（46→54 用户拍板）');
-  assert.ok(/\.menu-item\{[^}]*font-size:16px/.test(src), 'v6.1 菜单项应 16px（15→16）');
+  assert.ok(/\.menu-item\{[^}]*min-height:48px/.test(src), 'v6.2 菜单项应 min-height 48px（54→48 回调）');
+  assert.ok(/\.menu-item\{[^}]*font-size:15px/.test(src), 'v6.2 菜单项应 15px（16→15 回调）');
   assert.ok(!src.includes('body.native-app .menu-item') && !src.includes('body.native-app #menuBtn'), 'APP 专属加大规则应并入全局');
 });
 
