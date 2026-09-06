@@ -95,7 +95,14 @@
   /* v5.45：面板时间行——日期(原生) + 时:分 自建小输入框（打开面板焦点落分钟框且全选） */
   #remBoxForm .rem-time-row{display:flex;gap:8px;align-items:center;justify-content:center}
   #remBoxForm .rem-time-row input[type="date"]{flex:1;min-width:0;color-scheme:inherit}
-  #remBoxForm .rem-time-row .rem-hh,#remBoxForm .rem-time-row .rem-mm{width:2.9em;flex:none;text-align:center;padding:0 4px}
+  #remBoxForm .rem-time-row .rem-wheel-wrap{position:relative;width:54px;height:150px;flex:none;overflow:hidden;border:1px solid var(--line);border-radius:12px;background:var(--box-bg);-webkit-mask-image:linear-gradient(transparent,#000 32%,#000 68%,transparent);mask-image:linear-gradient(transparent,#000 32%,#000 68%,transparent)}
+  #remBoxForm .rem-time-row .rem-wheel{height:100%;overflow-y:auto;scroll-snap-type:y mandatory;scrollbar-width:none;outline:none;-webkit-overflow-scrolling:touch}
+  #remBoxForm .rem-time-row .rem-wheel::-webkit-scrollbar{display:none}
+  #remBoxForm .rem-time-row .rem-wheel:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+  #remBoxForm .rem-time-row .rem-wheel-it{height:50px;line-height:50px;text-align:center;font-size:15px;color:var(--muted);scroll-snap-align:center;cursor:pointer;user-select:none;-webkit-user-select:none}
+  #remBoxForm .rem-time-row .rem-wheel-it.cur{color:var(--fg);font-weight:500}
+  #remBoxForm .rem-time-row .rem-wheel-pad{height:50px}
+  #remBoxForm .rem-time-row .rem-wheel-mid{position:absolute;left:5px;right:5px;top:50%;height:50px;transform:translateY(-50%);border-top:1.5px solid var(--accent);border-bottom:1.5px solid var(--accent);border-radius:2px;pointer-events:none}
   #remBoxForm .rem-time-row .rem-colon{color:var(--muted);font-weight:600;flex:none}
   /* v5.45：已设提醒的时间文本标记（linkify 统一先拆后建，u 元素）——下划线如链接。
      v5.46：只包时间串；过期/已提醒过的时间不产标记（回归普通正文），灰态样式退役。
@@ -105,7 +112,7 @@
      设置行（时间/事项/添加提醒）永远首行，已设条目列表排后；chip 与模态互斥（遮罩挡正文） */
   #remBoxForm{display:flex;flex-direction:column;gap:12px;margin:2px 0 18px}
   #remBoxForm input[type="date"]{color-scheme:inherit}
-  #remBoxForm input.bad{border-color:var(--accent);box-shadow:0 0 0 3px var(--ring)}
+  #remBoxForm input.bad,#remBoxForm .rem-wheel-wrap.bad{border-color:var(--accent);box-shadow:0 0 0 3px var(--ring)}
   #remBoxList{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line);padding-top:14px}
   #remBoxList:empty{display:none}
   #remBoxList .rem-row{display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px;font-size:13px;line-height:1.5;color:var(--fg);background:none;text-align:left}
@@ -140,10 +147,8 @@
   #menuBox{width:min(90vw,320px);text-align:left;padding:26px 22px 22px}
   .menu-item{padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;cursor:pointer;color:var(--fg);font-size:13.5px;text-align:center;touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:border-color .2s}
   .menu-item:active{background:var(--hover)}
-  #menuFavHead{font-size:11px;color:var(--muted);letter-spacing:.12em;margin:14px 0 4px;text-align:center}
   .fav-row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid var(--line);color:var(--fg);font-size:13px;cursor:pointer}
   .fav-row:active{background:var(--hover)}
-  .fav-del{color:var(--muted);padding:2px 10px;flex-shrink:0}
   #menuFavEmpty{text-align:center;color:var(--muted);font-size:12px;padding:8px 0}
   footer .dot{width:7px;height:7px;border-radius:50%;background:#C9C7BE;flex-shrink:0;transition:background .3s}
   footer .dot.on{background:#2FA866}
@@ -260,12 +265,16 @@
 </div>
 <div class="mask hidden" id="menuMask">
   <div class="box" id="menuBox">
-    <h1>菜单</h1>
-    <div id="menuHome" class="menu-item" role="button" tabindex="0">⌂ 返回首页</div>
-    <div id="menuFav" class="menu-item" role="button" tabindex="0">★ 收藏笔记</div>
-    <div id="menuFavHead">收藏夹</div>
-    <div id="menuFavList"></div>
-    <div id="menuFavEmpty" class="hidden">暂无收藏</div>
+    <div id="menuMainView">
+      <div id="menuHome" class="menu-item" role="button" tabindex="0">⌂ 返回首页</div>
+      <div id="menuFav" class="menu-item" role="button" tabindex="0">★ 收藏笔记</div>
+      <div id="menuFavEntry" class="menu-item" role="button" tabindex="0">▸ 收藏夹</div>
+    </div>
+    <div id="menuFavView" class="hidden">
+      <div id="menuFavBack" class="menu-item" role="button" tabindex="0">‹ 返回</div>
+      <div id="menuFavList"></div>
+      <div id="menuFavEmpty" class="hidden">暂无收藏</div>
+    </div>
   </div>
 </div>
 <div id="draftBar" class="hintbar hidden">
@@ -344,7 +353,7 @@ const NOTE_LAST_KEY = 'notesync_last_note';
 const NOTE_JUMPED_KEY = 'notesync_jumped';
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '5.54';
+const APP_VERSION = '5.55';
 const BUILD_DATE = '2026-09-06';
 
 const $ = s => document.querySelector(s);
@@ -1149,6 +1158,17 @@ function hideUploadStatus() { uploadStatus.classList.remove('show'); }
         }
       }
       L.push('editor=' + cut(JSON.stringify(editor.innerHTML), 70));
+      // v5.55：原生桥 + 同步状态诊断（只读展示）。真机打开 ?diag 一眼确认：
+      // bridge=ok 且 scheduled>0 才说明原生闹钟真的排上了（v5.51 起 bridge=none 隐藏三个版本没发现）
+      const cap = window.Capacitor;
+      L.push('native=' + (typeof isNativeApp === 'function' && isNativeApp() ? 'APK' : 'web') +
+        '  bridge=' + ((cap && cap.Plugins && cap.Plugins.RemBridge) ? 'ok' : 'none') +
+        '  scheduled=' + (window.__remNativeScheduled != null ? window.__remNativeScheduled : '?') +
+        '  exact=' + (window.__remExactAlarm == null ? '?' : window.__remExactAlarm) +
+        (window.__remNativeErr ? '  err=' + window.__remNativeErr : ''));
+      L.push('sse=' + (sseSource ? 'open' : 'closed') +
+        '  lastSync=' + (lastSyncAt ? Math.round((Date.now() - lastSyncAt) / 1000) + 's前' : 'never') +
+        '  skip=' + (window.__pollSkipCount || 0));
     } catch (e) { L.push('ERR ' + e.message); }
     box.textContent = L.join('\n');
   }, 250);
@@ -2965,12 +2985,34 @@ function normalizeRemList(obj) {
 // v5.51：原生层提醒桥（Capacitor 不存在时全部静默返回，167 测试零破坏）
 // 注意：每次读 window.RemBridge（不缓存 const），让 jsdom 测试可在脚本执行后再注入 mock
 // 也让 Capacitor webview 在页面 ready 后注入生效
+// v5.55 P0 修复：Capacitor 7 把原生插件挂在 window.Capacitor.Plugins 下，从不挂 window.RemBridge——
+// 此前只读 window.RemBridge，真机上恒为 null → 原生闹钟从未注册、通知从未发出（v5.51 起隐藏断点；
+// jsdom mock 恰好叫 window.RemBridge，测试永远绿测不出）。现优先走 Capacitor 官方暴露路径，
+// 回退 window.RemBridge 保 jsdom 兼容；调用形态改 {list:[...]}（Kotlin 端 call.getArray("list")）。
 async function syncRemindersToNative() {
-  const rb = (typeof window !== 'undefined' && window.RemBridge) || null;
+  const cap = (typeof window !== 'undefined' && window.Capacitor) || null;
+  const rb = (cap && cap.Plugins && cap.Plugins.RemBridge) ||
+             (typeof window !== 'undefined' && window.RemBridge) || null;
   if (!rb || typeof rb.sync !== 'function') return;
   try {
-    await rb.sync(reminders.map(r => ({ at: r.at, text: r.text })));
-  } catch (e) { /* 原生层异常不污染前端流程 */ }
+    const ret = await rb.sync({ list: reminders.map(r => ({ at: r.at, text: r.text })) });
+    if (ret && typeof ret.scheduled === 'number') window.__remNativeScheduled = ret.scheduled; // ?diag 读数
+    window.__remNativeErr = null;
+  } catch (e) { window.__remNativeErr = String((e && e.message) || e); /* 原生层异常不污染前端流程 */ }
+}
+// v5.55：精确闹钟权限自检——仅 APK 且只引导一次（localStorage 标记）。
+// Android 12+ 的 SCHEDULE_EXACT_ALARM 默认不开，未开时闹钟退化为非精确档（深睡可能晚到被 60s 容差吞）。
+async function ensureExactAlarmPermission() {
+  if (typeof isNativeApp !== 'function' || !isNativeApp()) return;
+  try { if (localStorage.getItem('notesync_exact_alarm_asked') === '1') return; } catch (e) {}
+  const cap = (typeof window !== 'undefined' && window.Capacitor) || null;
+  const rb = cap && cap.Plugins && cap.Plugins.RemBridge;
+  if (!rb || typeof rb.requestExactAlarm !== 'function') return;
+  try {
+    const ret = await rb.requestExactAlarm();
+    try { localStorage.setItem('notesync_exact_alarm_asked', '1'); } catch (e) {}
+    if (ret) window.__remExactAlarm = !!ret.canScheduleExactAlarms;
+  } catch (e) { window.__remNativeErr = String((e && e.message) || e); }
 }
 // 解锁后从服务端恢复提醒（密文解不开→当无提醒）
 async function loadReminder(note, key) {
@@ -2986,6 +3028,7 @@ async function loadReminder(note, key) {
   renderRemBtn();
   scheduleReminders();
   syncRemindersToNative(); // v5.51：解锁后把密文解密得到的提醒列表同步到原生层排程
+  ensureExactAlarmPermission(); // v5.55：APK 精确闹钟权限自检（只引导一次）
 }
 // 设/改提醒 = 完整保存（正文 + rem 一起 PUT）：v 递增、SSE 广播、其他设备实时拿到
 async function persistReminders() {
@@ -3131,59 +3174,106 @@ function renderRemBtn() {
   remBtn.classList.toggle('on', reminders.some(r => r.at > Date.now()));
 }
 // v5.40 面板升级为扫码配对同款 .mask+.box 模态（复用 .box 输入框/主按钮样式与深色覆盖保护）；
+// ── v5.55 时/分滚轮（用户拍板：滚轮只做时/分两列，日期保留原生日历）──
+// iOS 风滚轮：overflow-y:auto + scroll-snap 吸附，上下渐隐 mask + 中线指示条；
+// 触屏原生惯性滚动；桌面聚焦后 ↑↓ 微调、点任意项直达；Enter 直接确认。
+// 值以 dataset.val 为唯一事实源（scroll 事件同步），jsdom 无布局也能稳定读写与测试。
+const REM_WHEEL_ITEM_H = 50;
+function makeWheel(seg, max, val) {
+  const wrap = document.createElement('div');
+  wrap.className = 'rem-wheel-wrap';
+  const wh = document.createElement('div');
+  wh.className = 'rem-wheel rem-wheel-' + seg;
+  wh.setAttribute('role', 'listbox');
+  wh.setAttribute('aria-label', seg === 'hh' ? '小时' : '分钟');
+  wh.tabIndex = 0;
+  wh.dataset.val = String(val);
+  wh.dataset.max = String(max);
+  const pad = document.createElement('div');
+  pad.className = 'rem-wheel-pad';
+  wh.appendChild(pad.cloneNode(false)); // 上下各垫一项高，让 0 与 max 都能滚到中线
+  for (let i = 0; i <= max; i++) {
+    const it = document.createElement('div');
+    it.className = 'rem-wheel-it' + (i === val ? ' cur' : '');
+    it.textContent = String(i).padStart(2, '0');
+    it.dataset.i = String(i);
+    wh.appendChild(it);
+  }
+  wh.appendChild(pad.cloneNode(false));
+  wh.addEventListener('scroll', () => {
+    const v = Math.max(0, Math.min(max, Math.round(wh.scrollTop / REM_WHEEL_ITEM_H)));
+    wh.dataset.val = String(v);
+    wh.querySelectorAll('.rem-wheel-it').forEach(el => el.classList.toggle('cur', +el.dataset.i === v));
+  }, { passive: true });
+  wrap.appendChild(wh);
+  const mid = document.createElement('div');
+  mid.className = 'rem-wheel-mid';
+  wrap.appendChild(mid);
+  return wrap;
+}
+function getWheelVal(seg) {
+  const el = document.querySelector('#remBoxForm .rem-wheel-' + seg);
+  return el ? +el.dataset.val : NaN;
+}
+function setWheelVal(seg, v, smooth) {
+  const el = document.querySelector('#remBoxForm .rem-wheel-' + seg);
+  if (!el) return;
+  const max = +el.dataset.max || 59;
+  const c = Math.max(0, Math.min(max, Math.round(v)));
+  el.dataset.val = String(c);
+  const top = c * REM_WHEEL_ITEM_H;
+  try {
+    if (smooth && el.scrollTo) el.scrollTo({ top, behavior: 'smooth' });
+    else el.scrollTop = top;
+  } catch (e) { el.scrollTop = top; }
+  el.querySelectorAll('.rem-wheel-it').forEach(x => x.classList.toggle('cur', +x.dataset.i === c));
+}
+// 显示后把滚轮滚到默认值（display:none 容器内 scrollTop 无效——v5.44 聚焦教训同理）
+function resetWheelScroll() {
+  ['hh', 'mm'].forEach(seg => {
+    const el = document.querySelector('#remBoxForm .rem-wheel-' + seg);
+    if (el) { try { el.scrollTop = (+el.dataset.val) * REM_WHEEL_ITEM_H; } catch (e) {} }
+  });
+}
 // 设置行（时间/事项/添加提醒）永远首行，已设条目列表排后；「定时」更名「添加提醒」（用户拍板）；
-// 事项框 Enter = 点「添加提醒」；所选时刻已过 → 时间框 accent 提示且不设；iOS 通知提示保留
+// 事项框 Enter = 点「添加提醒」；所选时刻已过 → 控件 accent 提示且不设；iOS 通知提示保留
 function renderRemPanel() {
   const form = document.getElementById('remBoxForm');
   const list = document.getElementById('remBoxList');
   form.innerHTML = ''; list.innerHTML = '';
   hideTimeChip();
-  // v5.45：时间区改自建时/分输入框——旧原生时间控件无法把选中钉在分钟段（内核硬边界，
-  // 探针实测 selectionStart=null、段导航只认真实按键）。自建文本框后 select() 标准生效：
-  // 打开面板焦点直接落分钟框且分钟值全选，数字直输/↑↓ 微调；日期保留原生选择器（触屏友好）
+  // v5.55：时/分改滚轮（用户拍板）。v5.45 的自建文本框退役——移动端键盘直输体验差，
+  // 滚轮单手可调；日期仍用原生选择器（触屏弹系统日历，比滚 12 个月好用）。
   const timeRow = document.createElement('div'); timeRow.className = 'rem-time-row';
   const dateInp = document.createElement('input');
   dateInp.type = 'date'; dateInp.setAttribute('aria-label', '提醒日期');
-  const hhInp = document.createElement('input');
-  hhInp.type = 'text'; hhInp.inputMode = 'numeric'; hhInp.maxLength = 2; hhInp.className = 'rem-hh'; hhInp.setAttribute('aria-label', '小时');
+  const hhWheel = makeWheel('hh', 23, 0);
+  const mmWheel = makeWheel('mm', 59, 0);
   const colon = document.createElement('span'); colon.className = 'rem-colon'; colon.textContent = ':';
-  const mmInp = document.createElement('input');
-  mmInp.type = 'text'; mmInp.inputMode = 'numeric'; mmInp.maxLength = 2; mmInp.className = 'rem-mm'; mmInp.setAttribute('aria-label', '分钟');
   const nd = new Date(Date.now() + 5 * 60 * 1000); // v5.42：默认 = 当前 +5 分钟（用户要求 12:35 → 12:40）；已过时刻由「添加提醒」accent 提示拦截
   dateInp.value = nd.getFullYear() + '-' + String(nd.getMonth() + 1).padStart(2, '0') + '-' + String(nd.getDate()).padStart(2, '0');
-  hhInp.value = String(nd.getHours()).padStart(2, '0');
-  mmInp.value = String(nd.getMinutes()).padStart(2, '0');
-  const segMax = x => (x === hhInp ? 23 : 59);
-  const clampSeg = inp => { // 输入期：只留数字、两位越界钳制（25→23 / 90→59）
-    const v = inp.value.replace(/\D/g, '').slice(0, 2);
-    inp.value = (v.length === 2 && +v > segMax(inp)) ? String(segMax(inp)) : v;
-  };
-  const padSeg = inp => { // 失焦/提交前：补零成两位
-    if (inp.value) inp.value = String(Math.min(+inp.value, segMax(inp))).padStart(2, '0');
-  };
-  hhInp.addEventListener('input', () => { clampSeg(hhInp); if (hhInp.value.length === 2) { mmInp.focus(); mmInp.select(); } });
-  mmInp.addEventListener('input', () => clampSeg(mmInp));
-  hhInp.addEventListener('blur', () => padSeg(hhInp));
-  mmInp.addEventListener('blur', () => padSeg(mmInp));
-  timeRow.appendChild(dateInp); timeRow.appendChild(hhInp); timeRow.appendChild(colon); timeRow.appendChild(mmInp);
+  hhWheel.querySelector('.rem-wheel').dataset.val = String(nd.getHours());
+  mmWheel.querySelector('.rem-wheel').dataset.val = String(nd.getMinutes());
+  timeRow.appendChild(dateInp); timeRow.appendChild(hhWheel); timeRow.appendChild(colon); timeRow.appendChild(mmWheel);
   form.appendChild(timeRow);
   const item = document.createElement('input');
   item.type = 'text';
-  item.className = 'rem-item'; // v5.45：专属类名——时分框同为 type=text，选择器需区分
+  item.className = 'rem-item';
   item.placeholder = '事项'; // v5.44：placeholder 精简，去掉括号补语
   item.maxLength = 20;
   item.setAttribute('aria-label', '提醒事项');
   const ok = document.createElement('button');
   ok.type = 'button'; ok.textContent = '添加提醒';
   const doAdd = () => {
-    padSeg(hhInp); padSeg(mmInp);
     const dv = dateInp.value; // YYYY-MM-DD
-    const at = (dv && hhInp.value && mmInp.value)
-      ? new Date(+dv.slice(0, 4), +dv.slice(5, 7) - 1, +dv.slice(8, 10), +hhInp.value, +mmInp.value).getTime()
+    const hv = getWheelVal('hh'), mv = getWheelVal('mm');
+    const at = (dv && !isNaN(hv) && !isNaN(mv))
+      ? new Date(+dv.slice(0, 4), +dv.slice(5, 7) - 1, +dv.slice(8, 10), hv, mv).getTime()
       : 0;
     if (!at || at <= Date.now()) {
-      [dateInp, hhInp, mmInp].forEach(x => x.classList.add('bad')); // 已过/无效：accent 提示，不设
-      setTimeout(() => [dateInp, hhInp, mmInp].forEach(x => x.classList.remove('bad')), 900);
+      const bads = [dateInp].concat(Array.prototype.slice.call(form.querySelectorAll('.rem-wheel-wrap')));
+      bads.forEach(x => x.classList.add('bad')); // 已过/无效：accent 提示，不设
+      setTimeout(() => bads.forEach(x => x.classList.remove('bad')), 900);
       return;
     }
     const text = item.value.trim();
@@ -3197,9 +3287,25 @@ function renderRemPanel() {
   item.addEventListener('keydown', e => { // v5.40：事项框 Enter 直接确认
     if (e.key === 'Enter') { e.preventDefault(); doAdd(); }
   });
-  [dateInp, hhInp, mmInp].forEach(x => x.addEventListener('keydown', e => { // v5.45：时间区 Enter 同样直接确认
+  dateInp.addEventListener('keydown', e => { // 日期 Enter 同样直接确认
     if (e.key === 'Enter') { e.preventDefault(); doAdd(); }
-  }));
+  });
+  form.querySelectorAll('.rem-wheel').forEach(wh => { // v5.55：滚轮键盘可达——↑↓ 微调、Enter 确认、点项直达
+    wh.addEventListener('keydown', e => {
+      const seg = wh.classList.contains('rem-wheel-hh') ? 'hh' : 'mm';
+      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        const d = e.key === 'ArrowUp' ? -1 : 1;
+        setWheelVal(seg, getWheelVal(seg) + d);
+      } else if (e.key === 'Enter') {
+        e.preventDefault(); doAdd();
+      }
+    });
+    wh.addEventListener('click', e => {
+      const it = e.target.closest('.rem-wheel-it');
+      if (it) setWheelVal(wh.classList.contains('rem-wheel-hh') ? 'hh' : 'mm', +it.dataset.i, true);
+    });
+  });
   form.appendChild(item);
   form.appendChild(ok);
   // 已设条目永远排在设置区之后（v5.47：显式升序——距离现在最近的在最上方，用户要求）
@@ -3227,17 +3333,13 @@ function renderRemPanel() {
   // v5.44：聚焦逻辑挪至 focusRemTimeInput()，由 toggleRemPanel 在 mask 显示后调用——
   // 在本函数末尾聚焦时 remMask 仍为 hidden，display:none 容器内的元素聚焦静默无效（探针实测）
 }
-// v5.45：打开提醒面板时焦点直接落在「分钟」输入框且分钟值全选（用户硬性要求：如 15:16 默认选中 16）。
-// 旧原生时间控件时代选区钉不住分钟段（selectionStart=null 内核硬边界），自建文本框后 select() 标准生效必中。
-// 时序/守卫要点沿 v5.44：必须由 toggleRemPanel 在 remMask 显示后调用（display:none 容器内聚焦静默无效）；
-// 仅桌面环境执行，触屏设备不自动聚焦（防软键盘挤偏面板复发——v5.43 教训）
+// v5.55：滚轮时代焦点逻辑——桌面聚焦小时滚轮（↑↓ 可调、Enter 确认），触屏不聚焦（防焦点框干扰）。
+// 时序守卫沿 v5.44：必须由 toggleRemPanel 在 remMask 显示后调用（display:none 容器内聚焦静默无效）。
 function focusRemTimeInput() {
   try {
     if (!(window.matchMedia && window.matchMedia('(hover:hover) and (pointer:fine)').matches)) return;
-    const mm = document.querySelector('#remBoxForm input.rem-mm');
-    if (!mm) return;
-    mm.focus({ preventScroll: true });
-    mm.select();
+    const hh = document.querySelector('#remBoxForm .rem-wheel-hh');
+    if (hh) hh.focus({ preventScroll: true });
   } catch (e) {}
 }
 // v5.45：打开面板前保存编辑器选区（块内偏移），插入提醒行时恢复到"光标所在处"
@@ -3253,6 +3355,7 @@ function toggleRemPanel(force) {
     renderRemPanel();
     remMask.classList.remove('hidden');
     remCard.classList.add('hidden');
+    resetWheelScroll(); // v5.55：滚轮滚到默认值（display:none 内 scrollTop 无效，必须显示后设置）
     focusRemTimeInput(); // v5.44：mask 显示后再聚焦（display:none 容器内聚焦静默无效）
   } else {
     remMask.classList.add('hidden');
@@ -3311,6 +3414,10 @@ function renderMenu() {
     favBtn.classList.remove('hidden');
     favBtn.textContent = readFavs().indexOf(noteId) >= 0 ? '☆ 取消收藏' : '★ 收藏笔记';
   }
+  // v5.55：收藏夹收进二级视图（用户拍板）——每次打开菜单回到主视图，列表只在二级渲染
+  const mainView = document.getElementById('menuMainView');
+  const favView = document.getElementById('menuFavView');
+  if (mainView && favView) { mainView.classList.remove('hidden'); favView.classList.add('hidden'); }
   const list = document.getElementById('menuFavList');
   list.innerHTML = '';
   const favs = readFavs();
@@ -3318,15 +3425,24 @@ function renderMenu() {
   favs.forEach(name => {
     const row = document.createElement('div'); row.className = 'fav-row';
     const label = document.createElement('span'); label.textContent = name;
-    const del = document.createElement('span'); del.className = 'fav-del'; del.textContent = '✕';
-    del.addEventListener('click', e => { e.stopPropagation(); writeFavs(readFavs().filter(n => n !== name)); renderMenu(); });
+    // v5.55：行内 ✕ 删除按钮退役（用户拍板）——删除收藏的唯一入口 = 进入笔记后「☆ 取消收藏」
     row.addEventListener('click', () => { menuMask.classList.add('hidden'); location.assign('/' + encodeURIComponent(name)); });
-    row.appendChild(label); row.appendChild(del);
+    row.appendChild(label);
     list.appendChild(row);
   });
 }
 $('#menuBtn').addEventListener('click', () => { renderMenu(); menuMask.classList.remove('hidden'); });
 menuMask.addEventListener('click', e => { if (e.target === menuMask) menuMask.classList.add('hidden'); });
+// v5.55：主视图 ↔ 收藏夹二级视图
+$('#menuFavEntry').addEventListener('click', () => {
+  renderMenu(); // 先刷新列表（renderMenu 会重置视图，这里再切到二级）
+  document.getElementById('menuMainView').classList.add('hidden');
+  document.getElementById('menuFavView').classList.remove('hidden');
+});
+$('#menuFavBack').addEventListener('click', () => {
+  document.getElementById('menuFavView').classList.add('hidden');
+  document.getElementById('menuMainView').classList.remove('hidden');
+});
 $('#menuHome').addEventListener('click', () => { menuMask.classList.add('hidden'); location.assign('/'); });
 $('#menuFav').addEventListener('click', () => {
   if (!noteId) return;
@@ -3406,7 +3522,13 @@ async function poll() {
       // 本机有未保存改动时（editor.innerHTML !== lastHtml 且正聚焦），不覆盖编辑器，
       // 否则会丢失正在输入的内容、并导致光标消失（见 BUG_CHECKLIST E1）。
       const dirty = document.activeElement === editor && editor.innerHTML !== lastHtml;
-      if (dirty) { localVer = note.v; return; }
+      if (dirty) {
+        localVer = note.v;
+        // v5.55：远端更新被输入中静默跳过时不再显示「已同步」——用户看得到真相（?diag 有计数）
+        window.__pollSkipCount = (window.__pollSkipCount || 0) + 1;
+        setStatus(false, '远端有更新，输入完成后合并');
+        return;
+      }
       if (html !== editor.innerHTML) {
         const wasFocused = document.activeElement === editor;
         // 用字符偏移保存光标，而非 cloneRange：替换 innerHTML 后旧 Range 指向的节点被 detach，

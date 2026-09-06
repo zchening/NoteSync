@@ -312,11 +312,11 @@ test('R12 模态面板：复用 .box+qr-box 居中、设置行首行、时间默
   const timeRow = panel.querySelector('.rem-time-row');
   assert.ok(timeRow, 'v5.45 时间行必须存在（日期 + 时:分 自建控件，datetime-local 退役）');
   const dateInp = timeRow.querySelector('input[type="date"]');
-  const hhInp = timeRow.querySelector('input.rem-hh');
-  const mmInp = timeRow.querySelector('input.rem-mm');
+  const hhWh = timeRow.querySelector('.rem-wheel-hh');
+  const mmWh = timeRow.querySelector('.rem-wheel-mm');
   assert.ok(dateInp && dateInp.value, '日期框必须存在且有默认值（今天）');
-  assert.ok(hhInp && mmInp && /^\d{2}$/.test(hhInp.value) && /^\d{2}$/.test(mmInp.value), '时/分框必须存在且默认两位（当前 +5 分钟）');
-  const picked = new Date(+dateInp.value.slice(0, 4), +dateInp.value.slice(5, 7) - 1, +dateInp.value.slice(8, 10), +hhInp.value, +mmInp.value).getTime();
+  assert.ok(hhWh && mmWh && /^\d{1,2}$/.test(hhWh.dataset.val) && /^\d{1,2}$/.test(mmWh.dataset.val), 'v5.55 时/分滚轮必须存在且有默认值（当前 +5 分钟）');
+  const picked = new Date(+dateInp.value.slice(0, 4), +dateInp.value.slice(5, 7) - 1, +dateInp.value.slice(8, 10), +hhWh.dataset.val, +mmWh.dataset.val).getTime();
   assert.ok(Math.abs(Date.now() + 300000 - picked) < 120000, 'v5.42 默认时间必须是当前 +5 分钟（±2 分钟容差）');
   const itemInput = panel.querySelector('input.rem-item');
   assert.ok(itemInput && itemInput.value === '' && itemInput.placeholder === '事项', 'v5.44 事项框留空且 placeholder 精简为「事项」（括号补语已按用户要求删除）');
@@ -355,14 +355,14 @@ test('R12b 定时已过时刻红边拦截；留空事项按空入库', async t =
   window.toggleRemPanel(true);
   const panel = window.document.getElementById('remPanel');
   const dateInp = panel.querySelector('input[type="date"]');
-  const hhInp = panel.querySelector('input.rem-hh');
-  const mmInp = panel.querySelector('input.rem-mm');
   const itemInput = panel.querySelector('input.rem-item');
 
-  dateInp.value = '2020-01-01'; hhInp.value = '08'; mmInp.value = '00'; // 已过时刻
+  dateInp.value = '2020-01-01';
+  window.setWheelVal('hh', 8); window.setWheelVal('mm', 0); // 已过时刻
   [...panel.querySelectorAll('button')].find(b => b.textContent === '添加提醒').click();
   await sleep(30);
-  assert.ok(dateInp.classList.contains('bad') && mmInp.classList.contains('bad'), '已过时刻必须加重提示（日期/时分框同标）');
+  const badWraps = panel.querySelectorAll('.rem-wheel-wrap');
+  assert.ok(dateInp.classList.contains('bad') && badWraps.length === 2 && badWraps[0].classList.contains('bad') && badWraps[1].classList.contains('bad'), '已过时刻必须加重提示（日期框与两列滚轮同标）');
   assert.strictEqual(puts.length, 0, '已过时刻不得发出 PUT');
   assert.strictEqual(window.document.getElementById('remBtn').classList.contains('on'), false, '已过时刻不得点亮提醒按钮（未入库）');
 
@@ -371,13 +371,11 @@ test('R12b 定时已过时刻红边拦截；留空事项按空入库', async t =
   window.toggleRemPanel(true);
   const panel2 = window.document.getElementById('remPanel');
   const dateInp2 = panel2.querySelector('input[type="date"]');
-  const hhInp2 = panel2.querySelector('input.rem-hh');
-  const mmInp2 = panel2.querySelector('input.rem-mm');
   const future = new Date(Date.now() + 3600e3);
   const pad2 = n => String(n).padStart(2, '0');
   dateInp2.value = future.getFullYear() + '-' + pad2(future.getMonth() + 1) + '-' + pad2(future.getDate());
-  hhInp2.value = pad2(future.getHours());
-  mmInp2.value = pad2(future.getMinutes());
+  window.setWheelVal('hh', future.getHours());
+  window.setWheelVal('mm', future.getMinutes());
   // 留空事项直接点「添加提醒」
   [...panel2.querySelectorAll('button')].find(b => b.textContent === '添加提醒').click();
   await sleep(50);
@@ -419,14 +417,12 @@ test('R12c Esc 与遮罩点击关闭模态；事项框 Enter 等价点「添加�
   window.toggleRemPanel(true);
   const panel = window.document.getElementById('remPanel');
   const dateInp = panel.querySelector('input[type="date"]');
-  const hhInp = panel.querySelector('input.rem-hh');
-  const mmInp = panel.querySelector('input.rem-mm');
   const itemInput = panel.querySelector('input.rem-item');
   const future = new Date(Date.now() + 3600e3);
   const pad2 = n => String(n).padStart(2, '0');
   dateInp.value = future.getFullYear() + '-' + pad2(future.getMonth() + 1) + '-' + pad2(future.getDate());
-  hhInp.value = pad2(future.getHours());
-  mmInp.value = pad2(future.getMinutes());
+  window.setWheelVal('hh', future.getHours());
+  window.setWheelVal('mm', future.getMinutes());
   itemInput.value = '开会';
   itemInput.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
   await sleep(50);

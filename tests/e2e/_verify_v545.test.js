@@ -76,13 +76,12 @@ async function openDesktopEditor(noteName) {
   return { ctx, page };
 }
 
-// 面板添加一条提醒（v5.47 参数化：日期/时/分/事项）
+// 面板添加一条提醒（v5.55：时/分改滚轮——setWheelVal 直接设值，等同用户滚到目标位）
 async function addViaPanelAt(page, ymd, hh, mm, item) {
   await page.click('#remBtn');
   await page.waitForSelector('#remPanel', { timeout: 5000 });
   await page.fill('#remBoxForm input[type="date"]', ymd);
-  await page.fill('#remBoxForm input.rem-hh', hh);
-  await page.fill('#remBoxForm input.rem-mm', mm);
+  await page.evaluate(([h, m]) => { setWheelVal('hh', +h); setWheelVal('mm', +m); }, [hh, mm]);
   await page.fill('#remBoxForm input.rem-item', item);
   await page.evaluate(() => {
     [...document.querySelectorAll('#remBoxForm button')].find(b => b.textContent === '添加提醒').click();

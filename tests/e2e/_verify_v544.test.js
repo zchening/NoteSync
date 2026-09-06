@@ -104,29 +104,31 @@ test('V544-1 到点卡片处于页面正中心，标题「提醒」与正文「�
   } finally { await ctx.close(); }
 }));
 
-// ── ①+② 打开面板：时间框默认聚焦（v5.45 起为自建分钟框全选）+ placeholder 精简 ──
-test('V544-2 桌面端打开面板分钟框默认聚焦且全选，placeholder=「事项」', guard(async () => {
+// ── ①+② 打开面板：v5.55 滚轮时代——桌面聚焦小时滚轮 + placeholder 精简 ──
+test('V544-2 桌面端打开面板小时滚轮默认聚焦（↑↓可调），placeholder=「事项」', guard(async () => {
   const { ctx, page } = await openDesktopEditor();
   try {
     await page.click('#remBtn'); // 用户真实路径：点菜单栏闹钟图标
     await page.waitForSelector('#remPanel', { timeout: 5000 });
     const m = await page.evaluate(() => {
-      const mm = document.querySelector('#remBoxForm input.rem-mm');
+      const hh = document.querySelector('#remBoxForm .rem-wheel-hh');
+      const mm = document.querySelector('#remBoxForm .rem-wheel-mm');
       const item = document.querySelector('#remBoxForm input.rem-item');
       return {
-        focused: document.activeElement === mm,
-        selStart: mm ? mm.selectionStart : null,
-        selEnd: mm ? mm.selectionEnd : null,
-        value: mm ? mm.value : '',
+        focused: document.activeElement === hh,
+        hhVal: hh ? hh.dataset.val : null,
+        mmVal: mm ? mm.dataset.val : null,
+        hhCount: hh ? hh.querySelectorAll('.rem-wheel-it').length : 0,
+        mmCount: mm ? mm.querySelectorAll('.rem-wheel-it').length : 0,
         desktop: window.matchMedia('(hover:hover) and (pointer:fine)').matches,
         placeholder: item ? item.placeholder : null,
       };
     });
     assert.ok(m.desktop, 'Playwright 桌面 context 应命中 hover:fine 守卫');
-    assert.ok(m.focused, '桌面端打开面板分钟框必须默认聚焦（v5.44 修复：mask 显示后才聚焦，display:none 内聚焦无效）');
-    assert.strictEqual(m.selStart, 0, 'v5.45 分钟值必须从头全选');
-    assert.strictEqual(m.selEnd, 2, 'v5.45 分钟值必须选到末尾（两位全选=真选中「16」）');
-    assert.ok(m.value, '默认 +5 分钟值仍应填好');
+    assert.ok(m.focused, '桌面端打开面板小时滚轮必须默认聚焦（v5.55：滚轮 ↑↓ 微调的前提；mask 显示后才聚焦）');
+    assert.strictEqual(m.hhCount, 24, '小时滚轮必须 24 项（00-23）');
+    assert.strictEqual(m.mmCount, 60, '分钟滚轮必须 60 项（00-59）');
+    assert.ok(m.hhVal !== null && m.mmVal !== null, '默认 +5 分钟值仍应填好');
     assert.strictEqual(m.placeholder, '事项', 'placeholder 必须精简为「事项」（括号补语已删）');
     assert.deepStrictEqual(page.__errors, [], '不应有页面 JS 错误');
   } finally { await ctx.close(); }
@@ -153,16 +155,16 @@ test('V544-3 移动端（触屏设备模拟）打开面板不自动聚焦（防�
     await page.click('#remBtn');
     await page.waitForSelector('#remPanel', { timeout: 5000 });
     const m = await page.evaluate(() => {
-      const mm = document.querySelector('#remBoxForm input.rem-mm');
+      const hh = document.querySelector('#remBoxForm .rem-wheel-hh');
       return {
         desktop: window.matchMedia('(hover:hover) and (pointer:fine)').matches,
-        focused: document.activeElement === mm,
-        value: mm ? mm.value : '',
+        focused: document.activeElement === hh,
+        hhVal: hh ? hh.dataset.val : null,
       };
     });
     assert.ok(!m.desktop, '移动设备模拟应命中 coarse 指针（非桌面环境）');
-    assert.ok(!m.focused, '触屏设备不得自动聚焦时间框（v5.43 教训：聚焦弹软键盘压缩视口致面板偏离正中心）');
-    assert.ok(m.value, '默认 +5 分钟值仍应填好');
+    assert.ok(!m.focused, '触屏设备不得自动聚焦时间控件（v5.43 教训：聚焦弹软键盘压缩视口致面板偏离正中心）');
+    assert.ok(m.hhVal !== null, '默认 +5 分钟值仍应填好');
     assert.deepStrictEqual(page.__errors, [], '不应有页面 JS 错误');
   } finally { await ctx.close(); }
 }));

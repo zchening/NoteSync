@@ -44,6 +44,13 @@ class RemPlugin : Plugin() {
         const val ACTION_FIRE = "cn.xuyinji.notesync.REM_FIRE"
         const val ACTION_NOTIFY_CLICK = "cn.xuyinji.notesync.NOTIFY_CLICK"
 
+        // v5.55：前台标志（MainActivity onResume/onPause 维护）。
+        // 前台时 JS 提醒卡+声音已负责，RemReceiver 跳过通知避免双重打扰；
+        // 进程被杀重建时默认 false = 推通知，安全方向正确。
+        @JvmStatic
+        @Volatile
+        var isForeground = false
+
         fun getOrCreateKey(): SecretKey {
             val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
             (ks.getKey(KEYSTORE_ALIAS, null) as? SecretKey)?.let { return it }

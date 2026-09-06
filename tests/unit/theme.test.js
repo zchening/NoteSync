@@ -333,11 +333,12 @@ test('v5.43：输入框内容必须居中（继承 qr-box），showPicker 退役
   assert.ok(!/showPicker/.test(SRC), 'showPicker 一并退役（依赖聚焦手势，且自动弹选择器过激）');
 });
 
-test('v5.45：打开面板默认聚焦自建分钟框且全选（真选中），聚焦受桌面环境守卫（触屏不聚焦防挤偏）', () => {
-  assert.ok(/input\.rem-mm/.test(SRC), '自建分钟输入框必须存在（datetime-local 已退役——内核段选区硬边界）');
+test('v5.55：时/分滚轮组件形态（自建文本框退役），聚焦守卫沿桌面环境限定', () => {
+  assert.ok(/\.rem-wheel\b/.test(SRC), '滚轮容器类必须存在（时/分两列滚轮，用户拍板）');
+  assert.ok(/function makeWheel\(seg, max, val\)/.test(SRC), 'makeWheel 工厂函数必须存在');
+  assert.ok(!/input\.rem-mm/.test(SRC), 'v5.45 自建分钟文本框必须退役');
   assert.ok(!/datetime-local/.test(SRC), '原生 datetime-local 必须彻底移除');
-  assert.ok(/mm\.focus\(\{\s*preventScroll:\s*true\s*\}\)/.test(SRC), '聚焦必须带 preventScroll，不得滚动页面');
-  assert.ok(/mm\.select\(\)/.test(SRC), '分钟值必须全选（select() 标准文本 API，v5.45 真选中「16」）');
+  assert.ok(/hh\.focus\(\{\s*preventScroll:\s*true\s*\}\)/.test(SRC), '聚焦小时滚轮必须带 preventScroll，不得滚动页面');
   assert.ok(/\(hover:hover\) and \(pointer:fine\)/.test(SRC), '自动聚焦必须限定桌面环境（v5.43 教训：移动端聚焦弹软键盘压缩视口，面板偏离正中心）');
   assert.ok(!/inp\.focus\(\)/.test(SRC), '不得出现无参数裸调用（必须 preventScroll 且受桌面守卫包住）');
   assert.ok((SRC.match(/\.focus\(\{/g) || []).length === 1, '带选项的聚焦调用全文件只能出现一次（守卫块内），防止新增无守卫调用');

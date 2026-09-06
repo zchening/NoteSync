@@ -20,6 +20,9 @@ class RemReceiver : BroadcastReceiver() {
         // 非 precise 兜底（setAndAllowWhileIdle）在系统深睡后补触发会晚到数分钟，
         // 晚到超过 60 秒一律丢弃不发通知（用户拍板：错过的不再弹）。
         if (at <= 0 || System.currentTimeMillis() - at > 60_000L) return
+        // v5.55：前台时 JS 提醒卡+声音已负责，不重复推通知；
+        // 非前台（后台/Home 切走/彻底关闭被杀/冷启拉起）一律推通知栏（用户拍板语义）
+        if (RemPlugin.isForeground) return
         RemPlugin.createNotificationChannel(context)
 
         // 点击通知 → 回 MainActivity → onNewIntent → JS 抛 rem-notify-click 事件
