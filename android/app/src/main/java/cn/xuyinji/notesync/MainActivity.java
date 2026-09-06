@@ -30,6 +30,12 @@ public class MainActivity extends BridgeActivity {
     private boolean pendingRemNotifyClick = false;
     private static final String MAIN_DOC_CACHE = "cached_index.html";
 
+    // v5.56：离线兜底诊断计数（JS 端 ?diag 经 RemPlugin.cacheInfo 只读——定位兜底断在哪一环）
+    public static volatile int interceptCount = 0;
+    public static volatile int fetchFailCount = 0;
+    public static volatile int cacheHitCount = 0;
+    public static volatile int assetHitCount = 0;
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         // v5.51：注册自定义提醒桥（Capacitor 7 也支持自动扫描，显式注册更稳）
@@ -73,6 +79,7 @@ public class MainActivity extends BridgeActivity {
                 // 页面照常打开，JS 照常跑（localStorage origin 不变），离线阅读生效。
                 // 热更新不受影响：联网时永远先拿线上最新版。
                 if (request.isForMainFrame() && "GET".equalsIgnoreCase(request.getMethod())) {
+                    interceptCount++;
                     try {
                         byte[] bytes = fetchMainDoc(request.getUrl().toString());
                         if (bytes != null && bytes.length > 0) {
@@ -80,9 +87,19 @@ public class MainActivity extends BridgeActivity {
                             return new WebResourceResponse("text/html", "utf-8", new ByteArrayInputStream(bytes));
                         }
                     } catch (Exception ignored) { }
+                    fetchFailCount++;
                     byte[] cached = readMainDoc();
                     if (cached != null && cached.length > 0) {
+                        cacheHitCount++;
                         return new WebResourceResponse("text/html", "utf-8", new ByteArrayInputStream(cached));
+                    }
+                    // v5.56 三级兜底：磁盘缓存也没有（首装未联网/数据被清/旧版拦截器从未生效）→ 回 APK 内置壳。
+                    // CI 构建时 cap sync 已把当版 index.html 打进 assets/public，壳必然存在；
+                    // 壳起后 JS 的 notesync_cache_* 离线缓存接管正文，「网络连接失败」页近乎不可达。
+                    byte[] asset = readAssetMainDoc();
+                    if (asset != null && asset.length > 0) {
+                        assetHitCount++;
+                        return new WebResourceResponse("text/html", "utf-8", new ByteArrayInputStream(asset));
                     }
                 }
                 return super.shouldInterceptRequest(view, request);
@@ -130,6 +147,18 @@ public class MainActivity extends BridgeActivity {
             byte[] buf = new byte[8192];
             int n;
             while ((n = fi.read(buf)) > 0) bo.write(buf, 0, n);
+            return bo.toByteArray();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** v5.56 末级兜底：APK 内置壳（assets/public/index.html，构建时 cap sync 打入当版） */
+    private byte[] readAssetMainDoc() {
+        try (InputStream in = getAssets().open("public/index.html"); ByteArrayOutputStream bo = new ByteArrayOutputStream()) {
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = in.read(buf)) > 0) bo.write(buf, 0, n);
             return bo.toByteArray();
         } catch (Exception e) {
             return null;

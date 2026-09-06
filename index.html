@@ -60,6 +60,7 @@
   .hintbar{position:fixed;left:50%;transform:translateX(-50%);z-index:55;display:flex;align-items:center;gap:10px;padding:8px 14px;font-size:12.5px;color:var(--fg);background:var(--box-bg);border:1px solid var(--line);border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.12);max-width:92vw}
   .hintbar.hidden{display:none}
   #draftBar{top:54px}
+  #remoteBar{top:96px} /* v5.56 远端冲突条：与草稿条同族错位，避免双条叠盖 */
   #installBar{bottom:16px}
   /* v5.40：到点提醒卡片对齐扫码配对弹窗（.box）视觉——圆角 18 / rise 入场 / 同款阴影与标题层级；
      不加遮罩：到点提醒是通知不是操作门槛，不打断正在输入的用户；颜色全走主题变量（--box-bg 不透明） */
@@ -269,6 +270,7 @@
       <div id="menuHome" class="menu-item" role="button" tabindex="0">⌂ 返回首页</div>
       <div id="menuFav" class="menu-item" role="button" tabindex="0">★ 收藏笔记</div>
       <div id="menuFavEntry" class="menu-item" role="button" tabindex="0">▸ 收藏夹</div>
+      <div id="menuDiag" class="menu-item" role="button" tabindex="0">⌁ 诊断</div>
     </div>
     <div id="menuFavView" class="hidden">
       <div id="menuFavBack" class="menu-item" role="button" tabindex="0">‹ 返回</div>
@@ -281,6 +283,11 @@
   <span id="draftMsg">本机有未同步的修改，但服务器上已有更新的内容</span>
   <button type="button" id="draftRestore">恢复我的修改</button>
   <button type="button" id="draftDiscard">丢弃</button>
+</div>
+<div id="remoteBar" class="hintbar hidden">
+  <span id="remoteMsg">服务器上有更新的内容，但本机有未保存的修改</span>
+  <button type="button" id="remoteKeep">保留我的</button>
+  <button type="button" id="remoteTake">用服务器版</button>
 </div>
 <div id="installBar" class="hintbar hidden">
   <span id="installMsg"></span>
@@ -353,7 +360,7 @@ const NOTE_LAST_KEY = 'notesync_last_note';
 const NOTE_JUMPED_KEY = 'notesync_jumped';
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '5.55';
+const APP_VERSION = '5.56';
 const BUILD_DATE = '2026-09-06';
 
 const $ = s => document.querySelector(s);
@@ -1124,54 +1131,84 @@ function hideUploadStatus() { uploadStatus.classList.remove('show'); }
 // headless 不做真实合成，「能打字但看不见光标」这类现象只能靠真机读数确认。
 // 纯只读：不改 DOM、不抢焦点（pointer-events:none），不开启时零开销。
 (function setupCaretDiag() {
-  if (location.search.indexOf('diag') === -1) return;
-  const box = document.createElement('div');
-  box.id = 'caretDiag';
-  box.style.cssText = 'position:fixed;right:8px;bottom:8px;z-index:99999;max-width:46vw;' +
-    'padding:8px 10px;border-radius:8px;background:rgba(0,0,0,.82);color:#0f0;' +
-    'font:11px/1.5 ui-monospace,Consolas,monospace;white-space:pre-wrap;word-break:break-all;' +
-    'pointer-events:none;user-select:none';
-  document.body.appendChild(box);
-  const cut = (s, n) => (s.length > n ? s.slice(0, n) + '…' : s);
-  setInterval(() => {
-    const L = [];
-    try {
-      L.push('v' + APP_VERSION + '  composing=' + (typeof isComposing !== 'undefined' ? isComposing : '?'));
-      const ae = document.activeElement;
-      L.push('focus=' + (ae ? (ae.id || ae.nodeName) : 'null') + '  docFocus=' + document.hasFocus());
-      L.push('caretColor=' + (getComputedStyle(editor).caretColor || '-'));
-      const sel = window.getSelection();
-      L.push('ranges=' + sel.rangeCount + '  collapsed=' + sel.isCollapsed);
-      if (sel.rangeCount) {
-        const r = sel.getRangeAt(0);
-        const sc = r.startContainer;
-        L.push('node=' + (sc.nodeType === 3 ? 'TEXT' + JSON.stringify(cut(sc.nodeValue || '', 10)) : sc.nodeName) + '@' + r.startOffset);
-        L.push('connected=' + sc.isConnected + '  inEditor=' + editor.contains(r.commonAncestorContainer));
-        const rects = r.getClientRects();
-        const b = r.getBoundingClientRect();
-        L.push('rects=' + rects.length + '  bcr=' + [b.x, b.y, b.width, b.height].map(n => Math.round(n)).join(','));
-        let blk = sc.nodeType === 3 ? sc.parentElement : sc;
-        while (blk && blk.parentElement !== editor && blk !== editor) blk = blk.parentElement;
-        if (blk && blk !== editor) {
-          const bb = blk.getBoundingClientRect();
-          L.push('block=' + blk.nodeName + ' h=' + Math.round(bb.height) + ' html=' + cut(JSON.stringify(blk.innerHTML), 34));
+  // v5.56：APP 无地址栏、笔记名不能含 ?——菜单「诊断」项经 __toggleDiag 免 URL 开关浮层，
+  // localStorage 标记让浮层跨重载保持（真机反复取证）；?diag 查询参数仍然有效。
+  let diagBox = null, diagTimer = null;
+  function bootDiag() {
+    if (diagBox) return;
+    diagBox = document.createElement('div');
+    diagBox.id = 'caretDiag';
+    diagBox.style.cssText = 'position:fixed;right:8px;bottom:8px;z-index:99999;max-width:46vw;' +
+      'padding:8px 10px;border-radius:8px;background:rgba(0,0,0,.82);color:#0f0;' +
+      'font:11px/1.5 ui-monospace,Consolas,monospace;white-space:pre-wrap;word-break:break-all;' +
+      'pointer-events:none;user-select:none';
+    document.body.appendChild(diagBox);
+    const cut = (s, n) => (s.length > n ? s.slice(0, n) + '…' : s);
+    diagTimer = setInterval(() => {
+      const L = [];
+      try {
+        L.push('v' + APP_VERSION + '  composing=' + (typeof isComposing !== 'undefined' ? isComposing : '?'));
+        const ae = document.activeElement;
+        L.push('focus=' + (ae ? (ae.id || ae.nodeName) : 'null') + '  docFocus=' + document.hasFocus());
+        L.push('caretColor=' + (getComputedStyle(editor).caretColor || '-'));
+        const sel = window.getSelection();
+        L.push('ranges=' + sel.rangeCount + '  collapsed=' + sel.isCollapsed);
+        if (sel.rangeCount) {
+          const r = sel.getRangeAt(0);
+          const sc = r.startContainer;
+          L.push('node=' + (sc.nodeType === 3 ? 'TEXT' + JSON.stringify(cut(sc.nodeValue || '', 10)) : sc.nodeName) + '@' + r.startOffset);
+          L.push('connected=' + sc.isConnected + '  inEditor=' + editor.contains(r.commonAncestorContainer));
+          const rects = r.getClientRects();
+          const b = r.getBoundingClientRect();
+          L.push('rects=' + rects.length + '  bcr=' + [b.x, b.y, b.width, b.height].map(n => Math.round(n)).join(','));
+          let blk = sc.nodeType === 3 ? sc.parentElement : sc;
+          while (blk && blk.parentElement !== editor && blk !== editor) blk = blk.parentElement;
+          if (blk && blk !== editor) {
+            const bb = blk.getBoundingClientRect();
+            L.push('block=' + blk.nodeName + ' h=' + Math.round(bb.height) + ' html=' + cut(JSON.stringify(blk.innerHTML), 34));
+          }
         }
-      }
-      L.push('editor=' + cut(JSON.stringify(editor.innerHTML), 70));
-      // v5.55：原生桥 + 同步状态诊断（只读展示）。真机打开 ?diag 一眼确认：
-      // bridge=ok 且 scheduled>0 才说明原生闹钟真的排上了（v5.51 起 bridge=none 隐藏三个版本没发现）
-      const cap = window.Capacitor;
-      L.push('native=' + (typeof isNativeApp === 'function' && isNativeApp() ? 'APK' : 'web') +
-        '  bridge=' + ((cap && cap.Plugins && cap.Plugins.RemBridge) ? 'ok' : 'none') +
-        '  scheduled=' + (window.__remNativeScheduled != null ? window.__remNativeScheduled : '?') +
-        '  exact=' + (window.__remExactAlarm == null ? '?' : window.__remExactAlarm) +
-        (window.__remNativeErr ? '  err=' + window.__remNativeErr : ''));
-      L.push('sse=' + (sseSource ? 'open' : 'closed') +
-        '  lastSync=' + (lastSyncAt ? Math.round((Date.now() - lastSyncAt) / 1000) + 's前' : 'never') +
-        '  skip=' + (window.__pollSkipCount || 0));
-    } catch (e) { L.push('ERR ' + e.message); }
-    box.textContent = L.join('\n');
-  }, 250);
+        L.push('editor=' + cut(JSON.stringify(editor.innerHTML), 70));
+        // v5.55：原生桥 + 同步状态诊断（只读展示）。真机打开 ?diag 一眼确认：
+        // bridge=ok 且 scheduled>0 才说明原生闹钟真的排上了（v5.51 起 bridge=none 隐藏三个版本没发现）
+        const cap = window.Capacitor;
+        const rb = (cap && cap.Plugins && cap.Plugins.RemBridge) || null;
+        L.push('native=' + (typeof isNativeApp === 'function' && isNativeApp() ? 'APK' : 'web') +
+          '  bridge=' + (rb ? 'ok' : 'none') +
+          '  scheduled=' + (window.__remNativeScheduled != null ? window.__remNativeScheduled : '?') +
+          '  exact=' + (window.__remExactAlarm == null ? '?' : window.__remExactAlarm) +
+          (window.__remNativeErr ? '  err=' + window.__remNativeErr : ''));
+        L.push('sse=' + (sseSource ? 'open' : 'closed') +
+          '  lastSync=' + (lastSyncAt ? Math.round((Date.now() - lastSyncAt) / 1000) + 's前' : 'never') +
+          '  skip=' + (window.__pollSkipCount || 0));
+        // v5.56：提醒数/远端挂起/版本 + 主文档缓存与拦截计数（cacheInfo 为 v5.56 APK 新增，旧 APK 静默 '?'）
+        L.push('rem=' + (typeof reminders !== 'undefined' ? reminders.length : '?') +
+          '  pendingRemote=' + (typeof pendingRemoteNote !== 'undefined' && pendingRemoteNote ? 1 : 0) +
+          '  localVer=' + (typeof localVer !== 'undefined' ? localVer : '?'));
+        const ci = window.__remCacheInfo;
+        L.push('mainDocCache=' + (ci ? (ci.exists ? ci.size + 'B' : 'none') : '?') +
+          '  intercept=' + (ci ? ci.intercept : '?') + '  fetchFail=' + (ci ? ci.fetchFail : '?') +
+          '  cacheHit=' + (ci ? ci.cacheHit : '?') + '  assetHit=' + (ci ? ci.assetHit : '?') +
+          '  nativeVer=' + (window.__remNativeVersion || '?'));
+        if (rb && typeof rb.cacheInfo === 'function') { rb.cacheInfo().then(r => { window.__remCacheInfo = r; }).catch(() => {}); }
+        if (rb && typeof rb.getVersion === 'function') {
+          rb.getVersion().then(r => {
+            window.__remNativeVersion = r.nativeVersion;
+            if (typeof r.scheduled === 'number') window.__remNativeScheduled = r.scheduled;
+          }).catch(() => {});
+        }
+      } catch (e) { L.push('ERR ' + e.message); }
+      diagBox.textContent = L.join('\n');
+    }, 250);
+  }
+  function stopDiag() {
+    if (diagTimer) { clearInterval(diagTimer); diagTimer = null; }
+    if (diagBox) { diagBox.remove(); diagBox = null; }
+  }
+  window.__toggleDiag = function () { if (diagBox) stopDiag(); else bootDiag(); };
+  let auto = location.search.indexOf('diag') !== -1;
+  try { if (localStorage.getItem('notesync_diag') === '1') auto = true; } catch (e) {}
+  if (auto) bootDiag();
 })();
 
 // --- 加解密 ---
@@ -2713,6 +2750,35 @@ draftRestoreBtn.addEventListener('click', async () => {
 });
 draftDiscardBtn.addEventListener('click', () => { clearDraft(); hideDraftBar(); });
 
+// ── v5.56 远端更新冲突条（对齐草稿冲突条铁律：绝不自动覆盖，用户拍板）──
+// 旧版 poll 在本机有未保存改动时直接 localVer = note.v 消费版本号却不应用内容：
+// 远端更新被永久吞掉、随后本地保存覆盖服务端（真机数据丢失实锤）。
+// 现只 stash 快照 + 亮条，拍板前服务端与本机内容零改动；「合并」= 用户显式二选一。
+let pendingRemoteNote = null; // 被挂起的远端快照（含最新 ct/iv/rem/v）
+const remoteBar = $('#remoteBar');
+function showRemoteBar() { remoteBar.classList.remove('hidden'); }
+function hideRemoteBar() { remoteBar.classList.add('hidden'); }
+$('#remoteKeep').addEventListener('click', () => {
+  // 保留我的：用户明确覆盖远端——清挂起并重进 saveLocal 直传（服务端 v 照常递增，对端经 poll 拿到）
+  pendingRemoteNote = null; hideRemoteBar();
+  saveLocal();
+});
+$('#remoteTake').addEventListener('click', async () => {
+  // 用服务器版：丢弃本机未保存修改（草稿一并清），应用远端正文+提醒
+  const note = pendingRemoteNote; pendingRemoteNote = null; hideRemoteBar();
+  if (!note || !cryptoKey) return;
+  try {
+    const html = await decryptText(note.ct, note.iv, cryptoKey);
+    lastHtml = html; localVer = note.v || localVer;
+    editor.innerHTML = html;
+    clearDraft();
+    ensureBlockWrapped(); try { linkifyEditor(); } catch (e) {} ensureCaret();
+    if ((note.rem || null) !== remCipher) { try { await loadReminder(note, cryptoKey); } catch (e) {} }
+    undoStack = []; redoStack = []; lastState = captureState();
+    setStatus(true, '已同步');
+  } catch (e) { setStatus(false, '应用远端失败'); }
+});
+
 // ── 安装引导（v5.35）──
 // Android/桌面 Chromium：beforeinstallprompt 触发 → [安装] 一键装
 // iOS：beforeinstallprompt 永不触发，只能走 Safari 分享菜单「添加到主屏幕」（如实提示，不装糊涂）
@@ -3444,6 +3510,13 @@ $('#menuFavBack').addEventListener('click', () => {
   document.getElementById('menuMainView').classList.remove('hidden');
 });
 $('#menuHome').addEventListener('click', () => { menuMask.classList.add('hidden'); location.assign('/'); });
+// v5.56：APP 内诊断入口（无地址栏无法加 ?diag，笔记名也不能含 ?）——开关浮层并跨重载保持标记
+$('#menuDiag').addEventListener('click', () => {
+  menuMask.classList.add('hidden');
+  const turningOn = !document.getElementById('caretDiag');
+  try { turningOn ? localStorage.setItem('notesync_diag', '1') : localStorage.removeItem('notesync_diag'); } catch (e) {}
+  if (window.__toggleDiag) window.__toggleDiag();
+});
 $('#menuFav').addEventListener('click', () => {
   if (!noteId) return;
   const favs = readFavs(); const i = favs.indexOf(noteId);
@@ -3464,6 +3537,13 @@ async function saveLocal() {
     enc = await encryptText(html, cryptoKey);
     // 先落草稿再上传：上传中途关页/失败，本次输入都已在 localStorage
     writeDraft(enc.ct, enc.iv);
+    if (pendingRemoteNote) {
+      // v5.56：远端更新挂起中——绝不自动覆盖服务端。草稿上一行已落，冲突条等用户拍板；
+      // 「保留我的」清挂起后重进本函数才会走到 apiPut。
+      setStatus(false, '远端有更新，待处理');
+      showRemoteBar();
+      return;
+    }
     const r = await apiPut({ ct: enc.ct, iv: enc.iv, salt: bufToB64(serverSalt) });
     localVer = r.v; lastHtml = html;
     saveRetryCount = 0;
@@ -3519,16 +3599,22 @@ async function poll() {
     hideOfflineBar();
     if ((note.v || 0) > localVer && note.ct) {
       const html = await decryptText(note.ct, note.iv, cryptoKey);
-      // 本机有未保存改动时（editor.innerHTML !== lastHtml 且正聚焦），不覆盖编辑器，
-      // 否则会丢失正在输入的内容、并导致光标消失（见 BUG_CHECKLIST E1）。
-      const dirty = document.activeElement === editor && editor.innerHTML !== lastHtml;
-      if (dirty) {
-        localVer = note.v;
-        // v5.55：远端更新被输入中静默跳过时不再显示「已同步」——用户看得到真相（?diag 有计数）
+      // v5.56：有未保存改动即挂起远端（不再要求正聚焦——失焦未存的修改同样绝不覆盖）。
+      // 旧版在此 localVer = note.v 消费版本号却不应用内容：下一轮 poll 条件不再成立，
+      // 远端更新被永久吞掉，随后本地保存直接覆盖服务端（真机数据丢失实锤，「输入完成后合并」
+      // 的提示从未有过任何合并动作）。现只 stash 快照 + 亮冲突条，用户拍板前零写入。
+      const unsaved = editor.innerHTML !== lastHtml;
+      if (unsaved) {
+        pendingRemoteNote = note;
         window.__pollSkipCount = (window.__pollSkipCount || 0) + 1;
-        setStatus(false, '远端有更新，输入完成后合并');
+        setStatus(false, '远端有更新，待处理');
+        showRemoteBar();
         return;
       }
+      pendingRemoteNote = null; hideRemoteBar();
+      // v5.56：应用远端时同步恢复提醒——此前 poll 只更新正文、从不碰 note.rem，
+      // 其他设备新增/取消的提醒本端永远看不到（PC 加的提醒手机有文字无下划线实锤）
+      if ((note.rem || null) !== remCipher) { try { await loadReminder(note, cryptoKey); } catch (e) {} }
       if (html !== editor.innerHTML) {
         const wasFocused = document.activeElement === editor;
         // 用字符偏移保存光标，而非 cloneRange：替换 innerHTML 后旧 Range 指向的节点被 detach，
@@ -3645,6 +3731,7 @@ $('#lock').addEventListener('click', () => {
   editor.innerHTML = ''; editor.contentEditable = false;
   // v5.37：锁定同时清提醒态（明文仍在内存会泄漏在卡片/chip 上，全部收掉）
   reminders = []; remCipher = null; clearTimeout(remTimer); remTimer = null;
+  pendingRemoteNote = null; hideRemoteBar(); // v5.56：退出连同远端冲突挂起一起清，残条不带到下次解锁
   clearTimeout(chipTimer); chipFeedbackUntil = 0; hideTimeChip();
   cardShownAts = []; remCard.classList.add('hidden');
   remMask.classList.add('hidden'); remPanelOpen = false; remBtn.classList.remove('on');
@@ -3753,6 +3840,7 @@ function isNativeApp() {
     if (note.ct) { try { lastHtml = await decryptText(note.ct, note.iv, cryptoKey); editor.innerHTML = lastHtml; } catch (e) {} }
     if (note.ct) cachePut({ ct: note.ct, iv: note.iv, v: note.v, salt: note.salt, savedAt: Date.now() }); // v5.49：成功加载即缓存正文密文，供离线阅读；v5.54 附盐
     lastSyncAt = Date.now(); // v5.50：在线加载成功=与服务端通信成功
+    await loadReminder(note, cryptoKey); // v5.56：自动解锁路径补提醒恢复——此前仅口令解锁路径（applyUnlocked）恢复，记住密钥的设备关标签/杀进程重开后提醒列表恒空、下划线全丢（真机实锤）
     ensureBlockWrapped();
     if (note.ct) { try { linkifyEditor(); } catch (e) {} }
     ensureCaret(); // 自动加载后显式重建合法折叠光标

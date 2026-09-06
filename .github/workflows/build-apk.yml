@@ -40,6 +40,15 @@ jobs:
           cp index.html www/index.html
           npx cap sync android
 
+      - name: 从 tag 注入安卓版本号（v5.56 起：versionName 永不漂移——v5.55 APK 自报 5.54 的教训）
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          CODE="${VER##*.}"
+          # 公式仅 5.x 线有效（v5.56→56）；跨 6.x 时需调整 versionCode 算法
+          sed -i "s/versionCode [0-9]\+/versionCode $CODE/; s/versionName \"[^\"]*\"/versionName \"$VER\"/" android/app/build.gradle
+          grep -n "versionCode\|versionName" android/app/build.gradle
+
       - name: 解码签名密钥库到 android/ 根（与下方 $(pwd) 路径一致）
         env:
           B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}

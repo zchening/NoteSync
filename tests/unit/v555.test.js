@@ -192,14 +192,17 @@ test('E6 menuBox 无「菜单」标题；收藏列表无 ✕ 删除按钮', () =
   assert.ok(!src.includes('fav-del'), 'fav-del 删除按钮应整段退役（唯一删除入口 = 笔记内取消收藏）');
 });
 
-// ── E7：poll dirty 跳过不再静默 ──
-test('E7 poll dirty 跳过提示：状态栏显示「远端有更新」+ 诊断计数', () => {
+// ── E7：poll 未保存改动挂起（v5.56 起不再消费版本号——合并吞噬修复）──
+test('E7 poll 跳过提示：不消费版本号 + stash 快照 + 冲突条 + 诊断计数', () => {
   const src = readSrc();
-  const dirtyIdx = src.indexOf('if (dirty) {');
-  assert.ok(dirtyIdx > -1, '应存在 dirty 跳过分支');
-  const seg = src.slice(dirtyIdx, dirtyIdx + 500);
-  assert.ok(seg.includes('远端有更新，输入完成后合并'), '跳过时状态栏应显示真相，不再假装「已同步」');
+  const idx = src.indexOf('const unsaved = editor.innerHTML !== lastHtml;');
+  assert.ok(idx > -1, '应有未保存判定（v5.56 起不再要求正聚焦——失焦未存同样绝不覆盖）');
+  const seg = src.slice(idx, idx + 520);
+  assert.ok(seg.includes('pendingRemoteNote = note;'), '挂起应 stash 远端快照');
+  assert.ok(!seg.includes('localVer = note.v'), '挂起分支不得消费版本号（旧版吞噬远端更新的根因）');
   assert.ok(seg.includes('__pollSkipCount'), '跳过应计入 __pollSkipCount 供 ?diag 展示');
+  assert.ok(seg.includes('showRemoteBar()'), '挂起应亮冲突条');
+  assert.ok(seg.includes('远端有更新，待处理'), '状态栏应显示真相');
 });
 
 // ── E8：?diag 新增原生桥 + 同步诊断行 ──

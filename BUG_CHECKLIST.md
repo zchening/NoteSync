@@ -1247,10 +1247,71 @@
   - [ ] footer 左侧 menuBtn + menuMask/menuBox 模态面板：返回首页（location.assign 留历史）/收藏切换/收藏夹列表（notesync_favs 上限 20，行点击 encodeURIComponent 跳转，✕ stopPropagation，空态文案）
   - [ ] 菜单 CSS 全 var() 深色自适配；列表 DOM 用 textContent 构建（无 innerHTML 注入面）
 
+## Q. 真机验收六连修（v5.56 新增分类——v5.55 发布后用户真机验收报告）
+
+### Q1 | 远端更新被静默吞噬 + 本地保存覆盖服务端（数据丢失级）
+- **版本**: v5.56
+- **现象**: 状态栏提示「远端有更新，输入完成后合并」，但输入完成后既不合并也无下文；他端新增内容（如 APP 加的提醒回写）在本端从不出现，且随后本端保存把服务端覆盖，他端内容丢失
+- **根因**: poll 发现远端更新且本机「dirty」时执行 `localVer = note.v` **却不应用内容**——版本号被消费，下一轮 poll `note.v > localVer` 不再成立，远端更新永久吞掉；「合并」动作在代码里根本不存在
+- **修复**: 有未保存改动即挂起（`editor.innerHTML !== lastHtml`，不再要求正聚焦——失焦未存同样绝不覆盖）：stash `pendingRemoteNote` 快照 + 状态栏「远端有更新，待处理」+ 弹远端冲突条（保留我的=明确覆盖远端直传 / 用服务器版=丢弃本机未存修改、应用远端正文+提醒），拍板前零写入；saveLocal 在 apiPut 前设闸门（草稿已先落，关页也不丢）
+- **关联文件**: index.html → poll() / saveLocal() / remoteBar 三件套
+- **核对要点**:
+  - [ ] 两端同开一篇：A 端输入中，B 端保存 → A 端亮冲突条、内容不被覆盖、skip 计数递增；再 poll 版本号不被消费
+  - [ ] 「用服务器版」→ 编辑器=远端内容、草稿清、提醒同步恢复；「保留我的」→ PUT 直传、B 端随后看到 A 端内容
+  - [ ] 失焦但未保存时 B 端保存 → 同样挂起不覆盖（不再仅限聚焦态）
+
+### Q2 | 关标签/杀进程重开后提醒列表恒空
+- **版本**: v5.56
+- **现象**: PC Chrome 新建提醒后关标签重开，正文里提醒文字还在但提醒列表找不到该项；APP 同理（杀进程重开列表空）
+- **根因**: 口令解锁路径（applyUnlocked）调 `loadReminder` 恢复提醒，但「记住密钥」的**自动解锁路径**（loadStoredKey 分支）漏调——reminders 恒为 []，列表空、下划线无、页内调度无
+- **修复**: 自动解锁路径补 `await loadReminder(note, cryptoKey)`（先于 linkifyEditor，下划线才画得出）
+- **关联文件**: index.html → init() loadStoredKey 分支
+- **核对要点**:
+  - [ ] 各端加提醒 → 关标签/杀进程重开 → 提醒列表在、下划线在、到点照响
+  - [ ] 口令解锁与自动解锁两路径提醒行为一致
+
+### Q3 | 提醒状态多端不同步
+- **版本**: v5.56
+- **现象**: PC 加的提醒，手机出现文字但无下划线；APP 加的提醒，PC 连正文文字都看不到
+- **根因**: ① `poll()` 只更新正文、从不处理 `note.rem`——他端提醒变化本端无感（无下划线）；② APP 加的提醒 PC 看不到是 Q1 的连带（PC 输入中跳过并消费版本号）
+- **修复**: poll 应用远端时若 `(note.rem || null) !== remCipher` 即 `loadReminder` 恢复+重排+同步原生层（先于 linkify）；Q1 修复后另一半自愈
+- **关联文件**: index.html → poll()
+- **核对要点**:
+  - [ ] PC 加提醒 → 手机（已开页面）≤2s 出现下划线 + 提醒列表有项 + 原生层排程
+  - [ ] 手机加提醒 → PC ≤2s 出现文字+下划线（PC 输入中则亮冲突条，拍板后一致）
+
+### Q4 | APP 断网重开只见原生「网络连接失败」页
+- **版本**: v5.56
+- **现象**: 看到「已同步」→ 飞行模式 → 杀应用重开 → 原生离线页+重试按钮，重试无效；应显示缓存正文+「离线 · 上次同步于 X」
+- **根因**: v5.55 主文档磁盘缓存合并后未经真机验证；原生离线页出现=主文档缓存未命中（缓存未写入/拦截器未生效/旧 APK 无拦截器），JS 的 `notesync_cache_*` 离线体系没机会跑
+- **修复**: MainActivity 三级兜底——联网 fetch → 磁盘缓存 → **APK 内置壳**（CI 构建 cap sync 把当版 index.html 打进 `assets/public`，壳必然存在）；壳起后 JS 离线缓存接管正文；新增 intercept/fetchFail/cacheHit/assetHit 四计数 + `RemBridge.cacheInfo` 只读诊断（?diag 直读，定位兜底断在哪一环）
+- **关联文件**: MainActivity.java → shouldInterceptRequest/readAssetMainDoc；RemPlugin.kt → cacheInfo
+- **核对要点**:
+  - [ ] 联网用过 → 飞行模式杀进程重开 → 看到断网前正文+离线条（不再见原生离线页）
+  - [ ] 诊断浮层 mainDocCache/intercept/cacheHit/assetHit 读数与实际操作一致
+
+### Q5 | APK 版本号与发布版不符（v5.55 APK 自报 5.54）
+- **版本**: v5.56
+- **根因**: `build.gradle` versionCode/versionName 发版从不 bump——v5.54/v5.55 两 tag 同为 54/"5.54"；新旧 APK 无法区分，同 versionCode 覆盖安装行为怪
+- **修复**: 本版起 build.gradle 随 APP_VERSION 双 bump（56/"5.56"）；CI 从 tag 自动注入（`GITHUB_REF_NAME#v` → sed），永不漂移
+- **关联文件**: android/app/build.gradle；.github/workflows/build-apk.yml
+- **核对要点**:
+  - [ ] Release APK 系统应用信息=5.56；诊断浮层 nativeVer=5.56 与页内 v5.56 一致
+
+### Q6 | APP 内无诊断通道（无地址栏、笔记名不能含 ?）
+- **版本**: v5.56
+- **根因**: `?diag` 只认 URL query；APP 是 WebView 无地址栏，笔记名合法字符集不含 `?`（ID_RE 设计如此）
+- **修复**: 菜单新增「⌁ 诊断」——`__toggleDiag` 免 URL 开关浮层 + localStorage 标记跨重载保持；浮层新增 rem/pendingRemote/localVer 与主文档缓存行
+- **关联文件**: index.html → setupCaretDiag / menuDiag
+- **核对要点**:
+  - [ ] APP 菜单点「诊断」浮层出现，再点消失；重开后状态保持
+  - [ ] bridge=ok 且 scheduled>0（闹钟真排上）、mainDocCache 非 none
+
 ## 版本与 bug 对应速查
 
 | 版本 | 涉及 bug 编号 |
 |------|---------------|
+| v5.56 | Q1-Q6（合并吞噬修冲突条 + 自动解锁补提醒恢复 + poll 同步 note.rem + 离线三级兜底+cacheInfo + 版本号双 bump/CI 注入 + APP 诊断入口，unit v556.test.js F1-F8 固化） |
 | v5.54 | P1-P5（过期补弹删+REM_DONE 退役纯时间过滤 + RemReceiver 60s 迟到容差 + 离线口令解本地缓存回退 + rem-notify-click JS 监听 + 页脚菜单收藏体系） |
 | v5.53 | O1-O5（删 captureInput 修 IME 组字链 + editor isComposing 旁路零 DOM 手术 + 首页 250ms 轮询兜底 + windowOptOutEdgeToEdgeEnforcement 退出 edge-to-edge + 返回键 OnBackPressedCallback 接 WebView 历史 + webContentsDebuggingEnabled 排障） |
 | v5.52 | N1-N10（APK 改 server.url 直连 + 砍热更新 + 原生三 P0：通知权限/requestCode 截断/同步落盘 + setAlarmClock + BootReceiver 补齐 + 断网兜底页 + 冷启事件补发 + 服务端 XFF/fail/SSE） |

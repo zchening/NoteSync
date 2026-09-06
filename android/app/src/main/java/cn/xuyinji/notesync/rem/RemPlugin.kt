@@ -255,6 +255,24 @@ class RemPlugin : Plugin() {
         }
     }
 
+    /** v5.56：主文档缓存与拦截计数只读诊断（?diag 浮层读取——离线兜底断在哪一环一眼看清） */
+    @PluginMethod
+    fun cacheInfo(call: PluginCall) {
+        try {
+            val f = java.io.File(context.filesDir, "cached_index.html")
+            val ret = JSObject()
+            ret.put("exists", f.exists())
+            ret.put("size", if (f.exists()) f.length() else 0)
+            ret.put("intercept", MainActivity.interceptCount)
+            ret.put("fetchFail", MainActivity.fetchFailCount)
+            ret.put("cacheHit", MainActivity.cacheHitCount)
+            ret.put("assetHit", MainActivity.assetHitCount)
+            call.resolve(ret)
+        } catch (e: Exception) {
+            call.reject("cacheInfo error: ${e.message}", e)
+        }
+    }
+
     /** 精确闹钟权限未授予时，引导用户到系统设置页授予 */
     @PluginMethod
     fun requestExactAlarm(call: PluginCall) {
