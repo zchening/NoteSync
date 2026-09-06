@@ -123,7 +123,7 @@ public class MainActivity extends BridgeActivity {
             wv.reload();
         }
 
-        // v5.60：冷启动也接住通知点击（进程被杀后点通知拉起 APP，intent 走 onCreate 不走 onNewIntent）
+        // v6.0：冷启动也接住通知点击（进程被杀后点通知拉起 APP，intent 走 onCreate 不走 onNewIntent）
         Intent cold = getIntent();
         if (cold != null && RemPlugin.ACTION_NOTIFY_CLICK.equals(cold.getAction())) {
             pendingRemNotifyClick = true;
@@ -220,7 +220,7 @@ public class MainActivity extends BridgeActivity {
     private void dispatchRemNotifyClick() {
         if (bridge == null || bridge.getWebView() == null) return;
         pendingRemNotifyClick = false;
-        // v5.60：带 noteId 派发——JS 收到后若不是当前笔记，直接跳到提醒所属的笔记
+        // v6.0：带 noteId 派发——JS 收到后若不是当前笔记，直接跳到提醒所属的笔记
         Intent it = getIntent();
         String nid = (it != null) ? it.getStringExtra("noteId") : null;
         final String nidJson = (nid == null) ? "null" : org.json.JSONObject.quote(nid);

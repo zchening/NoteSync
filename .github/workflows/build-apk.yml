@@ -44,8 +44,8 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         run: |
           VER="${GITHUB_REF_NAME#v}"
-          CODE="${VER##*.}"
-          # 公式仅 5.x 线有效（v5.56→56）；跨 6.x 时需调整 versionCode 算法
+          # versionCode 通用算法：去点拼接（v6.0→60、v6.1→61），延续 v5.58=58 递增；若未来出 6.10 双位数线需再议
+          CODE=$(echo "$VER" | tr -d '.')
           sed -i "s/versionCode [0-9]\+/versionCode $CODE/; s/versionName \"[^\"]*\"/versionName \"$VER\"/" android/app/build.gradle
           grep -n "versionCode\|versionName" android/app/build.gradle
 

@@ -1,4 +1,4 @@
-// v5.60 单元测试：十连修的回归护栏
+// v6.0 单元测试：十连修的回归护栏
 // T1 空 ct 落盐覆写 + localVer 落后误报远端冲突（数据级 P0）
 // T2 页脚离线条并入正文 | T3 右下角刷新按钮 | T4 菜单图标细线 SVG 化
 // T5 修改口令（Y 简单式）+ 旧设备「口令已变更」检测
@@ -126,9 +126,9 @@ test('T6b 历史版本语义：恢复走 saveLocal 绝不删历史 + saveLocal/p
   assert.ok(src.includes('历史不删'), '恢复语义必须注明「历史不删」——防误删的最后保障');
 
   // 自动快照：两处保存成功路径都挂「上一版」
-  assert.ok(src.includes('const prevHtml = lastHtml; // v5.60：自动快照存「保存前的上一版」'), 'saveLocal 应在 PUT 前抓上一版');
+  assert.ok(src.includes('const prevHtml = lastHtml; // v6.0：自动快照存「保存前的上一版」'), 'saveLocal 应在 PUT 前抓上一版');
   assert.ok(src.includes('if (prevHtml && prevHtml !== html) snapshotHistory(prevHtml, false);'), 'saveLocal 成功后应快照上一版');
-  assert.ok(src.includes('const prevHtml2 = lastHtml; // v5.60：自动快照存「保存前的上一版」，与 saveLocal 同规则'), 'persistReminders 应同样抓上一版（改提醒也是正文保存）');
+  assert.ok(src.includes('const prevHtml2 = lastHtml; // v6.0：自动快照存「保存前的上一版」，与 saveLocal 同规则'), 'persistReminders 应同样抓上一版（改提醒也是正文保存）');
   assert.ok(src.includes('if (prevHtml2 && prevHtml2 !== html) snapshotHistory(prevHtml2, false);'), 'persistReminders 成功后应快照上一版');
 
   // 服务端：快照环
@@ -230,6 +230,7 @@ test('T9 跨笔记提醒：原生分区 upsert + 跨分区稳定 uid + 通知点
   assert.ok(plugin.includes('for (r in readPartition(context, nid)) cancelAlarm(context, r)'), 'sync 只取消本分区旧闹钟（其他笔记零影响——全量镜像根因就此根治）');
   assert.ok(plugin.includes('putString(partCipher(nid), c)'), '落盘应写本分区，不再是单份 KEY_CIPHER');
   assert.ok(plugin.includes('private fun migrateLegacy(context: Context)'), '旧单份存储应迁移（并按旧 idx 清残留闹钟）');
+  assert.ok(plugin.includes('for (r in legacy) if (r.at > now) scheduleAlarm(context, r)'), '迁移项必须按新 stableUid 重排未来闹钟（P1：只取消不重排 = 升级后旧提醒静默失效）');
   assert.ok(plugin.includes('putExtra("noteId", r.noteId)'), '闹钟 intent 应带 noteId');
   assert.ok(plugin.includes('stableUid(r.noteId, r.at)'), 'PendingIntent requestCode 应用稳定 uid');
   // 通知点击链

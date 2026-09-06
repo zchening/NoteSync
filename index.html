@@ -160,7 +160,7 @@
   /* v5.58：菜单项触控区全端加大（原 v5.57 只在 APP 端加大，用户要求三端一致） */
   .menu-item{padding:14px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:9px;cursor:pointer;color:var(--fg);font-size:15px;min-height:46px;line-height:1.4;text-align:center;touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:border-color .2s}
   .menu-item:active{background:var(--hover)}
-  /* v5.60：菜单前缀换 1.7px 细线 SVG（与顶栏同族）——Unicode 字形（⌂ ★ ▣ ◐…）本身比汉字小一圈，
+  /* v6.0：菜单前缀换 1.7px 细线 SVG（与顶栏同族）——Unicode 字形（⌂ ★ ▣ ◐…）本身比汉字小一圈，
      行高加再大字形也不会变大；20px SVG 与 15px 文字基线对齐才是真正的「加大」 */
   .menu-item svg{width:20px;height:20px;vertical-align:-4.5px;margin-right:8px}
   /* v5.58：三端菜单与左下角布局统一——扫一扫/日夜间切换/退出锁定全平台进菜单（平台差异化机制退役），
@@ -168,7 +168,7 @@
   #themeBtn, #lock{display:none}
   .fav-row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid var(--line);color:var(--fg);font-size:13px;cursor:pointer}
   .fav-row:active{background:var(--hover)}
-  /* v5.60：历史版本行——meta 一行说明（时间·来源·版本·体积），预览内联展开，恢复走正常保存 */
+  /* v6.0：历史版本行——meta 一行说明（时间·来源·版本·体积），预览内联展开，恢复走正常保存 */
   .hist-row{padding:8px 4px;border-bottom:1px solid var(--line);font-size:13px;color:var(--fg)}
   .hist-meta{color:var(--muted);font-size:12px;letter-spacing:.02em}
   .hist-preview{margin-top:6px;padding:8px 10px;background:var(--hover);border-radius:8px;font-size:12px;color:var(--muted);white-space:pre-wrap;word-break:break-all;max-height:120px;overflow-y:auto}
@@ -238,14 +238,14 @@
   /* ── 提示气泡 / 加载 ────────────────── */
   .upload-status{position:fixed;bottom:44px;left:50%;transform:translateX(-50%);background:var(--upload-bg);color:var(--bg);padding:10px 20px;border-radius:999px;font-size:13px;letter-spacing:.03em;z-index:20;opacity:0;transition:opacity .3s;pointer-events:none;box-shadow:0 10px 30px rgba(20,20,18,.2)}
   /* v5.58：离线条移入页脚状态栏——原本是底部悬浮胶囊条（独立于状态栏、还要给上传提示让位），
-     用户要求并入状态栏；v5.60 再定稿为「· 最后同步：MM-DD hh:mm」并与状态文字同款样式。
+     用户要求并入状态栏；v6.0 再定稿为「· 最后同步：MM-DD hh:mm」并与状态文字同款样式。
      id 不变（offlineBar/offlineTime），
      显隐仍走 hidden 类，既有 cache/offline 单测与两个 e2e 不必重写 */
-  /* v5.60：离线条彻底并入状态栏正文——去掉胶囊（边框/内边距/11px 小字），
+  /* v6.0：离线条彻底并入状态栏正文——去掉胶囊（边框/内边距/11px 小字），
      与「灰点 + 离线」同字号同色同字距，读起来是同一句话，而不是旁边挂了个徽章 */
   .offlinebar{display:inline;margin-left:0;padding:0;font-size:inherit;letter-spacing:inherit;color:inherit;background:none;border:0;border-radius:0}
   .offlinebar.hidden{display:none}
-  /* v5.60：右下角刷新——与左下角 ☰ 对称，同样 44px 触控区，1.7px 细线 SVG 与顶栏同族 */
+  /* v6.0：右下角刷新——与左下角 ☰ 对称，同样 44px 触控区，1.7px 细线 SVG 与顶栏同族 */
   #refreshBtn{position:absolute;right:10px;top:50%;transform:translateY(-50%);cursor:pointer;padding:10px 12px;min-height:44px;display:flex;align-items:center;background:none;border:0;color:var(--muted);letter-spacing:0;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
   #refreshBtn:active{opacity:.6}
   #refreshBtn svg{width:20px;height:20px;display:block}
@@ -425,7 +425,7 @@ const NOTE_LAST_KEY = 'notesync_last_note';
 const NOTE_JUMPED_KEY = 'notesync_jumped';
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '5.60';
+const APP_VERSION = '6.0';
 const BUILD_DATE = '2026-09-06';
 
 const $ = s => document.querySelector(s);
@@ -1339,7 +1339,7 @@ async function apiGet() {
   const r = await fetchRetry(NOTE_API, { cache: 'no-store' }, 2);
   return r.json();
 }
-// v5.60：在途写入计数。PUT 已发出但响应未回的窗口里，服务端 v 已递增而本机 localVer 尚未回写；
+// v6.0：在途写入计数。PUT 已发出但响应未回的窗口里，服务端 v 已递增而本机 localVer 尚未回写；
 // 此刻 SSE（onmessage → poll）拿到的 note.v 必然大于 localVer，若再有未保存输入就会被判成
 // 「远端有更新」弹冲突条——新建笔记落盐时 100% 命中（见 BUG_CHECKLIST T1）。
 let inflightWrites = 0;
@@ -1956,7 +1956,7 @@ async function applyUnlocked(key, note) {
   if (note.ct) {
     try { lastHtml = await decryptText(note.ct, note.iv, key); editor.innerHTML = lastHtml; }
     catch (e) {
-      // v5.60：记住的密钥解不开服务端密文 = 口令已在他端变更（Y 简单式的配套检测）。
+      // v6.0：记住的密钥解不开服务端密文 = 口令已在他端变更（Y 简单式的配套检测）。
       // 旧密钥/旧缓存/旧草稿全部作废，必须清掉——否则显示空或旧内容，用户一保存
       // 还会把服务端新内容覆盖掉（数据丢失）。清完弹口令框让输新口令。
       try { localStorage.removeItem(KEY_STORE); } catch (e2) {}
@@ -2030,14 +2030,14 @@ async function unlock(pass) {
           await decryptText(note.ct, note.iv, k2); // 服务端正文校验：证明服务端密文同盐
           serverSalt = b64ToBuf(c.salt);
           key = k2;
-          if (!note.salt) { try { const rr2 = await apiPut({ ct: note.ct, iv: note.iv, salt: c.salt }); if (rr2 && typeof rr2.v === 'number') localVer = rr2.v; } catch (e2) {} } // 回写盐（v5.60：接回 v，避免 localVer 落后误报冲突）
+          if (!note.salt) { try { const rr2 = await apiPut({ ct: note.ct, iv: note.iv, salt: c.salt }); if (rr2 && typeof rr2.v === 'number') localVer = rr2.v; } catch (e2) {} } // 回写盐（v6.0：接回 v，避免 localVer 落后误报冲突）
           healed = true;
         } catch (e2) { healed = false; }
       }
       if (!healed) { await reportFail(); return; }
     }
   }
-  // v5.60：落盐回写 GET 到的 ct/iv——此前硬写空串，会把并发端刚写入的正文清空（数据级破坏）；
+  // v6.0：落盐回写 GET 到的 ct/iv——此前硬写空串，会把并发端刚写入的正文清空（数据级破坏）；
   // 同时必须接回 r.v 回写 localVer，否则版本落后必然触发误报冲突。
   if (!note.salt) {
     try {
@@ -2820,7 +2820,7 @@ function fmtSyncTime(ts) {
     return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
   } catch (e) { return ''; }
 }
-// v5.60：页脚只要「月-日 时:分」——带年份会把状态栏撑长，且跟在「离线」后面不像同一句话
+// v6.0：页脚只要「月-日 时:分」——带年份会把状态栏撑长，且跟在「离线」后面不像同一句话
 function fmtSyncShort(ts) {
   try {
     const d = new Date(ts);
@@ -2834,7 +2834,7 @@ function showOfflineBar(ts) {
   if (t) t.textContent = ts ? fmtSyncShort(ts) : '—'; // v5.50：无已知同步时刻不显示 1970 假时间
   if (bar) bar.classList.remove('hidden');
 }
-// v5.60：右下角刷新——手动拉一次最新。刻意复用 poll 的冲突判定：
+// v6.0：右下角刷新——手动拉一次最新。刻意复用 poll 的冲突判定：
 // 有未保存改动时 poll 会挂起远端并弹冲突卡，绝不静默覆盖本机输入。
 const refreshBtnEl = document.getElementById('refreshBtn');
 if (refreshBtnEl) {
@@ -3233,7 +3233,7 @@ async function syncRemindersToNative() {
   const rb = (cap && cap.Plugins && cap.Plugins.RemBridge) ||
              (typeof window !== 'undefined' && window.RemBridge) || null;
   if (!rb || typeof rb.sync !== 'function') { window.__lastNativeSync = 'no-bridge'; return; } // v5.57：诊断可读
-  // v5.60：分区 upsert——只同步当前笔记的分区（带 noteId），其他笔记的闹钟分区原生原样保留。
+  // v6.0：分区 upsert——只同步当前笔记的分区（带 noteId），其他笔记的闹钟分区原生原样保留。
   // 首页跳过：首页没有当前笔记提醒的权威列表，乱传会污染 '' 分区。
   if (typeof noteId === 'undefined' || !noteId) { window.__lastNativeSync = 'skip-no-note'; return; }
   try {
@@ -3277,7 +3277,7 @@ async function loadReminder(note, key) {
 // 设/改提醒 = 完整保存（正文 + rem 一起 PUT）：v 递增、SSE 广播、其他设备实时拿到
 async function persistReminders() {
   const html = editor.innerHTML;
-  const prevHtml2 = lastHtml; // v5.60：自动快照存「保存前的上一版」，与 saveLocal 同规则
+  const prevHtml2 = lastHtml; // v6.0：自动快照存「保存前的上一版」，与 saveLocal 同规则
   const body = await encryptText(html, cryptoKey);
   writeDraft(body.ct, body.iv);
   let remOut = null;
@@ -3653,7 +3653,7 @@ function readFavs() {
   try { const a = JSON.parse(localStorage.getItem(FAVS_KEY) || '[]'); return Array.isArray(a) ? a.filter(n => typeof n === 'string') : []; } catch (e) { return []; }
 }
 function writeFavs(a) { try { localStorage.setItem(FAVS_KEY, JSON.stringify(a.slice(0, FAVS_MAX))); } catch (e) {} }
-// v5.60：收藏按钮图标——renderMenu 每次 innerHTML 重写整行，图标必须跟状态一起重写；
+// v6.0：收藏按钮图标——renderMenu 每次 innerHTML 重写整行，图标必须跟状态一起重写；
 // textContent 一赋值静态 SVG 就没了
 const STAR_OUT_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.8l2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4-3.9-3.8 5.4-.8z"/></svg>';
 const STAR_IN_SVG = STAR_OUT_SVG.replace('fill="none"', 'fill="currentColor"');
@@ -3710,7 +3710,7 @@ $('#menuDiag').addEventListener('click', () => {
 $('#menuTheme').addEventListener('click', () => { menuMask.classList.add('hidden'); themeBtn.click(); });
 $('#menuLock').addEventListener('click', () => { menuMask.classList.add('hidden'); document.getElementById('lock').click(); });
 
-// ── 修改口令（v5.60，Y 简单式）──
+// ── 修改口令（v6.0，Y 简单式）──
 // 前提：改前必须用旧口令显式验证（用户拍板——即使本机已记住密钥）。
 // 流程：旧口令重派生并解开服务端当前密文 = 身份证明 → 新随机盐 + 新密钥重加密正文与提醒 →
 // PUT 带非空新盐（服务端 v5.58 规则只挡空盐，非空直接采纳，服务端零改动）。
@@ -3788,7 +3788,7 @@ async function cpRotate() {
   }
 }
 
-// ── 历史版本（v5.60）──
+// ── 历史版本（v6.0）──
 // 服务端密文快照环（FIFO 10 条，相同密文去重，手动打点不被自动挤掉）。
 // 自动：保存成功前把「上一版」入栈（60s 节流）；手动：菜单「新增历史版本」打点。
 // 恢复 = 应用快照正文后走正常 saveLocal 生成新版本——绝不删历史、不回退版本号。
@@ -3872,7 +3872,7 @@ $('#menuHistSave').addEventListener('click', async () => {
 });
 // v5.58：网页端扫码——BarcodeDetector（形状检测 API）+ getUserMedia 自写全屏扫描层。
 // Chrome/Edge/安卓 Chrome 支持；iOS Safari 无 BarcodeDetector → 明确提示「请用 APP」，不静默失败。
-// v5.60：桌面 Chrome/Edge 与 iOS Safari 均无 BarcodeDetector（形状检测 API 仅安卓/macOS Chrome）。
+// v6.0：桌面 Chrome/Edge 与 iOS Safari 均无 BarcodeDetector（形状检测 API 仅安卓/macOS Chrome）。
 // 兜底 = 动态加载同源 /jsQR.js 纯 JS 解码（约 127KB，immutable 缓存，只在扫码时拉一次）；
 // jsQR 都不可用（服务端旧版/断网）才提示「请用 APP」。逐帧 canvas 解码节流与 detector 一致。
 function loadJsQR() {
@@ -3979,7 +3979,7 @@ $('#menuFav').addEventListener('click', () => {
   writeFavs(favs);
   renderMenu();
 });
-// v5.60：通知点击恢复监听——原生带 noteId 派发 rem-notify-click。
+// v6.0：通知点击恢复监听——原生带 noteId 派发 rem-notify-click。
 // 点的是当前笔记：响铃卡链路已覆盖，不重复动作；是其他笔记：直接跳过去（通知本身就是提醒，进正文即达意）。
 window.addEventListener('rem-notify-click', (ev) => {
   try {
@@ -4006,7 +4006,7 @@ async function saveLocal() {
       showRemoteBar();
       return;
     }
-    const prevHtml = lastHtml; // v5.60：自动快照存「保存前的上一版」——正文被覆盖/误删时还有得救
+    const prevHtml = lastHtml; // v6.0：自动快照存「保存前的上一版」——正文被覆盖/误删时还有得救
     const r = await apiPut({ ct: enc.ct, iv: enc.iv, salt: currentSaltB64() }); // v5.58：空盐兜底
     localVer = r.v; lastHtml = html;
     if (prevHtml && prevHtml !== html) snapshotHistory(prevHtml, false); // fire-and-forget，失败静默
@@ -4055,7 +4055,7 @@ function flushDirtySave() {
 
 async function poll() {
   if (busy) return;
-  if (inflightWrites > 0) return; // v5.60：本机写入在途——本轮跳过，别把自增的 v 当成别人的更新
+  if (inflightWrites > 0) return; // v6.0：本机写入在途——本轮跳过，别把自增的 v 当成别人的更新
   if (!cryptoKey) return; // 已锁定：无密钥无须轮询，避免“同步中断”噪声
   try {
     const note = await apiGet();

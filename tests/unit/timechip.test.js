@@ -20,7 +20,7 @@ function futureDate(daysAhead, h, mi) {
   return d;
 }
 
-// v5.60：addReminder 会经 scheduleRemMarkRefresh 在 400ms 后跑 linkifyEditor 重建正文 DOM
+// v6.0：addReminder 会经 scheduleRemMarkRefresh 在 400ms 后跑 linkifyEditor 重建正文 DOM
 // （时间文本包进 u.rem-mark），旧的文本节点引用随之失效——先等它跑完再重新定位，
 // 否则设到死节点上的 selection 拿不到 caret，chip 永远不弹（TC14 全量三连挂的根因）。
 function findTimeNode(root, S) {
@@ -47,7 +47,7 @@ function freshApp() {
   const window = dom.window;
   return { dom, window, document: window.document, editor: window.document.getElementById('editor') };
 }
-// v5.60：历史快照（/history PUT）是新增合法流量，不计入主保存 PUT 断言
+// v6.0：历史快照（/history PUT）是新增合法流量，不计入主保存 PUT 断言
 function mockCapture(window, note, putV) {
   const puts = [];
   window.fetch = (url, opts) => {
@@ -386,7 +386,7 @@ test('TC12d 光标落已添加的未来时间上显示两行展示卡，点击�
   const expectedAt = window.parseTimeMatches(S)[0].at;
   await window.addReminder(expectedAt, '开会');
   const putsBefore = puts.length;
-  await sleep(560); // v5.60：等 400ms 的 linkifyEditor 重建完成，避免 selection 设到死节点（曾与它赛跑导致偶发挂）
+  await sleep(560); // v6.0：等 400ms 的 linkifyEditor 重建完成，避免 selection 设到死节点（曾与它赛跑导致偶发挂）
   const hit = findTimeNode(editor, S);
   assert.ok(hit, 'linkify 后正文应仍含时间文本');
 
@@ -407,7 +407,7 @@ test('TC12d 光标落已添加的未来时间上显示两行展示卡，点击�
   await sleep(50);
   assert.strictEqual(puts.length, putsBefore, '展示卡不可点：点击不得再发 PUT');
 
-  // v5.60：linkify 后 div.firstChild 是「会议 」等非时间文本（时间已包进 u.rem-mark），
+  // v6.0：linkify 后 div.firstChild 是「会议 」等非时间文本（时间已包进 u.rem-mark），
   // 原写法 setStart(hit.node, 0) 光标仍在时间上，chip 不会消失
   const walker2 = document.createTreeWalker(editor, 4);
   let away = null, n2;
@@ -438,7 +438,7 @@ test('TC14 已添加提醒处于临近触发 30 秒窗口内，光标落时间�
 
   // 把页面世界的 Date.now 钉在「秒数=35」的时刻：下一分钟边界恒落在 (now, now+30s] 窗口内，
   // 且 P-fixedNow=25s 远离危险区——原「秒数≥30 即可」在秒数接近 59 时 P-fixedNow≈1s，
-  // setTimeout(fireReminder) 走真实时钟，全量慢跑下会抢在断言前弹 remCard 藏掉 chip（v5.60 全量三连挂实锤）
+  // setTimeout(fireReminder) 走真实时钟，全量慢跑下会抢在断言前弹 remCard 藏掉 chip（v6.0 全量三连挂实锤）
   const realNow = Date.now();
   const d0 = new Date(realNow);
   d0.setSeconds(35, 0);
@@ -456,7 +456,7 @@ test('TC14 已添加提醒处于临近触发 30 秒窗口内，光标落时间�
 
   editor.innerHTML = '<div>马上 ' + S + ' 开会</div>';
   await window.addReminder(P, '开会'); // 提醒已添加（真实 PUT 路径）
-  await sleep(560); // v5.60：等 400ms 的 linkifyEditor 重建完成再定位节点（旧写法把 selection 设到死节点）
+  await sleep(560); // v6.0：等 400ms 的 linkifyEditor 重建完成再定位节点（旧写法把 selection 设到死节点）
   const hit = findTimeNode(editor, S);
   assert.ok(hit, 'linkify 后正文应仍含时间文本');
 
@@ -488,7 +488,7 @@ test('TC15 点展示卡「删除」→ 提醒彻底移除（PUT rem=null）、ch
 
   const expectedAt = window.parseTimeMatches(S)[0].at;
   await window.addReminder(expectedAt, '开会');
-  await sleep(560); // v5.60：等 linkifyEditor 重建完成再定位节点（同 TC12d 死节点竞态）
+  await sleep(560); // v6.0：等 linkifyEditor 重建完成再定位节点（同 TC12d 死节点竞态）
   const putsAfterAdd = puts.length;
   assert.ok(putsAfterAdd >= 1, '前置：添加提醒已持久化');
   const hit = findTimeNode(editor, S);

@@ -16,7 +16,7 @@ class RemReceiver : BroadcastReceiver() {
         val at = intent.getLongExtra("at", 0)
         val text = intent.getStringExtra("text") ?: "该看笔记了"
         val idx = intent.getIntExtra("idx", 0)
-        val noteId = intent.getStringExtra("noteId") ?: "" // v5.60：跨笔记——点击进提醒所属的笔记
+        val noteId = intent.getStringExtra("noteId") ?: "" // v6.0：跨笔记——点击进提醒所属的笔记
         // v5.54：过期提醒彻底静默——精确闹钟正常触发时 now-at≈0；
         // 非 precise 兜底（setAndAllowWhileIdle）在系统深睡后补触发会晚到数分钟，
         // 晚到超过 60 秒一律丢弃不发通知（用户拍板：错过的不再弹）。
@@ -25,7 +25,7 @@ class RemReceiver : BroadcastReceiver() {
         // 非前台（后台/Home 切走/彻底关闭被杀/冷启拉起）一律推通知栏（用户拍板语义）
         if (RemPlugin.isForeground) return
         RemPlugin.createNotificationChannel(context)
-        val uid = RemPlugin.stableUid(noteId, at) // v5.60：跨分区唯一，防不同笔记同 idx 通知互撞
+        val uid = RemPlugin.stableUid(noteId, at) // v6.0：跨分区唯一，防不同笔记同 idx 通知互撞
 
         // 点击通知 → 回 MainActivity → onNewIntent → JS 收 rem-notify-click(detail.noteId) 跳对应笔记
         val clickIntent = Intent(context, MainActivity::class.java).apply {
@@ -52,6 +52,6 @@ class RemReceiver : BroadcastReceiver() {
             .build()
 
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        nm.notify(uid, notif) // v5.60：id 用跨分区稳定 uid（旧 idx 在多分区下会互撞覆盖）
+        nm.notify(uid, notif) // v6.0：id 用跨分区稳定 uid（旧 idx 在多分区下会互撞覆盖）
     }
 }

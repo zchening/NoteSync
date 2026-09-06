@@ -56,7 +56,7 @@ test('E1 syncRemindersToNative：Capacitor.Plugins.RemBridge 优先 + {list} 调
 });
 
 // ── E2：jsdom 行为——真机形态 mock，桥真被调到且参数形态正确 ──
-// v5.60：走真实笔记路由（pageUrl 带 noteId）——分区 upsert 后首页会跳过同步，landing 场景不再触发 sync
+// v6.0：走真实笔记路由（pageUrl 带 noteId）——分区 upsert 后首页会跳过同步，landing 场景不再触发 sync
 test('E2 jsdom：Capacitor.Plugins.RemBridge mock 收到 {list} 形态（这是 v5.51 起漏测三年的盲区）', async t => {
   const calls = [];
   const app = freshApp(w => {
@@ -87,7 +87,7 @@ test('E2 jsdom：Capacitor.Plugins.RemBridge mock 收到 {list} 形态（这是 
   assert.equal(arg.list.length, 1, '加提醒后应同步 1 条到原生层');
   assert.equal(arg.list[0].at, at, '时间戳原样传递');
   assert.equal(arg.list[0].text, '推我', '文案原样传递');
-  assert.equal(arg.noteId, 'pushnote', 'v5.60：sync 必须带 noteId（原生按分区 upsert，切笔记不清其他笔记的闹钟）');
+  assert.equal(arg.noteId, 'pushnote', 'v6.0：sync 必须带 noteId（原生按分区 upsert，切笔记不清其他笔记的闹钟）');
   assert.equal(window.__remNativeScheduled, 1, '排程读数落 __remNativeScheduled（?diag 显示）');
 });
 

@@ -117,7 +117,7 @@ function writeNote(id, obj) {
   fs.renameSync(tmp, notePath(id));
 }
 
-// v5.60：历史版本快照环——FIFO 上限 HISTORY_MAX 条，独立文件 <id>.hist.json。
+// v6.0：历史版本快照环——FIFO 上限 HISTORY_MAX 条，独立文件 <id>.hist.json。
 // 只存密文（零知识不变）；手动打点不参与挤出（优先挤自动），相同密文不重复入栈。
 const HISTORY_MAX = 10;
 function histPath(id) { return path.join(NOTES_DIR, id + '.hist.json'); }
@@ -179,7 +179,7 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // --- API: 历史版本（v5.60，必须先于主 /api/note/ 分支——ID_RE 不含斜杠，放后面会被主分支吃掉）---
+  // --- API: 历史版本（v6.0，必须先于主 /api/note/ 分支——ID_RE 不含斜杠，放后面会被主分支吃掉）---
   // GET  /api/note/:id/history      → 元数据列表（ts/v/manual/size，不含密文，省流量）
   // GET  /api/note/:id/history/:ts  → 单条密文（预览/恢复时才取）
   // PUT  /api/note/:id/history      → 追加快照 {ct, iv, manual}
@@ -215,7 +215,9 @@ const server = http.createServer((req, res) => {
       }
       const cur = readNote(id);
       const hist = readHist(id);
-      const item = { ts: Date.now(), v: cur.v || 0, ct: obj.ct, iv: obj.iv, manual: !!obj.manual };
+      let ts = Date.now();
+      while (hist.list.some(x => x.ts === ts)) ts++; // v6.0：同毫秒去重，否则 GET /:ts 永远只命中第一条
+      const item = { ts: ts, v: cur.v || 0, ct: obj.ct, iv: obj.iv, manual: !!obj.manual };
       const last = hist.list[hist.list.length - 1];
       if (!last || last.ct !== item.ct || last.iv !== item.iv) {
         hist.list.push(item);
@@ -264,7 +266,7 @@ const server = http.createServer((req, res) => {
       // 此前服务端无条件采用 obj.salt → 笔记盐被冲成 '' → 下次解锁走随机盐推导 →
       // 正确口令恒定「解密失败」。空值一律保留原盐，盐只由首次初始化写入。
       const saltIn = (typeof obj.salt === 'string' && obj.salt) ? obj.salt : (cur.salt || '');
-      // v5.60：空 ct/iv 不覆写（与 v5.58 空盐同理）。旧版客户端落盐时硬发 ct:''/iv:''，
+      // v6.0：空 ct/iv 不覆写（与 v5.58 空盐同理）。旧版客户端落盐时硬发 ct:''/iv:''，
       // 会把并发端刚写入的正文清空——这是数据级破坏，服务端必须无条件兜住（线上仍有旧版在跑）。
       // 真实「清空笔记」经 AES-GCM 后 ct 仍含 16 字节 tag，不为空串，故此保护不会误伤。
       const ctIn = (typeof obj.ct === 'string' && obj.ct) ? obj.ct : (cur.ct || '');
@@ -331,7 +333,7 @@ const server = http.createServer((req, res) => {
         return;
       }
     }
-    // v5.60：jsQR 纯 JS 解码库（扫码兜底）——桌面 Chrome/Edge 与 iOS Safari 无 BarcodeDetector 时动态加载。
+    // v6.0：jsQR 纯 JS 解码库（扫码兜底）——桌面 Chrome/Edge 与 iOS Safari 无 BarcodeDetector 时动态加载。
     // 独立文件不内联进 index.html：127KB 只在真正扫码时才拉一次（immutable 缓存）。
     if (url === '/jsQR.js') {
       const f = path.join(APP_DIR, 'jsQR.js');

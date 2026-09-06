@@ -10,7 +10,7 @@ const ZWSP = '​';
 
 // extraBeforeParse：可选，用于在页面脚本执行前给 window 打桩（模拟不同内核能力）。
 // 例：模拟不支持 only 关键字的内核 —— loadApp(w => { w.CSS = { supports: () => false }; })
-// pageUrl：可选，自定义页面 URL（v5.60：跨笔记测试需让 noteId 非空，如 'http://localhost/mynote'）
+// pageUrl：可选，自定义页面 URL（v6.0：跨笔记测试需让 noteId 非空，如 'http://localhost/mynote'）
 function loadApp(extraBeforeParse, pageUrl) {
   let html = fs.readFileSync(INDEX_PATH, 'utf8');
   html = html.replace(/<script src="https:\/\/cdn\.jsdelivr[^"]*"><\/script>/, '');

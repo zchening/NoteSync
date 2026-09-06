@@ -39,7 +39,7 @@ class RemPlugin : Plugin() {
         const val PREFS_NAME = "notesync_rem"
         const val KEY_CIPHER = "cipher_b64"   // v5.59 前的单份存储（迁移源，读完即删）
         const val KEY_IV = "iv_b64"
-        // v5.60：按笔记分区存储——切到笔记 B 同步时只动 B 的分区，笔记 A 的闹钟分区原样保留，
+        // v6.0：按笔记分区存储——切到笔记 B 同步时只动 B 的分区，笔记 A 的闹钟分区原样保留，
         // 「A 设了提醒 → 切到 B → A 到点不推送」的根因（全量镜像 + cancelAll 式替换）就此根治。
         fun partCipher(noteId: String) = "cipher_n_" + noteId
         fun partIv(noteId: String) = "iv_n_" + noteId
@@ -112,7 +112,7 @@ class RemPlugin : Plugin() {
             return list
         }
 
-        /** v5.60：读取单个笔记分区的提醒列表（noteId 以分区 key 为权威，解密后强制回填） */
+        /** v6.0：读取单个笔记分区的提醒列表（noteId 以分区 key 为权威，解密后强制回填） */
         fun readPartition(context: Context, noteId: String): List<Reminder> {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val c = prefs.getString(partCipher(noteId), null) ?: return emptyList()
@@ -139,11 +139,15 @@ class RemPlugin : Plugin() {
                     .putString(partCipher(""), c2)
                     .putString(partIv(""), iv2)
                     .commit()
+                // v6.0 P1 修复：迁移项必须按新 stableUid 重排未来闹钟——上面取消的是旧码，
+                // 而新版 sync 只按 noteId 排程本分区，"" 分区不会被 JS 再次排程，不重排则升级后旧提醒静默失效
+                val now = System.currentTimeMillis()
+                for (r in legacy) if (r.at > now) scheduleAlarm(context, r)
             }
             prefs.edit().remove(KEY_CIPHER).remove(KEY_IV).commit()
         }
 
-        /** v5.60：按旧版 requestCode（分区内 idx）取消升级前的残留闹钟——stableUid 匹配不上旧码 */
+        /** v6.0：按旧版 requestCode（分区内 idx）取消升级前的残留闹钟——stableUid 匹配不上旧码 */
         private fun cancelLegacyAlarm(context: Context, r: Reminder) {
             val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
             val intent = Intent(context, RemReceiver::class.java).apply { action = ACTION_FIRE }
@@ -247,7 +251,7 @@ class RemPlugin : Plugin() {
     fun sync(call: PluginCall) {
         try {
             val listJson = call.getArray("list") ?: JSONArray()
-            // v5.60：分区 upsert——只替换当前笔记的分区，其他分区（含已排闹钟）一律不动。
+            // v6.0：分区 upsert——只替换当前笔记的分区，其他分区（含已排闹钟）一律不动。
             // 这是「A 设提醒 → 切到 B → A 到点仍推送」的核心。
             val nid = call.getString("noteId") ?: ""
             val now = System.currentTimeMillis()
@@ -260,7 +264,7 @@ class RemPlugin : Plugin() {
             }
             items.sortBy { it.at }
             val itemsWithIdx = items.mapIndexed { i, r -> r.copy(idx = i) }
-            migrateLegacy(context) // v5.60：升级首同步即清旧码闹钟（幂等，无旧 key 时零成本）
+            migrateLegacy(context) // v6.0：升级首同步即清旧码闹钟（幂等，无旧 key 时零成本）
             // 只清本分区旧 alarm（基于旧分区内容，跨分区零影响）
             for (r in readPartition(context, nid)) cancelAlarm(context, r)
             // 落盘加密 + 排程（同步落盘，防进程被杀丢提醒）

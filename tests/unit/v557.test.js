@@ -17,7 +17,7 @@ function readAndroid(rel) {
 }
 
 // ── G1：通知点击不再弹提醒面板（用户实测：通知本身就是提醒，进正文即可）──
-// v5.60：监听恢复=跨笔记跳转到提醒所属笔记，「弹面板」旧形态仍被此断言拦截
+// v6.0：监听恢复=跨笔记跳转到提醒所属笔记，「弹面板」旧形态仍被此断言拦截
 test('G1 无 rem-notify-click→toggleRemPanel 链路', () => {
   const src = readSrc();
   assert.ok(!/rem-notify-click'[^\n]*toggleRemPanel/.test(src), '通知点击不得再打开提醒面板');

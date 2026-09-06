@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""v5.60 APP 图标全套生成（用户拍板 C 衬线 N 修正版：对角线左上→右下，拉丁 N）
+"""v6.0 APP 图标全套生成（用户拍板 C 衬线 N 修正版：对角线左上→右下，拉丁 N）
 - 暖纸白底 #F7F2E9 + 金色细线 #B7912C
 - launcher 48-192 / foreground 108-432（安全区缩小）/ round 圆形 / Play Store 512
 - 4x supersample + LANCZOS 缩小抗锯齿，细线无重影（用户视觉铁律）

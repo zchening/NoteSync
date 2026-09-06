@@ -29,7 +29,7 @@ function freshApp() {
 }
 
 // PUT 请求全部捕获供断言；GET 返回 note
-// v5.60：历史快照（/history PUT）是新增合法流量，不计入主保存 PUT 断言
+// v6.0：历史快照（/history PUT）是新增合法流量，不计入主保存 PUT 断言
 function mockCapture(window, note, putV) {
   const puts = [];
   window.fetch = (url, opts) => {

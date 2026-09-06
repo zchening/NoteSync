@@ -134,10 +134,10 @@ test('E5 jsdom：收藏 writeFavs/readFavs 读写与 20 条截断；首页 rende
   dom.window.close(); // 释放 jsdom 资源，否则 node --test 进程不退出（SIGTERM）
 });
 
-// ── E6：原生通知点击事件落地（v5.57 起不再弹提醒面板；v5.60 恢复监听=跨笔记跳转，依旧严禁弹面板） ──
-test('E6 通知点击不得 toggleRemPanel（v5.57 行为变更护栏，v5.60 跳转语义不放宽）', () => {
+// ── E6：原生通知点击事件落地（v5.57 起不再弹提醒面板；v6.0 恢复监听=跨笔记跳转，依旧严禁弹面板） ──
+test('E6 通知点击不得 toggleRemPanel（v5.57 行为变更护栏，v6.0 跳转语义不放宽）', () => {
   const src = readSrc();
-  // v5.60：监听恢复（跨笔记跳转到提醒所属笔记），但「点通知再弹提醒面板」的旧形态仍不得回潮
+  // v6.0：监听恢复（跨笔记跳转到提醒所属笔记），但「点通知再弹提醒面板」的旧形态仍不得回潮
   assert.ok(!/rem-notify-click'[^\n]*toggleRemPanel/.test(src), '通知点击不得再打开提醒面板');
-  assert.ok(/rem-notify-click[\s\S]{0,400}location\.assign\('\/' \+ encodeURIComponent\(/.test(src), 'v5.60：监听必须走跨笔记跳转（location.assign），不是弹面板');
+  assert.ok(/rem-notify-click[\s\S]{0,400}location\.assign\('\/' \+ encodeURIComponent\(/.test(src), 'v6.0：监听必须走跨笔记跳转（location.assign），不是弹面板');
 });
