@@ -20,6 +20,19 @@ function futureDate(daysAhead, h, mi) {
   return d;
 }
 
+// v5.60：addReminder 会经 scheduleRemMarkRefresh 在 400ms 后跑 linkifyEditor 重建正文 DOM
+// （时间文本包进 u.rem-mark），旧的文本节点引用随之失效——先等它跑完再重新定位，
+// 否则设到死节点上的 selection 拿不到 caret，chip 永远不弹（TC14 全量三连挂的根因）。
+function findTimeNode(root, S) {
+  const doc = root.ownerDocument;
+  const walker = doc.createTreeWalker(root, 4 /* SHOW_TEXT */);
+  let n;
+  while ((n = walker.nextNode())) {
+    if (n.nodeValue && n.nodeValue.indexOf(S) !== -1) return { node: n, idx: n.nodeValue.indexOf(S) };
+  }
+  return null;
+}
+
 function freshApp() {
   const dom = loadApp(w => {
     try { Object.defineProperty(w, 'crypto', { value: webcrypto, configurable: true }); }
@@ -34,11 +47,15 @@ function freshApp() {
   const window = dom.window;
   return { dom, window, document: window.document, editor: window.document.getElementById('editor') };
 }
+// v5.60：历史快照（/history PUT）是新增合法流量，不计入主保存 PUT 断言
 function mockCapture(window, note, putV) {
   const puts = [];
   window.fetch = (url, opts) => {
     const m = (opts && opts.method) || 'GET';
-    if (m === 'PUT') { puts.push(JSON.parse(opts.body)); return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ v: putV }) }); }
+    if (m === 'PUT') {
+      if (String(url).indexOf('/history') !== -1) return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ ok: true }) });
+      puts.push(JSON.parse(opts.body)); return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ v: putV }) });
+    }
     return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(note) });
   };
   return puts;
@@ -363,17 +380,18 @@ test('TC12d 光标落已添加的未来时间上显示两行展示卡，点击�
 
   const S = fmtDate(futureDate(1, 7, 5));
   editor.innerHTML = '<div>会议 ' + S + ' · 开会</div>';
-  const tn = editor.querySelector('div').firstChild;
-  const idx = tn.nodeValue.indexOf(S);
   const chip = document.getElementById('timeChip');
 
   // 直接把提醒加进列表（绕过 chip 点击路径）
   const expectedAt = window.parseTimeMatches(S)[0].at;
   await window.addReminder(expectedAt, '开会');
   const putsBefore = puts.length;
+  await sleep(560); // v5.60：等 400ms 的 linkifyEditor 重建完成，避免 selection 设到死节点（曾与它赛跑导致偶发挂）
+  const hit = findTimeNode(editor, S);
+  assert.ok(hit, 'linkify 后正文应仍含时间文本');
 
   const range = document.createRange();
-  range.setStart(tn, idx + 2); range.setEnd(tn, idx + 2);
+  range.setStart(hit.node, hit.idx + 2); range.setEnd(hit.node, hit.idx + 2);
   const sel = window.getSelection();
   sel.removeAllRanges(); sel.addRange(range);
   document.dispatchEvent(new window.Event('selectionchange'));
@@ -389,8 +407,16 @@ test('TC12d 光标落已添加的未来时间上显示两行展示卡，点击�
   await sleep(50);
   assert.strictEqual(puts.length, putsBefore, '展示卡不可点：点击不得再发 PUT');
 
+  // v5.60：linkify 后 div.firstChild 是「会议 」等非时间文本（时间已包进 u.rem-mark），
+  // 原写法 setStart(hit.node, 0) 光标仍在时间上，chip 不会消失
+  const walker2 = document.createTreeWalker(editor, 4);
+  let away = null, n2;
+  while ((n2 = walker2.nextNode())) {
+    if (n2.nodeValue && n2.nodeValue.indexOf(S) === -1 && n2.nodeValue.trim()) { away = n2; break; }
+  }
+  assert.ok(away, '应有非时间文本节点可移');
   const range2 = document.createRange();
-  range2.setStart(tn, 0); range2.setEnd(tn, 0);
+  range2.setStart(away, 0); range2.setEnd(away, 0);
   sel.removeAllRanges(); sel.addRange(range2);
   document.dispatchEvent(new window.Event('selectionchange'));
   await sleep(400);
@@ -410,10 +436,13 @@ test('TC14 已添加提醒处于临近触发 30 秒窗口内，光标落时间�
   mockCapture(window, { v: 5, ct: noteCt.ct, iv: noteCt.iv, salt: 'x' }, 6);
   await window.applyUnlocked(key, { v: 5, ct: noteCt.ct, iv: noteCt.iv, salt: 'x' });
 
-  // 把页面世界的 Date.now 钉在「秒数≥30」的时刻，下一个分钟边界必落在 30 秒窗口内
+  // 把页面世界的 Date.now 钉在「秒数=35」的时刻：下一分钟边界恒落在 (now, now+30s] 窗口内，
+  // 且 P-fixedNow=25s 远离危险区——原「秒数≥30 即可」在秒数接近 59 时 P-fixedNow≈1s，
+  // setTimeout(fireReminder) 走真实时钟，全量慢跑下会抢在断言前弹 remCard 藏掉 chip（v5.60 全量三连挂实锤）
   const realNow = Date.now();
   const d0 = new Date(realNow);
-  const fixedNow = d0.getSeconds() < 30 ? realNow + (30 - d0.getSeconds()) * 1000 : realNow;
+  d0.setSeconds(35, 0);
+  const fixedNow = d0.getTime();
   const origDateNow = window.Date.now;
   window.Date.now = () => fixedNow;
   t.after(() => { window.Date.now = origDateNow; });
@@ -426,13 +455,14 @@ test('TC14 已添加提醒处于临近触发 30 秒窗口内，光标落时间�
   assert.ok(P > fixedNow && P - fixedNow <= 30000, '前置：解析值必须落在 (now, now+30s] 过期窗口内');
 
   editor.innerHTML = '<div>马上 ' + S + ' 开会</div>';
-  const tn = editor.querySelector('div').firstChild;
-  const idx = tn.nodeValue.indexOf(S);
   await window.addReminder(P, '开会'); // 提醒已添加（真实 PUT 路径）
+  await sleep(560); // v5.60：等 400ms 的 linkifyEditor 重建完成再定位节点（旧写法把 selection 设到死节点）
+  const hit = findTimeNode(editor, S);
+  assert.ok(hit, 'linkify 后正文应仍含时间文本');
 
   const chip = document.getElementById('timeChip');
   const range = document.createRange();
-  range.setStart(tn, idx + 2); range.setEnd(tn, idx + 2);
+  range.setStart(hit.node, hit.idx + 2); range.setEnd(hit.node, hit.idx + 2);
   const sel = window.getSelection();
   sel.removeAllRanges(); sel.addRange(range);
   document.dispatchEvent(new window.Event('selectionchange'));
@@ -454,17 +484,18 @@ test('TC15 点展示卡「删除」→ 提醒彻底移除（PUT rem=null）、ch
 
   const S = fmtDate(futureDate(1, 7, 5));
   editor.innerHTML = '<div>会议 ' + S + ' · 开会</div>';
-  const tn = editor.querySelector('div').firstChild;
-  const idx = tn.nodeValue.indexOf(S);
   const chip = document.getElementById('timeChip');
 
   const expectedAt = window.parseTimeMatches(S)[0].at;
   await window.addReminder(expectedAt, '开会');
+  await sleep(560); // v5.60：等 linkifyEditor 重建完成再定位节点（同 TC12d 死节点竞态）
   const putsAfterAdd = puts.length;
   assert.ok(putsAfterAdd >= 1, '前置：添加提醒已持久化');
+  const hit = findTimeNode(editor, S);
+  assert.ok(hit, 'linkify 后正文应仍含时间文本');
 
   const range = document.createRange();
-  range.setStart(tn, idx + 2); range.setEnd(tn, idx + 2);
+  range.setStart(hit.node, hit.idx + 2); range.setEnd(hit.node, hit.idx + 2);
   const sel = window.getSelection();
   sel.removeAllRanges(); sel.addRange(range);
   document.dispatchEvent(new window.Event('selectionchange'));

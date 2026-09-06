@@ -134,10 +134,10 @@ test('E5 jsdom：收藏 writeFavs/readFavs 读写与 20 条截断；首页 rende
   dom.window.close(); // 释放 jsdom 资源，否则 node --test 进程不退出（SIGTERM）
 });
 
-// ── E6：原生通知点击事件落地（v5.57 起不再弹提醒面板——通知本身就是提醒，进正文即可） ──
-test('E6 通知点击不再 toggleRemPanel（v5.57 行为变更护栏）', () => {
+// ── E6：原生通知点击事件落地（v5.57 起不再弹提醒面板；v5.60 恢复监听=跨笔记跳转，依旧严禁弹面板） ──
+test('E6 通知点击不得 toggleRemPanel（v5.57 行为变更护栏，v5.60 跳转语义不放宽）', () => {
   const src = readSrc();
-  assert.ok(!src.includes("addEventListener('rem-notify-click'"), 'v5.57 起不应再有 rem-notify-click 监听（用户实测：点通知进正文却再弹一层提醒面板=重复打扰）');
-  // 退役符号防回潮：rem-notify-click 后紧跟 toggleRemPanel 的旧形态不得再现
+  // v5.60：监听恢复（跨笔记跳转到提醒所属笔记），但「点通知再弹提醒面板」的旧形态仍不得回潮
   assert.ok(!/rem-notify-click'[^\n]*toggleRemPanel/.test(src), '通知点击不得再打开提醒面板');
+  assert.ok(/rem-notify-click[\s\S]{0,400}location\.assign\('\/' \+ encodeURIComponent\(/.test(src), 'v5.60：监听必须走跨笔记跳转（location.assign），不是弹面板');
 });

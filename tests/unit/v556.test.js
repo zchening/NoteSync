@@ -17,7 +17,7 @@ function readSrc() {
 function readAndroid(rel) {
   return fs.readFileSync(path.join(__dirname, '..', '..', 'android', 'app', 'src', 'main', 'java', 'cn', 'xuyinji', 'notesync', rel), 'utf8');
 }
-function freshApp(extra) {
+function freshApp(extra, pageUrl) {
   const dom = loadApp(w => {
     try { Object.defineProperty(w, 'crypto', { value: webcrypto, configurable: true }); }
     catch (e) { w.crypto = webcrypto; }
@@ -28,7 +28,7 @@ function freshApp(extra) {
       w.Range.prototype.getBoundingClientRect = function () { return { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 }; };
     }
     if (typeof extra === 'function') extra(w);
-  });
+  }, pageUrl);
   return { dom, window: dom.window, editor: dom.window.document.getElementById('editor') };
 }
 async function makeKey() { return webcrypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']); }
@@ -151,7 +151,7 @@ test('F7 poll 拿到远端新提醒：loadReminder 生效 + 原生 sync 收到�
         }
       }
     };
-  });
+  }, 'http://localhost/f7note'); // v5.60：分区 upsert 后首页跳过同步，必须走真实笔记路由
   t.after(() => app.dom.window.close());
   const { window } = app;
   const key = await makeKey();
@@ -191,8 +191,8 @@ test('F8 MainActivity assets 兜底 + RemPlugin.cacheInfo + build.gradle/CI 版�
   assert.ok(plugin.includes('MainActivity.interceptCount'), 'cacheInfo 应读 MainActivity 计数');
 
   const gradle = fs.readFileSync(path.join(__dirname, '..', '..', 'android', 'app', 'build.gradle'), 'utf8');
-  assert.ok(gradle.includes('versionCode 58'), 'build.gradle versionCode 应 bump 为 58（v5.58）');
-  assert.ok(gradle.includes('versionName "5.58"'), 'build.gradle versionName 应 bump 为 5.58');
+  assert.ok(gradle.includes('versionCode 60'), 'build.gradle versionCode 应 bump 为 60（v5.60）');
+  assert.ok(gradle.includes('versionName "5.60"'), 'build.gradle versionName 应 bump 为 5.60');
 
   const wf = fs.readFileSync(path.join(__dirname, '..', '..', '.github', 'workflows', 'build-apk.yml'), 'utf8');
   assert.ok(wf.includes('GITHUB_REF_NAME#v'), 'CI 应从 tag 注入 versionName（v5.55 APK 自报 5.54 的治本）');

@@ -29,11 +29,15 @@ function freshApp() {
 }
 
 // PUT 请求全部捕获供断言；GET 返回 note
+// v5.60：历史快照（/history PUT）是新增合法流量，不计入主保存 PUT 断言
 function mockCapture(window, note, putV) {
   const puts = [];
   window.fetch = (url, opts) => {
     const m = (opts && opts.method) || 'GET';
-    if (m === 'PUT') { puts.push(JSON.parse(opts.body)); return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ v: putV }) }); }
+    if (m === 'PUT') {
+      if (String(url).indexOf('/history') !== -1) return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ ok: true }) });
+      puts.push(JSON.parse(opts.body)); return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ v: putV }) });
+    }
     return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(note) });
   };
   return puts;

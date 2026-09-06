@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#FFFFFF</color>
+    <!-- v5.60：暖纸白（与图标底色一致，C 衬线 N 定稿） -->
+    <color name="ic_launcher_background">#F7F2E9</color>
 </resources>

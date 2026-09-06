@@ -85,7 +85,7 @@ test('O4 无同步时刻时离线条显示占位符', async t => {
   window.showOfflineBar(0);
   assert.strictEqual(document.getElementById('offlineTime').textContent, '—', '0 时刻应显示占位符');
   window.showOfflineBar(1700000000000);
-  assert.ok(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(document.getElementById('offlineTime').textContent), '有时刻应显示格式化时间');
+  assert.ok(/^\d{2}-\d{2} \d{2}:\d{2}$/.test(document.getElementById('offlineTime').textContent), '有时刻应显示 MM-DD hh:mm（v5.60 起不带年份）');
 });
 
 // ── O5：poll 失败分支——本机离线挂条，服务器问题不挂条 ──────
@@ -110,8 +110,8 @@ test('O5 poll 失败按 onLine 区分「离线」与「同步中断」', async t
 // ── O6：源码形态断言（lastSyncAt 语义 + 守卫齐全）────────────
 test('O6 v5.50 源码形态：lastSyncAt 语义与守卫', () => {
   const src = fs.readFileSync(INDEX_PATH, 'utf8');
-  assert.strictEqual((src.match(/lastSyncAt = Date\.now\(\)/g) || []).length, 5,
-    'lastSyncAt 写入点应为 5 处（解锁/在线加载/保存/轮询/提醒保存）');
+  assert.strictEqual((src.match(/lastSyncAt = Date\.now\(\)/g) || []).length, 6,
+    'lastSyncAt 写入点应为 6 处（解锁/在线加载/保存/轮询/提醒保存/改口令——v5.60 起改口令也是一次成功同步）');
   assert.ok(src.includes('lastSyncAt = 0; hideOfflineBar()'), '退出锁定应清时刻并收条');
   assert.ok(src.includes('if (!navigator.onLine) retries = 0;'), 'fetchRetry 应有离线快败');
   const m = src.match(/async function loadCachedBody\(key\) \{[\s\S]*?\n\}/);

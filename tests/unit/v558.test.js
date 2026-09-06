@@ -34,7 +34,7 @@ test('H2 offlineBar 在 footer 内 + 新文案 + 悬浮条 CSS 退役', () => {
   const footIdx = src.indexOf('<footer id="foot">');
   const barIdx = src.indexOf('id="offlineBar"');
   assert.ok(footIdx > -1 && barIdx > footIdx && barIdx < footIdx + 300, 'offlineBar 应在 footer 标签内部');
-  assert.ok(src.includes('离线·同步时间：'), '文案应为「离线·同步时间：」');
+  assert.ok(src.includes('· 最后同步：'), '文案应为「· 最后同步：」（v5.60 起并入状态栏正文、去掉年份）');
   assert.ok(!src.includes('上次同步于'), '旧文案「上次同步于」应退役');
   assert.ok(!src.includes('.offlinebar:not(.hidden)+.upload-status'), '悬浮条错位规则应随悬浮条退役');
   assert.ok(!/\.offlinebar\{position:fixed/.test(src), 'offlinebar 不应再是 fixed 悬浮条');
@@ -59,7 +59,7 @@ test('H4 native-only 退役 + 顶栏两枚全平台隐藏 + scanWithWebCamera', 
   assert.ok(!src.includes("classList.add('native-app')"), 'native-app 钩子应随 CSS 退役');
   assert.ok(src.includes('#themeBtn, #lock{display:none}'), '顶栏日夜间/退出锁定应全平台隐藏（v5.58 起不只 APP）');
   assert.ok(src.includes('async function scanWithWebCamera()'), '应有网页端扫码函数');
-  assert.ok(src.includes("typeof window.BarcodeDetector === 'undefined'"), '网页扫码应探测 BarcodeDetector 支持');
+  assert.ok(src.includes("typeof window.BarcodeDetector !== 'undefined'"), '网页扫码应探测 BarcodeDetector 支持（v5.60 起不支持时走 jsQR 兜底而非直接劝退）');
   assert.ok(src.includes('当前浏览器不支持扫码，请用 APP'), '不支持时应明确提示而非静默');
   assert.ok(src.includes('await scanWithWebCamera()'), 'menuScan 应有网页端分支（无插件时走自写扫码层）');
   assert.ok(src.includes('getUserMedia({ video: { facingMode: \'environment\' } })'), '网页扫码应走后置摄像头');
@@ -77,7 +77,7 @@ test('H5 server.js 空盐不覆写 + currentSaltB64 三处兜底 + 自愈 + 诊�
   const offIdx = src.indexOf('serverSalt = b64ToBuf(c.salt); // v5.58：离线解锁路径也落地 serverSalt');
   assert.ok(offIdx > -1, '离线缓存解锁路径应落地 serverSalt');
   assert.ok(src.includes('let healed = false;') && src.includes('if (!healed) { await reportFail(); return; }'), '解锁失败应先走缓存盐自愈，两步都不过才计失败');
-  assert.ok(src.includes('if (!note.salt) { try { await apiPut({ ct: note.ct, iv: note.iv, salt: c.salt }); } catch (e2) {} }'), '自愈成功应回写服务端盐');
+  assert.ok(src.includes('if (!note.salt) { try { const rr2 = await apiPut({ ct: note.ct, iv: note.iv, salt: c.salt }); if (rr2 && typeof rr2.v === \'number\') localVer = rr2.v; } catch (e2) {} }'), '自愈成功应回写服务端盐并接回 v（v5.60 起同步 localVer）');
   assert.ok(src.includes("'salt=' + (typeof serverSalt !== 'undefined' && serverSalt ? 'ok' : 'NONE')"), '诊断应含服务端盐状态');
   assert.ok(src.includes("'  cacheSalt='"), '诊断应含缓存盐状态');
 });

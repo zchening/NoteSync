@@ -122,6 +122,12 @@ public class MainActivity extends BridgeActivity {
             didCacheBootstrapReload = true;
             wv.reload();
         }
+
+        // v5.60：冷启动也接住通知点击（进程被杀后点通知拉起 APP，intent 走 onCreate 不走 onNewIntent）
+        Intent cold = getIntent();
+        if (cold != null && RemPlugin.ACTION_NOTIFY_CLICK.equals(cold.getAction())) {
+            pendingRemNotifyClick = true;
+        }
     }
 
     /** v5.57：缓存引导 reload 只跑一次（防循环），进程重建后若仍无缓存允许再试 */
@@ -214,11 +220,15 @@ public class MainActivity extends BridgeActivity {
     private void dispatchRemNotifyClick() {
         if (bridge == null || bridge.getWebView() == null) return;
         pendingRemNotifyClick = false;
+        // v5.60：带 noteId 派发——JS 收到后若不是当前笔记，直接跳到提醒所属的笔记
+        Intent it = getIntent();
+        String nid = (it != null) ? it.getStringExtra("noteId") : null;
+        final String nidJson = (nid == null) ? "null" : org.json.JSONObject.quote(nid);
         bridge.getWebView().post(() -> {
             if (bridge.getWebView() != null) {
                 // 等页面 JS 就绪（DOMContentLoaded/interactive）再派发，避免事件丢失
                 bridge.getWebView().evaluateJavascript(
-                    "(function(){var f=function(){window.dispatchEvent(new CustomEvent('rem-notify-click'));};"
+                    "(function(){var f=function(){window.dispatchEvent(new CustomEvent('rem-notify-click',{detail:{noteId:" + nidJson + "}}));};"
                         + "if(document.readyState==='complete'||document.readyState==='interactive'){f();}"
                         + "else{window.addEventListener('DOMContentLoaded',f);}})();",
                     null

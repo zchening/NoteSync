@@ -117,6 +117,23 @@ function writeNote(id, obj) {
   fs.renameSync(tmp, notePath(id));
 }
 
+// v5.60：历史版本快照环——FIFO 上限 HISTORY_MAX 条，独立文件 <id>.hist.json。
+// 只存密文（零知识不变）；手动打点不参与挤出（优先挤自动），相同密文不重复入栈。
+const HISTORY_MAX = 10;
+function histPath(id) { return path.join(NOTES_DIR, id + '.hist.json'); }
+function readHist(id) {
+  try {
+    const h = JSON.parse(fs.readFileSync(histPath(id), 'utf8'));
+    if (h && Array.isArray(h.list)) return h;
+  } catch {}
+  return { list: [] };
+}
+function writeHist(id, h) {
+  const tmp = histPath(id) + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(h));
+  fs.renameSync(tmp, histPath(id));
+}
+
 function sendJSON(res, code, obj) {
   res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
   res.end(JSON.stringify(obj));
@@ -162,6 +179,58 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // --- API: 历史版本（v5.60，必须先于主 /api/note/ 分支——ID_RE 不含斜杠，放后面会被主分支吃掉）---
+  // GET  /api/note/:id/history      → 元数据列表（ts/v/manual/size，不含密文，省流量）
+  // GET  /api/note/:id/history/:ts  → 单条密文（预览/恢复时才取）
+  // PUT  /api/note/:id/history      → 追加快照 {ct, iv, manual}
+  if (req.method === 'GET' && url.startsWith('/api/note/') && url.includes('/history')) {
+    const m = url.match(/^\/api\/note\/([^/]+)\/history(?:\/(\d+))?$/);
+    if (!m) return sendJSON(res, 404, { error: 'not found' });
+    let id;
+    try { id = decodeURIComponent(m[1]); } catch { return sendJSON(res, 400, { error: 'bad id' }); }
+    if (!id || !ID_RE.test(id)) return sendJSON(res, 400, { error: 'bad id' });
+    const limit = checkLimit(ip, id);
+    if (limit.locked) return sendJSON(res, 429, { error: 'locked', retryAfter: limit.retryAfter });
+    const hist = readHist(id);
+    if (m[2]) {
+      const item = hist.list.find(x => String(x.ts) === m[2]);
+      if (!item) return sendJSON(res, 404, { error: 'no such snapshot' });
+      return sendJSON(res, 200, { ts: item.ts, ct: item.ct, iv: item.iv });
+    }
+    return sendJSON(res, 200, { list: hist.list.map(x => ({ ts: x.ts, v: x.v, manual: !!x.manual, size: (x.ct || '').length })) });
+  }
+  if (req.method === 'PUT' && url.startsWith('/api/note/') && url.endsWith('/history')) {
+    let id;
+    try { id = decodeURIComponent(url.slice('/api/note/'.length, -'/history'.length)); } catch { return sendJSON(res, 400, { error: 'bad id' }); }
+    if (!id || !ID_RE.test(id)) return sendJSON(res, 400, { error: 'bad id' });
+    const limit = checkLimit(ip, id);
+    if (limit.locked) return sendJSON(res, 429, { error: 'locked', retryAfter: limit.retryAfter });
+    let body = '';
+    req.on('data', c => { body += c; if (body.length > 1024 * 1024) req.destroy(); });
+    req.on('end', () => {
+      let obj;
+      try { obj = JSON.parse(body); } catch { return sendJSON(res, 400, { error: 'bad json' }); }
+      if (!obj || typeof obj.ct !== 'string' || !obj.ct || typeof obj.iv !== 'string' || !obj.iv) {
+        return sendJSON(res, 400, { error: 'missing fields' });
+      }
+      const cur = readNote(id);
+      const hist = readHist(id);
+      const item = { ts: Date.now(), v: cur.v || 0, ct: obj.ct, iv: obj.iv, manual: !!obj.manual };
+      const last = hist.list[hist.list.length - 1];
+      if (!last || last.ct !== item.ct || last.iv !== item.iv) {
+        hist.list.push(item);
+        while (hist.list.length > HISTORY_MAX) {
+          let idx = hist.list.findIndex(x => !x.manual); // 手动打点优先保留，先挤自动
+          if (idx === -1) idx = 0;
+          hist.list.splice(idx, 1);
+        }
+        writeHist(id, hist);
+      }
+      return sendJSON(res, 200, { ok: true, ts: item.ts, count: hist.list.length });
+    });
+    return;
+  }
+
   // --- API: 读取笔记 ---
   if (req.method === 'GET' && url.startsWith('/api/note/')) {
     const id = extractId(url, '/api/note');
@@ -195,7 +264,12 @@ const server = http.createServer((req, res) => {
       // 此前服务端无条件采用 obj.salt → 笔记盐被冲成 '' → 下次解锁走随机盐推导 →
       // 正确口令恒定「解密失败」。空值一律保留原盐，盐只由首次初始化写入。
       const saltIn = (typeof obj.salt === 'string' && obj.salt) ? obj.salt : (cur.salt || '');
-      const next = { v: (cur.v || 0) + 1, ct: obj.ct, iv: obj.iv, salt: saltIn, rem: rem, updatedAt: Date.now() };
+      // v5.60：空 ct/iv 不覆写（与 v5.58 空盐同理）。旧版客户端落盐时硬发 ct:''/iv:''，
+      // 会把并发端刚写入的正文清空——这是数据级破坏，服务端必须无条件兜住（线上仍有旧版在跑）。
+      // 真实「清空笔记」经 AES-GCM 后 ct 仍含 16 字节 tag，不为空串，故此保护不会误伤。
+      const ctIn = (typeof obj.ct === 'string' && obj.ct) ? obj.ct : (cur.ct || '');
+      const ivIn = (typeof obj.iv === 'string' && obj.iv) ? obj.iv : (cur.iv || '');
+      const next = { v: (cur.v || 0) + 1, ct: ctIn, iv: ivIn, salt: saltIn, rem: rem, updatedAt: Date.now() };
       writeNote(id, next);
       sseBroadcast(id, { v: next.v, updatedAt: next.updatedAt });
       return sendJSON(res, 200, { ok: true, v: next.v, updatedAt: next.updatedAt });
@@ -253,6 +327,16 @@ const server = http.createServer((req, res) => {
       const f = path.join(APP_DIR, 'favicon.svg');
       if (fs.existsSync(f)) {
         res.writeHead(200, { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'no-cache, no-store, must-revalidate' });
+        fs.createReadStream(f).pipe(res);
+        return;
+      }
+    }
+    // v5.60：jsQR 纯 JS 解码库（扫码兜底）——桌面 Chrome/Edge 与 iOS Safari 无 BarcodeDetector 时动态加载。
+    // 独立文件不内联进 index.html：127KB 只在真正扫码时才拉一次（immutable 缓存）。
+    if (url === '/jsQR.js') {
+      const f = path.join(APP_DIR, 'jsQR.js');
+      if (fs.existsSync(f)) {
+        res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'public, max-age=31536000, immutable' });
         fs.createReadStream(f).pipe(res);
         return;
       }
