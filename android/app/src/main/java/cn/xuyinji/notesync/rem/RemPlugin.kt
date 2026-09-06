@@ -47,7 +47,9 @@ class RemPlugin : Plugin() {
         // v5.55：前台标志（MainActivity onResume/onPause 维护）。
         // 前台时 JS 提醒卡+声音已负责，RemReceiver 跳过通知避免双重打扰；
         // 进程被杀重建时默认 false = 推通知，安全方向正确。
-        @JvmStatic
+        // 必须 @JvmField：@JvmStatic 只生成 get/set 方法，字段仍为 private，
+        // Java 侧 RemPlugin.isForeground 字段式访问会编译失败（CI 实锤）。
+        @JvmField
         @Volatile
         var isForeground = false
 
