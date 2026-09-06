@@ -13,10 +13,15 @@
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
+        <!-- v5.53：targetSdk 35 强制 edge-to-edge，WebView 延伸到状态栏下——
+             顶部菜单栏顶进双挖孔区且触摸被系统状态栏窗口消费（图标点不动）。
+             opt-out 后 WebView 从状态栏下方开始渲染。API<35 平台忽略此项，无害。 -->
+        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
     </style>
 
 
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="android:background">@drawable/splash</item>
+        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
     </style>
 </resources>

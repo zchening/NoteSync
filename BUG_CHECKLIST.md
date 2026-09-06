@@ -1168,10 +1168,50 @@
   - [ ] `/api/fail` 强制 `application/json` content-type 逼出预检——simple 请求 CORS 白名单挡不住，任意网页可刷锁别人的笔记
   - [ ] SSE 全局上限 2000（`sseActive` 计数 + close 递减），防恶意长连接耗尽 fd
 
+## O. APK 真机输入/布局/导航（v5.53 新增分类，小米 Civi 3 + 百度输入法实测）
+
+### O1 | 首页 IME 短语注入后打开按钮卡 disabled
+- **版本**: v5.53
+- **现象**: 百度输入法"个性短语"候选上屏后按钮仍灰；英文逐字输入正常
+- **根因**: 短语注入走非标准 IME 路径不派发 input 事件，按钮状态无人刷新
+- **要点与核对**:
+  - [ ] landing 初始化含 250ms 轮询兜底（setInterval 对比 li.value 变化补跑 sanitizeName）
+  - [ ] 点击打开回调内 clearInterval(pollTimer)
+
+### O2 | 编辑器正文汉字无法上屏
+- **版本**: v5.53
+- **现象**: 数字英文可输汉字不行
+- **根因**: captureInput:true 启用 BaseInputConnection（官方自述"更简单的键盘，可能有各种限制"）破坏标准 IME 组字链；叠加组字期间空 inputType 的 input 事件触发 cleanupLeadingTrailingBreaks DOM 手术打断组字
+- **要点与核对**:
+  - [ ] capacitor.config.json 无 captureInput
+  - [ ] editor input 监听器开头 isComposing 旁路——组字期间只挂 saveTimer 草稿保存、零 DOM 手术
+  - [ ] needCleanup 不含 it === '' 条件（空 inputType 一律视为组字事件不清理）
+  - [ ] skipCleanupOnce 无残留（grep 为 0）
+
+### O3 | 顶部菜单栏顶进双挖孔区且图标点不动
+- **版本**: v5.53
+- **现象**: header 与药丸挖孔重合，点击无响应
+- **根因**: targetSdk 35 强制 edge-to-edge，WebView 延伸到状态栏下，状态栏区域触摸被系统窗口消费不传 WebView
+- **要点与核对**:
+  - [ ] styles.xml 两个 theme 均含 android:windowOptOutEdgeToEdgeEnforcement=true（API 35 生效、老版本忽略）
+  - [ ] 后续版本正解：viewport-fit=cover + env(safe-area-inset-top)
+
+### O4 | 返回键直接回桌面
+- **版本**: v5.53
+- **根因**: Capacitor 7 BridgeActivity 不接管返回键，默认 finish Activity
+- **要点与核对**:
+  - [ ] MainActivity onCreate 注册 OnBackPressedCallback——canGoBack 则 goBack（笔记页→首页可换笔记），无历史才退出
+
+### O5 | 真机排障通道（工程改进）
+- **版本**: v5.53
+- **要点与核对**:
+  - [ ] capacitor.config.json 含 webContentsDebuggingEnabled:true（USB + chrome://inspect 直接看 APK 内 WebView 报错）
+
 ## 版本与 bug 对应速查
 
 | 版本 | 涉及 bug 编号 |
 |------|---------------|
+| v5.53 | O1-O5（删 captureInput 修 IME 组字链 + editor isComposing 旁路零 DOM 手术 + 首页 250ms 轮询兜底 + windowOptOutEdgeToEdgeEnforcement 退出 edge-to-edge + 返回键 OnBackPressedCallback 接 WebView 历史 + webContentsDebuggingEnabled 排障） |
 | v5.52 | N1-N10（APK 改 server.url 直连 + 砍热更新 + 原生三 P0：通知权限/requestCode 截断/同步落盘 + setAlarmClock + BootReceiver 补齐 + 断网兜底页 + 冷启事件补发 + 服务端 XFF/fail/SSE） |
 | v4.3 | A1, A2, A3 |
 | v4.3.1 | A4 |

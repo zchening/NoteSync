@@ -1,6 +1,6 @@
 {
   "name": "notesync",
-  "version": "5.52.0",
+  "version": "5.53.0",
   "private": true,
   "description": "NoteSync - 端到端加密便签 + Capacitor APK 壳（v5.51）",
   "scripts": {

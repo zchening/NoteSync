@@ -23,6 +23,20 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(RemPlugin.class);
         super.onCreate(savedInstanceState);
 
+        // v5.53：返回键接 WebView 历史——Capacitor 不接管返回键，默认 finish 直接回桌面。
+        // 笔记页按返回 → 回首页（自动跳转时 assign 留下的历史）；首页再按 → 退出。
+        getOnBackPressedDispatcher().addCallback(this, new androidx.activity.OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                WebView wv = (bridge != null) ? bridge.getWebView() : null;
+                if (wv != null && wv.canGoBack()) {
+                    wv.goBack();
+                } else {
+                    finish();
+                }
+            }
+        });
+
         // 离线兜底页：断网/服务器不可达时 WebView 白屏，显示重试界面
         if (bridge == null) return;
         WebView wv = bridge.getWebView();

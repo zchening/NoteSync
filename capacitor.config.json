@@ -6,7 +6,7 @@
   "android": {
     "cleartext": false,
     "allowMixedContent": false,
-    "captureInput": true
+    "webContentsDebuggingEnabled": true
   },
   "server": {
     "url": "https://biji.xuyinji.com.cn",

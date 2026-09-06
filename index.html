@@ -324,7 +324,7 @@ const NOTE_LAST_KEY = 'notesync_last_note';
 const NOTE_JUMPED_KEY = 'notesync_jumped';
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '5.52';
+const APP_VERSION = '5.53';
 const BUILD_DATE = '2026-09-06';
 
 const $ = s => document.querySelector(s);
@@ -2121,8 +2121,6 @@ function isBlankBlock(n) {
   }
   return false;
 }
-// 程序化派发 input 时，若本次不希望触发首尾空行清理，先置为 true（一次性）
-let skipCleanupOnce = false;
 // 光标是否落在某节点内 —— 用于保护"用户主动创建/正在编辑的空行"不被 cleanup 吞掉
 function caretInsideNode(n) {
   if (!n) return false;
@@ -2361,6 +2359,14 @@ function ensureCaret(forceRepaint) {
 
 editor.addEventListener('input', (e) => {
   const it = (e && e.inputType) || '';
+  if (isComposing) {
+    // v5.53：组字（拼音→候选→上屏）期间完全旁路 DOM 手术——cleanup/linkify/撤销记录
+    // 任何一项在组字中途执行都会打断 IME 组字（部分 WebView+输入法组合下 inputType
+    // 为空串，曾误触发 cleanup 致汉字无法上屏）。只保留草稿保存计时。
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveLocal, 800);
+    return;
+  }
   if (busy) {
     // I4：保存进行中（网络慢时可达数秒）的输入不再被丢弃——
     // 标记 pendingResave，本轮 saveLocal 完成后（finally）补挂保存；
@@ -2373,14 +2379,15 @@ editor.addEventListener('input', (e) => {
     }
     return;
   }
-  // 只有删除类输入（以及粘贴/程序化派发）才做首尾空行清理。
+  // 只有删除类输入（以及粘贴）才做首尾空行清理。
   // 插入类输入尤其是回车(insertParagraph/insertLineBreak)绝不清理，
   // 否则刚换出来的空行会被立刻删掉，用户看到的就是"回车无反应"(bug 4)。
   // 注意：historyUndo / historyRedo 绝不参与首尾空行清理，也不触发 linkify。
   // 在撤销事务内部再跑 cleanup / linkify 的 DOM 手术会破坏原生撤销栈（cleanup 删空白块、
   // linkify 的选区重设打断撤销事务分组），导致 Ctrl+Z“按了没反应”或错位。
-  const needCleanup = it.indexOf('delete') === 0 || it === 'insertFromPaste' || (it === '' && !skipCleanupOnce);
-  skipCleanupOnce = false;
+  // v5.53：移除 it === '' 条件——空 inputType 的来源不可控（部分 WebView+输入法
+  // 的组字事件就是空串），误伤组字的代价（汉字无法上屏）远大于漏清理。
+  const needCleanup = it.indexOf('delete') === 0 || it === 'insertFromPaste';
   if (needCleanup) cleanupLeadingTrailingBreaks();
   clearTimeout(saveTimer);
   saveTimer = setTimeout(saveLocal, 800);
@@ -2474,7 +2481,6 @@ editor.addEventListener('keydown', e => {
     nb.innerHTML = '<br>';
     if (block === editor) editor.appendChild(nb); else block.after(nb);
     placeCaretInBlock(nb);
-    skipCleanupOnce = true;
     editor.dispatchEvent(new Event('input'));
   }
 });
@@ -3506,7 +3512,15 @@ function isNativeApp() {
     li.addEventListener('input', sanitizeName);
     li.addEventListener('compositionend', sanitizeName);
     syncOpenBtn();
+    // v5.53：IME 兜底轮询——部分输入法（如百度个性短语）向输入框注入文本时
+    // 不按标准流程派发 input/composition 事件，按钮状态会卡死在 disabled。
+    // 250ms 对比 value，有变化就补跑 sanitizeName。仅首页显示期间运行，成本可忽略。
+    let lastPollVal = li.value;
+    const pollTimer = setInterval(() => {
+      if (li.value !== lastPollVal) { sanitizeName(); lastPollVal = li.value; }
+    }, 250);
     lb.addEventListener('click', () => {
+      clearInterval(pollTimer);
       const name = li.value.trim();
       if (name) location.href = '/' + encodeURIComponent(name);
     });
