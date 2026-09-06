@@ -150,8 +150,10 @@ test('Bug2b 解锁后退出锁定，解锁按钮回到禁用态', guard(async ()
   await page.fill('#pw', 'x');
   assert.strictEqual(await page.evaluate(() => document.getElementById('ok').disabled), false, '解锁且有口令时按钮应启用');
 
-  // 点退出锁定
-  await page.click('#lock');
+  // 点退出锁定（v5.58 起顶栏 🔒 全平台移除，走 ☰ → 菜单「退出锁定」）
+  await page.click('#menuBtn');
+  await page.waitForSelector('#menuLock');
+  await page.click('#menuLock');
   await page.waitForSelector('#pw');
   assert.strictEqual(await page.evaluate(() => document.getElementById('pw').value), '', '退出后口令框应清空');
   assert.strictEqual(await page.evaluate(() => document.getElementById('ok').disabled), true, '退出后解锁按钮必须回到禁用态');

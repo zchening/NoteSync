@@ -119,5 +119,7 @@ test('O6 v5.50 源码形态：lastSyncAt 语义与守卫', () => {
   assert.ok(!m[0].includes('lastSyncAt'), 'loadCachedBody 不得更新 lastSyncAt（缓存时刻≠同步时刻）');
   assert.ok(src.includes("window.addEventListener('offline'"), '应有 offline 监听');
   assert.ok(src.includes("window.addEventListener('online'"), '应有 online 监听');
-  assert.ok(src.includes('.offlinebar:not(.hidden)+.upload-status{bottom:88px}'), '上传提示应与离线条错位');
+  // v5.58：离线条移入页脚状态栏——悬浮胶囊条与其让位规则一并退役
+  assert.ok(!src.includes('.offlinebar:not(.hidden)+.upload-status'), '悬浮条错位规则应退役（离线条已并入页脚）');
+  assert.ok(!/\.offlinebar\{position:fixed/.test(src), 'offlinebar 不应再是 fixed 悬浮条');
 });

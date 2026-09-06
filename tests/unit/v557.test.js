@@ -44,8 +44,8 @@ test('G3 caretInfoInEditor 裸文本兜底 + compositionend 补 chip 触发', ()
   assert.ok(cseg.includes('maybeShowTimeChip'), '组字结束应补 chip 触发（组合态内 selectionchange 全被 isComposing 拦掉）');
 });
 
-// ── G4：冲突/草稿提示=扫码配对同款浮卡（排版挤压+按钮出框实锤后的重做）──
-test('G4 conflictbar/confcard 浮卡形态 + 统一文案 + hintbar 退役', () => {
+// ── G4：冲突/草稿提示=扫码配对同款浮卡（v5.58 起文案与尺寸由 v558.test.js 接管）──
+test('G4 conflictbar/confcard 浮卡形态 + hintbar 退役', () => {
   const src = readSrc();
   assert.ok(src.includes('.conflictbar{'), '应有 conflictbar 容器样式');
   assert.ok(src.includes('.confcard{'), '应有 confcard 浮卡样式（圆角18+rise+同款阴影）');
@@ -54,9 +54,6 @@ test('G4 conflictbar/confcard 浮卡形态 + 统一文案 + hintbar 退役', () 
   const bars = src.match(/class="conflictbar hidden"/g) || [];
   assert.equal(bars.length, 2, 'draftBar 与 remoteBar 应都是 conflictbar 浮卡');
   assert.ok(!/id="draftBar" class="hintbar/.test(src) && !/id="remoteBar" class="hintbar/.test(src), '两条不应再是 hintbar 单行条');
-  assert.ok((src.match(/发现冲突：选哪边？/g) || []).length >= 2, '两卡应有统一标题');
-  assert.ok(src.includes('保留本机修改') && src.includes('使用服务器版本'), '按钮文案应统一「本机 vs 服务器」口径');
-  assert.ok(!src.includes('保留我的</button>') && !src.includes('用服务器版</button>'), '旧按钮文案应退役');
 });
 
 // ── G5：口令框「返回首页」出口（APP 里不想解锁只能杀进程实锤）──
@@ -75,16 +72,10 @@ test('G6 自动解锁路径补写 NOTE_LAST_KEY（共两处：口令+自动）',
   assert.ok(hits.length >= 2, '口令解锁与自动解锁两条路径都应写 NOTE_LAST_KEY（此前仅口令路径写，记住密钥/扫码配对进来的设备跳转键从不更新）');
 });
 
-// ── G7：APP 菜单收纳（日夜间/退出锁定/扫一扫 native-only + 触控区加大）──
-test('G7 native-only 菜单三件套 + native-app CSS + 顶栏隐藏 + wiring', () => {
+// ── G7：菜单收纳（v5.58 起三端统一，形态断言移交 v558.test.js；此处仅保 wiring 不回退）──
+test('G7 菜单三件套 DOM + wiring', () => {
   const src = readSrc();
   assert.ok(src.includes('id="menuScan"') && src.includes('id="menuTheme"') && src.includes('id="menuLock"'), '菜单应有扫一扫/日夜间切换/退出锁定三项');
-  assert.ok((src.match(/menu-item native-only/g) || []).length === 3, '三项应都是 native-only（PC 菜单不变）');
-  assert.ok(src.includes('.native-only{display:none!important}'), 'native-only 默认应隐藏');
-  assert.ok(src.includes('body.native-app .native-only{display:block!important}'), '原生端应显示 native-only 项');
-  assert.ok(src.includes('body.native-app #themeBtn, body.native-app #lock{display:none}'), '原生端顶栏应隐藏主题/锁定图标');
-  assert.ok(src.includes('body.native-app .menu-item{'), '原生端菜单项触控区应加大');
-  assert.ok(src.includes("document.body.classList.add('native-app')"), '原生端应给 body 打 native-app 类');
   assert.ok(src.includes("$('#menuTheme').addEventListener('click'"), 'menuTheme 应有 wiring');
   assert.ok(src.includes("$('#menuLock').addEventListener('click'"), 'menuLock 应有 wiring');
   assert.ok(src.includes("$('#menuScan').addEventListener('click'"), 'menuScan 应有 wiring');

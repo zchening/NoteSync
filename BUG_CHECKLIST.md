@@ -1370,10 +1370,44 @@
 - **关联文件**: index.html → menuScan / parsePairLink；package.json
 - **核对要点**: PC 开配对码 → APP 扫一扫 → 直开笔记免口令；扫外站二维码提示「不是 NoteSync 配对二维码」
 
+## S 类 | v5.58 验收五连修（2026-09-06 傍晚）
+
+### S1 | 冲突卡太窄不醒目 + 按钮文案定稿
+- **版本**: v5.58
+- **修复**: `.confcard` 加宽 min(92vw,420px)、按钮 min-height 44px、顶部 3px 强调色条、阴影加深；正文定稿「发现另一台设备上的更新，与本机未保存的修改不一致」，按钮定稿「保留本机 / 使用新版本」
+- **关联文件**: index.html → conflictbar CSS / draftBar / remoteBar
+- **核对要点**: 两端同改 → 浮卡明显加宽、双按钮在卡内；文案与按钮为定稿版
+
+### S2 | 离线提示改「离线·同步时间：X」并移入状态栏
+- **版本**: v5.58
+- **修复**: 悬浮胶囊条退役（连带 upload-status 让位规则）；offlineBar/offlineTime 移入 footer，文案改「离线·同步时间：X」；id 不变故单测/双 e2e 免重写
+- **关联文件**: index.html → footer / .offlinebar CSS
+- **核对要点**: 断网 → 页脚出现「离线·同步时间：X」；联网即隐
+
+### S3 | 页脚/菜单/☰ 三端全面加大
+- **版本**: v5.58
+- **修复**: footer padding 14px/min-height 46px；☰ 22px + min-height 44px；菜单项 46px/15px 全局（v5.57 的 native 专属规则并入全局）
+- **关联文件**: index.html → footer / #menuBtn / .menu-item CSS
+- **核对要点**: 三端页脚明显更高、菜单项更容易点中
+
+### S4 | 菜单三端统一 + 网页端扫码
+- **版本**: v5.58
+- **修复**: 扫一扫/日夜间切换/退出锁定全平台进菜单（native-only/native-app 退役），顶栏 themeBtn/lock 全平台隐藏；网页端自写扫码层 scanWithWebCamera（BarcodeDetector+getUserMedia，iOS Safari 提示「请用 APP」）
+- **关联文件**: index.html → menuScan/menuTheme/menuLock / scanWithWebCamera / #themeBtn,#lock CSS
+- **核对要点**: 三端菜单项序一致；PC Chrome 点扫一扫能调起摄像头扫码开笔记；iOS Safari 给出明确提示
+
+### S5 | 正确口令报「口令错误，解密失败」（盐被空值冲掉，数据级）
+- **版本**: v5.58
+- **根因**: `bufToB64(null)`='' + 服务端 PUT 无条件覆写 salt → v5.54 离线缓存解锁路径不设 serverSalt，联网保存把服务端盐冲成 '' → 下次解锁走随机盐 → 正确口令恒定失败（当次会话密钥在内存，故表现为「有时候」）
+- **修复**: 三层——服务端 PUT 空盐保留原盐；前端 PUT 盐走 currentSaltB64()（缺失回退缓存盐）+ 离线解锁落地 serverSalt；解锁失败先走「口令+缓存盐」自愈（缓存与服务端正文都解开才采用并回写盐）
+- **关联文件**: server.js → PUT；index.html → unlock / currentSaltB64 / 诊断 salt=/cacheSalt=
+- **核对要点**: 曾解密失败的笔记输口令能进（自愈）；诊断 salt=ok；另一设备正常解锁同一笔记
+
 ## 版本与 bug 对应速查
 
 | 版本 | 涉及 bug 编号 |
 |------|---------------|
+| v5.58 | S1-S5（冲突卡加宽+文案定稿 + 离线条入状态栏 + 页脚菜单三端加大 + 菜单三端统一+网页扫码 + 盐根治三层，unit v558.test.js H1-H5 固化） |
 | v5.57 | R1-R9（通知点击不弹面板 + 下划线补重绘 + chip 裸文本/组字兜底 + 冲突草稿浮卡 + 口令框返回首页 + 自动解锁记最后笔记 + MainActivity 缓存引导 reload + APP 菜单收纳 + 扫一扫，unit v557.test.js G1-G10 固化） |
 | v5.56 | Q1-Q6（合并吞噬修冲突条 + 自动解锁补提醒恢复 + poll 同步 note.rem + 离线三级兜底+cacheInfo + 版本号双 bump/CI 注入 + APP 诊断入口，unit v556.test.js F1-F8 固化） |
 | v5.54 | P1-P5（过期补弹删+REM_DONE 退役纯时间过滤 + RemReceiver 60s 迟到容差 + 离线口令解本地缓存回退 + rem-notify-click JS 监听 + 页脚菜单收藏体系） |

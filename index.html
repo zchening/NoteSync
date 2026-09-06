@@ -65,11 +65,12 @@
      无遮罩不挡输入：容器 pointer-events:none，仅卡片可点；必须显式二选一，铁律不变 */
   .conflictbar{position:fixed;left:50%;transform:translateX(-50%);z-index:55;pointer-events:none;max-width:92vw}
   .conflictbar.hidden{display:none}
-  .confcard{pointer-events:auto;background:var(--box-bg);border:1px solid var(--line);border-radius:18px;box-shadow:0 24px 70px rgba(20,20,18,.16);padding:20px 22px 16px;width:min(88vw,340px);text-align:center;animation:rise .5s cubic-bezier(.2,.7,.3,1) both}
-  .confcard .conf-title{font-size:16px;font-weight:600;margin:0 0 6px;color:var(--fg)}
-  .confcard .conf-msg{font-size:13px;color:var(--muted);margin:0 0 14px;line-height:1.5}
+  /* v5.58：用户反馈浮卡太窄不够显眼——加宽到 420、按钮 44px 高、顶部加强调色条、阴影加深 */
+  .confcard{pointer-events:auto;background:var(--box-bg);border:1px solid var(--line);border-top:3px solid var(--accent);border-radius:18px;box-shadow:0 28px 80px rgba(20,20,18,.22);padding:22px 26px 18px;width:min(92vw,420px);text-align:center;animation:rise .5s cubic-bezier(.2,.7,.3,1) both}
+  .confcard .conf-title{font-size:17.5px;font-weight:600;margin:0 0 8px;color:var(--fg)}
+  .confcard .conf-msg{font-size:13.5px;color:var(--muted);margin:0 0 16px;line-height:1.6}
   .confcard .conf-btns{display:flex;gap:10px}
-  .confcard .conf-btns button{flex:1;padding:10px 0;font-size:14px;color:var(--fg);background:none;border:1px solid var(--line);border-radius:10px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+  .confcard .conf-btns button{flex:1;min-height:44px;padding:12px 0;font-size:15px;color:var(--fg);background:none;border:1px solid var(--line);border-radius:10px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
   #remoteBar{top:96px} /* v5.56 远端冲突条：与草稿条同族错位，避免双条叠盖 */
   #installBar{bottom:16px}
   /* v5.40：到点提醒卡片对齐扫码配对弹窗（.box）视觉——圆角 18 / rise 入场 / 同款阴影与标题层级；
@@ -152,19 +153,16 @@
   @media (max-width:560px){ #editor{padding:24px 18px 100px;font-size:16px} }
 
   /* ── 页脚（v5.21：纯状态条「● 状态字」，状态自顶栏移入；解锁态已由状态字编码，加密标语已在落地页/解锁弹窗表达）── */
-  footer{display:flex;align-items:center;justify-content:center;gap:7px;padding:10px 16px;border-top:1px solid var(--line);font-size:11px;color:var(--muted);letter-spacing:.14em;position:relative}
-  #menuBtn{position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:15px;line-height:1;cursor:pointer;padding:6px 12px;touch-action:manipulation;-webkit-tap-highlight-color:transparent;letter-spacing:0}
+  footer{display:flex;align-items:center;justify-content:center;gap:7px;padding:14px 18px;min-height:46px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);letter-spacing:.14em;position:relative} /* v5.58：状态栏加高、字号加大（用户要求三端都更方便点击/阅读） */
+  #menuBtn{position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:22px;line-height:1;cursor:pointer;padding:10px 14px;min-height:44px;display:flex;align-items:center;touch-action:manipulation;-webkit-tap-highlight-color:transparent;letter-spacing:0}
   #menuBtn:active{opacity:.6}
   #menuBox{width:min(90vw,320px);text-align:left;padding:26px 22px 22px}
-  .menu-item{padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;cursor:pointer;color:var(--fg);font-size:13.5px;text-align:center;touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:border-color .2s}
+  /* v5.58：菜单项触控区全端加大（原 v5.57 只在 APP 端加大，用户要求三端一致） */
+  .menu-item{padding:14px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:9px;cursor:pointer;color:var(--fg);font-size:15px;min-height:46px;line-height:1.4;text-align:center;touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:border-color .2s}
   .menu-item:active{background:var(--hover)}
-  /* v5.57：APP 端菜单扩容——①日夜间/退出锁定收进菜单（顶栏 8 枚图标太小点着累）
-     ②菜单项触控区加大（行高≥46px/字号 15）③☰ 按钮放大 ④扫一扫仅原生可见 */
-  .native-only{display:none!important}
-  body.native-app .native-only{display:block!important}
-  body.native-app #themeBtn, body.native-app #lock{display:none}
-  body.native-app .menu-item{padding:14px 12px;font-size:15px;min-height:46px;line-height:1.4}
-  body.native-app #menuBtn{font-size:22px;padding:6px 12px}
+  /* v5.58：三端菜单与左下角布局统一——扫一扫/日夜间切换/退出锁定全平台进菜单（平台差异化机制退役），
+     顶栏 themeBtn/lock 全平台移除（不再只在 APP 端隐藏）；菜单项与 ☰ 加大已在上方全局生效 */
+  #themeBtn, #lock{display:none}
   .fav-row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid var(--line);color:var(--fg);font-size:13px;cursor:pointer}
   .fav-row:active{background:var(--hover)}
   #menuFavEmpty{text-align:center;color:var(--muted);font-size:12px;padding:8px 0}
@@ -230,9 +228,11 @@
 
   /* ── 提示气泡 / 加载 ────────────────── */
   .upload-status{position:fixed;bottom:44px;left:50%;transform:translateX(-50%);background:var(--upload-bg);color:var(--bg);padding:10px 20px;border-radius:999px;font-size:13px;letter-spacing:.03em;z-index:20;opacity:0;transition:opacity .3s;pointer-events:none;box-shadow:0 10px 30px rgba(20,20,18,.2)}
-  .offlinebar{position:fixed;left:50%;transform:translateX(-50%);bottom:44px;z-index:20;padding:8px 16px;font-size:12px;letter-spacing:.04em;color:var(--muted);background:var(--box-bg);border:1px solid var(--line);border-radius:999px;box-shadow:0 6px 20px rgba(0,0,0,.12)}
+  /* v5.58：离线条移入页脚状态栏——原本是底部悬浮胶囊条（独立于状态栏、还要给上传提示让位），
+     用户要求并入状态栏并改文案为「离线·同步时间：X」。id 不变（offlineBar/offlineTime），
+     显隐仍走 hidden 类，既有 cache/offline 单测与两个 e2e 不必重写 */
+  .offlinebar{display:inline;margin-left:6px;padding:3px 9px;font-size:11px;letter-spacing:.04em;color:var(--muted);background:none;border:1px solid var(--line);border-radius:999px}
   .offlinebar.hidden{display:none}
-  .offlinebar:not(.hidden)+.upload-status{bottom:88px} /* v5.50：离线条可见时，本地复制/导出等上传提示上移错位，不与离线条叠放 */
   .upload-status.show{opacity:1}
   #loading{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:5;color:var(--muted);font-size:13px;letter-spacing:.2em}
 </style>
@@ -289,9 +289,9 @@
       <div id="menuHome" class="menu-item" role="button" tabindex="0">⌂ 返回首页</div>
       <div id="menuFav" class="menu-item" role="button" tabindex="0">★ 收藏笔记</div>
       <div id="menuFavEntry" class="menu-item" role="button" tabindex="0">▸ 收藏夹</div>
-      <div id="menuScan" class="menu-item native-only" role="button" tabindex="0">▣ 扫一扫</div>
-      <div id="menuTheme" class="menu-item native-only" role="button" tabindex="0">◐ 日夜间切换</div>
-      <div id="menuLock" class="menu-item native-only" role="button" tabindex="0">⎋ 退出锁定</div>
+      <div id="menuScan" class="menu-item" role="button" tabindex="0">▣ 扫一扫</div>
+      <div id="menuTheme" class="menu-item" role="button" tabindex="0">◐ 日夜间切换</div>
+      <div id="menuLock" class="menu-item" role="button" tabindex="0">⎋ 退出锁定</div>
       <div id="menuDiag" class="menu-item" role="button" tabindex="0">⌁ 诊断</div>
     </div>
     <div id="menuFavView" class="hidden">
@@ -304,15 +304,15 @@
 <div id="draftBar" class="conflictbar hidden">
   <div class="confcard">
     <div class="conf-title">发现冲突：选哪边？</div>
-    <div class="conf-msg" id="draftMsg">服务器上有更新的内容，本机还有未保存的修改。</div>
-    <div class="conf-btns"><button type="button" id="draftRestore">保留本机修改</button><button type="button" id="draftDiscard">使用服务器版本</button></div>
+    <div class="conf-msg" id="draftMsg">发现另一台设备上的更新，与本机未保存的修改不一致</div>
+    <div class="conf-btns"><button type="button" id="draftRestore">保留本机</button><button type="button" id="draftDiscard">使用新版本</button></div>
   </div>
 </div>
 <div id="remoteBar" class="conflictbar hidden">
   <div class="confcard">
     <div class="conf-title">发现冲突：选哪边？</div>
-    <div class="conf-msg">服务器上有更新的内容，本机还有未保存的修改。</div>
-    <div class="conf-btns"><button type="button" id="remoteKeep">保留本机修改</button><button type="button" id="remoteTake">使用服务器版本</button></div>
+    <div class="conf-msg">发现另一台设备上的更新，与本机未保存的修改不一致</div>
+    <div class="conf-btns"><button type="button" id="remoteKeep">保留本机</button><button type="button" id="remoteTake">使用新版本</button></div>
   </div>
 </div>
 <div id="installBar" class="hintbar hidden">
@@ -322,8 +322,7 @@
 </div>
 <div id="editor" data-ph="开始输入，自动同步到所有设备…" contenteditable="true"></div>
 <input type="file" id="fileInput" accept="image/*" style="display:none">
-<footer id="foot"><span id="menuBtn" title="菜单">☰</span><span class="dot" id="status"></span><span id="statustext">连接中…</span></footer>
-<div id="offlineBar" class="offlinebar hidden">离线 · 上次同步于 <span id="offlineTime"></span></div>
+<footer id="foot"><span id="menuBtn" title="菜单">☰</span><span class="dot" id="status"></span><span id="statustext">连接中…</span><span id="offlineBar" class="offlinebar hidden">离线·同步时间：<span id="offlineTime"></span></span></footer>
 <div class="upload-status" id="uploadStatus"></div>
 
 <div id="loading">加载中</div>
@@ -387,7 +386,7 @@ const NOTE_LAST_KEY = 'notesync_last_note';
 const NOTE_JUMPED_KEY = 'notesync_jumped';
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '5.57';
+const APP_VERSION = '5.58';
 const BUILD_DATE = '2026-09-06';
 
 const $ = s => document.querySelector(s);
@@ -1219,6 +1218,11 @@ function hideUploadStatus() { uploadStatus.classList.remove('show'); }
           '  pendingRemote=' + (typeof pendingRemoteNote !== 'undefined' && pendingRemoteNote ? 1 : 0) +
           '  localVer=' + (typeof localVer !== 'undefined' ? localVer : '?'));
         const ci = window.__remCacheInfo;
+        // v5.58：盐状态——serverSalt 空曾致联网保存冲掉服务端盐（正确口令恒定解密失败的根因）
+        let cacheSaltOk = false;
+        try { const cc = cacheGet(); cacheSaltOk = !!(cc && cc.salt); } catch (e) {}
+        L.push('salt=' + (typeof serverSalt !== 'undefined' && serverSalt ? 'ok' : 'NONE') +
+          '  cacheSalt=' + (cacheSaltOk ? 'ok' : 'none'));
         L.push('mainDocCache=' + (ci ? (ci.exists ? ci.size + 'B' : 'none') : '?') +
           '  intercept=' + (ci ? ci.intercept : '?') + '  fetchFail=' + (ci ? ci.fetchFail : '?') +
           '  cacheHit=' + (ci ? ci.cacheHit : '?') + '  assetHit=' + (ci ? ci.assetHit : '?') +
@@ -1932,6 +1936,7 @@ async function unlock(pass) {
           const key = await deriveKey(pass, b64ToBuf(c.salt));
           await decryptText(c.ct, c.iv, key); // 口令校验：不匹配此处抛出
           cryptoKey = key;
+          serverSalt = b64ToBuf(c.salt); // v5.58：离线解锁路径也落地 serverSalt——此前留 null，联网保存时空盐曾冲掉服务端盐（正确口令恒定解密失败的根因）
           try { localStorage.setItem(KEY_STORE, bufToB64(await crypto.subtle.exportKey('raw', key))); } catch (e2) {}
           const ok = await loadCachedBody(key);
           if (ok) {
@@ -1951,9 +1956,27 @@ async function unlock(pass) {
   try { key = await deriveKey(pass, serverSalt); } catch (e) { err.textContent = '派生密钥失败'; return; }
   if (note.ct) {
     try { await decryptText(note.ct, note.iv, key); }
-    catch (e) { await reportFail(); return; }
+    catch (e) {
+      // v5.58 自愈：服务端盐曾被冲成空串（v5.54 离线解锁路径不设 serverSalt + 服务端无条件覆写），
+      // 正确口令会恒定「解密失败」。本地缓存盐与口令若能同时解开缓存与服务端正文，
+      // 即证明原盐仍在缓存里 → 用缓存盐解锁并回写盐，救回笔记；两步都不过才计失败。
+      const c = cacheGet();
+      let healed = false;
+      if (c && c.salt) {
+        try {
+          const k2 = await deriveKey(pass, b64ToBuf(c.salt));
+          if (c.ct) await decryptText(c.ct, c.iv, k2); // 缓存校验：证明口令+缓存盐自洽
+          await decryptText(note.ct, note.iv, k2); // 服务端正文校验：证明服务端密文同盐
+          serverSalt = b64ToBuf(c.salt);
+          key = k2;
+          if (!note.salt) { try { await apiPut({ ct: note.ct, iv: note.iv, salt: c.salt }); } catch (e2) {} } // 回写盐
+          healed = true;
+        } catch (e2) { healed = false; }
+      }
+      if (!healed) { await reportFail(); return; }
+    }
   }
-  if (!note.salt) { try { await apiPut({ ct: '', iv: '', salt: bufToB64(serverSalt) }); } catch (e) {} }
+  if (!note.salt) { try { await apiPut({ ct: '', iv: '', salt: currentSaltB64() }); } catch (e) {} } // v5.58：空盐兜底
   await applyUnlocked(key, note);
 }
 
@@ -2703,7 +2726,7 @@ function clearDraft() { try { localStorage.removeItem(DRAFT_KEY); } catch (e) {}
 
 // ===== v5.49 离线正文缓存（仅供离线阅读，密文落盘，零知识不变）=====
 // 每次成功 apiGet / 保存都会把正文密文写进 localStorage（与服务端同一份 blob），
-// 离线打开时若有本地密钥却拉不到服务端，就从这份缓存解密展示，并浮出「离线·上次同步于 X」。
+// 离线打开时若有本地密钥却拉不到服务端，就从这份缓存解密展示，并浮出「离线·同步时间：X」。
 // 仅存密文：与服务器、与离线草稿同理，密钥不出浏览器，零知识属性不变。
 const CACHE_KEY = 'notesync_cache_' + noteId;
 function cachePut(obj) {
@@ -2714,6 +2737,14 @@ function cacheGet() {
   try { const s = localStorage.getItem(CACHE_KEY); return s ? JSON.parse(s) : null; } catch (e) { return null; }
 }
 function cacheClear() { try { localStorage.removeItem(CACHE_KEY); } catch (e) {} }
+// v5.58：PUT 用的盐——绝不返回空值把服务端盐冲掉（v5.54 离线解锁路径不设 serverSalt，
+// 联网保存时 bufToB64(null)='' 曾把盐写成空串，导致正确口令恒定解密失败）。
+// serverSalt 缺失时回退本地缓存盐；两者皆无才给空串（服务端 v5.58 起空值保留原盐）。
+function currentSaltB64() {
+  if (serverSalt) return bufToB64(serverSalt);
+  const c = cacheGet();
+  return (c && c.salt) || '';
+}
 function fmtSyncTime(ts) {
   try {
     const d = new Date(ts);
@@ -2778,11 +2809,11 @@ async function restoreDraftIfNeeded(key) {
   if (!html) { clearDraft(); return; }
   if (html === lastHtml) { clearDraft(); return; }
   // v5.49：任何与当前内容不符的草稿都不再静默覆盖，统一交给冲突条由用户决定
-  // v5.57：文案统一「本机 vs 服务器」口径，按钮=保留本机修改/使用服务器版本
+  // v5.58：文案统一「发现…与…不一致」句式（用户拍板）；按钮 保留本机/使用新版本
   const msg = document.getElementById('draftMsg');
   if (msg) msg.textContent = (d.baseV !== localVer)
-    ? '服务器上有更新的内容，本机还有未保存的修改。'
-    : '本机有一份离线草稿，与当前内容不一致。';
+    ? '发现另一台设备上的更新，与本机未保存的修改不一致'
+    : '发现本机有一份离线草稿，与当前内容不一致';
   showDraftBar();
 }
 draftRestoreBtn.addEventListener('click', async () => {
@@ -3166,7 +3197,7 @@ async function persistReminders() {
   } else {
     remCipher = null; remOut = null; // 显式 null = 服务端清除字段
   }
-  const r = await apiPut({ ct: body.ct, iv: body.iv, salt: bufToB64(serverSalt), rem: remOut });
+  const r = await apiPut({ ct: body.ct, iv: body.iv, salt: currentSaltB64(), rem: remOut }); // v5.58：空盐兜底
   localVer = r.v; lastHtml = html; clearDraft();
   cachePut({ ct: body.ct, iv: body.iv, v: r.v, salt: serverSalt ? bufToB64(serverSalt) : null, savedAt: Date.now() }); // v5.50：提醒保存也是正文保存，同步刷新离线缓存；v5.54 附盐
   lastSyncAt = Date.now(); hideOfflineBar(); // v5.50：离线转在线后改提醒，不能出现「条挂着、页脚已同步」
@@ -3574,11 +3605,56 @@ $('#menuDiag').addEventListener('click', () => {
   try { turningOn ? localStorage.setItem('notesync_diag', '1') : localStorage.removeItem('notesync_diag'); } catch (e) {}
   if (window.__toggleDiag) window.__toggleDiag();
 });
-// v5.57：APP 端收纳——日夜间切换/退出锁定移入菜单（顶栏图标在手机上太小）；
-// native-app 类驱动 CSS：顶栏隐藏这两枚 + 菜单项触控区加大（见样式区 v5.57 块）
-if (isNativeApp()) { try { document.body.classList.add('native-app'); } catch (e) {} }
+// v5.58：三端菜单/左下角布局统一——扫一扫、日夜间切换、退出锁定全平台可见（平台差异化机制退役），
+// 顶栏 themeBtn/lock 全平台移除（见样式区 #themeBtn, #lock{display:none}）
 $('#menuTheme').addEventListener('click', () => { menuMask.classList.add('hidden'); themeBtn.click(); });
 $('#menuLock').addEventListener('click', () => { menuMask.classList.add('hidden'); document.getElementById('lock').click(); });
+// v5.58：网页端扫码——BarcodeDetector（形状检测 API）+ getUserMedia 自写全屏扫描层。
+// Chrome/Edge/安卓 Chrome 支持；iOS Safari 无 BarcodeDetector → 明确提示「请用 APP」，不静默失败。
+async function scanWithWebCamera() {
+  if (typeof window.BarcodeDetector === 'undefined' || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    setStatus(false, '当前浏览器不支持扫码，请用 APP');
+    return null;
+  }
+  const overlay = document.createElement('div');
+  overlay.className = 'mask';
+  overlay.id = 'scanMask';
+  const box = document.createElement('div');
+  box.className = 'box';
+  box.setAttribute('style', 'text-align:center');
+  const h = document.createElement('h1'); h.className = 'qr-title'; h.textContent = '扫一扫';
+  const video = document.createElement('video');
+  video.setAttribute('playsinline', ''); video.muted = true; video.autoplay = true;
+  video.setAttribute('style', 'width:100%;max-height:46vh;background:#000;border-radius:12px;object-fit:cover');
+  const tip = document.createElement('p'); tip.textContent = '对准 PC 端「二维码配对」弹窗里的二维码';
+  const cancel = document.createElement('button'); cancel.id = 'scanCancel'; cancel.textContent = '取 消';
+  box.appendChild(h); box.appendChild(video); box.appendChild(tip); box.appendChild(cancel);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+  let stream = null, timer = null, done = false;
+  const cleanup = () => { done = true; if (timer) clearInterval(timer); if (stream) stream.getTracks().forEach(t => t.stop()); overlay.remove(); };
+  cancel.addEventListener('click', cleanup);
+  overlay.addEventListener('click', e => { if (e.target === overlay) cleanup(); });
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    video.srcObject = stream;
+    try { await video.play(); } catch (e) {}
+    const detector = new window.BarcodeDetector();
+    return await new Promise(resolve => {
+      timer = setInterval(async () => {
+        if (done) return;
+        try {
+          const codes = await detector.detect(video);
+          if (codes && codes[0] && codes[0].rawValue) { cleanup(); resolve(codes[0].rawValue); }
+        } catch (e) { /* 单帧失败忽略，继续下一帧 */ }
+      }, 350);
+    });
+  } catch (e) {
+    cleanup();
+    setStatus(false, (e && e.name === 'NotAllowedError') ? '相机权限被拒绝' : '扫码启动失败');
+    return null;
+  }
+}
 // v5.57：APP「扫一扫」——ML Kit 插件（@capacitor-mlkit/barcode-scanning）原生侧挂
 // Capacitor.Plugins.BarcodeScanner（与 RemBridge 同套路，单文件无打包器不走 import）。
 // 扫 PC「二维码配对」弹窗 → 解析出 /笔记名#k=密钥 → assign 后走既有配对接收端自动解锁。
@@ -3586,20 +3662,24 @@ $('#menuScan').addEventListener('click', async () => {
   menuMask.classList.add('hidden');
   const cap = window.Capacitor;
   const bs = (cap && cap.Plugins && cap.Plugins.BarcodeScanner) || null;
-  if (!bs || typeof bs.scan !== 'function') { setStatus(false, '扫一扫不可用'); return; }
-  try {
-    if (typeof bs.requestPermissions === 'function') {
-      try {
-        const p = await bs.requestPermissions();
-        if (p && p.camera === 'denied') { setStatus(false, '相机权限被拒绝'); return; }
-      } catch (e) {}
-    }
-    const ret = await bs.scan();
-    const raw = (ret && ret.barcodes && ret.barcodes[0] && (ret.barcodes[0].rawValue || ret.barcodes[0].displayValue)) || '';
-    const dest = parsePairLink(raw);
-    if (dest) location.assign(dest);
-    else if (raw) setStatus(false, '不是 NoteSync 配对二维码');
-  } catch (e) { /* 用户取消扫码/相机关闭等，静默 */ }
+  let raw = '';
+  if (bs && typeof bs.scan === 'function') {
+    try {
+      if (typeof bs.requestPermissions === 'function') {
+        try {
+          const p = await bs.requestPermissions();
+          if (p && p.camera === 'denied') { setStatus(false, '相机权限被拒绝'); return; }
+        } catch (e) {}
+      }
+      const ret = await bs.scan();
+      raw = (ret && ret.barcodes && ret.barcodes[0] && (ret.barcodes[0].rawValue || ret.barcodes[0].displayValue)) || '';
+    } catch (e) { return; /* 用户取消扫码/相机关闭等，静默 */ }
+  } else {
+    raw = (await scanWithWebCamera()) || ''; // v5.58：网页端走自写扫码层
+  }
+  const dest = parsePairLink(raw);
+  if (dest) location.assign(dest);
+  else if (raw) setStatus(false, '不是 NoteSync 配对二维码');
 });
 $('#menuFav').addEventListener('click', () => {
   if (!noteId) return;
@@ -3628,7 +3708,7 @@ async function saveLocal() {
       showRemoteBar();
       return;
     }
-    const r = await apiPut({ ct: enc.ct, iv: enc.iv, salt: bufToB64(serverSalt) });
+    const r = await apiPut({ ct: enc.ct, iv: enc.iv, salt: currentSaltB64() }); // v5.58：空盐兜底
     localVer = r.v; lastHtml = html;
     saveRetryCount = 0;
     clearDraft();
@@ -3902,7 +3982,7 @@ function isNativeApp() {
         err.textContent = '笔记名不合法（仅英文、数字、下划线、短横线）';
         return;
       }
-      // v5.49：本地有密钥但拉不到服务端 → 尝试用离线缓存密文解密展示，浮出「离线·上次同步于 X」
+      // v5.49：本地有密钥但拉不到服务端 → 尝试用离线缓存密文解密展示，浮出「离线·同步时间：X」
       const cached = await loadCachedBody(cryptoKey);
       if (cached) {
         loadingEl.classList.add('hidden');

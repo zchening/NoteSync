@@ -191,7 +191,11 @@ const server = http.createServer((req, res) => {
       // 否则任何一台设备的正文保存都会抹掉另一台设备刚设的提醒。
       let rem = cur.rem || null;
       if (obj.rem !== undefined) rem = obj.rem; // null 也是显式意图（取消提醒）
-      const next = { v: (cur.v || 0) + 1, ct: obj.ct, iv: obj.iv, salt: obj.salt, rem: rem, updatedAt: Date.now() };
+      // v5.58 空盐不覆写（数据级止血）：客户端 serverSalt 为空时 bufToB64(null) 产出空串，
+      // 此前服务端无条件采用 obj.salt → 笔记盐被冲成 '' → 下次解锁走随机盐推导 →
+      // 正确口令恒定「解密失败」。空值一律保留原盐，盐只由首次初始化写入。
+      const saltIn = (typeof obj.salt === 'string' && obj.salt) ? obj.salt : (cur.salt || '');
+      const next = { v: (cur.v || 0) + 1, ct: obj.ct, iv: obj.iv, salt: saltIn, rem: rem, updatedAt: Date.now() };
       writeNote(id, next);
       sseBroadcast(id, { v: next.v, updatedAt: next.updatedAt });
       return sendJSON(res, 200, { ok: true, v: next.v, updatedAt: next.updatedAt });
