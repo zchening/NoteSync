@@ -107,7 +107,7 @@ test('V544-1 到点卡片处于页面正中心，标题「提醒」与正文「�
 // ── ①+② 打开面板：v5.55 滚轮时代——桌面聚焦小时滚轮 + placeholder 精简 ──
 // v7.1.0：toggleRemPanel 在 focusRemTimeInput 后补调 focusRemItemInput（A 方案，用户拍板）——
 // 桌面端最终焦点落在事项输入框（滚轮 ↑↓ 仍可 Tab/点击到达，hhVal/mmVal 默认值不变）。
-test('V544-2 桌面端打开面板默认聚焦事项输入框（v7.1.0 A 方案），placeholder=「事项」', guard(async () => {
+test('V544-2 桌面端打开面板默认聚焦事项输入框（v7.1.0 A 方案），placeholder=「事项（最多20字）」', guard(async () => {
   const { ctx, page } = await openDesktopEditor();
   try {
     await page.click('#remBtn'); // 用户真实路径：点菜单栏闹钟图标
@@ -133,7 +133,7 @@ test('V544-2 桌面端打开面板默认聚焦事项输入框（v7.1.0 A 方案�
     assert.strictEqual(m.hhCount, 24, '小时滚轮必须 24 项（00-23）');
     assert.strictEqual(m.mmCount, 60, '分钟滚轮必须 60 项（00-59）');
     assert.ok(m.hhVal !== null && m.mmVal !== null, '默认 +5 分钟值仍应填好');
-    assert.strictEqual(m.placeholder, '事项', 'placeholder 必须精简为「事项」（括号补语已删）');
+    assert.strictEqual(m.placeholder, '事项（最多20字）', 'placeholder 必须带字数提示「事项（最多20字）」');
     assert.deepStrictEqual(page.__errors, [], '不应有页面 JS 错误');
   } finally { await ctx.close(); }
 }));

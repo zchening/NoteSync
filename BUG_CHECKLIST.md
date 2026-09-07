@@ -1412,6 +1412,16 @@
 | v5.56 | Q1-Q6（合并吞噬修冲突条 + 自动解锁补提醒恢复 + poll 同步 note.rem + 离线三级兜底+cacheInfo + 版本号双 bump/CI 注入 + APP 诊断入口，unit v556.test.js F1-F8 固化） |
 | v5.54 | P1-P5（过期补弹删+REM_DONE 退役纯时间过滤 + RemReceiver 60s 迟到容差 + 离线口令解本地缓存回退 + rem-notify-click JS 监听 + 页脚菜单收藏体系） |
 | v5.53 | O1-O5（删 captureInput 修 IME 组字链 + editor isComposing 旁路零 DOM 手术 + 首页 250ms 轮询兜底 + windowOptOutEdgeToEdgeEnforcement 退出 edge-to-edge + 返回键 OnBackPressedCallback 接 WebView 历史 + webContentsDebuggingEnabled 排障） |
+| v7.2.1 | 提醒面板事项框 placeholder 加字数提示「事项（最多20字）」（用户要求，1 行文案改动+7 测试文件断言同步） |
+| v7.2.0 | MCP 四工具（search/export/import/remove+replace_html）；四症状根修：PUT 带 baseV 409 挂起冲突条、poll 三级分类、relocate 禁跨块+打字推迟、全角归一+hover 选时；relTime 事项区 U+3000 防护修复 |
+| v7.1.1 | MCP note_image 直传 Cloudinary + note_remind 四 op + decryptText <16 对齐 + normDecorHtml 保留 img src |
+| v7.1.0 | 相对时间设提醒三段式（MCP parseAt 同表）+ isDecorativelyEqual 冲突误报根修 + 提醒 UI 四修 |
+| v7.0.1 | 菜单一屏放得下：menu-item flex + 按钮/图标/主视图限高三修 |
+| v7.0.0 | MCP 服务接入大版本（stdio 四工具）+ 关于弹窗扉页式重排 |
+| v6.3 | PC 扫码 CSP 'self' + 提醒上限/过期拦截 + 通知跳错笔记 + 历史迁移端点 + MCP 服务上线 |
+| v6.2 | 口令弹窗 X 融合标题行（.box button:not(.box-x) 根修）+ 菜单滚动瘦身 + menuClose 退役 |
+| v6.1 | 九条需求+十项优化：图标 B 参数重绘、口令弹窗 X、关于弹窗+诊断彩蛋、历史版本单行、扫码文案分流 |
+| v6.0 | 十连修：冲突误报根治 isDecorativelyEqual 前身、改口令 migrateHistoryKeys、历史版本快照环、跨笔记提醒、jsQR 兜底 |
 | v5.52 | N1-N10（APK 改 server.url 直连 + 砍热更新 + 原生三 P0：通知权限/requestCode 截断/同步落盘 + setAlarmClock + BootReceiver 补齐 + 断网兜底页 + 冷启事件补发 + 服务端 XFF/fail/SSE） |
 | v4.3 | A1, A2, A3 |
 | v4.3.1 | A4 |

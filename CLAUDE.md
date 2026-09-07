@@ -26,10 +26,10 @@ node tests/e2e/_probe_<name>.js             # 各专项回归探针（退出码 
 
 ## 测试与发布纪律
 
-- 改完必须全量回归：单元 + E2E + 相关探针全绿才算完成；大版本上线前派独立子代理做盲测验证（v5.19 起惯例）
-- 发布四件套：`index.html` 的 `APP_VERSION`/`BUILD_DATE` → README 更新历史（顶部插一行「版本/日期/摘要」三列表格 + **一个** `<details>` 折叠块内含全部版本 bullet 列表）→ BUG_CHECKLIST 对应条目/版本表 → git tag（纯版本号 `vN`）
-- **必须推送 GitHub**：提交后 `git push origin main && git push origin vN`（分支 + tag 都要推，否则 GitHub 上的 README/代码滞后——v5.19/v5.20 曾漏推，用户反馈"GitHub 怎么没更新"）。v5.51 起 push tag `v*` 会触发 GitHub Actions 云构建 release APK（`.github/workflows/build-apk.yml`，4 个 ANDROID_KEYSTORE* Secrets 必须在位）
-- 部署只走 `D:/Users/zchen/Documents/WorkBuddyProject/NoteSync/deploy_gen.py` + `deploy_target_*.json`（清单不含凭据，密码读 `C:\Temp\new_server_pwd.txt`）。验证走公网域名 `note.xuyinji.com.cn` / `biji.xuyinji.com.cn`（均 Caddy 反代同后端、Let's Encrypt 自动证书、DNSPod 生效；直连裸 IP 无 Host 匹配会被 302 拦截，故不走裸 IP）或 localhost
+- 改完必须全量回归：单元 + E2E + 相关探针全绿才算完成；**发版前四层测试闸（2026-09-07 用户硬规）**：A 单元全套 / B 模块定向 / C 全链路 e2e+新增场景 / D 逐条功能核对，多个子代理独立跑、各自出报告，全绿才准 commit/tag；任一红则修复后该层与下游重跑（撞 429 可降级为主线程直跑全套，不阻塞发版）
+- 发布四件套：三 bump（`index.html` 的 `APP_VERSION` 三段式 + `android/app/build.gradle` 的 versionCode=去点/versionName + `tools/notesync-mcp-server.js` 的 serverInfo）→ README 更新历史（顶部插一行 `| vX.Y.Z | 日期 | 摘要 |`，摘要 ≤40 汉字）+ BUG_CHECKLIST 版本速查表 + MCP 工具表/边界表 → annotated tag `vX.Y.Z`（**必须三段式**，CI 从 tag 注入 versionName；独立建 tag + `git tag -l` 核实，绝不与 push 链式）
+- **必须推送 GitHub**：提交后 push main + push tag（三通道不稳交替重试，以 `git ls-remote` 为准；漏推会让 GitHub 滞后——v5.19/v5.20 曾犯）。push tag 触发 GitHub Actions 云构建 release APK（`.github/workflows/build-apk.yml`，4 个 ANDROID_KEYSTORE* Secrets 必须在位）
+- 部署只走 `D:/Users/zchen/Documents/WorkBuddyProject/NoteSync/deploy_gen.py` + `deploy_target_*.json`（**spec 必须带 src_dir**；清单不含凭据，密码读 `C:/Temp/new_server_pwd.txt`；常传 index.html + tools/notesync-mcp-server.js）。验证走公网域名 `note.xuyinji.com.cn` / `biji.xuyinji.com.cn`（均 Caddy 反代同后端；直连裸 IP 无 Host 匹配会被 302 拦截，故不走裸 IP）或 localhost；大文件传后必须二次实抓复验
 
 ## 深入文档
 

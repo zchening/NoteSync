@@ -491,8 +491,8 @@ const NOTE_LAST_KEY = 'notesync_last_note';
 const NOTE_JUMPED_KEY = 'notesync_jumped';
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '7.2.0';
-const BUILD_DATE = '2026-09-07';
+const APP_VERSION = '7.2.1';
+const BUILD_DATE = '2026-09-08';
 
 const $ = s => document.querySelector(s);
 const editor = $('#editor'), mask = $('#mask'), pw = $('#pw'), err = $('#err');
@@ -3894,7 +3894,7 @@ function renderRemPanel() {
   const item = document.createElement('input');
   item.type = 'text';
   item.className = 'rem-item';
-  item.placeholder = '事项'; // v5.44：placeholder 精简，去掉括号补语
+  item.placeholder = '事项（最多20字）'; // v5.44 精简为裸「事项」后，按用户要求在暗文里直接提示字数上限
   item.maxLength = 20;
   item.setAttribute('aria-label', '提醒事项');
   const ok = document.createElement('button');

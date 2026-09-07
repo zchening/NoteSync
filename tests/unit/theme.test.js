@@ -349,7 +349,7 @@ test('v5.44：到点卡片必须居中且文字居中（remRise 专用入场）�
   assert.ok(/@keyframes remRise\{from\{[^}]*translate\(-50%,-50%\)[^}]*\}to\{[^}]*translate\(-50%,-50%\)/.test(SRC), 'remRise 的 from/to 两帧都必须保留 translate(-50%,-50%) 居中偏移');
   assert.ok(/#remCard\{[^}]*text-align:center/.test(SRC), '到点卡片标题「提醒」与正文「时间 · 事项」必须居中（用户反复要求）');
   assert.ok(!/#remCard\{[^}]*animation:rise /.test(SRC), '#remCard 不得再挂通用 rise 动画');
-  assert.ok(/item\.placeholder = '事项'/.test(SRC), '事项框 placeholder 必须精简为「事项」（去掉括号补语）');
+  assert.ok(/item\.placeholder = '事项（最多20字）'/.test(SRC), '事项框 placeholder 必须带字数提示「事项（最多20字）」');
   assert.ok((SRC.match(/new AC\(\)/g) || []).length === 1, 'AudioContext 只允许在解锁函数里创建一次（响铃时复用全局 ctx，不得再新建 suspended 实例）');
   assert.ok(/createBuffer\(1,\s*1,\s*22050\)/.test(SRC), '音频解锁必须播放静音 buffer（iOS/国产内核手势解锁必需）');
   assert.ok(/\['pointerdown',\s*'touchend',\s*'keydown'\]\.forEach/.test(SRC), '解锁必须挂在首次手势事件（pointerdown/touchend/keydown）上');
