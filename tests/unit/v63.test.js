@@ -79,13 +79,19 @@ test('V63-7 MainActivity 冷启动通知点击直达笔记 URL', () => {
 });
 
 // ── #8 关于弹窗 ──
-test('V63-8 关于弹窗：标题去撇号 + 版本两行对齐结构', () => {
+test('V63-8 关于弹窗：标题去撇号 + 版本两行对齐结构（v7.0 重排后仍守住）', () => {
   const src = readSrc();
-  assert.ok(src.includes('id="aboutTitle">关于 Note Sync</h1>'), '标题应为「关于 Note Sync」');
+  assert.ok(src.includes('id="aboutTitle">关于NoteSync</h1>'), '标题应为「关于NoteSync」（用户拍板文案）');
   assert.ok(!src.includes("关于Note'Sync"), '旧撇号标题必须全部退役（含注释）');
   assert.ok(src.includes('id="aboutAppRow"'), 'App 版本行应整行显隐');
-  assert.ok(src.includes("$('#aboutVer').textContent = 'v' + APP_VERSION;"), '版本值区只放 vX.Y');
-  assert.ok(/#aboutAuthor\{margin-top:2px;padding-top:12px;border-top:1px solid var\(--line\)\}/.test(src), '作者行应独立分区');
+  assert.ok(src.includes("$('#aboutVer').textContent = 'Version ' + APP_VERSION;"), '版本值应为三段式 Version X.Y.Z');
+  assert.ok(src.includes('id="aboutAuthorName">@zchening</span>'), '作者行应为「@zchening」（用户拍板文案）');
+  assert.ok(src.includes('#aboutTitle{font-family:var(--serif);font-size:18px;font-weight:600;letter-spacing:1px}'), '标题应小号低字距衬线（v7.0 用户反馈）');
+  assert.ok(src.includes("#aboutTitle::after{content:'';display:block;width:52px;height:1px"), '金线应细长（52x1，用户反馈）');
+  assert.ok(src.includes('.about-row{display:flex;justify-content:center;align-items:baseline;gap:10px;line-height:2;font-size:12.5px}'), '两行信息应作为整体与标题居中（用户反馈）');
+  assert.ok(src.includes('.about-v{width:110px;text-align:left;'), '值列应定宽保证行间左右缘整齐（用户反馈）');
+  assert.ok(src.includes('#aboutAuthor{display:flex;justify-content:center;align-items:baseline;gap:10px;margin:6px auto 0}'), '作者行应与标题居中对齐（用户反馈）');
+  assert.ok(src.includes('#aboutAuthorName{width:110px;text-align:left;font-family:var(--serif);color:var(--accent);font-weight:400;font-size:14px'), '作者应金色衬线不加粗（用户反馈）');
 });
 
 // ── #9 菜单手势兜底 ──

@@ -124,11 +124,15 @@
      用 text-decoration 而非 border/背景，主题切换不反色；只作用于 s.rem-done，不动用户手打的 <s> */
   #editor s.rem-done{text-decoration:line-through;text-decoration-thickness:1.5px;opacity:.62}
   /* v6.3：关于弹窗排版——版本为对齐的两行（k/v 两列），作者行分隔线分区、长文本不溢出 */
-  #aboutVerBlock{margin:12px auto 14px;display:inline-block;min-width:172px}
-  .about-row{display:flex;justify-content:space-between;align-items:baseline;gap:16px;line-height:2;font-size:14px}
-  .about-k{color:var(--muted)}
-  .about-v{color:var(--fg);font-variant-numeric:tabular-nums;word-break:break-all;text-align:right}
-  #aboutAuthor{margin-top:2px;padding-top:12px;border-top:1px solid var(--line)}
+  /* v7.0：关于弹窗（用户拍板文案+五轮反馈收敛）——扉页式：小号衬线标题+细长金线；两行信息作为整体与标题居中（定宽值列保证行间左右缘整齐）；作者金色衬线不加粗 */
+  #aboutTitle{font-family:var(--serif);font-size:18px;font-weight:600;letter-spacing:1px}
+  #aboutTitle::after{content:'';display:block;width:52px;height:1px;background:var(--accent);margin:11px auto 0;opacity:.8}
+  #aboutVerBlock{margin:12px auto 0}
+  .about-row{display:flex;justify-content:center;align-items:baseline;gap:10px;line-height:2;font-size:12.5px}
+  .about-k{color:var(--muted);font-size:11.5px;letter-spacing:1px}
+  .about-v{width:110px;text-align:left;color:var(--fg);font-variant-numeric:tabular-nums;word-break:break-all;font-weight:600}
+  #aboutAuthor{display:flex;justify-content:center;align-items:baseline;gap:10px;margin:6px auto 0}
+  #aboutAuthorName{width:110px;text-align:left;font-family:var(--serif);color:var(--accent);font-weight:400;font-size:14px;letter-spacing:.5px}
   /* v5.40：提醒面板升级为扫码配对同款 .mask+.box 模态（复用 .box 输入框/主按钮样式与深色覆盖保护）；
      设置行（时间/事项/添加提醒）永远首行，已设条目列表排后；chip 与模态互斥（遮罩挡正文） */
   #remBoxForm{display:flex;flex-direction:column;gap:12px;margin:2px 0 18px}
@@ -426,13 +430,13 @@
 
 <div class="mask hidden" id="aboutMask">
   <div class="box qr-box">
-    <h1 class="qr-title" id="aboutTitle">关于 Note Sync</h1>
-    <!-- v6.3：版本区独立成块、两行同层级对齐（此前 App 行靠负 margin 挤在一起，标题还带个撇号） -->
+    <h1 class="qr-title" id="aboutTitle">关于NoteSync</h1>
+    <!-- v7.0：关于弹窗重排（用户拍板）——标题/版本卡/作者三段式；版本值统一「Version X.Y.Z」三段式 -->
     <div id="aboutVerBlock">
       <div class="about-row"><span class="about-k">网页</span><span class="about-v" id="aboutVer"></span></div>
       <div class="about-row hidden" id="aboutAppRow"><span class="about-k">App</span><span class="about-v" id="aboutAppVer"></span></div>
     </div>
-    <div id="aboutAuthor"><span class="about-k">产品作者</span><span class="about-v" id="aboutAuthorName">zchening</span></div>
+    <div id="aboutAuthor"><span class="about-k">作者</span><span class="about-v" id="aboutAuthorName">@zchening</span></div>
   </div>
 </div>
 
@@ -476,7 +480,7 @@ const NOTE_LAST_KEY = 'notesync_last_note';
 const NOTE_JUMPED_KEY = 'notesync_jumped';
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '6.3';
+const APP_VERSION = '7.0.0';
 const BUILD_DATE = '2026-09-07';
 
 const $ = s => document.querySelector(s);
@@ -3878,8 +3882,8 @@ $('#menuHome').addEventListener('click', () => { menuMask.classList.add('hidden'
 const aboutMask = $('#aboutMask'), diagMask = $('#diagMask');
 $('#menuAbout').addEventListener('click', async () => {
   menuMask.classList.add('hidden');
-  // v6.3：前缀「网页/APP」交给左侧 .about-k 列，值区只放 vX.Y，两行严格同层级对齐
-  $('#aboutVer').textContent = 'v' + APP_VERSION;
+  // v7.0：版本值统一三段式「Version X.Y.Z」（用户拍板文案）；网页/App 两行同层级对齐不变
+  $('#aboutVer').textContent = 'Version ' + APP_VERSION;
   const av = $('#aboutAppVer'), avRow = $('#aboutAppRow');
   avRow.classList.add('hidden'); av.textContent = '';
   if (isNativeApp()) {
@@ -3890,7 +3894,7 @@ $('#menuAbout').addEventListener('click', async () => {
       if (rb && typeof rb.getVersion === 'function') {
         const ret = await rb.getVersion();
         const nv = ret && ret.nativeVersion;
-        if (nv) { av.textContent = 'v' + nv; avRow.classList.remove('hidden'); }
+        if (nv) { av.textContent = 'Version ' + nv; avRow.classList.remove('hidden'); }
       }
     } catch (e) {}
   }

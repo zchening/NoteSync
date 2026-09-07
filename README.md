@@ -1,32 +1,34 @@
 # NoteSync
 
-> 一个极简的端到端加密便签同步工具。多个设备，同一段文字和图片，几秒自动同步。
+> 只有你能看的加密便签：多设备几秒自动同步，服务器只存密文，连开发者都看不到内容。
 
 ![端到端加密](https://img.shields.io/badge/加密-端到端-blue)
 ![零依赖](https://img.shields.io/badge/后端-零依赖-green)
 ![自托管](https://img.shields.io/badge/部署-自托管-orange)
-![Caddy + DNSPod](https://img.shields.io/badge/HTTPS-Caddy%20%2B%20DNSPod-success)
+![HTTPS](https://img.shields.io/badge/HTTPS-Caddy-success)
 ![夜间模式](https://img.shields.io/badge/主题-深色%2F浅色-purple)
 
 ---
 
-# 📖 第一部分：使用指南
-
-> 普通用户看这一部分就够了。
-
 ## 这是什么
 
-我做了一个这样的小工具，用于多个设备自动同步文本和图片。
+一个极简的端到端加密便签同步工具。电脑、手机打开同一个网址、输同一个口令，之后随便打字、贴图，几秒自动同步。
 
-比如你想要在电脑和手机上同步一段文字，或者一张截图。
+三个特点：
 
-## 快速开始
+1. **加密**：口令派生密钥、在浏览器里加解密，服务器上只有一堆乱码
+2. **省事**：扫码配对新设备免输口令，可以像 App 一样装到手机桌面
+3. **能干正事**：提醒、历史版本、AI 助手直接帮你读写笔记
 
-**第 1 步**：在 PC 浏览器输入 `https://note.xuyinji.com.cn/xxx`（记为**网址 A**），其中 `xxx` 是任意英文、数字或两者组合。首次访问需要输入一个口令（记为**口令 a**，比如 `12345` 或 `zhangsan`）。
+---
 
-**第 2 步**：在手机浏览器输入**网址 A**，同理手机首次访问也要输入**口令 a**。（也可以不输网址和口令：在已解锁的电脑上用「扫码配对」生成二维码，手机扫一下直接打开，见下文[扫码配对](#扫码配对添加新设备免输口令)。）
+## 快速开始（3 步）
 
-**第 3 步**：然后两个设备间输入任何文字或 emoji 表情，自动在几秒内同步。
+**第 1 步**：电脑浏览器打开 `https://note.xuyinji.com.cn/xxx`，`xxx` 是任意英文/数字（这是你的**笔记名**），首次访问设一个**口令**。
+
+**第 2 步**：手机打开同一个网址，输同一个口令。（也可以不输：在已解锁的设备上点右上角「二维码」图标，新设备扫一下直接打开，见[扫码配对](#扫码配对添加新设备免输口令)。）
+
+**第 3 步**：两边随便输入文字或图片，几秒自动同步。
 
 ```mermaid
 sequenceDiagram
@@ -41,248 +43,186 @@ sequenceDiagram
     Note over PC,Phone: ⑥ 之后两边随便打字，几秒自动同步
 ```
 
-## 使用场景
+---
 
-### 场景一：临时分享
+## 核心功能
 
-如果你要在自己设备和别人的设备同步文件，可以随便输入个 URL，比如 `https://note.xuyinji.com.cn/tmp`，然后随便输个口令比如 `111`，用完以后不再使用就行了。
+### 🔒 端到端加密（零知识）
 
-```mermaid
-flowchart LR
-    A["💻 你<br/>打开网址 /tmp<br/>输口令 111"] --> B["☁️ 网站"]
-    C["📱 朋友<br/>打开同一网址<br/>输同一口令"] --> B
-    A -->|"你输入文字"| B
-    B -.->|"几秒后<br/>朋友手机出现"| C
-    style A fill:#bbf,stroke:#333
-    style C fill:#cfc,stroke:#333
-```
+口令从不离开你的浏览器。服务器只存密文，管理员也解不开。输入的每一句话、每一条提醒、每一份历史版本，都是加密后才上传的。
 
-### 场景二：常用笔记
+### 📱 多设备实时同步
 
-可以设定一个 URL 作为常用的网址，比如 `https://note.xuyinji.com.cn/zhangsan`。然后在 PC 浏览器上保存这个网址，同时在手机浏览器把这个网址保存到手机桌面（看上去像 app 图标一样），以后就可以随时在自己的多个设备之间同步内容。
+编辑后自动保存，其他设备亚秒级收到更新（SSE 推送 + 断线自动重连 + 轮询兜底）。临时分享：随便起个网址、随便定个口令，用完即弃；常用笔记：电脑存书签、手机加到桌面。每个笔记一个口令，互不干扰。
 
-```mermaid
-flowchart TD
-    subgraph 一次设置
-        A["💻 电脑<br/>收藏书签"] --> D["🔖 网址 /zhangsan"]
-        B["📱 手机<br/>添加到桌面<br/>（像 app 图标）"] --> D
-    end
-    subgraph 以后随时用
-        D --> E["💻 点书签打开"]
-        D --> F["📱 点图标打开"]
-        E <-->|"打字自动同步"| F
-    end
-    style D fill:#bbf,stroke:#333
-    style E fill:#cfc,stroke:#333
-    style F fill:#cfc,stroke:#333
-```
+### 📷 扫码配对（添加新设备，免输口令）
 
-### 多笔记互不干扰
-
-每个 URL 对应一个唯一的口令，互相完全隔离。你可以按用途创建多个笔记：
-
-```mermaid
-flowchart TD
-    A["📖 /zhangsan<br/>你的日记本<br/>口令：随便定一个长的"]
-    B["📋 /tmp<br/>临时记事本<br/>口令：111"]
-    C["📝 /meeting<br/>会议记录本<br/>口令：8888"]
-    A --> D["各管各的<br/>互不干扰"]
-    B --> D
-    C --> D
-    style A fill:#cfc,stroke:#333
-    style B fill:#fcc,stroke:#333
-    style C fill:#bbf,stroke:#333
-    style D fill:#ffd,stroke:#333
-```
-
-> 目前没做口令修改功能。要换口令就新建一个 URL，旧的不管就行。
-
-### 扫码配对（添加新设备，免输口令）
-
-给笔记添加新设备时，不用敲网址、不用输口令：
-
-1. 在已解锁的设备上，点右上角的「二维码」图标，二维码直接显示；
+1. 在已解锁的设备上点右上角「二维码」图标；
 2. 新设备扫这个码，笔记直接打开；
-3. 之后这台设备会记住密钥，像其它设备一样自动解锁、自动同步。
+3. 新设备记住密钥，以后自动解锁、自动同步。
 
-> **注意**：二维码里带着解锁密钥，**等同于口令**——只在自己的设备之间扫，不要截图发给别人。二维码显示 60 秒后自动隐藏，需要时再点一次图标即可。密钥放在网址 `#` 之后的部分，浏览器从不把它发给服务器，服务器依然只能看到密文。
+> **注意**：二维码里带着解锁密钥，**等同于口令**——只在自己的设备之间扫。二维码 60 秒自动隐藏，密钥放在网址 `#` 之后，浏览器从不把它发给服务器。
+
+### ⏰ 便签提醒
+
+- **正文里直接写时间就能设**：输入 `9-10 9:00` 或 `2026-9-10 09:00`，光标点上去弹出浮条，点「添加提醒」即可
+- 也可以点工具栏闹钟图标打开面板：选日期时间 + 事项，一次设多条（最多 10 条未来提醒）
+- 到点弹系统通知 + 页面卡片 + 响铃；页面关了也不要紧，下次打开会补记
+- **已到点的提醒，正文里的时间+事项会自动画上删除线**（所有设备同步显示），一眼看出哪些办完了
+- 提醒内容和正文同一把密钥加密，服务器不知道你设了什么
+
+### 🕘 历史版本
+
+- 每次保存自动留快照（60 秒节流），也可以在菜单里手动「新增历史版本」打点
+- 任意版本可**预览**、可**恢复**（恢复 = 生成新版本，绝不丢数据）
+- **修改口令时，所有历史版本自动换新钥重加密**，不会出现改完口令旧版本打不开的情况
+
+### 🔑 修改口令
+
+菜单 →「修改口令」→ 输新口令即可。正文、提醒、历史版本全部自动用新钥重加密。其他设备下次打开时输入新口令解锁。
+
+### 🧰 日常好功能
+
+- **图片同步**：Ctrl+V 粘贴 / 拖拽 / 按钮上传，压缩后直传图床，文字仍端到端加密
+- **链接识别**：网址、手机号自动变可点击链接
+- **删除线**：选中文字点工具栏按钮，支持跨行、部分取消
+- **夜间模式**：按时间自动切换（07:00/19:00），也可手动切
+- **离线草稿**：断网放心写，密文草稿存在本地，恢复联网自动补传；和别的设备冲突时让你二选一，绝不自动覆盖
+- **复制导出**：一键复制图文到 Notion/Word/备忘录；或导出成图片发聊天窗口
+- **PWA 安装**：手机「添加到主屏幕」像 App 一样用，支持离线打开
+
+---
+
+## 🤖 用 AI 管理你的笔记（MCP）★ v6.3 新增
+
+给 WorkBuddy（或任何支持 MCP 的 AI 助手）接上 NoteSync 后，你可以直接说人话：
+
+> 「看一下我的笔记全文」「在笔记末尾加一行：明天交周报」「帮我在笔记里设个明天早上 9 点的提醒」
+
+AI 通过 4 个工具操作你的笔记：
+
+| 工具 | 能干什么 |
+|------|---------|
+| `note_locate` | 确认笔记存在、能否用口令解开 |
+| `note_read` | 读笔记全文：纯文本 `text` / 原始 `html` / 截图 `image` |
+| `note_edit` | 改内容：末尾追加 `append` / 按文字定位插入 `insert` / 删除 `delete` |
+| `note_remind` | 设提醒（支持未来时间；过去时间会被拒绝） |
+
+<details>
+<summary><b>方式一：本机接入（点开查看 4 步）</b></summary>
+
+> 前提：这台电脑装了 WorkBuddy（自带 Node.js，**不用另装任何东西**）。
+
+**第 1 步**：拿到 MCP 服务器文件 `notesync-mcp-server.js`。两种方式任选：
+
+- 从仓库拿：`tools/notesync-mcp-server.js`（clone 或下载仓库）
+- 从线上拿：浏览器打开 `https://biji.xuyinji.com.cn/mcp/notesync-mcp-server.js` 另存到本地，比如存到 `D:\mcp\notesync-mcp-server.js`
+
+**第 2 步**：编辑 WorkBuddy 的 MCP 配置文件（注意路径，**不是** `.mcp.json`）：
+
+```
+C:\Users\<你的用户名>\.workbuddy\mcp.json
+```
+
+在 `mcpServers` 里加上 notesync 条目（已有其他条目就并列添加，别删别人的）：
+
+```json
+{
+  "mcpServers": {
+    "notesync": {
+      "command": "C:/Users/<你的用户名>/.workbuddy/binaries/node/versions/<版本号>/node.exe",
+      "args": ["D:/mcp/notesync-mcp-server.js"],
+      "env": {
+        "NOTESYNC_NOTE": "我的笔记名",
+        "NOTESYNC_PASSPHRASE": "这个笔记的口令"
+      }
+    }
+  }
+}
+```
+
+字段说明：
+
+| 字段 | 怎么填 |
+|------|--------|
+| `command` | 本机 node 的绝对路径。装了 WorkBuddy 的电脑在 `C:\Users\<用户名>\.workbuddy\binaries\node\versions\` 下有现成的；没装 WorkBuddy 就填系统 node 的路径 |
+| `args` | 第 1 步那个 js 文件的绝对路径（正斜杠写法） |
+| `NOTESYNC_NOTE` | 默认笔记名（网址里 `xxx` 那段）。**可以留空**，之后每次让 AI 操作时指定笔记名 |
+| `NOTESYNC_PASSPHRASE` | 这个笔记的口令。**只写在本机这个文件里**，不进聊天、不进 git |
+
+**第 3 步**：打开 WorkBuddy → 连接管理 → 右上角「自定义连接」入口 → 找到 `notesync` 点**「信任」**。（写完配置不会自动生效，必须点一次信任。）
+
+**第 4 步**：验证。对 WorkBuddy 说：「用 notesync 读一下我的笔记」。它调用 `note_locate` + `note_read`，能复述出你的笔记内容就成功了。
+
+**常见问题**：
+
+- **口令不对**：`note_locate` 会报 `readable:false`——检查 `NOTESYNC_PASSPHRASE` 是否是这个笔记的口令
+- **改了笔记口令**：回来改 `mcp.json` 里的口令，再重启一次会话（或重新点信任）
+- **想用 image 出图**：需要那台电脑能找到 Playwright（仓库 `tests/` 下装过就有）；找不到时 AI 会得到一个 HTML 文件兜底，不影响 text/html 两种读法
+- **多个笔记、口令不同**：在 `mcpServers` 里照样子多加几条，比如 `notesync-工作`、`notesync-私人`，各自填各自的口令
+
+</details>
+
+<details>
+<summary><b>方式二：换一台电脑接入（点开查看 3 步）</b></summary>
+
+> 前提：那台电脑装了 WorkBuddy（推荐，自带 Node）或任何 Node.js 18+。
+
+**第 1 步**：下载一键接入脚本。Windows PowerShell 里执行：
+
+```powershell
+curl.exe -O https://biji.xuyinji.com.cn/mcp/setup-notesync-mcp.js
+```
+
+macOS / Linux 用：
+
+```bash
+curl -O https://biji.xuyinji.com.cn/mcp/setup-notesync-mcp.js
+```
+
+> Windows 的 `curl` 常是 PowerShell 别名，**务必写 `curl.exe`**。
+
+**第 2 步**：运行脚本：
+
+```
+node setup-notesync-mcp.js
+```
+
+脚本会问你两个问题：
+
+1. **默认笔记名**（可留空，之后调用时再指定）
+2. **笔记口令**（必填）
+
+然后它自动完成：下载 MCP 服务器文件（脚本同目录没有就自动从站点拉）→ 备份你原有的 `mcp.json` → 把 notesync 条目合并进去（**不动你已有的其他连接配置**）→ command 自动填当前 node 的绝对路径。
+
+**第 3 步**：和方式一一样——WorkBuddy → 连接管理 → 自定义连接 → 给 `notesync` 点**「信任」**，然后说句话验证。
+
+**常见问题**：
+
+- **下载失败**（公司代理等）：手动下载两个文件放到同一目录再跑脚本——
+  - `https://biji.xuyinji.com.cn/mcp/setup-notesync-mcp.js`
+  - `https://biji.xuyinji.com.cn/mcp/notesync-mcp-server.js`
+- **重跑脚本**：会覆盖 notesync 条目（原配置有备份，文件名带时间戳），相当于重新配置
+- **想手动改**：脚本写的配置就是方式一那个 JSON，随时可以自己编辑
+
+</details>
+
+### 安全边界（重要）
+
+- 口令**只存在于本机** `mcp.json`（或你手动配的环境变量里），不进聊天记录、不进 git、不上传
+- AI 助手在本机派生密钥、本机加解密——**服务器依然只见密文**，零知识设计不因 MCP 改变
+- 线上公开下载的两个 js 文件**不含任何秘密**（只是工具代码），公开托管是安全的
+- 谁拿到你的口令谁就能解密笔记——`mcp.json` 不要截图、不要提交到任何仓库
+
+---
 
 ## 安全说明
 
-### 你的内容只有你能看
-
-口令是端到端加密的——服务器只存密文，加解密全在浏览器完成。所以虽然是我开发的，但我也没法知道你输入的内容。这就是"零知识"设计。
-
-简单说：**你输的口令和文字，从没离开过你的浏览器**。服务器上存的是一堆看不懂的乱码，连我也解不开。
-
-### 防爆破保护
-
-为防止有人拿到你的网址后暴力试口令，系统会自动锁定：
-
-- 同一个设备连续输错口令 **10 次**，这个网址会被锁住 **30 分钟**
-- 锁住期间谁也进不去（即使口令对了也不行）
-- 所以建议常用笔记用长一点的口令（比如一句话），临时分享用短口令无所谓
-
-### 图片同步
-
-除了文字，也支持图片同步。三种上传方式：
-
-- **粘贴**：Ctrl+V 粘贴截图，自动上传并显示
-- **拖拽**：把图片文件拖进编辑区
-- **按钮**：点上传按钮（细线 SVG 图标）选择图片
-
-图片上传后直接显示在文字中间，可以像文字一样删除、剪切、复制。图片不加密（明文存第三方图床），文字仍端到端加密。
-
-### 超链接与手机号
-
-笔记中的 `http://` 和 `https://` 开头的网址会自动变成可点击的金色链接，点击在新标签页打开。中国大陆手机号（1 开头 11 位）也会自动识别为可点击链接，移动端点击直接跳转拨号界面。无论是粘贴、手动输入还是其他设备同步来的内容，都会自动识别并转为链接。点击链接不会进入编辑模式。
-
-### 删除线
-
-选中文字后点击右上角删除线按钮（带横线的 T 图标），给选中文字添加删除线；再次选中已加删除线的文字点击按钮即可取消。支持跨行选中、部分取消（只取消选中部分的删除线，不影响同行其他文字）。
-
-### 夜间模式
-
-按北京时间自动切换：07:00 切换日间模式，19:00 切换夜间模式。每分钟检查一次，页面刷新后恢复自动模式。也可手动点太阳/月亮按钮切换，手动切换后本次会话不再自动切换。
-
-### 复制与导出
-
-- **复制到剪贴板**：复制全部内容（文字+图片），粘贴到 Notion / Word / 小米笔记 / iPhone 备忘录等支持富文本的应用时图文保留；粘贴到微信、飞书等纯文本输入框时只保留文字
-- **导出为图片**：将编辑区渲染为 PNG 图片并复制到剪贴板，可直接 Ctrl+V 粘贴到聊天窗口
-
-### 实时同步
-
-编辑后自动保存，其他设备通过 SSE（Server-Sent Events）亚秒级收到更新并自动加载。连接断开时自动重试 + SSE 自动重连 + 轮询兜底，确保各种网络环境下都能恢复同步。
-
-### 便签提醒
-
-给整条笔记设一个提醒时间，到点弹系统通知（或页面内提示）。工具栏闹钟按钮 → 选「1 小时后 / 今晚 8 点 / 明天上午 9 点」，或自定义时间；已设提醒可随时取消，按钮呈高亮状态。
-
-- **通知文案**默认取笔记首行（截 20 字），到点后弹系统通知，点击直达笔记
-- **页面关了怎么办**：到点时如果页面没开，下次打开笔记会自动补弹提示条（已过 N 分钟）——这是 100% 兜底；页面开着则准点弹。安卓装成 App 后后台送达更可靠；iOS 需先添加到主屏幕才支持通知
-- **隐私**：提醒内容与正文同一把密钥加密，服务器只存乱码，不知道你设了什么提醒、什么时候提醒
-- 通知权限在第一次设提醒时才申请；被拒绝也不影响使用（自动降级为打开笔记时的提示条）
-
-### PWA 支持
-
-手机浏览器打开后，可"添加到主屏幕"作为独立应用使用，全屏体验、自定义 SVG 图标、离线可打开缓存页面。浏览器标签页标题显示为 "NoteSync"。每个笔记的快捷方式会打开对应笔记（而非默认笔记），Chrome 和小米浏览器均支持。
-
-解锁后底部会弹出一次安装引导（Android/桌面点「安装」一键装；iOS 需在 Safari 分享菜单选「添加到主屏幕」），点 × 后不再提醒。
-
-### 离线草稿：断网也能放心写
-
-此前断网时虽然能打字，但页面一关、未同步的内容就丢了。现在每一次编辑在加密之后、上传之前，都会先把密文草稿存进浏览器本地存储（明文不落盘）：
-
-- **保存成功** → 草稿自动清除
-- **保存失败 / 中途关页 / 杀进程** → 草稿都在，下次打开笔记自动恢复，并立即补传
-- **另一台设备已经写了新版本**（检测到服务端版本比草稿新）→ 顶部弹出提示条让你选：「恢复我的修改」或「丢弃」，绝不自动覆盖任何一方的数据
-
+- **零知识**：加解密全在浏览器（PBKDF2 20 万次迭代派生密钥 + AES-256-GCM），服务器和管理员只见密文
+- **防爆破**：同一设备连续输错口令 10 次，该笔记锁 30 分钟（锁住期间对的口令也进不去）——常用笔记建议用长口令
+- **密文兜底**：提醒、草稿、历史版本全部随正文同钥加密；离线时密文草稿存本地，不落明文
 
 ---
-
----
-
-# 🔧 第二部分：技术细节
-
-> 开发者或想自己部署的人看这一部分。
-
-## 技术架构
-
-| 层 | 技术 | 说明 |
-|----|------|------|
-| 前端 | 原生 HTML/JS | contenteditable 编辑器，Web Crypto API |
-| 加密 | AES-256-GCM | 对称加密，IV 随机生成 |
-| 密钥派生 | PBKDF2 | 20 万次迭代，SHA-256 |
-| 图片存储 | Cloudinary | 浏览器直传，Unsigned Upload Preset |
-| 图片压缩 | Canvas API | 上传前压缩至 1920px，JPEG 85% |
-| 实时同步 | SSE (Server-Sent Events) | 服务端推送更新通知，亚秒级同步 |
-| 截图导出 | html2canvas | 编辑区渲染为 PNG，2x 分辨率 |
-| PWA | manifest.json + Service Worker | 可安装到主屏幕，离线可打开 |
-| 后端 | Node.js | 零依赖，单文件 `server.js` |
-| 存储 | JSON 文件 | 每笔记独立 `data/notes/{id}.json` |
-| 反代 | Caddy（HTTPS） | 按 Host 分流：xuyinji.com.cn/www→静态根，note→反代 8080；Let's Encrypt 自签 |
-| 隧道 | 无（DNSPod 直连） | 域名 DNSPod 解析到 124.221.92.225，Caddy 自签 HTTPS；已弃用 Cloudflare Tunnel |
-| 进程管理 | nssm | Windows 服务，开机自启 |
-
-```mermaid
-flowchart TD
-    Browser[浏览器] -->|HTTPS :443| Caddy[Caddy 反代+静态]
-    Caddy -->|Host=note| Node[NoteSync :8080]
-    Caddy -->|Host=xuyinji| Site[静态站 C:/Services/xuyinji]
-    Node -->|读写| Storage[(data/notes/*.json)]
-    Browser -->|加解密| Crypto[Web Crypto API]
-    style Browser fill:#bbf,stroke:#333
-    style Caddy fill:#cfc,stroke:#333
-    style Node fill:#fcc,stroke:#333
-    style Storage fill:#f9f,stroke:#333
-    style Crypto fill:#bbf,stroke:#333
-```
-
-### 加密流程
-
-```mermaid
-flowchart LR
-    A[口令] --> B[PBKDF2<br/>20 万次迭代]
-    B --> C[AES-256-GCM 密钥]
-    C --> D[加密明文]
-    D --> E[密文]
-    E --> F[服务器只存密文]
-    F --> G[其他设备拉取密文]
-    G --> H[浏览器解密]
-    H --> I[显示明文]
-    style A fill:#bbf,stroke:#333
-    style F fill:#f9f,stroke:#333,stroke-width:2px
-    style I fill:#cfc,stroke:#333
-```
-
-**关键点**：口令从不离开浏览器，服务器和管理员都看不到明文。
-
-### 图片同步方案
-
-图片采用第三方图床方案，**不经过你的服务器**，零流量消耗：
-
-```mermaid
-flowchart LR
-    A[浏览器] -->|压缩 1920px| B[Canvas]
-    B -->|直传| C[Cloudinary]
-    C -->|返回 URL| A
-    A -->|URL 存入加密文本| D[你的服务器]
-    D -->|密文| E[其他设备]
-    E -->|解密显示图片| F[从 Cloudinary 拉取]
-    style A fill:#bbf,stroke:#333
-    style C fill:#cfc,stroke:#333
-    style D fill:#fcc,stroke:#333
-    style F fill:#cfc,stroke:#333
-```
-
-| 设计决策 | 选择 | 原因 |
-|---------|------|------|
-| 图片存储 | Cloudinary | 免费额度足够个人用 |
-| 上传方式 | Unsigned Upload Preset | 无需暴露 API Secret |
-| 图片加密 | 不加密 | 能用 Cloudinary 变换，复杂度低 |
-| 服务器流量 | 零 | 浏览器直传 Cloudinary |
-| 压缩 | 1920px / JPEG 85% | 兼顾质量和体积 |
-| 编辑器 | contenteditable | 图片内嵌显示，可删除/剪切 |
-
-自部署需在 `index.html` 中替换 Cloudinary 配置（`CLOUD_NAME` 和 `UPLOAD_PRESET`），并在 Cloudinary 控制台创建 Unsigned Upload Preset。
-
-### API
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/note/:id` | 读取笔记密文 |
-| PUT | `/api/note/:id` | 写入笔记密文 |
-| POST | `/api/fail/:id` | 上报解密失败（用于限流） |
-| GET | `/healthz` | 健康检查 |
-| GET | `/*` | 返回前端页面（SPA 路由） |
-
-### 限流机制
-
-- 限流维度：IP + noteId 组合
-- 失败阈值：10 次
-- 计数窗口：10 分钟（窗口内无新失败则清零）
-- 锁定时长：30 分钟（锁定期间连正确口令也拒）
-- 存储方式：内存 Map，服务重启清零
 
 ## 自部署
 
@@ -292,40 +232,74 @@ flowchart LR
 bash install.sh
 ```
 
-脚本自动安装 Node.js、nginx、certbot，配置 HTTPS 和 systemd 服务。
+自动安装 Node.js、nginx、certbot，配置 HTTPS 和 systemd 服务。
 
 ### Windows（手动）
 
-> 当前生产架构（2026-08 起）：反代用 **Caddy**（非 nginx），域名走 **DNSPod** 直连（非 Cloudflare Tunnel），Caddy 自签 Let's Encrypt HTTPS。Cloudflare Tunnel / cloudflared 已弃用。
-
 1. 安装 [Node.js 20+](https://nodejs.org/)
-2. 部署 `server.js`、`index.html`、`bridge.html`（配对中转页）到目标目录（如 `C:/Services/NoteSync/`）
-3. 用 [nssm](https://nssm.cc/) 注册两个 Windows 服务：`NoteSync`（运行 `node server.js`，端口 8080）、`NoteSyncProxy`（运行 `caddy.exe`，读取 `Caddyfile` 做 HTTPS 反代/静态分流）
-4. `Caddyfile` 按 Host 分流：`xuyinji.com.cn`/`www` → 静态根 `C:/Services/xuyinji/`（v5.26 起含 `/note/*` → 302 `note.xuyinji.com.cn/*` 配对短链中转，规避小米相机对 note 子域二维码的网址安全拦截）；`note.xuyinji.com.cn` → `https://` 反代 `127.0.0.1:8080`（含 `/bridge.html` 静态路由，兼容 v5.23-v5.25 旧配对码）。Caddy 自动 Let's Encrypt 签 HTTPS
-5. DNSPod 加 A 记录 `xuyinji.com.cn`/`www`/`note` → 服务器 IP（DNS only，不开代理）
-6. 腾讯云安全组 + Windows 防火墙放通 80/443
-
-> **为什么不再用 Tunnel**：ICP 备案通过后，域名可合规直连国内服务器（DNSPod→124.221.92.225），Caddy 自签 HTTPS 满足 secure context（NoteSync 的 `crypto.subtle` 解锁前提）。Cloudflare 橙云会把域名解析到境外节点，触发接入商「解析指向境外」扫描→取消接入→ICP 作废，故必须灰云/直连。
+2. 部署 `server.js`、`index.html`、`bridge.html`、`tools/` 到目标目录（如 `C:/Services/NoteSync/`）
+3. 用 [nssm](https://nssm.cc/) 注册两个 Windows 服务：`NoteSync`（`node server.js`，端口 8080）、`NoteSyncProxy`（`caddy.exe run --config Caddyfile` 做 HTTPS 反代）
+4. `Caddyfile` 按 Host 分流，Caddy 自动 Let's Encrypt 签 HTTPS
+5. DNS 加 A 记录指向服务器，放通 80/443
 
 ### noteId 规则
 
-- 允许字符：`a-z` `A-Z` `0-9` `_` `-`
-- 长度：1-64 字符
-- 中文及其它字符被拒绝（前后端一致，v5.15 起；`_` `-` 于 v5.19 恢复）
-- 不符合规则的 URL 返回 400
+- 允许 `a-z` `A-Z` `0-9` `_` `-`，长度 1-64，中文被拒绝（前后端一致）
+
+---
+
+## 技术细节（给想深究的人）
+
+| 层 | 技术 | 说明 |
+|----|------|------|
+| 前端 | 原生 HTML/JS | contenteditable 编辑器，Web Crypto API |
+| 加密 | AES-256-GCM + PBKDF2(20 万次) | 对称加密，IV 随机 |
+| 实时同步 | SSE + 轮询兜底 | 亚秒级推送，断线自动重连 |
+| 图片 | Cloudinary 直传 | Canvas 压缩 1920px，服务器零流量 |
+| MCP | 零依赖 Node stdio | `tools/notesync-mcp-server.js`，JSON-RPC 2.0 |
+| 后端 | Node.js 零依赖单文件 | `server.js`，每笔记一个 JSON 文件 |
+| 反代 | Caddy | HTTPS + 静态分流；nssm 注册 Windows 服务 |
+
+```mermaid
+flowchart LR
+    A[口令] --> B[PBKDF2<br/>20 万次迭代]
+    B --> C[AES-256-GCM 密钥]
+    C --> D[浏览器加密]
+    D --> E[服务器只存密文]
+    E --> F[其他设备拉取解密]
+    style A fill:#bbf,stroke:#333
+    style E fill:#f9f,stroke:#333,stroke-width:2px
+    style F fill:#cfc,stroke:#333
+```
+
+### API
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET / PUT | `/api/note/:id` | 读写笔记密文（PUT 支持 `baseV` 乐观并发，冲突返回 409） |
+| GET / PUT | `/api/note/:id/history` | 历史快照列表 / 追加快照 |
+| PUT | `/api/note/:id/history/:ts` | 按 ts 覆写快照密文（改口令迁移用） |
+| POST | `/api/fail/:id` | 上报解密失败（用于限流） |
+| GET | `/mcp/notesync-mcp-server.js` 等 | MCP 工具公开下载 |
+| GET | `/healthz` | 健康检查 |
+| GET | `/*` | SPA 路由（返回前端页面） |
+
+---
 
 ## 限制
 
-- 每个笔记是单编辑区，不支持富文本格式（纯文字 + 图片 + 链接 + 删除线）
-- last-write-wins 合并策略，同时编辑可能覆盖（SSE 实时推送 + 版本号检测）
+- 纯文字 + 图片 + 链接 + 删除线，不支持标题/列表等富文本格式
+- last-write-wins 合并策略，多端同时编辑可能覆盖（有版本号检测 + 冲突提示条兜底）
 - 限流数据存内存，服务重启清零
-- 无口令修改功能（新建 URL 代替）
-- 无笔记列表页（知道 URL 才能访问）
+- 无笔记列表页（知道网址才能访问——这也是隐私特性）
+
+---
 
 ## 更新历史
 
 | 版本 | 日期 | 摘要 |
 |------|------|------|
+| v7.0.0 | 2026-09-07 | MCP服务接入大版本，关于弹窗重排 |
 | v6.3 | 2026-09-07 | 修PC扫码CSP、提醒上限与过期拦截、通知跳错笔记、历史迁移、MCP服务 |
 | v6.2 | 2026-09-07 | 口令弹窗X融入标题行，菜单可滚动并瘦身，菜单X退役 |
 | v6.1 | 2026-09-07 | 图标加粗重绘、关于弹窗+诊断彩蛋、历史版本单行可滚、菜单图标加大 |
