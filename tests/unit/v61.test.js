@@ -58,11 +58,11 @@ test('V61-4 修改口令：非空即可、placeholder 精简、相邻输入框 1
 });
 
 // ── 5. 菜单图标加大（用户：点击费劲）──
-test('V61-5 菜单尺寸：图标 22px/1.9 线宽、条目 48px/15px（v6.2 瘦身回调）', () => {
+test('V61-5 菜单尺寸：图标 26px、条目 42px/15px（v7.0.1 flex 瘦身）', () => {
   const src = readSrc();
-  assert.ok(src.includes('.menu-item svg{width:22px;height:22px;vertical-align:-5.5px;margin-right:7px}'), 'SVG 应 22px');
-  assert.ok(/\.menu-item\{[^}]*min-height:48px/.test(src), '条目应 48px');
-  assert.ok(/\.menu-item\{[^}]*padding:13px 12px/.test(src), '条目 padding 应 13px 12px');
+  assert.ok(src.includes('.menu-item svg{width:26px;height:26px;flex:none}'), 'SVG 应 26px');
+  assert.ok(/\.menu-item\{[^}]*min-height:42px/.test(src), '条目应 42px');
+  assert.ok(/\.menu-item\{[^}]*padding:9px 12px/.test(src), '条目 padding 应 9px 12px');
   assert.ok(/\.menu-item\{[^}]*font-size:15px/.test(src), '条目字号应 15px');
 });
 
@@ -133,7 +133,7 @@ test('V61-11 历史版本：单行「时间 · 手动 | 预览/恢复」、删�
   assert.ok(src.includes('.hist-line{display:flex;align-items:center;justify-content:space-between;gap:8px}'), '单行 flex 布局');
   assert.ok(src.includes('.hist-btns{display:flex;gap:6px;flex-shrink:0}'), '按钮组不挤压');
   assert.ok(src.includes('#menuHistList,#menuFavList{max-height:min(50vh,400px);overflow-y:auto;-webkit-overflow-scrolling:touch}'), '历史/收藏列表应独立滚动');
-  assert.ok(src.includes('#menuMainView{max-height:min(58vh,520px);overflow-y:auto;-webkit-overflow-scrolling:touch}'), '菜单主视图应限高内滚');
+  assert.ok(src.includes('#menuMainView{max-height:min(72vh,560px);overflow-y:auto;-webkit-overflow-scrolling:touch}'), '菜单主视图应限高内滚');
 });
 
 // ── 12. menuBox X 退役（v6.2 用户拍板：遮罩点击已覆盖退出）──
@@ -141,7 +141,7 @@ test('V61-12 menuBox X 退役：menuClose 全链路移除 + menuBox 瘦身', () 
   const src = readSrc();
   assert.ok(!src.includes('id="menuClose"'), 'menuClose 按钮应退役');
   assert.ok(!src.includes("$('#menuClose')"), 'menuClose wiring 应移除');
-  assert.ok(src.includes('#menuBox{width:min(86vw,300px);text-align:left;padding:20px 18px}'), 'menuBox 应瘦身（300px/20px 18px）');
+  assert.ok(src.includes('#menuBox{width:min(86vw,300px);text-align:left;padding:14px 16px}'), 'menuBox 应瘦身（300px/14px 16px）');
   assert.ok(src.includes("menuMask.addEventListener('click', e => { if (e.target === menuMask) menuMask.classList.add('hidden'); });"), '遮罩点击关闭应保留为退出路径');
 });
 
@@ -156,15 +156,15 @@ test('V61-13 扫码提示分流：HTTPS/组件失败/无摄像头/权限拒绝 �
 });
 
 // ── 14. 版本升格（v7.0 起断言跟随最新版）──
-test('V61-14 版本升格：APP_VERSION 7.0.0 / BUILD_DATE / gradle 700+7.0.0 / README 条目 ≤40 汉字', () => {
+test('V61-14 版本升格：APP_VERSION 7.0.1 / BUILD_DATE / gradle 701+7.0.1 / README 条目 ≤40 汉字', () => {
   const src = readSrc();
-  assert.ok(src.includes("const APP_VERSION = '7.0.0';"), 'APP_VERSION 应 7.0.0');
+  assert.ok(src.includes("const APP_VERSION = '7.0.1';"), 'APP_VERSION 应 7.0.1');
   assert.ok(src.includes("const BUILD_DATE = '2026-09-07';"), 'BUILD_DATE 应更新');
   const gradle = readRel('android/app/build.gradle');
-  assert.ok(gradle.includes('versionCode 700') && gradle.includes('versionName "7.0.0"'), 'gradle 应 700/7.0.0');
+  assert.ok(gradle.includes('versionCode 701') && gradle.includes('versionName "7.0.1"'), 'gradle 应 701/7.0.1');
   const readme = readRel('README.md');
-  const row = (readme.match(/^\| v7\.0\.0 \|[^|]+\|([^|]+)\|/m) || [])[1] || '';
+  const row = (readme.match(/^\| v7\.0\.1 \|[^|]+\|([^|]+)\|/m) || [])[1] || '';
   const hz = (row.match(/[一-龥]/g) || []).length;
-  assert.ok(hz > 0 && hz <= 40, 'README v7.0.0 摘要应为 1-40 汉字（实测 ' + hz + '）');
+  assert.ok(hz > 0 && hz <= 40, 'README v7.0.1 摘要应为 1-40 汉字（实测 ' + hz + '）');
   assert.ok(readme.includes('| v6.3 | 2026-09-07 |'), 'README 应有 v6.3 条目');
 });

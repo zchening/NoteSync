@@ -42,23 +42,23 @@ test('V62-4 menuClose 退役：按钮/wiring 全移除，遮罩点击关闭保�
   assert.ok(src.includes("menuMask.addEventListener('click', e => { if (e.target === menuMask) menuMask.classList.add('hidden'); });"), '遮罩点击关闭应保留');
 });
 
-// ── 5. 菜单主视图滚动 + 收纳盒瘦身 ──
-test('V62-5 菜单滚动与瘦身：主视图 58vh 内滚、盒 300px、条目 48px/15px、图标 22px', () => {
+// ── 5. 菜单主视图滚动 + 收纳盒瘦身（v7.0.1：flex+42px+26px 图标+72vh，用户反馈一屏放下）──
+test('V62-5 菜单滚动与瘦身：主视图 72vh 内滚、盒 300px、条目 42px/15px、图标 26px', () => {
   const src = readSrc();
-  assert.ok(src.includes('#menuMainView{max-height:min(58vh,520px);overflow-y:auto;-webkit-overflow-scrolling:touch}'), '主视图应限高内滚');
-  assert.ok(src.includes('#menuBox{width:min(86vw,300px);text-align:left;padding:20px 18px}'), 'menuBox 应 300px/20px 18px');
-  assert.ok(/\.menu-item\{[^}]*min-height:48px/.test(src) && /\.menu-item\{[^}]*font-size:15px/.test(src), '条目 48px/15px');
-  assert.ok(/\.menu-item\{[^}]*margin-bottom:7px/.test(src), '条目间距 margin-bottom:7px');
-  assert.ok(src.includes('.menu-item svg{width:22px;height:22px;vertical-align:-5.5px;margin-right:7px}'), '图标 22px/-5.5px/7px');
+  assert.ok(src.includes('#menuMainView{max-height:min(72vh,560px);overflow-y:auto;-webkit-overflow-scrolling:touch}'), '主视图应限高内滚');
+  assert.ok(src.includes('#menuBox{width:min(86vw,300px);text-align:left;padding:14px 16px}'), 'menuBox 应 300px/14px 16px');
+  assert.ok(/\.menu-item\{[^}]*min-height:42px/.test(src) && /\.menu-item\{[^}]*font-size:15px/.test(src), '条目 42px/15px');
+  assert.ok(/\.menu-item\{[^}]*margin-bottom:5px/.test(src), '条目间距 margin-bottom:5px');
+  assert.ok(src.includes('.menu-item svg{width:26px;height:26px;flex:none}'), '图标 26px（flex 布局）');
   assert.ok(src.includes('#menuHistList,#menuFavList{max-height:min(50vh,400px);overflow-y:auto;-webkit-overflow-scrolling:touch}'), '历史/收藏 50vh');
 });
 
 // ── 6. 版本升格 ──
 test('V62-6 版本升格 6.2/62 + README 条目 ≤40 汉字（v7.0 起断言跟随最新版）', () => {
   const src = readSrc();
-  assert.ok(src.includes("const APP_VERSION = '7.0.0';"), 'APP_VERSION 应 7.0.0');
+  assert.ok(src.includes("const APP_VERSION = '7.0.1';"), 'APP_VERSION 应 7.0.1');
   const gradle = readRel('android/app/build.gradle');
-  assert.ok(gradle.includes('versionCode 700') && gradle.includes('versionName "7.0.0"'), 'gradle 应 700/7.0.0');
+  assert.ok(gradle.includes('versionCode 701') && gradle.includes('versionName "7.0.1"'), 'gradle 应 701/7.0.1');
   const readme = readRel('README.md');
   const row = (readme.match(/^\| v7\.0\.0 \|[^|]+\|([^|]+)\|/m) || [])[1] || '';
   const hz = (row.match(/[一-龥]/g) || []).length;
