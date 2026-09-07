@@ -124,9 +124,25 @@ public class MainActivity extends BridgeActivity {
         }
 
         // v6.0：冷启动也接住通知点击（进程被杀后点通知拉起 APP，intent 走 onCreate 不走 onNewIntent）
+        // v6.3 P1 根治「点通知有时进错笔记」：此前首屏加载根页后，JS 的「自动进入上次笔记」
+        // (NOTE_LAST_KEY→assign('/B')) 与原生 rem-notify-click→assign('/A') 两个 location.assign
+        // 竞速，谁的导航后 commit 谁赢（取决于网络/缓存时序）——有时 A 有时 B。
+        // 修法：带 ACTION_NOTIFY_CLICK 冷启时首屏 URL 直接定到 '/'+noteId，根页竞速彻底消失；
+        // 热启动路径（onNewIntent→rem-notify-click 事件）保留不变。
         Intent cold = getIntent();
         if (cold != null && RemPlugin.ACTION_NOTIFY_CLICK.equals(cold.getAction())) {
             pendingRemNotifyClick = true;
+            String nid = cold.getStringExtra("noteId");
+            if (nid != null && nid.matches("[A-Za-z0-9_-]{1,64}") && bridge != null && bridge.getWebView() != null) {
+                String base = bridge.getAppUrl();
+                if (base != null && base.length() > 0 && !base.endsWith("/")) {
+                    final String target = base + "/" + nid;
+                    android.util.Log.d("NoteSync", "cold-start notify click -> direct load: " + target);
+                    bridge.getWebView().post(() -> {
+                        if (bridge.getWebView() != null) bridge.getWebView().loadUrl(target);
+                    });
+                }
+            }
         }
     }
 

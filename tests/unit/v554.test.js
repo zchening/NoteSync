@@ -55,7 +55,9 @@ test('E2 过期提醒彻底静默：REM_DONE 函数定义全退役，过滤简�
   assert.ok(!src.includes('const REM_DONE_KEY'), 'REM_DONE_KEY 常量定义应删除');
 
   // scheduleReminders 与正文识别的过滤都改为纯时间判断
-  assert.ok(src.includes('filter(m => m.at > now)'), '提醒匹配过滤应为 m.at > now 纯时间判断');
+  // v6.3：remMatchesFor 改 if/return 分支（未来=下划线；过期+fired=删除线），不再用 filter 形态
+  assert.ok(src.includes('if (m.at > now) {'), '提醒匹配过滤应为 m.at > now 纯时间判断（v6.3 if 分支形态）');
+  assert.ok(/r\.at <= now && !r\.fired/.test(src), 'v6.3：markExpiredFired 仍按纯时间补记，无 REM_DONE 存储');
   // 补弹分支必须删除：scheduleReminders 内不再出现 showRemCard(overdue
   const schedIdx = src.indexOf('function scheduleReminders');
   assert.ok(schedIdx > -1, '应存在 scheduleReminders 定义');

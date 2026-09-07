@@ -83,15 +83,15 @@ test('V61-7 关于弹窗：菜单入口、qr-box 风格、网页/APP 版本行�
   assert.ok(src.includes('id="menuAbout"') && src.includes('关于 NoteSync'), '菜单底部应有「关于 NoteSync」');
   assert.ok(src.includes('id="aboutMask"'), '应有 aboutMask 弹窗');
   assert.ok(/id="aboutMask"[\s\S]{0,300}class="box qr-box"/.test(src), '关于弹窗应复用 qr-box 风格（同扫码配对）');
-  assert.ok(src.includes('id="aboutTitle">关于Note\'Sync</h1>'), "标题应为「关于Note'Sync」");
-  assert.ok(src.includes("$('#aboutVer').textContent = '网页 v' + APP_VERSION;"), '应有网页版本行');
-  assert.ok(src.includes("av.textContent = 'APP v' + nv;"), 'APP 端应显示 APP 版本');
+  assert.ok(src.includes('id="aboutTitle">关于 Note Sync</h1>'), '标题应为「关于 Note Sync」（v6.3：撇号删除）');
+  assert.ok(src.includes("$('#aboutVer').textContent = 'v' + APP_VERSION;"), '应有网页版本行（v6.3：前缀移交 about-k 列）');
+  assert.ok(src.includes("av.textContent = 'v' + nv;"), 'APP 端应显示 APP 版本（v6.3：同层级对齐）');
   assert.ok(src.includes("rb.getVersion"), '应经 RemBridge.getVersion 取原生版本');
-  assert.ok(src.includes('产品作者：zchening'), '应显示产品作者');
+  assert.ok(src.includes('id="aboutAuthorName">zchening</span>'), '应显示产品作者（v6.3：独立分区结构）');
 });
 
 // ── 8. 彩蛋：标题连点 4 次 → 诊断模态 ──
-test("V61-8 彩蛋：连点「关于Note'Sync」标题 4 次弹出诊断模态", () => {
+test("V61-8 彩蛋：连点「关于 Note Sync」标题 4 次弹出诊断模态", () => {
   const src = readSrc();
   assert.ok(src.includes('aboutTaps >= 4'), '应连点 4 次触发');
   assert.ok(src.includes('setTimeout(() => { aboutTaps = 0; }, 800)'), '800ms 连击窗口');
@@ -155,16 +155,16 @@ test('V61-13 扫码提示分流：HTTPS/组件失败/无摄像头/权限拒绝 �
   assert.ok(!src.includes('当前浏览器不支持扫码，请用 APP'), '旧「请用 APP」误导文案应退役');
 });
 
-// ── 14. 版本升格 6.1/61 + 日期 ──
-test('V61-14 版本升格：APP_VERSION 6.2 / BUILD_DATE / gradle 62+6.2 / README 条目 ≤40 汉字', () => {
+// ── 14. 版本升格（v6.3 起断言跟随最新版）──
+test('V61-14 版本升格：APP_VERSION 6.3 / BUILD_DATE / gradle 63+6.3 / README 条目 ≤40 汉字', () => {
   const src = readSrc();
-  assert.ok(src.includes("const APP_VERSION = '6.2';"), 'APP_VERSION 应 6.2');
+  assert.ok(src.includes("const APP_VERSION = '6.3';"), 'APP_VERSION 应 6.3');
   assert.ok(src.includes("const BUILD_DATE = '2026-09-07';"), 'BUILD_DATE 应更新');
   const gradle = readRel('android/app/build.gradle');
-  assert.ok(gradle.includes('versionCode 62') && gradle.includes('versionName "6.2"'), 'gradle 应 62/6.2');
+  assert.ok(gradle.includes('versionCode 63') && gradle.includes('versionName "6.3"'), 'gradle 应 63/6.3');
   const readme = readRel('README.md');
-  const row = (readme.match(/^\| v6\.2 \|[^|]+\|([^|]+)\|/m) || [])[1] || '';
+  const row = (readme.match(/^\| v6\.3 \|[^|]+\|([^|]+)\|/m) || [])[1] || '';
   const hz = (row.match(/[一-龥]/g) || []).length;
-  assert.ok(hz > 0 && hz <= 40, 'README v6.2 摘要应为 1-40 汉字（实测 ' + hz + '）');
-  assert.ok(readme.includes('| v6.2 | 2026-09-07 |'), 'README 应有 v6.2 条目');
+  assert.ok(hz > 0 && hz <= 40, 'README v6.3 摘要应为 1-40 汉字（实测 ' + hz + '）');
+  assert.ok(readme.includes('| v6.3 | 2026-09-07 |'), 'README 应有 v6.3 条目');
 });

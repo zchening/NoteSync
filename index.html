@@ -120,6 +120,15 @@
      v5.46：只包时间串；过期/已提醒过的时间不产标记（回归普通正文），灰态样式退役。
      u 元素盒在该内核夜间可能吃字，纳入三份锁色名单 */
   #editor u.rem-mark{text-decoration:underline;text-underline-offset:3px;text-decoration-thickness:1.5px}
+  /* v6.3：已过期的已推送提醒——时间+事项整段删除线（用户新需求，取代 v5.46「回归普通正文」）。
+     用 text-decoration 而非 border/背景，主题切换不反色；只作用于 s.rem-done，不动用户手打的 <s> */
+  #editor s.rem-done{text-decoration:line-through;text-decoration-thickness:1.5px;opacity:.62}
+  /* v6.3：关于弹窗排版——版本为对齐的两行（k/v 两列），作者行分隔线分区、长文本不溢出 */
+  #aboutVerBlock{margin:12px auto 14px;display:inline-block;min-width:172px}
+  .about-row{display:flex;justify-content:space-between;align-items:baseline;gap:16px;line-height:2;font-size:14px}
+  .about-k{color:var(--muted)}
+  .about-v{color:var(--fg);font-variant-numeric:tabular-nums;word-break:break-all;text-align:right}
+  #aboutAuthor{margin-top:2px;padding-top:12px;border-top:1px solid var(--line)}
   /* v5.40：提醒面板升级为扫码配对同款 .mask+.box 模态（复用 .box 输入框/主按钮样式与深色覆盖保护）；
      设置行（时间/事项/添加提醒）永远首行，已设条目列表排后；chip 与模态互斥（遮罩挡正文） */
   #remBoxForm{display:flex;flex-direction:column;gap:12px;margin:2px 0 18px}
@@ -175,6 +184,9 @@
   .hist-line{display:flex;align-items:center;justify-content:space-between;gap:8px}
   .hist-btns{display:flex;gap:6px;flex-shrink:0}
   .hist-btns button{min-height:32px;padding:4px 12px;font-size:12.5px;color:var(--fg);background:none;border:1px solid var(--line);border-radius:8px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+  /* v6.3：失效版本置灰（解不开 = 旧口令加密），按钮禁用，不再是静默失败 */
+  .hist-item.hist-bad{opacity:.45}
+  .hist-item.hist-bad .hist-btns button{cursor:not-allowed;text-decoration:line-through}
   /* v6.2：历史/收藏列表独立滚动（52vh→50vh 随菜单盒瘦身微调）——条目多时不再撑爆 menuBox */
   #menuHistList,#menuFavList{max-height:min(50vh,400px);overflow-y:auto;-webkit-overflow-scrolling:touch}
   /* v6.2：菜单主视图限高内滚——条目多或小屏时列表可滚，弹窗不超屏 */
@@ -414,10 +426,13 @@
 
 <div class="mask hidden" id="aboutMask">
   <div class="box qr-box">
-    <h1 class="qr-title" id="aboutTitle">关于Note'Sync</h1>
-    <p id="aboutVer"></p>
-    <p id="aboutAppVer" class="hidden" style="margin-top:-8px"></p>
-    <p style="margin-top:2px">产品作者：zchening</p>
+    <h1 class="qr-title" id="aboutTitle">关于 Note Sync</h1>
+    <!-- v6.3：版本区独立成块、两行同层级对齐（此前 App 行靠负 margin 挤在一起，标题还带个撇号） -->
+    <div id="aboutVerBlock">
+      <div class="about-row"><span class="about-k">网页</span><span class="about-v" id="aboutVer"></span></div>
+      <div class="about-row hidden" id="aboutAppRow"><span class="about-k">App</span><span class="about-v" id="aboutAppVer"></span></div>
+    </div>
+    <div id="aboutAuthor"><span class="about-k">产品作者</span><span class="about-v" id="aboutAuthorName">zchening</span></div>
   </div>
 </div>
 
@@ -461,7 +476,7 @@ const NOTE_LAST_KEY = 'notesync_last_note';
 const NOTE_JUMPED_KEY = 'notesync_jumped';
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '6.2';
+const APP_VERSION = '6.3';
 const BUILD_DATE = '2026-09-07';
 
 const $ = s => document.querySelector(s);
@@ -1247,7 +1262,7 @@ function hideUploadStatus() { uploadStatus.classList.remove('show'); }
   // v5.56：APP 无地址栏、笔记名不能含 ?——菜单「诊断」项经 __toggleDiag 免 URL 开关浮层，
   // localStorage 标记让浮层跨重载保持（真机反复取证）；?diag 查询参数仍然有效。
   let diagBox = null, diagTimer = null;
-  // v6.1：采样逻辑抽成 collectDiagLines()——?diag 常驻浮层与「关于Note'Sync」彩蛋诊断模态共用。
+  // v6.1：采样逻辑抽成 collectDiagLines()——?diag 常驻浮层与「关于 Note Sync」彩蛋诊断模态共用。
   // 浮层保持 250ms 实时刷新；诊断模态为一次性快照（打开时取一拍）。
   window.collectDiagLines = function () {
     const cut = (s, n) => (s.length > n ? s.slice(0, n) + '…' : s);
@@ -1663,8 +1678,17 @@ function clampOverflowSelection() {
   } catch (e) { return false; }
   return true;
 }
+// v6.3：钳制改为「仅三击手势后生效」。原实现挂在每次 selectionchange 上无差别钳制，
+// 而 Shift+↓/→ 跨空行时选区终点必落在空行块的起点（空块 textContent===''，
+// atStart 判断 ''==='' 恒真）→ 选区被钳回上一行末尾，第二、三行永远选不中（用户实测）。
+// 三击才 arm 一个 400ms 窗口，键盘扩展选区与鼠标拖选一律不受影响。
+let clampArmedUntil = 0;
+editor.addEventListener('pointerdown', e => {
+  if (e.detail >= 3) clampArmedUntil = Date.now() + 400; // 三击（click detail=3）才开闸
+}, true);
 document.addEventListener('selectionchange', () => {
   if (document.activeElement !== editor || isComposing || isRestoring) return;
+  if (Date.now() > clampArmedUntil) return; // 非三击手势：不干预原生选区
   clampOverflowSelection();
 });
 
@@ -2242,6 +2266,13 @@ function buildLinkSafe(text, urlRegex, phoneRegex, breakSeparators, remMatches) 
       u.className = 'rem-mark';
       u.textContent = mt.text;
       frag.appendChild(u);
+    } else if (mt.kind === 'rem-done') {
+      // v6.3：已推送的提醒 —— 时间+事项整段删除线。用独立 class，与用户手打的 <s> 区分，
+      // linkify 重建时只拆 s.rem-done，绝不碰用户自己的删除线。
+      const s = document.createElement('s');
+      s.className = 'rem-done';
+      s.textContent = mt.text;
+      frag.appendChild(s);
     } else if (mt.kind === 'url' && denyAsUrl(mt.text)) {
       addText(mt.text); // 文件名/未知裸域名：保持纯文本
     } else {
@@ -2272,10 +2303,24 @@ function buildLinkSafe(text, urlRegex, phoneRegex, breakSeparators, remMatches) 
 function remMatchesFor(txt) {
   if (!reminders.length || !txt || txt.length > 4000) return [];
   const now = Date.now();
-  return parseTimeMatches(txt)
-    .filter(m => reminders.some(r => r.at === m.at))
-    .filter(m => m.at > now)
-    .map(m => ({ start: m.index, end: m.index + m.length, text: txt.slice(m.index, m.index + m.length), kind: 'rem' }));
+  const out = [];
+  parseTimeMatches(txt).forEach(m => {
+    const r = reminders.find(x => x.at === m.at);
+    if (!r) return; // 没主动加过的日期绝不动（v5.46 用户拍板）
+    if (m.at > now) { // 未来：<u class="rem-mark"> 只包时间串
+      out.push({ start: m.index, end: m.index + m.length, text: txt.slice(m.index, m.index + m.length), kind: 'rem' });
+      return;
+    }
+    // v6.3：过期且已推送 → 时间 + 分隔符 + 事项「整段」加删除线（用户新需求，覆盖 v5.46
+    //「过期回归普通正文」的旧拍板）。事项最多带 20 字，与 itemAfterMatch 同口径。
+    if (!r.fired) return;
+    let end = m.index + m.length;
+    const tail = txt.slice(end);
+    const lead = (tail.match(/^[·\s\u3000]+/) || [''])[0].length;
+    if (lead < tail.length) end += lead + Math.min(20, tail.length - lead);
+    out.push({ start: m.index, end: end, text: txt.slice(m.index, end), kind: 'rem-done' });
+  });
+  return out;
 }
 
 function linkifyEditor(opts) {
@@ -2298,15 +2343,20 @@ function linkifyEditor(opts) {
     const autoLinks = Array.from(editor.querySelectorAll('a[data-url="1"]'));
     const straySpans = Array.from(editor.querySelectorAll('span'));
     const remMarks = Array.from(editor.querySelectorAll('u.rem-mark')); // v5.45：提醒标记也要先拆后建
+    const remDones = Array.from(editor.querySelectorAll('s.rem-done')); // v6.3：已推送删除线同轮重建（只认自家 class，不动用户手打的 <s>）
     // v5.45：列表里有提醒且正文存在可标记时间时不得早退（否则新增/拆标记都刷不出来）
     // v5.46：只看仍有效的（未过期且未确认）——过期时间不再产标记，纯过期文本走早退省一轮拆建
     const now = Date.now();
+    // v6.3：已推送（过期+fired）的条目也算「有提醒可渲染」，否则删除线永远建不出来
     const hasRemText = reminders.length > 0 && editor.textContent.length <= 4000 &&
-      parseTimeMatches(editor.textContent).some(m => reminders.some(r => r.at === m.at) && m.at > now);
+      parseTimeMatches(editor.textContent).some(m => {
+        const r = reminders.find(x => x.at === m.at);
+        return !!r && (m.at > now || r.fired);
+      });
 
     // 早退：无自动链接可拆解、无杂散 span、无提醒标记要刷新、也无任何可链接文本 → 不碰 DOM（避免污染原生撤销栈）。
     // 普通纯文本输入走此分支；粘贴/输入本身已产生合法块结构，无需 ensureBlockWrapped/normalize。
-    if (autoLinks.length === 0 && straySpans.length === 0 && remMarks.length === 0 && !hasRemText && !hasLinkableText(editor, urlTest, phoneTest, longWordTest)) {
+    if (autoLinks.length === 0 && straySpans.length === 0 && remMarks.length === 0 && remDones.length === 0 && !hasRemText && !hasLinkableText(editor, urlTest, phoneTest, longWordTest)) {
       return;
     }
 
@@ -2338,6 +2388,11 @@ function linkifyEditor(opts) {
     remMarks.forEach(u => {
       const t = document.createTextNode(u.textContent);
       u.replaceWith(t);
+    });
+    // 1.6) v6.3：已推送删除线同样拆回纯文本，与链接/下划线同一轮重建
+    remDones.forEach(s => {
+      const t = document.createTextNode(s.textContent);
+      s.replaceWith(t);
     });
     // 2) 把浏览器在块合并/格式保留时自动插入的纯 <span> 包装层拍平（应用本身从不创建 span，
     //    这些 span 无语义）。只拍平 <span>，不动 <s>(删除线) 等语义标签。
@@ -3055,7 +3110,8 @@ installDismiss.addEventListener('click', () => {
 const remBtn = $('#remBtn'), remPanel = $('#remPanel'), remMask = $('#remMask');
 const remCard = $('#remCard'), remCardList = $('#remCardList'), remCardAck = $('#remCardAck');
 const timeChip = $('#timeChip');
-const REM_MAX = 10;
+const REM_MAX = 10;      // 未来提醒上限（addReminder 只数未过期的条数）
+const REM_DONE_MAX = 20; // v6.3：已过期/已推送条目的保留上限（供删除线渲染），FIFO 挤最旧
 let reminders = [], remCipher = null, remTimer = null, remPanelOpen = false;
 let cardShownAts = []; // 当前卡片展示的提醒时间戳，「知道了」据此全部标记
 let chipFeedbackUntil = 0; // chip「已设」反馈窗口内不再被 selectionchange 改写
@@ -3102,8 +3158,11 @@ function collectTimeMatches(text) {
   const pushShort = m => {
     if (overlaps(m.index)) return;
     const now = new Date();
-    let at = resolveTimeAt(now.getFullYear(), +m[1], +m[2], +m[3], +m[4]);
-    if (at !== null && at <= Date.now()) at = resolveTimeAt(now.getFullYear() + 1, +m[1], +m[2], +m[3], +m[4]);
+    // v6.3：短格式（无年份）不再「本年已过就顺延明年」——那条兜底把过去的日期（8-30 9:00）
+    // 判定成明年同刻的未来时间，悬停照样弹「添加提醒」、点了就加出一个明年的提醒（用户实测 P1）。
+    // 规则统一（用户红线）：短格式一律按今年解析，已过 = expired，不给添加入口。
+    // 代价：要设明年 5-1 的提醒得写全 2027-5-1 或用提醒面板。
+    const at = resolveTimeAt(now.getFullYear(), +m[1], +m[2], +m[3], +m[4]);
     if (at === null) return;
     res.push({ at: at, index: m.index, length: m[0].length, expired: at <= Date.now() + 30000 });
   };
@@ -3224,7 +3283,7 @@ document.addEventListener('selectionchange', () => {
   chipTimer = setTimeout(maybeShowTimeChip, 250);
 });
 // v5.57：chip 补触发已并入 editor 的 compositionend 监听（isComposing 复位处），此处不重复挂
-function chipActivate(e) {
+async function chipActivate(e) { // v6.3：async——要 await addReminder 的结果才决定弹成功卡还是收起
   if (e.button !== undefined && e.button !== 0) return;
   e.preventDefault();
   if (!chipData) return;
@@ -3233,7 +3292,10 @@ function chipActivate(e) {
   chipFeedbackUntil = Date.now() + 3000; // v5.45：两行确认卡停留 3 秒
   chipDeleteAt = at; // v5.47：确认卡带「删除」，误添加可立即反悔
   askRemPermission();
-  addReminder(at, item);
+  // v6.3：等结果再决定弹什么——失败（超上限/已过期）时 addReminder 自己已提示，
+  // 这里必须收起 chip，否则「✅ 提醒已添加」与「提醒最多 10 条」同屏打架（用户实测 P1）
+  const ok = await addReminder(at, item);
+  if (!ok) { chipDeleteAt = null; hideTimeChip(); return; }
   // v5.45：确认反馈改两行卡片（用户拍板）——第一行「✅ 提醒已添加」+「删除」，第二行「时间　事项」
   timeChip.classList.add('feedback');
   timeChip.textContent = '';
@@ -3261,15 +3323,23 @@ function scheduleRemMarkRefresh() {
   remMarkTimer = setTimeout(() => { if (!isLinkifying) { try { linkifyEditor(); } catch (e) {} } }, 400);
 }
 // 旧明文 {at,text} → 新 [{at,text}] 的迁移统一在这里做；坏数据当无提醒。
+// v6.3 三项修正（用户实测 P0/P1）：
+//   ① 过期条目不再全部丢弃——#2 的根因是过期条目只进不出塞满 REM_MAX，导致面板显示 0 条
+//      却永远报「提醒最多 10 条」。修法：上限只数未来条目（addReminder 内），列表本身保留过期条目。
+//   ② 保留过期条目是因为 #3 需要它们渲染「已推送 → 删除线」——全删就画不出删除线。
+//   ③ 也不能无限留：REM_DONE_MAX 条 FIFO，最旧的先挤掉，密文体量有界。
 function normalizeRemList(obj) {
   let list = [];
   if (obj && Array.isArray(obj.list)) list = obj.list;
   else if (obj && typeof obj.at === 'number') list = [obj];
-  return list
+  const now = Date.now();
+  const all = list
     .filter(r => r && typeof r.at === 'number')
-    .map(r => ({ at: r.at, text: typeof r.text === 'string' ? r.text : '' }))
-    .sort((a, b) => a.at - b.at)
-    .slice(0, REM_MAX);
+    .map(r => ({ at: r.at, text: typeof r.text === 'string' ? r.text : '', fired: !!r.fired }))
+    .sort((a, b) => a.at - b.at);
+  const future = all.filter(r => r.at > now).slice(0, REM_MAX);
+  const done = all.filter(r => r.at <= now).slice(-REM_DONE_MAX);
+  return future.concat(done).sort((a, b) => a.at - b.at);
 }
 // v5.51：原生层提醒桥（Capacitor 不存在时全部静默返回，167 测试零破坏）
 // 注意：每次读 window.RemBridge（不缓存 const），让 jsdom 测试可在脚本执行后再注入 mock
@@ -3319,10 +3389,21 @@ async function loadReminder(note, key) {
       if (reminders.length) remCipher = note.rem;
     } catch (e) { reminders = []; remCipher = null; }
   }
+  await markExpiredFired(); // v6.3：关页/杀进程期间到点的提醒补记 fired（原生已推送过）
   renderRemBtn();
   scheduleReminders();
   syncRemindersToNative(); // v5.51：解锁后把密文解密得到的提醒列表同步到原生层排程
   ensureExactAlarmPermission(); // v5.55：APK 精确闹钟权限自检（只引导一次）
+}
+// v6.3：任何 at<=now 且未标 fired 的条目一律补记——它要么已被原生闹钟推送过通知，
+// 要么因晚到超过 60s 被静默丢弃，两种情况下语义都是「这次提醒已经过去了」，
+// 正文里的时间+事项该画删除线。写回密文，跨端一致（A 方案，用户拍板）。
+async function markExpiredFired() {
+  const now = Date.now();
+  const dirty = reminders.filter(r => r.at <= now && !r.fired);
+  if (!dirty.length) return;
+  dirty.forEach(r => { r.fired = true; });
+  try { await persistReminders(); } catch (e) {}
 }
 // 设/改提醒 = 完整保存（正文 + rem 一起 PUT）：v 递增、SSE 广播、其他设备实时拿到
 async function persistReminders() {
@@ -3348,19 +3429,30 @@ async function persistReminders() {
   renderRemBtn();
   syncRemindersToNative(); // v5.51：保存后同步最新提醒列表到原生层
 }
+// v6.3：返回布尔——chipActivate 必须据此决定「弹成功卡还是弹失败提示」。
+// 此前 chip 不等 addReminder 结果就无条件弹「✅ 提醒已添加」，与下方「最多 10 条」同屏打架。
 async function addReminder(at, text) {
-  if (!cryptoKey || typeof at !== 'number') return;
-  if (reminders.some(r => r.at === at)) {
-    reminders = reminders.filter(r => r.at !== at); // 同刻再设 = 更新文案，不产生重复
-  } else if (reminders.length >= REM_MAX) {
+  if (!cryptoKey || typeof at !== 'number') return false;
+  if (at <= Date.now()) { // 兜底闸门：任何入口的过去时间一律不设（chip/面板已各自拦，这里防漏网）
+    showUploadStatus('已过去的时间不能设提醒');
+    setTimeout(() => { if (uploadStatus.textContent.indexOf('已过去') === 0) hideUploadStatus(); }, 2200);
+    return false;
+  }
+  // v6.3：上限只数「未过期」条目——过期条目留在列表里是为了画删除线（#3），不该占额（#2）
+  if (!reminders.some(r => r.at === at) &&
+      reminders.filter(r => r.at > Date.now()).length >= REM_MAX) {
     showUploadStatus('提醒最多 ' + REM_MAX + ' 条，先取消一些吧');
     setTimeout(() => { if (uploadStatus.textContent.indexOf('提醒最多') === 0) hideUploadStatus(); }, 2600);
-    return;
+    return false;
   }
-  reminders.push({ at: at, text: text || '' });
+  if (reminders.some(r => r.at === at)) {
+    reminders = reminders.filter(r => r.at !== at); // 同刻再设 = 更新文案，不产生重复
+  }
+  reminders.push({ at: at, text: text || '', fired: false });
   reminders.sort((a, b) => a.at - b.at);
   scheduleRemMarkRefresh(); // v5.45：新增提醒后正文时间文本包上下划线
-  try { await persistReminders(); } catch (e) { setStatus(false, '保存失败'); }
+  try { await persistReminders(); } catch (e) { setStatus(false, '保存失败'); return false; }
+  return true;
 }
 async function removeReminder(at) {
   reminders = reminders.filter(r => r.at !== at);
@@ -3390,6 +3482,8 @@ async function fireReminder(at) {
   const entry = reminders.find(r => r.at === at);
   scheduleReminders(); // v5.54：过期静默，无 REM_DONE 补弹语义，只排下一条
   if (!entry) return;
+  // v6.3：标记已推送（进 rem 密文，跨端一致）——渲染层据此给「时间+事项」整段加删除线
+  if (!entry.fired) { entry.fired = true; try { await persistReminders(); } catch (e) {} }
   playRemSound();
   const title = '⏰ ' + (entry.text || '该看笔记了');
   if (typeof window.Notification !== 'undefined' && window.Notification.permission === 'granted') {
@@ -3574,7 +3668,9 @@ function renderRemPanel() {
     }
     const text = item.value.trim();
     askRemPermission();
-    addReminder(at, text).then(() => {
+    // v6.3：只在实际添加成功时收面板+回写正文——失败（上限/过去时间）addReminder 已提示
+    addReminder(at, text).then(ok => {
+      if (!ok) return;
       toggleRemPanel(false);
       insertRemLine(at, text); // v5.45：面板添加的提醒回写正文光标处（时间　事项）
     });
@@ -3698,6 +3794,33 @@ remBtn.addEventListener('click', () => { if (!cryptoKey) return; toggleRemPanel(
 // 收藏纯本机（localStorage，不碰服务器——笔记名本就明文在 URL，无新增暴露面）；
 // 清除本机密钥仍是左上角「退出锁定」唯一职责，菜单不重复（用户拍板）。
 const menuMask = $('#menuMask');
+// v6.3：菜单在 v6.2 变成滚动容器（max-height+overflow-y:auto）后，触屏首击偶发被判成滚动手势、
+// click 被浏览器吞掉（用户实测「返回首页要点两次」）。CSS 的 touch-action:manipulation 只能
+// 去掉双击缩放延迟，管不了手势吞 click。兜底：pointerup 且位移<10px 时等 350ms，
+// 真实 click 始终没到就补一次激活；万一迟到的真实 click 后到，capture 阶段吞掉防重复执行。
+(function menuTapGuard() {
+  const menuBoxEl = document.getElementById('menuBox');
+  if (!menuBoxEl) return;
+  let start = null, moved = false, gotClick = false, synthUntil = 0;
+  menuBoxEl.addEventListener('pointerdown', e => { start = { x: e.clientX, y: e.clientY }; moved = false; gotClick = false; }, true);
+  menuBoxEl.addEventListener('pointermove', e => {
+    if (start && (Math.abs(e.clientX - start.x) > 10 || Math.abs(e.clientY - start.y) > 10)) moved = true;
+  }, true);
+  menuBoxEl.addEventListener('click', e => {
+    if (Date.now() < synthUntil && e.isTrusted) { e.stopPropagation(); e.preventDefault(); return; } // 迟到的真实 click：吞掉
+    gotClick = true;
+  }, true);
+  menuBoxEl.addEventListener('pointerup', e => {
+    if (e.pointerType === 'mouse' || moved || !start) return;
+    const el = (e.target && e.target.closest) ? e.target.closest('.menu-item') : null;
+    if (!el) return;
+    setTimeout(() => {
+      if (gotClick) return;
+      synthUntil = Date.now() + 800;
+      try { el.click(); } catch (err) {}
+    }, 350);
+  }, true);
+})();
 const FAVS_KEY = 'notesync_favs', FAVS_MAX = 20;
 function readFavs() {
   try { const a = JSON.parse(localStorage.getItem(FAVS_KEY) || '[]'); return Array.isArray(a) ? a.filter(n => typeof n === 'string') : []; } catch (e) { return []; }
@@ -3750,14 +3873,15 @@ $('#menuFavBack').addEventListener('click', () => {
   document.getElementById('menuMainView').classList.remove('hidden');
 });
 $('#menuHome').addEventListener('click', () => { menuMask.classList.add('hidden'); location.assign('/'); });
-// v6.1：菜单「诊断」一级项退役（用户拍板）——诊断入口收进「关于Note'Sync」弹窗彩蛋（标题连点 4 次）
+// v6.1：菜单「诊断」一级项退役（用户拍板）——诊断入口收进「关于 Note Sync」弹窗彩蛋（标题连点 4 次）
 // 与 ?diag URL 通道；v5.56 的免 URL 开关浮层逻辑（__toggleDiag/localStorage 标记）保留供 ?diag 使用。
 const aboutMask = $('#aboutMask'), diagMask = $('#diagMask');
 $('#menuAbout').addEventListener('click', async () => {
   menuMask.classList.add('hidden');
-  $('#aboutVer').textContent = '网页 v' + APP_VERSION;
-  const av = $('#aboutAppVer');
-  av.classList.add('hidden'); av.textContent = '';
+  // v6.3：前缀「网页/APP」交给左侧 .about-k 列，值区只放 vX.Y，两行严格同层级对齐
+  $('#aboutVer').textContent = 'v' + APP_VERSION;
+  const av = $('#aboutAppVer'), avRow = $('#aboutAppRow');
+  avRow.classList.add('hidden'); av.textContent = '';
   if (isNativeApp()) {
     // APP 端补 APP 版本号——RemPlugin.getVersion 现成桥方法；旧 APK 无此方法则静默跳过
     try {
@@ -3766,13 +3890,13 @@ $('#menuAbout').addEventListener('click', async () => {
       if (rb && typeof rb.getVersion === 'function') {
         const ret = await rb.getVersion();
         const nv = ret && ret.nativeVersion;
-        if (nv) { av.textContent = 'APP v' + nv; av.classList.remove('hidden'); }
+        if (nv) { av.textContent = 'v' + nv; avRow.classList.remove('hidden'); }
       }
     } catch (e) {}
   }
   aboutMask.classList.remove('hidden');
 });
-// 彩蛋：800ms 内连点标题「关于Note'Sync」4 次 → 关闭关于弹窗 → 弹诊断模态（v6.1 用户需求）
+// 彩蛋：800ms 内连点标题「关于 Note Sync」4 次 → 关闭关于弹窗 → 弹诊断模态（v6.1 用户需求）
 let aboutTaps = 0, aboutTapTimer = null;
 $('#aboutTitle').addEventListener('click', () => {
   aboutTaps++;
@@ -3874,6 +3998,7 @@ async function cpRotate() {
       const re = await encryptText(JSON.stringify({ list: reminders }), keyNew);
       remCipher = JSON.stringify(re); remOut = remCipher;
     } else { remCipher = null; } // 显式 null = 服务端清除提醒字段
+    const keyOld = cryptoKey; // v6.3：历史快照迁移要用旧钥（下一行就换了）
     const r = await apiPut({ ct: enc.ct, iv: enc.iv, salt: bufToB64(saltNew), rem: remOut });
     cryptoKey = keyNew; serverSalt = saltNew; localVer = r.v; lastHtml = html;
     try { localStorage.setItem(KEY_STORE, bufToB64(await crypto.subtle.exportKey('raw', keyNew))); } catch (e) {}
@@ -3884,6 +4009,7 @@ async function cpRotate() {
     syncRemindersToNative();
     cpMask.classList.add('hidden'); cpReset();
     showUploadStatus('口令已修改');
+    migrateHistoryKeys(keyOld, keyNew); // v6.3：历史快照全部换新钥（fire-and-forget，失败条目预览时置灰）
     setTimeout(() => { if (uploadStatus.textContent.indexOf('口令已修改') === 0) hideUploadStatus(); }, 2600);
   } catch (e) {
     cpErr.textContent = (e && e.locked) ? '已锁定，请稍后' : '修改失败，请重试';
@@ -3892,12 +4018,45 @@ async function cpRotate() {
 }
 
 // ── 历史版本（v6.0）──
+// v6.3：改口令时把历史快照逐条换钥（旧钥解→新钥重加→PUT /history/:ts 覆写同 ts）。
+// 此前只迁主文档+提醒，旧口令时期的快照永远解不开，预览只会「预览失败」。
+// fire-and-forget：单条失败静默跳过（该条之后会走「置灰·不可用」通道），不阻塞改口令主流程。
+async function migrateHistoryKeys(keyOld, keyNew) {
+  try {
+    const r = await fetchRetry(NOTE_API + '/history', { cache: 'no-store' }, 1);
+    const list = ((await r.json()).list) || [];
+    for (const h of list) {
+      try {
+        const r2 = await fetchRetry(NOTE_API + '/history/' + h.ts, { cache: 'no-store' }, 1);
+        const j2 = await r2.json();
+        const html = await decryptText(j2.ct, j2.iv, keyOld);
+        const enc = await encryptText(html, keyNew);
+        await fetchRetry(NOTE_API + '/history/' + h.ts, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ct: enc.ct, iv: enc.iv }) }, 0);
+      } catch (e) { /* 单条失败跳过 */ }
+    }
+  } catch (e) { /* 列表取不到就整体放弃，不影响主流程 */ }
+}
 // 服务端密文快照环（FIFO 10 条，相同密文去重，手动打点不被自动挤掉）。
 // 自动：保存成功前把「上一版」入栈（60s 节流）；手动：菜单「新增历史版本」打点。
 // 恢复 = 应用快照正文后走正常 saveLocal 生成新版本——绝不删历史、不回退版本号。
 const menuHistView = document.getElementById('menuHistView'), menuHistList = document.getElementById('menuHistList');
 let histPreviewTs = null; // 当前展开预览的快照 ts（再点一次收起）
 let lastAutoSnap = 0;
+// v6.3：历史操作提示统一走 toast（此前每条 catch 都手搓一遍 showUploadStatus+定时收起）
+function toast(msg) {
+  showUploadStatus(msg);
+  setTimeout(() => { if (uploadStatus.textContent === msg) hideUploadStatus(); }, 2200);
+}
+// v6.3：标识失效版本——置灰 + 禁按钮 + 元信息后缀，不再静默失败也误导「预览失败」
+function markHistBad(row, pv, rs) {
+  try {
+    row.classList.add('hist-bad');
+    if (pv) pv.disabled = true;
+    if (rs) rs.disabled = true;
+    const meta = row.querySelector('.hist-meta');
+    if (meta && meta.textContent.indexOf('不可用') < 0) meta.textContent += ' · 不可用';
+  } catch (e) {}
+}
 async function snapshotHistory(html, manual) {
   if (!cryptoKey || !html) return;
   const now = Date.now();
@@ -3931,19 +4090,26 @@ async function loadHistList() {
     pv.addEventListener('click', async () => {
       const old = row.querySelector('.hist-preview');
       if (old) { old.remove(); if (histPreviewTs === item.ts) { histPreviewTs = null; return; } }
-      try {
+      let j2 = null;
+      try { // v6.3：失败要分清——网络问题是「重试」，解不开是「版本已失效」，不能一律「预览失败」
         const r2 = await fetchRetry(NOTE_API + '/history/' + item.ts, { cache: 'no-store' }, 1);
-        const j2 = await r2.json();
-        const html = await decryptText(j2.ct, j2.iv, cryptoKey);
-        const box = document.createElement('div'); box.className = 'hist-preview';
-        box.textContent = html.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').slice(0, 300) || '（空）';
-        row.appendChild(box); histPreviewTs = item.ts;
-      } catch (e) { showUploadStatus('预览失败'); setTimeout(() => { if (uploadStatus.textContent === '预览失败') hideUploadStatus(); }, 2200); }
+        j2 = await r2.json();
+      } catch (e) { toast('预览失败：网络异常，请重试'); return; }
+      let html;
+      try {
+        html = await decryptText(j2.ct, j2.iv, cryptoKey);
+      } catch (e) { markHistBad(row, pv, rs); toast('该版本不可用'); return; }
+      const box = document.createElement('div'); box.className = 'hist-preview';
+      box.textContent = html.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').slice(0, 300) || '（空）';
+      row.appendChild(box); histPreviewTs = item.ts;
     });
     rs.addEventListener('click', async () => {
+      let j2 = null;
       try {
         const r2 = await fetchRetry(NOTE_API + '/history/' + item.ts, { cache: 'no-store' }, 1);
-        const j2 = await r2.json();
+        j2 = await r2.json();
+      } catch (e) { toast('恢复失败：网络异常，请重试'); return; }
+      try {
         const html = await decryptText(j2.ct, j2.iv, cryptoKey);
         pendingRemoteNote = null; hideRemoteBar(); // 恢复 = 用户显式拍板，任何远端挂起一并作废
         editor.innerHTML = html; lastHtml = html;
@@ -3951,7 +4117,7 @@ async function loadHistList() {
         saveLocal(); // 正常保存 → 服务端 v+1，其他设备经 poll 收到；历史不删
         showUploadStatus('已恢复所选版本');
         setTimeout(() => { if (uploadStatus.textContent === '已恢复所选版本') hideUploadStatus(); }, 2200);
-      } catch (e) { showUploadStatus('恢复失败'); setTimeout(() => { if (uploadStatus.textContent === '恢复失败') hideUploadStatus(); }, 2200); }
+      } catch (e) { markHistBad(row, pv, rs); toast('该版本不可用'); } // v6.3：解不开 = 已失效，置灰而非笼统「恢复失败」
     });
     btns.appendChild(pv); btns.appendChild(rs);
     line.appendChild(meta); line.appendChild(btns);
@@ -3986,8 +4152,18 @@ function loadJsQR() {
     if (typeof window.jsQR === 'function') return resolve(true);
     const s = document.createElement('script');
     s.src = '/jsQR.js';
-    s.onload = () => resolve(typeof window.jsQR === 'function');
-    s.onerror = () => resolve(false);
+    s.onload = () => {
+      const ok = typeof window.jsQR === 'function';
+      if (!ok) console.error('[scan] /jsQR.js 已加载但 window.jsQR 非函数（检查文件内容/UMD 形态）');
+      resolve(ok);
+    };
+    s.onerror = e => {
+      // v6.3：失败必留日志——2026-09 排查实锤：Caddy CSP 的 script-src 漏了 'self'，
+      // 同源动态 <script> 被浏览器静默拦截（curl 看响应是 200 完全看不出来）。
+      // 修 CSP 后此分支理论上不可达；再出现说明网络层或 MIME 出了新问题。
+      console.error('[scan] /jsQR.js 加载失败（若控制台有 CSP violation 提示则为 script-src 缺 \'self\'）', e);
+      resolve(false);
+    };
     document.head.appendChild(s);
   });
 }

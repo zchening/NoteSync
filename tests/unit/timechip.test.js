@@ -92,17 +92,25 @@ test('TC2 斜杠与单数字格式 2026/9/6 7:05 同样命中', t => {
   assert.strictEqual(res[0].at, new Date(d.getFullYear(), d.getMonth(), d.getDate(), 7, 5).getTime());
 });
 
-// ── TC3：无年份已过 → 自动进位明年 ────────────────────────
-test('TC3 无年份 1-1 07:00 今年已过自动进位明年', t => {
+// ── TC3：无年份已过 → 一律按今年解析并标 expired（v6.3：顺延明年的兜底退役——
+// 它让过去日期被当成未来、悬停弹「添加提醒」，用户红线是过去时间不给任何入口）──
+test('TC3-v63 无年份已过时间不再进位明年，直接标 expired', t => {
   const app = freshApp();
   t.after(() => app.dom.window.close());
   const { window } = app;
   const now = new Date();
   const res = window.parseTimeMatches('1-1 07:00 记得做');
-  assert.strictEqual(res.length, 1, '无年份格式必须命中（进位后）');
+  assert.strictEqual(res.length, 1, '无年份格式仍必须命中');
   const expSame = new Date(now.getFullYear(), 0, 1, 7, 0).getTime();
-  const expNext = new Date(now.getFullYear() + 1, 0, 1, 7, 0).getTime();
-  assert.strictEqual(res[0].at, expSame > Date.now() + 30000 ? expSame : expNext);
+  assert.strictEqual(res[0].at, expSame, '必须按今年解析，绝不进位明年');
+  if (expSame <= Date.now() + 30000) {
+    assert.strictEqual(res[0].expired, true, '今年已过的短格式必须标 expired（不给添加入口）');
+  }
+  // 未来日期不受影响：明天的 07:05 仍解析为今年、未过期
+  const tomorrow = new Date(Date.now() + 86400e3);
+  const fut = window.parseTimeMatches((tomorrow.getMonth() + 1) + '-' + tomorrow.getDate() + ' 07:05 记得做');
+  assert.strictEqual(fut.length, 1, '未来短格式必须命中');
+  assert.strictEqual(fut[0].expired, false, '未来短格式不得误标 expired');
 });
 
 // ── TC4：过去时间 → 过期标记（v5.39：仍返回但标 expired，chip 显示灰态）──

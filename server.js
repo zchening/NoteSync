@@ -199,6 +199,34 @@ const server = http.createServer((req, res) => {
     }
     return sendJSON(res, 200, { list: hist.list.map(x => ({ ts: x.ts, v: x.v, manual: !!x.manual, size: (x.ct || '').length })) });
   }
+  // v6.3：PUT /api/note/:id/history/:ts —— 按 ts 覆写单条快照的密文。
+  // 用途：改口令时前端把历史快照逐条「旧钥解→新钥重加」写回，历史不再因换钥集体失效。
+  // 只允许替换 ct/iv，ts/v/manual 原样保留——换钥不改变历史的时序语义。
+  if (req.method === 'PUT' && /^\/api\/note\/[^/]+\/history\/\d+$/.test(url)) {
+    const m = url.match(/^\/api\/note\/([^/]+)\/history\/(\d+)$/);
+    let id;
+    try { id = decodeURIComponent(m[1]); } catch { return sendJSON(res, 400, { error: 'bad id' }); }
+    if (!id || !ID_RE.test(id)) return sendJSON(res, 400, { error: 'bad id' });
+    const limit = checkLimit(ip, id);
+    if (limit.locked) return sendJSON(res, 429, { error: 'locked', retryAfter: limit.retryAfter });
+    let body = '';
+    req.on('data', c => { body += c; if (body.length > 1024 * 1024) req.destroy(); });
+    req.on('end', () => {
+      let obj;
+      try { obj = JSON.parse(body); } catch { return sendJSON(res, 400, { error: 'bad json' }); }
+      if (!obj || typeof obj.ct !== 'string' || !obj.ct || typeof obj.iv !== 'string' || !obj.iv) {
+        return sendJSON(res, 400, { error: 'missing fields' });
+      }
+      const hist = readHist(id);
+      const item = hist.list.find(x => String(x.ts) === m[2]);
+      if (!item) return sendJSON(res, 404, { error: 'no such snapshot' });
+      item.ct = obj.ct;
+      item.iv = obj.iv;
+      writeHist(id, hist);
+      return sendJSON(res, 200, { ok: true, ts: item.ts });
+    });
+    return;
+  }
   if (req.method === 'PUT' && url.startsWith('/api/note/') && url.endsWith('/history')) {
     let id;
     try { id = decodeURIComponent(url.slice('/api/note/'.length, -'/history'.length)); } catch { return sendJSON(res, 400, { error: 'bad id' }); }
@@ -257,6 +285,11 @@ const server = http.createServer((req, res) => {
         return sendJSON(res, 400, { error: 'missing fields' });
       }
       const cur = readNote(id);
+      // v6.3：opt-in 乐观并发控制——MCP 等自动化写入带 baseV 时，版本不符返回 409（附当前 v），
+      // 客户端重读-改-重写；web 端不带 baseV，行为完全不变（不破坏任何现有客户端）。
+      if (typeof obj.baseV === 'number' && (cur.v || 0) !== obj.baseV) {
+        return sendJSON(res, 409, { error: 'version conflict', v: cur.v || 0 });
+      }
       // v5.36 提醒字段（rem）：与正文同为密文，服务端零知识不变。
       // 客户端显式传 rem（含 null=取消提醒）时采用之；未传（普通正文保存）时保留原值——
       // 否则任何一台设备的正文保存都会抹掉另一台设备刚设的提醒。
@@ -339,6 +372,17 @@ const server = http.createServer((req, res) => {
       const f = path.join(APP_DIR, 'jsQR.js');
       if (fs.existsSync(f)) {
         res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'public, max-age=31536000, immutable' });
+        fs.createReadStream(f).pipe(res);
+        return;
+      }
+    }
+    // v6.3：MCP 工具公开下载（零知识不破——这两个文件不含任何秘密，口令走调用端 env）。
+    // 新机器接入：curl 拿 setup 脚本 → 跑一条命令自动写 mcp.json，免 clone 免手工配置。
+    // 精确文件名白名单（url 完全匹配才命中），无路径穿越面；no-cache 保证拿到最新版。
+    if (url === '/mcp/notesync-mcp-server.js' || url === '/mcp/setup-notesync-mcp.js') {
+      const f = path.join(APP_DIR, 'tools', url.split('/').pop());
+      if (fs.existsSync(f)) {
+        res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'no-cache' });
         fs.createReadStream(f).pipe(res);
         return;
       }

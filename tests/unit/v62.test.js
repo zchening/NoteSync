@@ -54,14 +54,14 @@ test('V62-5 菜单滚动与瘦身：主视图 58vh 内滚、盒 300px、条目 4
 });
 
 // ── 6. 版本升格 ──
-test('V62-6 版本升格 6.2/62 + README 条目 ≤40 汉字', () => {
+test('V62-6 版本升格 6.2/62 + README 条目 ≤40 汉字（v6.3 起断言跟随最新版）', () => {
   const src = readSrc();
-  assert.ok(src.includes("const APP_VERSION = '6.2';"), 'APP_VERSION 应 6.2');
+  assert.ok(src.includes("const APP_VERSION = '6.3';"), 'APP_VERSION 应 6.3');
   const gradle = readRel('android/app/build.gradle');
-  assert.ok(gradle.includes('versionCode 62') && gradle.includes('versionName "6.2"'), 'gradle 应 62/6.2');
+  assert.ok(gradle.includes('versionCode 63') && gradle.includes('versionName "6.3"'), 'gradle 应 63/6.3');
   const readme = readRel('README.md');
-  const row = (readme.match(/^\| v6\.2 \|[^|]+\|([^|]+)\|/m) || [])[1] || '';
+  const row = (readme.match(/^\| v6\.3 \|[^|]+\|([^|]+)\|/m) || [])[1] || '';
   const hz = (row.match(/[一-龥]/g) || []).length;
-  assert.ok(hz > 0 && hz <= 40, 'README v6.2 摘要应为 1-40 汉字（实测 ' + hz + '）');
-  assert.ok(readme.includes('| v6.2 | 2026-09-07 |'), 'README 应有 v6.2 条目');
+  assert.ok(hz > 0 && hz <= 40, 'README v6.3 摘要应为 1-40 汉字（实测 ' + hz + '）');
+  assert.ok(readme.includes('| v6.3 | 2026-09-07 |'), 'README 应有 v6.3 条目');
 });
