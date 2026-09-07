@@ -491,7 +491,7 @@ const NOTE_LAST_KEY = 'notesync_last_note';
 const NOTE_JUMPED_KEY = 'notesync_jumped';
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '7.1.0';
+const APP_VERSION = '7.1.1';
 const BUILD_DATE = '2026-09-07';
 
 const $ = s => document.querySelector(s);
@@ -4517,6 +4517,9 @@ function normDecorHtml(html) {
       const lt = tag.toLowerCase();
       let attrs = '';
       if (tag === 'A') attrs = ' href="' + (child.getAttribute('href') || '') + '"';
+      // v7.1.1：img 保留 src——note_image/MCP 插图落地后 src 是图片身份属性，归一化丢 src 会把
+      // 两张不同的图判等（回填方向单调安全：判定更严只会更少回填、更多落回严格比较）。
+      if (tag === 'IMG') attrs = ' src="' + (child.getAttribute('src') || '') + '"';
       out += '<' + lt + attrs + '>' + walk(child) + '</' + lt + '>';
     }
     return out;

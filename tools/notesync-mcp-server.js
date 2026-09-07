@@ -15,7 +15,8 @@
 //   note_locate  按名称定位笔记（可附带试解密验证）
 //   note_read    获取笔记全文：text 纯文本 / html 原文 / image 长图 PNG
 //   note_edit    追加/插入/删除一段文字（纯文本语义，位置按可见字符计）
-//   note_remind  为笔记创建未来时间的提醒（上限 10 条，过期/过去时间拒绝）
+//   note_image   本机图片上传 Cloudinary 后插入正文 <img>（v7.1.1，不压缩直传 ≤8MB）
+//   note_remind  提醒管理：add 设提醒（回写正文行）/ list 列出 / cancel 取消 / clear 清理过期（v7.1.1）
 
 'use strict';
 
@@ -31,6 +32,15 @@ const OUT_DIR = process.env.NOTESYNC_OUT_DIR || path.join(os.tmpdir(), 'notesync
 const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 const PBKDF2_ITER = 200000; // 与 index.html PBKDF2_ITER 严格一致
 const REM_MAX = 10;         // 未来提醒上限（与 index.html REM_MAX 一致）
+const REM_DONE_MAX = 20;    // 已触发条目保留上限 FIFO（与 index.html REM_DONE_MAX 一致）
+
+// ---------- Cloudinary（v7.1.1 note_image） ----------
+// 与 web 端 index.html 同源同值（unsigned preset，非密钥可公开）——改一处必须同步另一处。
+const CLOUD_NAME = 'dntsgx6t3';
+const UPLOAD_PRESET = 'NoteXCloudinary';
+const CLOUDINARY_URL = 'https://api.cloudinary.com/v1_1/' + CLOUD_NAME + '/image/upload';
+const IMG_MAX_BYTES = 8 * 1024 * 1024; // MCP 直传不压缩（web 端才压缩到 1920 宽），上限 8MB
+const IMG_EXT_RE = /\.(png|jpe?g|gif|webp)$/i;
 
 // ---------- 加解密（与 web 端同构） ----------
 const keyCache = new Map(); // key = name + '|' + saltB64
@@ -52,7 +62,9 @@ function encryptText(text, keyRaw, ivBuf) {
 }
 function decryptText(ctB64, ivB64, keyRaw) {
   const ct = Buffer.from(ctB64, 'base64');
-  if (ct.length < 17) throw new Error('ciphertext too short');
+  // 16 字节 = 纯 GCM tag = 空明文（web 端 webcrypto 无长度守卫，清空正文会产出 16 字节密文，
+  // v7.1.1 起 MCP 与 web 语义对齐：16 字节合法解出空串；<16 才是真截断）
+  if (ct.length < 16) throw new Error('ciphertext too short');
   const tag = ct.subarray(ct.length - 16);
   const body = ct.subarray(0, ct.length - 16);
   const d = crypto.createDecipheriv('aes-256-gcm', keyRaw, Buffer.from(ivB64, 'base64'));
@@ -209,7 +221,9 @@ async function renderImage(html) {
     const page = await browser.newPage({ viewport: { width: 800, height: 1000 }, deviceScaleFactor: 2 });
     await page.setContent('<!DOCTYPE html><html><head><meta charset="utf-8"><style>' +
       'body{font:15px/1.7 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;color:#1a1c23;background:#fff;padding:32px 40px}' +
-      'div,p{min-height:1em;margin:0}u.rem-mark{text-decoration:underline}s{text-decoration:line-through}a{color:#2456c8}</style></head><body>' +
+      'div,p{min-height:1em;margin:0}u.rem-mark{text-decoration:underline}s{text-decoration:line-through}a{color:#2456c8}' +
+      'img{max-width:100%;height:auto}' + // v7.1.1：note_image 落地后宽图长图导出不横向爆版
+      '</style></head><body>' +
       html + '</body></html>', { waitUntil: 'load' });
     const dims = await page.evaluate(() => ({ w: document.documentElement.scrollWidth, h: document.documentElement.scrollHeight }));
     const pngPath = path.join(OUT_DIR, 'note-' + stamp + '.png');
@@ -289,39 +303,163 @@ async function toolEdit(args) {
   });
 }
 
+// 回写正文行的时间串：与 web 端 fmtRemInsert（index.html「function fmtRemInsert」）逐字同构——
+// 年-月-日 时:分（年月日时不补零、分补零两位）。正文行经 web collectTimeMatches 解析后
+// 必须得到与 rem.at 完全一致的 at，下划线/触发后删除线才会命中。
+function fmtRemLine(at) {
+  const d = new Date(at);
+  return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate() + ' ' + d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+// 与 web 端 normalizeRemList（index.html「function normalizeRemList」）同构：
+// 合法条目过滤 → at 升序 → 未来全留（上限 REM_MAX 由 add 把守）→ 已过期/已触发留最新 REM_DONE_MAX 条
+function normRemList(list) {
+  const now = Date.now();
+  const all = list
+    .filter(r => r && typeof r.at === 'number')
+    .map(r => ({ at: r.at, text: typeof r.text === 'string' ? r.text : '', fired: !!r.fired }))
+    .sort((a, b) => a.at - b.at);
+  const future = all.filter(r => r.at > now).slice(0, REM_MAX); // 与 web 同构：异常超限时留最近 REM_MAX 条（验收路三 P07b）
+  const done = all.filter(r => r.at <= now).slice(-REM_DONE_MAX);
+  return future.concat(done).sort((a, b) => a.at - b.at);
+}
+// cancel/clear 的 PUT：服务端缺 ct/iv/salt 直接 400（missing fields），空串字段才保留原值——
+// 「不动正文」指明文不变，密文层必须连同 ct/iv/salt 一起重加密提交，409 由 withRetry409 兜。
+// 清空后 rem 用显式 null（服务端约定 null=取消提醒，写 {"list":[]} 语义不等价）。
+async function putBodyPreservingHtml(name, html, saltB64, key, v, remValue) {
+  const encHtml = encryptText(html, key);
+  const body = { ct: encHtml.ct, iv: encHtml.iv, salt: saltB64, baseV: v };
+  if (remValue !== undefined) body.rem = remValue;
+  return apiPut(name, body);
+}
 async function toolRemind(args) {
   const name = args.name || DEFAULT_NOTE;
   assertName(name);
   mustPass();
-  const at = parseAt(args.at);
-  if (at === null) throw new Error('at 需为 ISO 8601、"YYYY-M-D H:MM"（本地时区）或中文相对时间（如 明天早上9点、这周五18:30、下个月1号 18:50）');
-  if (at <= Date.now() + 30000) throw new Error('过去或 30 秒内的时间不能设提醒：' + args.at + '（若是「这周X」已过，可改用「下周X」）');
-  const text = String(args.text || '').slice(0, 20);
+  const op = args.op || 'add';
+  if (!['add', 'list', 'cancel', 'clear'].includes(op)) throw new Error('op 只支持 add | list | cancel | clear');
   return withRetry409(name, async () => {
-    const { note, saltB64, key, v } = await loadNote(name);
+    const { note, saltB64, key, html, v } = await loadNote(name);
     let list = [];
     if (note.rem) {
       const enc = JSON.parse(note.rem);
       const obj = JSON.parse(decryptText(enc.ct, enc.iv, key));
-      list = Array.isArray(obj.list) ? obj.list.filter(r => r && typeof r.at === 'number') : [];
+      list = Array.isArray(obj.list) ? obj.list.filter(r => r && typeof r.at === 'number')
+        : (obj && typeof obj.at === 'number' ? [obj] : []); // v5.37 前单条目旧格式迁移（与 web normalizeRemList 同构，防 add 静默丢旧提醒——验收路三 P17）
     }
     const now = Date.now();
+
+    if (op === 'list') {
+      return { list: list.slice().sort((a, b) => a.at - b.at).map(r => ({
+        at: r.at, atStr: fmtRemLine(r.at), text: r.text || '', fired: !!r.fired, expired: r.at <= now,
+      })) };
+    }
+
+    if (op === 'cancel') {
+      let atNum = typeof args.at === 'number' ? args.at : parseAt(typeof args.at === 'string' ? args.at : '');
+      if (atNum === null || atNum === undefined) throw new Error('cancel 需要 at（数字时间戳或可解析的时间串；先用 op=list 拿精确值）');
+      const gone = list.find(r => r.at === atNum);
+      if (!gone) throw new Error('未找到该时刻的提醒：' + atNum + '（可先 op=list 查看）');
+      const next = normRemList(list.filter(r => r.at !== atNum));
+      // 逐字对齐 web removeReminder：只删 rem 条目，正文文字行保留（时间串回归普通文本）
+      const r = await putBodyPreservingHtml(name, html, saltB64, key, v,
+        next.length ? JSON.stringify(encryptText(JSON.stringify({ list: next }), key)) : null);
+      return { ok: true, op, removed: { at: gone.at, atStr: fmtRemLine(gone.at), text: gone.text || '' }, futureCount: next.filter(x => x.at > now).length, v: r.v };
+    }
+
+    if (op === 'clear') {
+      const next = normRemList(list.filter(r => r.at > now));
+      const cleared = list.length - next.length;
+      if (cleared === 0 && next.length === list.length) return { ok: true, op, cleared: 0, futureCount: next.length }; // 无可清，不发起 PUT
+      const r = await putBodyPreservingHtml(name, html, saltB64, key, v,
+        next.length ? JSON.stringify(encryptText(JSON.stringify({ list: next }), key)) : null);
+      return { ok: true, op, cleared, futureCount: next.length, v: r.v };
+    }
+
+    // op === 'add'（默认）：v7.1.1 起回写正文行（与 web 面板 insertRemLine 同构；MCP 无光标，固定追加正文末尾）
+    const at = parseAt(args.at);
+    if (at === null) throw new Error('at 需为 "YYYY-MM-DDTHH:MM" 或 "YYYY-M-D H:MM"（本地时区，分钟级，不带秒与时区）或中文相对时间（如 明天早上9点、这周五18:30、下个月1号 18:50）');
+    if (at <= Date.now() + 30000) throw new Error('过去或 30 秒内的时间不能设提醒：' + args.at + '（若是「这周X」已过，可改用「下周X」）');
+    const text = String(args.text || '').trim().slice(0, 20); // 与 web chip 面板同口径：先 trim 再截 20
+    const dup = list.find(r => r.at === at);
     const future = list.filter(r => r.at > now);
-    const dup = future.find(r => r.at === at);
     if (!dup && future.length >= REM_MAX) throw new Error('提醒最多 ' + REM_MAX + ' 条（当前未来提醒 ' + future.length + ' 条），先取消一些吧');
-    const next = list.filter(r => r.at !== at);
+    const next = normRemList(list.filter(r => r.at !== at));
     next.push({ at, text, fired: false });
     next.sort((a, b) => a.at - b.at);
+    const line = fmtRemLine(at) + (text ? '　' + text : ''); // 全角空格 U+3000，与 web fmtRemInsert+'　'+item 逐字一致
+    const nextHtml = html + '<div>' + escapeHtml(line) + '</div>';
     const re = encryptText(JSON.stringify({ list: next }), key);
-    const body = { ct: (note.ct || ''), iv: (note.iv || ''), salt: saltB64, rem: JSON.stringify(re), baseV: v };
-    if (!note.ct && !note.iv) { // 处女笔记只设提醒：ct/iv 留空，服务端 v5.58/v6.0 规则会保住原值（本来也空）
-      delete body.ct; delete body.iv;
-      body.salt = saltB64;
-    }
-    const r = await apiPut(name, body);
-    return { ok: true, v: r.v, at, text, futureCount: next.filter(x => x.at > Date.now()).length };
+    const r = await putBodyPreservingHtml(name, nextHtml, saltB64, key, v, JSON.stringify(re));
+    return { ok: true, op, v: r.v, at, atStr: fmtRemLine(at), text, futureCount: next.filter(x => x.at > Date.now()).length, bodyLine: line, overwrote: !!dup };
   });
 }
+// ---------- note_image：本机图片 → Cloudinary → 正文插 <img>（v7.1.1） ----------
+// 线上 CSP 已放行：img-src https://res.cloudinary.com + connect-src api.cloudinary.com（Caddy 头），
+// web 端正文渲染 <img> 无障碍；正文保存走 isDecorativelyEqual 之外的结构标签，不受纯文本转义影响。
+async function toolImage(args) {
+  const name = args.name || DEFAULT_NOTE;
+  assertName(name);
+  const p = String(args.path || '');
+  if (!p) throw new Error('path 必填（本机图片绝对路径）');
+  if (!IMG_EXT_RE.test(p)) throw new Error('只支持 png/jpg/jpeg/gif/webp：' + p);
+  let buf;
+  try { buf = fs.readFileSync(p); } catch (e) { throw new Error('读取图片失败：' + p + '（' + (e.code || e.message) + '）'); }
+  if (buf.length > IMG_MAX_BYTES) throw new Error('图片超过 8MB（实际 ' + (buf.length / 1048576).toFixed(1) + 'MB）；MCP 直传不压缩，请先缩小后再试');
+
+  // 上传放在重试闭包外：409 重试只重做 PUT，绝不重复上传产生垃圾文件（对抗审 P1-2）
+  const fd = new FormData();
+  fd.append('file', new Blob([buf]), path.basename(p));
+  fd.append('upload_preset', UPLOAD_PRESET);
+  let url = '';
+  try {
+    const resp = await fetch(CLOUDINARY_URL, { method: 'POST', body: fd, signal: AbortSignal.timeout(30000) });
+    let j = null;
+    try { j = await resp.json(); } catch (e) { throw new Error('Cloudinary 响应非 JSON：HTTP ' + resp.status); }
+    if (!resp.ok || !j || !j.secure_url) {
+      throw new Error('Cloudinary 上传失败：HTTP ' + resp.status + (j && j.error && j.error.message ? ' ' + j.error.message : ''));
+    }
+    url = j.secure_url;
+  } catch (e) {
+    if (e.name === 'TimeoutError') throw new Error('Cloudinary 上传超时（30s），未写入笔记');
+    throw e;
+  }
+  if (!/^https:\/\/res\.cloudinary\.com\//.test(url)) throw new Error('Cloudinary 返回了非预期的 URL，拒绝写入笔记：' + url);
+
+  const imgHtml = '<img src="' + escapeHtml(url) + '">';
+  try {
+    return await withRetry409(name, async () => {
+      const { note, saltB64, key, html, v } = await loadNote(name);
+      let nextHtml;
+      const located = typeof args.position === 'number' || args.match !== undefined;
+      if (located) {
+        const pm = htmlToPlainMap(html);
+        let at;
+        if (typeof args.position === 'number') {
+          at = plainToHtmlIndex(pm, Math.max(0, Math.floor(args.position)));
+        } else {
+          const m = String(args.match || '');
+          if (!m.trim()) throw new Error('match 不能为空（按纯文本子串定位；正文里的 &<>"\' 存储为 HTML 实体，直接给纯文本即可）');
+          const idx = html.indexOf(escapeHtml(m)); // 与 toolEdit 同口径：纯文本子串，内部转义后查找
+          if (idx === -1) throw new Error('未在正文中找到 match：' + m);
+          at = args.where === 'before' ? idx : idx + escapeHtml(m).length;
+        }
+        nextHtml = html.slice(0, at) + imgHtml + html.slice(at);
+      } else {
+        nextHtml = html + '<div>' + imgHtml + '</div>'; // 默认：正文末尾独立一行（与 web 行块结构一致）
+      }
+      const enc = encryptText(nextHtml, key);
+      const body = { ct: enc.ct, iv: enc.iv, salt: saltB64, baseV: v };
+      if (note.rem !== undefined) body.rem = note.rem; // 只动正文，提醒原样透传
+      const r = await apiPut(name, body);
+      return { ok: true, url, v: r.v, inserted: located ? 'inline' : 'append' };
+    });
+  } catch (e) {
+    const err = new Error((e.message || String(e)) + '｜图片已上传成功：' + url + '（可重试写入或手动插入该 URL）');
+    err.uploadedUrl = url;
+    throw err;
+  }
+}
+
 // 中文相对时间表（与 web 端逐字一致）：[日期段]? [\s]* [时段词]? [\s]* [时刻]，锚定全串匹配。
 // H 左邻不设 (?<![年月日号:])：锚定全串下「2026年9月8日18点」整体必不匹配（天然防护），
 // 而日期段结尾（日/号）直接接 H点 是合法形态（本月10日18点30 / 下周日9点）——裁决 2025-09-07。
@@ -433,28 +571,43 @@ const TOOLS = [
         text: { type: 'string', description: 'append/insert 要写入的文字（自动 HTML 转义）' },
         position: { type: 'number', description: '纯文本可见字符偏移（insert 起点 / delete 起点）' },
         length: { type: 'number', description: 'delete 删除的可见字符数' },
-        match: { type: 'string', description: '定位锚点字符串' },
+        match: { type: 'string', description: '定位锚点（纯文本子串；正文中的 &<>"\' 存储为 HTML 实体，直接给纯文本即可）' },
         where: { type: 'string', enum: ['before', 'after'], description: 'insert 相对 match 的位置' },
       },
       required: ['op'],
     },
   },
   {
-    name: 'note_remind',
-    description: '为笔记创建未来时间的提醒（服务端零知识，提醒密文本地加密写回）。at 支持 ISO 8601、"YYYY-M-D H:MM" 或中文相对时间（与 Web 端一致，见 at 参数说明）；上限 10 条未来提醒；同刻重设=更新文案',
+    name: 'note_image',
+    description: '把本机图片加入笔记：上传 Cloudinary 后在正文插入 <img>（线上 CSP 已放行该域）。默认追加为正文末尾独立一行；给 match（纯文本子串，where=before/after）或 position（纯文本偏移）可内联插入。png/jpg/jpeg/gif/webp，≤8MB，直传不压缩',
     inputSchema: {
       type: 'object',
       properties: {
         name: { type: 'string' },
-        at: { type: 'string', description: '提醒时刻。支持：ISO 8601；YYYY-M-D H:MM；中文相对时间 [今天/明天/后天/大后天|这周X/下周X|本月N日(号)/下个月N号]? [凌晨/早上/上午/中午/下午/傍晚/晚上/夜里]? [hh:mm 或 H点/H点半/H点M分/H点M]，如「明天早上9点」「这周五18:30」「下个月1号 18:50」「晚上12点半」' },
-        text: { type: 'string', description: '提醒事项（≤20 字，可空）' },
+        path: { type: 'string', description: '本机图片绝对路径' },
+        match: { type: 'string', description: '定位锚点（纯文本子串），与 where 配合内联插入' },
+        position: { type: 'number', description: '纯文本可见字符偏移（与 match 二选一）' },
+        where: { type: 'string', enum: ['before', 'after'], description: '相对 match 的位置，默认 after' },
       },
-      required: ['at'],
+      required: ['path'],
+    },
+  },
+  {
+    name: 'note_remind',
+    description: '笔记提醒管理（v7.1.1 起）。op=add（默认）设提醒：at 支持相对时间，上限 10 条未来提醒，同刻重设=更新文案，并在正文末尾回写「时间　事项」一行；op=list 列出全部提醒（含 at 精确值，供 cancel 用）；op=cancel 按 at 取消一条（只删提醒，不动正文文字——与网页端一致）；op=clear 清理全部已过期/已触发条目',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        op: { type: 'string', enum: ['add', 'list', 'cancel', 'clear'], description: 'add=设提醒（默认）/ list=列出 / cancel=取消一条 / clear=清理过期' },
+        at: { type: ['string', 'number'], description: 'add：提醒时刻，支持 "YYYY-MM-DDTHH:MM" 或 YYYY-M-D H:MM（本地时区，分钟级，不带秒与时区）；中文相对时间 [今天/明天/后天/大后天|这周X/下周X|本月N日(号)/下个月N号]? [凌晨/早上/上午/中午/下午/傍晚/晚上/夜里]? [hh:mm 或 H点/H点半/H点M分/H点M]，如「明天早上9点」「这周五18:30」「下个月1号 18:50」「晚上12点半」。cancel：数字时间戳或可解析的时间串（建议先 op=list 取精确值）' },
+        text: { type: 'string', description: '提醒事项（≤20 字，可空；仅 add 用）' },
+      },
     },
   },
 ];
 
-const IMPLS = { note_locate: toolLocate, note_read: toolRead, note_edit: toolEdit, note_remind: toolRemind };
+const IMPLS = { note_locate: toolLocate, note_read: toolRead, note_edit: toolEdit, note_image: toolImage, note_remind: toolRemind };
 
 function rpcResult(id, result) { process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id, result }) + '\n'); }
 function rpcError(id, code, message) {
@@ -469,7 +622,7 @@ function handleLine(line) {
     rpcResult(id, {
       protocolVersion: '2024-11-05',
       capabilities: { tools: {} },
-      serverInfo: { name: 'notesync', version: '7.1.0' },
+      serverInfo: { name: 'notesync', version: '7.1.1' },
     });
     return;
   }
@@ -511,4 +664,4 @@ if (require.main === module) {
   process.stderr.write('[notesync-mcp] ready base=' + BASE + ' note=' + (DEFAULT_NOTE || '(per-call)') + ' pass=' + (PASSPHRASE ? 'set' : 'MISSING') + '\n');
 }
 
-module.exports = { parseAt, toolRemind };
+module.exports = { parseAt, toolRemind, toolImage, fmtRemLine, encryptText, decryptText, getKeyFor };
