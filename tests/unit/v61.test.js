@@ -158,10 +158,10 @@ test('V61-13 扫码提示分流：HTTPS/组件失败/无摄像头/权限拒绝 �
 // ── 14. 版本升格（v7.0 起断言跟随最新版）──
 test('V61-14 版本升格：APP_VERSION 7.0.1 / BUILD_DATE / gradle 701+7.0.1 / README 条目 ≤40 汉字', () => {
   const src = readSrc();
-  assert.ok(src.includes("const APP_VERSION = '7.2.1';"), 'APP_VERSION 应 7.2.1');
+  assert.ok(src.includes("const APP_VERSION = '7.3.0';"), 'APP_VERSION 应 7.3.0');
   assert.ok(src.includes("const BUILD_DATE = '2026-09-08';"), 'BUILD_DATE 应更新');
   const gradle = readRel('android/app/build.gradle');
-  assert.ok(gradle.includes('versionCode 721') && gradle.includes('versionName "7.2.1"'), 'gradle 应 721/7.2.1');
+  assert.ok(gradle.includes('versionCode 730') && gradle.includes('versionName "7.3.0"'), 'gradle 应 730/7.3.0');
   const readme = readRel('README.md');
   const row = (readme.match(/^\| v7\.0\.1 \|[^|]+\|([^|]+)\|/m) || [])[1] || '';
   const hz = (row.match(/[一-龥]/g) || []).length;

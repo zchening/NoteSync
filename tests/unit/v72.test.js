@@ -69,11 +69,11 @@ function freshServer() {
 }
 
 // ═══════════ 源码断言 ═══════════
-test('V72-S1 版本三处一致：index 7.2.1 / gradle 721 / MCP serverInfo 7.2.1', () => {
-  assert.ok(SRC.includes("const APP_VERSION = '7.2.1';"), 'APP_VERSION 应 7.2.1');
+test('V72-S1 版本三处一致：index 7.3.0 / gradle 730 / MCP serverInfo 7.3.0', () => {
+  assert.ok(SRC.includes("const APP_VERSION = '7.3.0';"), 'APP_VERSION 应 7.3.0');
   const gradle = fs.readFileSync(path.join(ROOT, 'android', 'app', 'build.gradle'), 'utf8');
-  assert.ok(gradle.includes('versionCode 721') && gradle.includes('versionName "7.2.1"'), 'gradle 应 721/7.2.1');
-  assert.ok(MCP_SRC.includes("serverInfo: { name: 'notesync', version: '7.2.1' }"), 'MCP serverInfo 应 7.2.1');
+  assert.ok(gradle.includes('versionCode 730') && gradle.includes('versionName "7.3.0"'), 'gradle 应 730/7.3.0');
+  assert.ok(MCP_SRC.includes("serverInfo: { name: 'notesync', version: '7.3.0' }"), 'MCP serverInfo 应 7.3.0');
 });
 
 test('V72-S2 新工具注册齐全：TOOLS 含 search/export/import + description 含隐私提示', () => {
@@ -438,8 +438,10 @@ test('V72-I11 preview/apply 对不安全 zip 条目名拒绝（zip slip 复用 r
 // ═══════════ web 端症状 1/2/3/4 源码断言（本版范围的最低守门） ═══════════
 test('V72-W1 症状2：web PUT 带 baseV + 409 挂起（handleWriteConflict 存在且不自动重试）', () => {
   assert.ok(SRC.includes('handleWriteConflict'), '应有 handleWriteConflict');
-  assert.ok(/saveLocal[\s\S]{0,2000}baseV: localVer[\s\S]{0,600}status === 409[\s\S]{0,200}handleWriteConflict/.test(SRC), 'saveLocal 的 apiPut 应带 baseV 并在 409 走挂起');
-  assert.ok(/persistReminders[\s\S]{0,3000}baseV: localVer/.test(SRC), 'persistReminders 应带 baseV');
+  // v7.3.0（HB3）：baseV 用 localVer（SSE 已知版本不得抬高——静默覆盖他端内容），409 仍走挂起不自动重试。
+  // apiPut 行尾注释较长，baseV→409 实际间距 856 字符，{0,600} 不足放宽 {0,1200}。
+  assert.ok(/function saveLocal[\s\S]{0,2000}baseV: localVer[\s\S]{0,1200}status === 409[\s\S]{0,200}handleWriteConflict/.test(SRC), 'saveLocal 的 apiPut 应带 baseV=localVer 并在 409 走挂起');
+  assert.ok(/persistReminders[\s\S]{0,3000}baseV: localVer/.test(SRC), 'persistReminders 应带 baseV=localVer');
 });
 test('V72-W2 症状4：poll 远端三级分类（严格相等静默/装饰等价静默/真实变更走原路径）', () => {
   assert.ok(/if \(html === lastHtml\) \{[\s\S]{0,400}return; \/\/ 级0/.test(SRC), '级0 严格相等静默消费');

@@ -1412,6 +1412,7 @@
 | v5.56 | Q1-Q6（合并吞噬修冲突条 + 自动解锁补提醒恢复 + poll 同步 note.rem + 离线三级兜底+cacheInfo + 版本号双 bump/CI 注入 + APP 诊断入口，unit v556.test.js F1-F8 固化） |
 | v5.54 | P1-P5（过期补弹删+REM_DONE 退役纯时间过滤 + RemReceiver 60s 迟到容差 + 离线口令解本地缓存回退 + rem-notify-click JS 监听 + 页脚菜单收藏体系） |
 | v5.53 | O1-O5（删 captureInput 修 IME 组字链 + editor isComposing 旁路零 DOM 手术 + 首页 250ms 轮询兜底 + windowOptOutEdgeToEdgeEnforcement 退出 edge-to-edge + 返回键 OnBackPressedCallback 接 WebView 历史 + webContentsDebuggingEnabled 排障） |
+| v7.3.0 | 保存冲突频繁五根因修复：P0-1 解密比较自动接受 / P0-2 二次409收口 / P0-5 提醒系统解耦 / P2-4 保存互斥；HB1-6（remoteKeep合并远端提醒、用户通道补推rem、回滚对齐baseV、挂起期提醒草稿、收口失败补挂、消费点移出finally/草稿隔离/合并重套上限）；三轮对抗审核补丁（P1-A挂起期poll守卫/P1-B草稿恢复/P1-C武装期比较/P2-a密文草稿/P2-b本机优先/P2-d文案优先）——baseV一律localVer，unit v73 S1-S9+B1-B13固化 |
 | v7.2.1 | 提醒面板事项框 placeholder 加字数提示「事项（最多20字）」（用户要求，1 行文案改动+7 测试文件断言同步） |
 | v7.2.0 | MCP 四工具（search/export/import/remove+replace_html）；四症状根修：PUT 带 baseV 409 挂起冲突条、poll 三级分类、relocate 禁跨块+打字推迟、全角归一+hover 选时；relTime 事项区 U+3000 防护修复 |
 | v7.1.1 | MCP note_image 直传 Cloudinary + note_remind 四 op + decryptText <16 对齐 + normDecorHtml 保留 img src |

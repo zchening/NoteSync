@@ -285,8 +285,9 @@ const server = http.createServer((req, res) => {
         return sendJSON(res, 400, { error: 'missing fields' });
       }
       const cur = readNote(id);
-      // v6.3：opt-in 乐观并发控制——MCP 等自动化写入带 baseV 时，版本不符返回 409（附当前 v），
-      // 客户端重读-改-重写；web 端不带 baseV，行为完全不变（不破坏任何现有客户端）。
+      // v6.3：opt-in 乐观并发控制——写入带 baseV 时，版本不符返回 409（附当前 v），
+      // 客户端重读-改-重写；v7.2.0 起 web 端也带 baseV（baseV=localVer），
+      // 不带 baseV 的旧客户端行为完全不变（不破坏任何现有客户端）。
       if (typeof obj.baseV === 'number' && (cur.v || 0) !== obj.baseV) {
         return sendJSON(res, 409, { error: 'version conflict', v: cur.v || 0 });
       }
