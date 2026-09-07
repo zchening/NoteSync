@@ -23,6 +23,7 @@ node tests/e2e/_probe_<name>.js             # 各专项回归探针（退出码 
 5. **编辑器根下必须全为块级子节点**（`ensureBlockWrapped` 收口）；裸文本挂根 Chromium 不绘制光标（F7）。
 6. **撤销栈纪律**：用户 input 压栈（recordIfChanged）；程序化改动（linkify/poll/粘贴收尾整理）只 `syncCurrentState()` 不压栈；`historyUndo/historyRedo` 不触发 linkify、不参与首尾空行清理；回车类输入（insertParagraph/insertLineBreak）绝不清理空块（bug 4）。
 7. **fetchRetry 对 4xx 不重试**（锁定/非法名等客户端错误，重试只浪费时间）。
+8. **保存/冲突纪律（v7.3.0 定）**：baseV 一律 localVer（SSE 只触发 poll，绝不抬 baseV）；409 后必须**解密远端正文与本机比较再决策**（AES-GCM 随机 IV，绝不比 ct/iv），真实差异挂起弹条绝不静默覆盖；提醒系统 409 走系统通道只合并列表、不弹用户条。
 
 ## 测试与发布纪律
 
