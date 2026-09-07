@@ -294,8 +294,8 @@ async function toolRemind(args) {
   assertName(name);
   mustPass();
   const at = parseAt(args.at);
-  if (at === null) throw new Error('at 需为 ISO 8601 或 "YYYY-M-D H:MM"（本地时区）');
-  if (at <= Date.now()) throw new Error('过去的时间不能设提醒：' + args.at);
+  if (at === null) throw new Error('at 需为 ISO 8601、"YYYY-M-D H:MM"（本地时区）或中文相对时间（如 明天早上9点、这周五18:30、下个月1号 18:50）');
+  if (at <= Date.now() + 30000) throw new Error('过去或 30 秒内的时间不能设提醒：' + args.at + '（若是「这周X」已过，可改用「下周X」）');
   const text = String(args.text || '').slice(0, 20);
   return withRetry409(name, async () => {
     const { note, saltB64, key, v } = await loadNote(name);
@@ -322,13 +322,77 @@ async function toolRemind(args) {
     return { ok: true, v: r.v, at, text, futureCount: next.filter(x => x.at > Date.now()).length };
   });
 }
-function parseAt(s) {
+// 中文相对时间表（与 web 端逐字一致）：[日期段]? [\s]* [时段词]? [\s]* [时刻]，锚定全串匹配。
+// H 左邻不设 (?<![年月日号:])：锚定全串下「2026年9月8日18点」整体必不匹配（天然防护），
+// 而日期段结尾（日/号）直接接 H点 是合法形态（本月10日18点30 / 下周日9点）——裁决 2025-09-07。
+// 红线由 toolRemind 执行：算出过去（含 now+30s 内）一律视为过期。
+const REL_RE = /^(大后天|明天|后天|今天|这周[一二三四五六日天]|下周[一二三四五六日天]|(?:这个月|本月)(\d{1,2})[日号]|(?:下个月|下月)(\d{1,2})[日号])?\s*(凌晨|早上|上午|中午|下午|傍晚|晚上|夜里)?\s*(?:(?<!\d)(\d{1,2}):(\d{2})(?!\d)|(?<!\d)(?<!第)(\d{1,2})点(?:(\d{1,2})分?|(半))?(?!\d))$/;
+const REL_WD = { '一': 0, '二': 1, '三': 2, '四': 3, '五': 4, '六': 5, '日': 6, '天': 6 }; // 周首日=周一
+// 带年份完整中文日期（与 web 端 reFullCn 同构）：绝对年份不滚动，hh:mm 直用，锚定整串
+const REL_FULLCN_RE = /^(\d{4})年(\d{1,2})月(\d{1,2})日\s*(\d{1,2}):(\d{2})$/;
+// 兜底守门（与 web 端边界防护同构）：串含相对时间/时刻 token 却未整体命中 REL_RE
+// = 形似时间但被防护拒绝（10:301 / 3点2019 / 本周五 18:00 / 会议纪要　明天10点 …），
+// 一律 null，绝不放进 Date.parse（V8 会把 10:301 之类误解析成 1970 年怪值）。
+const REL_GATE_RE = /年|月|\d{1,2}:\d{1,2}|\d{1,2}点|今天|明天|后天|这周|下周|本周|星期|礼拜/;
+function parseAt(s, now = Date.now()) {
   if (typeof s !== 'string' || !s) return null;
   let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})[ T](\d{1,2}):(\d{2})$/);
   if (m) {
     const t = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]).getTime();
     return isNaN(t) ? null : t;
   }
+  m = s.match(REL_FULLCN_RE); // 2027年5月1日 07:00（无空格 \s* 亦通）：绝对年份原生构造
+  if (m) {
+    const h = +m[4], mi = +m[5];
+    if (h > 23 || mi > 59) return null;
+    const t = new Date(+m[1], +m[2] - 1, +m[3], h, mi).getTime();
+    return isNaN(t) ? null : t;
+  }
+  m = s.trim().match(REL_RE); // 相对时间表：须恰好一个匹配覆盖整个字符串
+  if (m) {
+    const base = new Date(now);
+    const y = base.getFullYear(), mo = base.getMonth(), d = base.getDate();
+    let monthShift = 0, targetD = d;
+    const seg = m[1];
+    if (seg === '今天') targetD = d;
+    else if (seg === '明天') targetD = d + 1;
+    else if (seg === '后天') targetD = d + 2;
+    else if (seg === '大后天') targetD = d + 3;
+    else if (seg && seg.length === 3 && (seg[0] === '这' || seg[0] === '下')) {
+      // 这周X/下周X：dayIdx=(getDay()+6)%7（周一=0..周日=6），本周一+dayIdx(X)天，下周再+7
+      targetD = d - ((base.getDay() + 6) % 7) + REL_WD[seg[2]] + (seg[0] === '下' ? 7 : 0);
+    } else if (seg) {
+      const n = +(m[2] || m[3]);
+      if (seg[0] === '下') { // 下(个)月N日/号：new Date 原生滚动跨年（12月→次年1月），与 web 端 reRel 同收 [日号]
+        if (!(n >= 1 && n <= new Date(y, mo + 2, 0).getDate())) return null;
+        monthShift = 1;
+      } else { // (这个)月N日/号：超当月天数→null
+        if (!(n >= 1 && n <= new Date(y, mo + 1, 0).getDate())) return null;
+      }
+      targetD = n;
+    }
+    let h, mi;
+    if (m[5] !== undefined) { // hh:mm 一律直用（时段词不生效）
+      h = +m[5]; mi = +m[6];
+      if (!(h <= 23 && mi <= 59)) return null;
+    } else { // H点[半|M分|M]
+      h = +m[7]; mi = m[8] !== undefined ? +m[8] : (m[9] !== undefined ? 30 : 0); // 半=30分
+      if (!(h <= 23 && mi <= 59)) return null;
+      const p = m[4];
+      if (p === '凌晨') { if (h === 12) h = 0; } // 凌晨12点=当天00:xx
+      else if (p === '早上' || p === '上午') { /* 原值 */ }
+      else if (p === '中午') { if (h >= 1 && h <= 5) h += 12; }
+      else if (p === '下午' || p === '傍晚') { if (h >= 1 && h <= 11) h += 12; }
+      else if (p === '晚上' || p === '夜里') {
+        if (h === 12) h = 24;               // 晚上12点=次日00:xx
+        else if (h >= 1 && h <= 5) h += 24; // 次日凌晨
+        else if (h >= 6 && h <= 11) h += 12;
+      }
+    }
+    const t = new Date(y, mo + monthShift, targetD, h, mi).getTime(); // 原生进位，禁手工钳制
+    return isNaN(t) ? null : t;
+  }
+  if (REL_GATE_RE.test(s)) return null; // 兜底守门：形似时间未整串命中 → 防护拒绝
   const t = Date.parse(s);
   return isNaN(t) ? null : t;
 }
@@ -377,12 +441,12 @@ const TOOLS = [
   },
   {
     name: 'note_remind',
-    description: '为笔记创建未来时间的提醒（服务端零知识，提醒密文本地加密写回）。at 支持 ISO 8601 或 "YYYY-M-D H:MM"（本地时区）；上限 10 条未来提醒；同刻重设=更新文案',
+    description: '为笔记创建未来时间的提醒（服务端零知识，提醒密文本地加密写回）。at 支持 ISO 8601、"YYYY-M-D H:MM" 或中文相对时间（与 Web 端一致，见 at 参数说明）；上限 10 条未来提醒；同刻重设=更新文案',
     inputSchema: {
       type: 'object',
       properties: {
         name: { type: 'string' },
-        at: { type: 'string', description: 'ISO 8601 或 YYYY-M-D H:MM' },
+        at: { type: 'string', description: '提醒时刻。支持：ISO 8601；YYYY-M-D H:MM；中文相对时间 [今天/明天/后天/大后天|这周X/下周X|本月N日(号)/下个月N号]? [凌晨/早上/上午/中午/下午/傍晚/晚上/夜里]? [hh:mm 或 H点/H点半/H点M分/H点M]，如「明天早上9点」「这周五18:30」「下个月1号 18:50」「晚上12点半」' },
         text: { type: 'string', description: '提醒事项（≤20 字，可空）' },
       },
       required: ['at'],
@@ -397,19 +461,6 @@ function rpcError(id, code, message) {
   process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id, error: { code, message } }) + '\n');
 }
 
-let buf = '';
-process.stdin.setEncoding('utf8');
-process.stdin.on('data', chunk => {
-  buf += chunk;
-  let idx;
-  while ((idx = buf.indexOf('\n')) !== -1) {
-    const line = buf.slice(0, idx).trim();
-    buf = buf.slice(idx + 1);
-    if (line) handleLine(line);
-  }
-});
-process.stdin.on('end', () => process.exit(0));
-
 function handleLine(line) {
   let msg;
   try { msg = JSON.parse(line); } catch (e) { return; }
@@ -418,7 +469,7 @@ function handleLine(line) {
     rpcResult(id, {
       protocolVersion: '2024-11-05',
       capabilities: { tools: {} },
-      serverInfo: { name: 'notesync', version: '6.3.0' },
+      serverInfo: { name: 'notesync', version: '7.1.0' },
     });
     return;
   }
@@ -443,4 +494,21 @@ function handleLine(line) {
   if (id !== undefined) rpcError(id, -32601, 'method not found: ' + method);
 }
 
-process.stderr.write('[notesync-mcp] ready base=' + BASE + ' note=' + (DEFAULT_NOTE || '(per-call)') + ' pass=' + (PASSPHRASE ? 'set' : 'MISSING') + '\n');
+// 仅直接运行时启动 stdio 服务；被 require（如对齐测试）时不挂住 stdin/stdout
+if (require.main === module) {
+  let buf = '';
+  process.stdin.setEncoding('utf8');
+  process.stdin.on('data', chunk => {
+    buf += chunk;
+    let idx;
+    while ((idx = buf.indexOf('\n')) !== -1) {
+      const line = buf.slice(0, idx).trim();
+      buf = buf.slice(idx + 1);
+      if (line) handleLine(line);
+    }
+  });
+  process.stdin.on('end', () => process.exit(0));
+  process.stderr.write('[notesync-mcp] ready base=' + BASE + ' note=' + (DEFAULT_NOTE || '(per-call)') + ' pass=' + (PASSPHRASE ? 'set' : 'MISSING') + '\n');
+}
+
+module.exports = { parseAt, toolRemind };

@@ -81,8 +81,11 @@
   #remCard{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:80;width:min(90vw,380px);max-width:86vw;background:var(--box-bg);color:var(--fg);border:1px solid var(--line);border-radius:18px;padding:30px 30px 26px;box-shadow:0 24px 70px rgba(20,20,18,.16);display:flex;flex-direction:column;gap:14px;text-align:center;animation:remRise .5s cubic-bezier(.2,.7,.3,1) both}
   #remCard.hidden{display:none!important}
   #remCardTitle{font-size:18px;font-weight:600;margin:0;letter-spacing:.02em}
-  #remCardList{display:flex;flex-direction:column;gap:10px;font-size:13.5px;line-height:1.55;max-height:40vh;overflow-y:auto}
-  #remCardList .rem-item{display:flex;flex-direction:column;gap:2px}
+  /* v7.1.0：列表行距收紧（gap 10→6、line-height 1.55→1.4，用户反馈行距过大），
+     限高内滚防长列表顶爆卡片（min(60vh,440px)，overscroll 防滚动穿透）；
+     .rem-item min-height:40px 保可点热区 */
+  #remCardList{display:flex;flex-direction:column;gap:6px;font-size:13.5px;line-height:1.4;max-height:min(60vh,440px);overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+  #remCardList .rem-item{display:flex;flex-direction:column;gap:2px;min-height:40px;justify-content:center}
   #remCardList .rem-when{font-size:14px}
   #remCardList .rem-late{color:var(--muted);font-size:11.5px}
   /* v5.40：「知道了」对齐 .box 主按钮外观（全宽实底反色、字距加宽）；底座仍是 div 伪按钮——
@@ -90,6 +93,10 @@
   #remCardAck{width:100%;height:46px;display:flex;align-items:center;justify-content:center;border:0;border-radius:10px;background:var(--fg);color:var(--bg);font-size:15px;font-weight:500;letter-spacing:.08em;cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:manipulation;-webkit-tap-highlight-color:transparent;margin-top:4px}
   #remCardAck:hover{opacity:.85}
   #remCardAck:active{opacity:.75}
+  /* v7.1.0：remCard 右上角关闭 X——div 伪按钮复用 .box-x（v5.39 铁律：remCard 内原生 button
+     会被国产浏览器夜间模式强制涂黑）；定位写在 #remCardX 上，.box-x 本体保持流内（v6.2 断言约束） */
+  #remCardX{position:absolute;top:14px;right:14px}
+  #remPanelX{flex:none}
   /* v5.45：chip 改版——14px 加大更明显；尾部蓝色 CTA「添加提醒」做按钮感；
      点添加后原地变两行确认卡（✅ 提醒已添加 / 时间　事项）；
      v5.46：已添加的未来时间悬停同款两行展示卡（不可点）；过期时间不浮任何 chip（零打扰） */
@@ -138,7 +145,7 @@
   #remBoxForm{display:flex;flex-direction:column;gap:12px;margin:2px 0 18px}
   #remBoxForm input[type="date"]{color-scheme:inherit}
   #remBoxForm input.bad,#remBoxForm .rem-wheel-wrap.bad{border-color:var(--accent);box-shadow:0 0 0 3px var(--ring)}
-  #remBoxList{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line);padding-top:14px}
+  #remBoxList{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line);padding-top:14px;max-height:min(60vh,440px);overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain} /* v7.1.0：限高内滚防长列表顶爆弹窗 */
   #remBoxList:empty{display:none}
   #remBoxList .rem-row{display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px;font-size:13px;line-height:1.5;color:var(--fg);background:none;text-align:left}
   #remBoxList .rem-row button{padding:4px 12px;font-size:12px;color:var(--fg);background:none;border:1px solid var(--line);border-radius:8px;cursor:pointer;transition:border-color .2s;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
@@ -323,6 +330,7 @@
   <button type="button" id="lock" title="退出锁定"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="11" x="4" y="11" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></button>
 </header>
 <div id="remCard" class="hidden">
+  <div id="remCardX" class="box-x" role="button" tabindex="0" title="关闭" aria-label="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12"/><path d="M18 6L6 18"/></svg></div>
   <div id="remCardTitle">提醒</div>
   <div id="remCardList"></div>
   <div id="remCardAck" role="button" tabindex="0">知道了</div>
@@ -330,7 +338,10 @@
 <div id="timeChip" class="hidden"></div>
 <div class="mask hidden" id="remMask">
   <div class="box qr-box" id="remPanel">
-    <h1>提醒</h1>
+    <div class="modal-head">
+      <h1>提醒</h1>
+      <div id="remPanelX" class="box-x" role="button" tabindex="0" title="关闭" aria-label="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12"/><path d="M18 6L6 18"/></svg></div>
+    </div>
     <div id="remBoxForm"></div>
     <div id="remBoxList"></div>
   </div>
@@ -480,7 +491,7 @@ const NOTE_LAST_KEY = 'notesync_last_note';
 const NOTE_JUMPED_KEY = 'notesync_jumped';
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '7.0.1';
+const APP_VERSION = '7.1.0';
 const BUILD_DATE = '2026-09-07';
 
 const $ = s => document.querySelector(s);
@@ -894,6 +905,7 @@ function applyStrike() {
   }
 
   if (editor.innerHTML !== htmlBefore) {
+    backfillLastHtmlIfDecorativelyEqual(); // v7.1.0：若仅装饰差异（如只清了零宽空格），回填避免空保存
     try {
       if (savedOffsets) {
         const newRange = restoreSelectionOffsets(editor, savedOffsets.start, savedOffsets.end);
@@ -1572,6 +1584,7 @@ function applyState(s) {
   } finally {
     isRestoring = false;
   }
+  backfillLastHtmlIfDecorativelyEqual(); // v7.1.0：undo/redo 恢复后若与 lastHtml 装饰等价，回填消除假 dirty
   lastState = captureState();
 }
 
@@ -2450,9 +2463,11 @@ function linkifyEditor(opts) {
     // 链接规范化可能移动/合并节点（如 <div> </div> 场景），导致选区失效 → 此处兜底重建合法光标。
     // 仅在选区已失效时重建位置；选区合法时只补一次 caret 绘制刷新（F11：位置对但画不出来）。
     try { ensureCaret(true); } catch (e) {}
-    // linkify 是程序化改动：把当前（已链接）内容同步为已提交状态，不向撤销栈压新条目，
-    // 否则用户按 Ctrl+Z 会先穿透 linkify 而非命中自己的上一步（Bug A 的 60 次按压根因）。
+    // v7.1.0：linkify 是程序化改动：同步撤销栈当前状态后，若结果与 lastHtml 装饰等价
+    // （纯打标重写，如添加提醒 400ms 后的 rem-mark 包裹），回填 lastHtml 消除假 dirty，
+    // 避免下轮 poll 把打标 DOM 误判为「本机未保存修改」弹假冲突条。
     syncCurrentState();
+    backfillLastHtmlIfDecorativelyEqual();
   }
 }
 
@@ -3158,6 +3173,16 @@ function collectTimeMatches(text) {
     // v5.39：过期时间仍返回但标 expired——chip 显示「已过期」灰态，不再无声无息
     res.push({ at: at, index: m.index, length: m[0].length, expired: at <= Date.now() + 30000 });
   }
+  // v7.1.0：带年份完整中文日期（2027年5月1日 07:00）——此前只有 reCn 内层「5月1日 07:00」命中，
+  // 按今年解析 → 未来年份被误判过期假灰态。reFullCn 带年份完整解析（不滚动年份），命中区间占位
+  // spans 后，内层 reCn 自然被 overlaps 排除。
+  const reFullCn = /(\d{4})年(\d{1,2})月(\d{1,2})日\s*(\d{1,2}):(\d{2})/g;
+  while ((m = reFullCn.exec(text)) !== null) {
+    spans.push([m.index, m.index + m[0].length]);
+    const at = resolveTimeAt(+m[1], +m[2], +m[3], +m[4], +m[5]);
+    if (at === null) continue;
+    res.push({ at: at, index: m.index, length: m[0].length, expired: at <= Date.now() + 30000 });
+  }
   const overlaps = i => spans.some(s => i >= s[0] && i < s[1]);
   const pushShort = m => {
     if (overlaps(m.index)) return;
@@ -3174,8 +3199,119 @@ function collectTimeMatches(text) {
   while ((m = reShort.exec(text)) !== null) pushShort(m);
   const reCn = /(\d{1,2})月(\d{1,2})日\s*(\d{1,2}):(\d{2})/g;
   while ((m = reCn.exec(text)) !== null) pushShort(m);
+  // v7.1.0：相对时间组最后跑，避让已有命中区间（数字组的 spans 占位 + res 已产出区间），
+  // 组内自占位互避（有效/无效 match 都占位，防「本月31日 10点」判无效后裸「10点」二次命中）。
+  try {
+    const relAll = collectRelTimeMatches(text, Date.now());
+    const relOverlap = r => spans.some(s => r.index >= s[0] && r.index < s[1]) ||
+                            res.some(x => r.index >= x.index && r.index < x.index + x.length);
+    for (const r of relAll) if (!relOverlap(r)) res.push(r);
+  } catch (e) {}
   return res.sort((a, b) => a.index - b.index);
 }
+
+// ── v7.1.0 相对时间解析（纯函数，now 可注入供测试；tools/notesync-mcp-server.js parseAt 同口径对齐）──
+// 三段式：[日期段]? [\s]* [时段词]? [\s]* [时刻]，整段一个 match（index/length 覆盖全串）。
+// 日期段（省略=今天）：今天/明天/后天/大后天 | 这周X/下周X（周首日=周一，dayIdx=(getDay()+6)%7；
+//   周日当天说「这周五」=字面过去 → expired 灰态）| 本月N日/这个月N日/本月N号/这个月N号（N 超当月天数→不命中）|
+//   下个月N号/下月N号（12月→次年1月跨年由 new Date 原生进位）。明确不收：本周X/星期X/礼拜X。
+// 时段词（省略=24h 原值；仅对「X点…」形态换算，冒号 hh:mm 一律直用）：
+//   凌晨 h12→0；早上/上午 原值；中午 h1-5→h+12；下午/傍晚 h1-11→h+12；
+//   晚上/夜里 h1-5→次日同刻（日期+1）、h6-11→h+12、h12→次日00:xx（日期+1）。
+// 时刻形态：hh:mm（hh 0-23 可 1-2 位，mm 两位）| H点 | H点半 | H点M分 | H点M。
+// 边界防护：hh:mm 左邻 (?<!\d)；整个时刻 token 右邻 (?!\d)；点形态 H 左邻 (?<!第)(?<!\d)(?<![年月日号:])
+// （裸时刻组，堵「第3点」「123:45」「2026年9月8日18点」被抢）；显式日期段分支无此限制（日期段已限定语境）。
+// 事项区防护：匹配起点之前存在全角空格 U+3000 → 跳过（面板回写「YYYY-M-D H:MM　事项」格式，事项区不二次命中）。
+// 过期口径与数字组一致：at <= now+30000 → expired:true 仍返回（chip 灰态「已过期」无添加入口）。
+// 日期一律 new Date(y, mo, d, h, mi) 原生进位，禁止手工钳制月/年。
+function collectRelTimeMatches(text, now) {
+  if (!text || typeof text !== 'string') return [];
+  const n = (now instanceof Date) ? now : new Date(now == null ? Date.now() : +now);
+  const res = [];
+  const taken = []; // 组内已占位区间（有效/无效 match 都占位）
+  const WD = '一二三四五六日天';
+  const reRel = new RegExp(
+    // 分支 A：显式日期段 + [\s]* + 时段词? + [\s]* + 时刻
+    '(?:大后天|后天|明天|今天|这周[一二三四五六日天]|下周[一二三四五六日天]|(?:这个月|本月)\\d{1,2}[日号]|(?:下个月|下月)\\d{1,2}[日号])' +
+    '[\\s]*(?:凌晨|早上|上午|中午|下午|傍晚|晚上|夜里)?[\\s]*' +
+    '(?:\\d{1,2}:\\d{2}|\\d{1,2}点(?:\\d{1,2}分|\\d{1,2}|半)?)(?!\\d)' +
+    '|' +
+    // 分支 B：裸时刻（左邻排除 第/数字/年月日号:，以及不收的「周X/本周X/星期X/礼拜X」残留——
+    // 否则「本周五 18:00」整段不命中后，裸「 18:00」会被捡走产生错误提醒）
+    '(?<!第)(?<!\\d)(?<![年月日号:])' +
+    '(?<!周[一二三四五六日天]\\s?)(?<!本\\s?周[一二三四五六日天]\\s?)(?<!星期[一二三四五六日天]\\s?)(?<!礼拜[一二三四五六日天]\\s?)' +
+    '(?:凌晨|早上|上午|中午|下午|傍晚|晚上|夜里)?[\\s]*' +
+    '(?:\\d{1,2}:\\d{2}|\\d{1,2}点(?:\\d{1,2}分|\\d{1,2}|半)?)(?!\\d)',
+    'g'
+  );
+  const reDateSeg = /^(大后天|后天|明天|今天|这周([一二三四五六日天])|下周([一二三四五六日天])|(?:这个月|本月)(\d{1,2})[日号]|(?:下个月|下月)(\d{1,2})[日号])/;
+  const rePartSeg = /^(凌晨|早上|上午|中午|下午|傍晚|晚上|夜里)/;
+  const reTimeSeg = /^(?:(\d{1,2}):(\d{2})|(\d{1,2})点(?:(\d{1,2})分|(\d{1,2})|(半))?)/;
+  let m;
+  while ((m = reRel.exec(text)) !== null) {
+    const start = m.index, len = m[0].length;
+    taken.push([start, start + len]); // 无效 match 也占位，防同串内二次命中
+    if (text.slice(0, start).indexOf('\u3000') !== -1) continue; // 事项区（全角空格之后）不命中
+    let seg = m[0];
+    const dm = seg.match(reDateSeg);
+    if (dm) seg = seg.slice(dm[0].length);
+    seg = seg.replace(/^[\s]+/, '');
+    let part = null;
+    const pm = seg.match(rePartSeg);
+    if (pm) { part = pm[1]; seg = seg.slice(pm[0].length).replace(/^[\s]+/, ''); }
+    const tm = seg.match(reTimeSeg);
+    if (!tm) continue; // 主正则保证可达，防御性跳过
+    let H, Mi, extraDay = 0;
+    if (tm[1] !== undefined) {
+      H = +tm[1]; Mi = +tm[2]; // 冒号形态直用，时段词不参与换算
+    } else {
+      H = +tm[3];
+      Mi = tm[6] ? 30 : (tm[4] !== undefined ? +tm[4] : (tm[5] !== undefined ? +tm[5] : 0));
+      if (part === '晚上' || part === '夜里') {
+        if (H >= 1 && H <= 5) extraDay = 1; // 晚上1-5点 = 次日凌晨
+        else if (H >= 6 && H <= 11) H += 12;
+        else if (H === 12) { H = 0; extraDay = 1; } // 晚上12点 = 次日00:xx
+      } else if (part === '下午' || part === '傍晚') {
+        if (H >= 1 && H <= 11) H += 12;
+      } else if (part === '中午') {
+        if (H >= 1 && H <= 5) H += 12;
+      } else if (part === '凌晨') {
+        if (H === 12) H = 0; // 凌晨12点 = 当天00:xx
+      }
+    }
+    if (H > 23 || Mi > 59) continue; // 非法时刻整段不命中
+    const y0 = n.getFullYear(), mo0 = n.getMonth(), d0 = n.getDate();
+    let MO = mo0, D = d0;
+    if (dm) {
+      if (dm[1] === '今天') { /* D = d0 */ }
+      else if (dm[1] === '明天') D = d0 + 1;
+      else if (dm[1] === '后天') D = d0 + 2;
+      else if (dm[1] === '大后天') D = d0 + 3;
+      else if (dm[2] !== undefined || dm[3] !== undefined) {
+        // 这周X/下周X：周首日=周一，dayIdx=(getDay()+6)%7 体系（周一=0，周日=6）
+        const idx = WD.indexOf(dm[2] || dm[3]);
+        if (idx < 0) continue;
+        const dayIdx = idx <= 5 ? idx : 6; // 日/天 → 6（周一=0 体系，周日=本周第7天）
+        D = d0 - ((n.getDay() + 6) % 7) + dayIdx + (dm[1].charAt(0) === '下' ? 7 : 0);
+      } else {
+        const N = +(dm[4] || dm[5]);
+        if (N < 1 || N > 31) continue;
+        if (dm[4] !== undefined) {
+          if (N > new Date(y0, mo0 + 1, 0).getDate()) continue; // 超当月天数（如9月31日）→ 不命中
+          D = N;
+        } else {
+          if (N > new Date(y0, mo0 + 2, 0).getDate()) continue; // 超下月天数 → 不命中
+          MO = mo0 + 1; D = N; // new Date 原生进位跨年（12月→次年1月）
+        }
+      }
+    }
+    const at = new Date(y0, MO, D + extraDay, H, Mi).getTime();
+    res.push({ at: at, index: start, length: len, expired: at <= n.getTime() + 30000 });
+  }
+  return res;
+}
+window.collectRelTimeMatches = collectRelTimeMatches;
+window.collectTimeMatches = collectTimeMatches;
 function parseTimeMatches(text) {
   if (!text || typeof text !== 'string' || text.length > 4000) return [];
   return collectTimeMatches(text);
@@ -3564,6 +3700,15 @@ remCardAck.addEventListener('click', () => {
 remCardAck.addEventListener('keydown', e => { // v5.39 div 伪按钮保留键盘可达性
   if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); remCardAck.click(); }
 });
+// v7.1.0：右上角 X 关闭（div 伪按钮同 v5.39 铁律；remCardX=关卡片，remPanelX=收面板）
+$('#remCardX').addEventListener('click', () => { cardShownAts = []; remCard.classList.add('hidden'); });
+$('#remCardX').addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('#remCardX').click(); }
+});
+$('#remPanelX').addEventListener('click', () => toggleRemPanel(false));
+$('#remPanelX').addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('#remPanelX').click(); }
+});
 function renderRemBtn() {
   remBtn.classList.toggle('on', reminders.some(r => r.at > Date.now()));
 }
@@ -3680,7 +3825,8 @@ function renderRemPanel() {
     });
   };
   ok.addEventListener('click', doAdd);
-  item.addEventListener('keydown', e => { // v5.40：事项框 Enter 直接确认
+  item.addEventListener('keydown', e => { // v5.40：事项框 Enter 直接确认；v7.1.0：IME 组合中不触发
+    if (e.isComposing || e.keyCode === 229) return;
     if (e.key === 'Enter') { e.preventDefault(); doAdd(); }
   });
   dateInp.addEventListener('keydown', e => { // 日期 Enter 同样直接确认
@@ -3738,6 +3884,17 @@ function focusRemTimeInput() {
     if (hh) hh.focus({ preventScroll: true });
   } catch (e) {}
 }
+// v7.1.0：仅 PC 自动聚焦事项输入框（A 方案，用户拍板）——hover:hover+pointer:fine 双门控
+// （hover 特性合法值只有 hover/none，任务原文的「hover: fine」在任何环境恒 false，故用
+// focusRemTimeInput 同款写法）；移动端绝不聚焦（v5.43 教训：软键盘压缩视口把面板顶出屏）。
+// 选择器必须带 #remBoxForm 前缀（.rem-item 类名与 remCard 列表项撞名）。必须由 toggleRemPanel 在面板显示后调用。
+function focusRemItemInput() {
+  try {
+    if (!(window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches)) return;
+    const it = document.querySelector('#remBoxForm .rem-item');
+    if (it) it.focus({ preventScroll: true });
+  } catch (e) {}
+}
 // v5.45：打开面板前保存编辑器选区（块内偏移），插入提醒行时恢复到"光标所在处"
 let panelSavedSel = null;
 function toggleRemPanel(force) {
@@ -3753,6 +3910,7 @@ function toggleRemPanel(force) {
     remCard.classList.add('hidden');
     resetWheelScroll(); // v5.55：滚轮滚到默认值（display:none 内 scrollTop 无效，必须显示后设置）
     focusRemTimeInput(); // v5.44：mask 显示后再聚焦（display:none 容器内聚焦静默无效）
+    focusRemItemInput(); // v7.1.0：仅 PC 补聚焦事项输入框（后调覆盖滚轮焦点；移动端不聚焦）
   } else {
     remMask.classList.add('hidden');
   }
@@ -4335,11 +4493,54 @@ function scheduleSaveRetry() {
   saveRetryTimer = setTimeout(() => { saveRetryTimer = null; saveLocal(); }, delay);
 }
 
+// ── v7.1.0 装饰等价（冲突弹窗误报根修）──
+// 假 dirty 根因：persistReminders 立即上传并回填 lastHtml，400ms 后 scheduleRemMarkRefresh
+// → linkifyEditor 打标重写 DOM（u.rem-mark/s.rem-done），editor.innerHTML 变了但 lastHtml 没变，
+// 下轮 poll 的 unsaved 判定把打标后的 DOM 当成「本机未保存修改」→ 弹假冲突条。
+// isDecorativelyEqual：两侧做白名单归一化后比较——只解包自动链接 a[data-url]、u.rem-mark、
+// s.rem-done、无样式裸 span、零宽空格 \u200B；保留块结构与其他所有标签（<b><i><s> 等用户格式绝不剥）。
+// 严格比对三点（saveLocal 早退 / 冲突草稿判定 / poll 替换判定）不使用本函数——真实字节差异必须走原路径。
+function normDecorHtml(html) {
+  const root = document.createElement('div');
+  root.innerHTML = String(html == null ? '' : html);
+  const ZWSP = /\u200B/g;
+  function walk(node) {
+    let out = '';
+    for (let child = node.firstChild; child; child = child.nextSibling) {
+      if (child.nodeType === 3) { out += child.nodeValue.replace(ZWSP, ''); continue; }
+      if (child.nodeType !== 1) continue;
+      const tag = child.tagName;
+      if (tag === 'A' && child.getAttribute('data-url') === '1') { out += walk(child); continue; }
+      if (tag === 'U' && child.classList.contains('rem-mark')) { out += walk(child); continue; }
+      if (tag === 'S' && child.classList.contains('rem-done')) { out += walk(child); continue; }
+      if (tag === 'SPAN' && !child.getAttribute('style') && !child.getAttribute('class')) { out += walk(child); continue; }
+      const lt = tag.toLowerCase();
+      let attrs = '';
+      if (tag === 'A') attrs = ' href="' + (child.getAttribute('href') || '') + '"';
+      out += '<' + lt + attrs + '>' + walk(child) + '</' + lt + '>';
+    }
+    return out;
+  }
+  return walk(root);
+}
+function isDecorativelyEqual(a, b) {
+  if (a === b) return true;
+  try { return normDecorHtml(a) === normDecorHtml(b); } catch (e) { return false; }
+}
+window.isDecorativelyEqual = isDecorativelyEqual;
+window.normDecorHtml = normDecorHtml;
+// 回填规则（根修）：程序化 DOM 写点（linkify 打标/打链接、applyStrike、undo/redo 恢复等）写完后，
+// 若结果与 lastHtml 装饰等价则 lastHtml = editor.innerHTML。用户真实打字必然改变文本 → 不装饰等价
+// → 不回填 → saveLocal 照常保存；纯打标重写则等价 → 回填 → 假 dirty 消失。
+function backfillLastHtmlIfDecorativelyEqual() {
+  try { if (isDecorativelyEqual(lastHtml, editor.innerHTML)) lastHtml = editor.innerHTML; } catch (e) {}
+}
+
 // I4：切后台/关页前把未保存内容尽力写出（best-effort：saveLocal 是异步的，
 // 页面被系统立即杀掉时仍可能丢最后一笔，但常态下显著收窄丢失窗口）
 function flushDirtySave() {
   if (!cryptoKey || busy) return;
-  if (editor.innerHTML === lastHtml) return;
+  if (isDecorativelyEqual(editor.innerHTML, lastHtml)) return; // v7.1.0：打标重写等装饰差异不算 dirty
   saveLocal();
 }
 
@@ -4358,7 +4559,10 @@ async function poll() {
       // 旧版在此 localVer = note.v 消费版本号却不应用内容：下一轮 poll 条件不再成立，
       // 远端更新被永久吞掉，随后本地保存直接覆盖服务端（真机数据丢失实锤，「输入完成后合并」
       // 的提示从未有过任何合并动作）。现只 stash 快照 + 亮冲突条，用户拍板前零写入。
-      const unsaved = editor.innerHTML !== lastHtml;
+      // v7.1.0：装饰等价判定——打标重写（u.rem-mark 等）与 lastHtml 装饰等价不算「本机未保存修改」，
+      // 否则 B 端加提醒 → 本端 400ms 后打标 → 下轮 poll 误弹假冲突条（实锤复现源）。
+      // 用户真实输入必然改变文本 → 不装饰等价 → 照常挂起。
+      const unsaved = !isDecorativelyEqual(editor.innerHTML, lastHtml);
       if (unsaved) {
         pendingRemoteNote = note;
         window.__pollSkipCount = (window.__pollSkipCount || 0) + 1;
