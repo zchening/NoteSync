@@ -406,8 +406,8 @@ test('v5.47：chip 两行卡带「删除」伪按钮（三板锁色）+ 30 秒�
   assert.ok(/function hideTimeChip\(\) \{ chipData = null; chipDeleteAt = null;/.test(SRC), 'hideTimeChip 必须同时清 chipDeleteAt（防旧目标误删）');
   assert.ok((SRC.match(/chipDeleteAt = /g) || []).length >= 4, 'chipDeleteAt 赋值点：声明+清除+展示卡+确认卡');
   // ── 30 秒窗口差修复：已添加分支优先，口径与下划线一致 ──
-  assert.ok(/if \(m\.at <= now\) \{ hideTimeChip\(\); return; \}/.test(SRC), '已添加分支以 at<=now 拦截（与下划线阈值一致，修 30s 窗口差）');
-  assert.ok(/if \(m\.expired\) \{ hideTimeChip\(\); return; \}/.test(SRC), '未添加的过期时间仍零打扰（硬规则不变）');
+  assert.ok(/if \(m\.at <= now\) \{ hideTimeChip\(\); return false; \}/.test(SRC), '已添加分支以 at<=now 拦截（与下划线阈值一致，修 30s 窗口差；v7.2.0 起渲染主体抽为 showChipForMatch 返回布尔）');
+  assert.ok(/if \(m\.expired\) \{ hideTimeChip\(\); return false; \}/.test(SRC), '未添加的过期时间仍零打扰（硬规则不变）');
   assert.ok(/const now = Date\.now\(\);\s*\n\s*\/\/ v5\.47/.test(SRC), '过期口径判断必须取自当前时刻');
   // ── 面板列表：左对齐 + 显式升序 ──
   assert.ok(/#remBoxList \.rem-row\{[^}]*text-align:left\}/.test(SRC), '面板已设列表必须左对齐（覆盖 .qr-box 居中，用户拍板）');
@@ -422,7 +422,7 @@ test('v5.45：chip 文案改版（蓝色 CTA）+ 两行确认卡 + 过期零打�
   assert.ok(/cta\.textContent = '添加提醒'/.test(SRC), 'chip CTA 必须是「添加提醒」（与面板按钮统一，「设提醒」退役）');
   assert.ok(!/'设提醒：'/.test(SRC), '旧文案「设提醒：」必须删除');
   assert.ok(!/已过期 ' \+ fmtRemTime/.test(SRC), '旧「已过期」chip 文案必须删除（过期不再浮 chip）');
-  assert.ok(/if \(m\.expired\) \{ hideTimeChip\(\); return; \}/.test(SRC), '过期命中直接不显示 chip（零打扰，用户拍板；v5.47 起该判断移到已添加分支之后）');
+  assert.ok(/if \(m\.expired\) \{ hideTimeChip\(\); return false; \}/.test(SRC), '过期命中直接不显示 chip（零打扰，用户拍板；v5.47 起该判断移到已添加分支之后）');
   assert.ok(/createTextNode\('✅ 提醒已添加'\)/.test(SRC), '确认卡第一行必须是「✅ 提醒已添加」（v5.47：文本节点+删除按钮）');
   assert.ok(/l2\.textContent = fmtRemTime\(at\) \+ \(item \? '　' \+ item : ''\)/.test(SRC), '确认卡第二行必须是「时间　事项」（v5.47 分隔符=全角空格）');
   assert.ok(/chipFeedbackUntil = Date\.now\(\) \+ 3000/.test(SRC), '确认卡停留 3 秒');

@@ -491,7 +491,7 @@ const NOTE_LAST_KEY = 'notesync_last_note';
 const NOTE_JUMPED_KEY = 'notesync_jumped';
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '7.1.1';
+const APP_VERSION = '7.2.0';
 const BUILD_DATE = '2026-09-07';
 
 const $ = s => document.querySelector(s);
@@ -1318,6 +1318,11 @@ function hideUploadStatus() { uploadStatus.classList.remove('show'); }
         L.push('sse=' + (sseSource ? 'open' : 'closed') +
           '  lastSync=' + (lastSyncAt ? Math.round((Date.now() - lastSyncAt) / 1000) + 's前' : 'never') +
           '  skip=' + (window.__pollSkipCount || 0));
+        // v7.2.0（症状3）：relocate/打字守卫探针——relocated=同块挪移次数，kept=保持原位次数，
+        // typeDefer=poll 因连续打字推迟应用远端次数。打字跳线复发时看 kept/typeDefer 是否增长。
+        L.push('caret: relocated=' + (window.__relocateCount || 0) +
+          '  kept=' + (window.__relocateKept || 0) +
+          '  typeDefer=' + (window.__pollTypeDefer || 0));
         // v5.56：提醒数/远端挂起/版本 + 主文档缓存与拦截计数（cacheInfo 为 v5.56 APK 新增，旧 APK 静默 '?'）
         L.push('rem=' + (typeof reminders !== 'undefined' ? reminders.length : '?') +
           '  future=' + (typeof reminders !== 'undefined' ? reminders.filter(r => r.at > Date.now()).length : '?') + // v5.57：scheduled=0 时分辨「全部过期」vs「没同步」
@@ -2205,6 +2210,21 @@ async function tryPairingUnlock() {
 
 // --- 同步 ---
 let saveTimer = null, linkifyTimer = null, isLinkifying = false;
+// v7.2.0（症状3）：末次击键时间戳。连续打字中（<1.5s）推迟一切 DOM 手术（linkify/poll 远端应用），
+// 斩断「手术 → 光标落不可绘制位 → relocate」链条的第一环；撤销/重做不刷新（程序化恢复）。
+let lastTypeAt = 0;
+// 连续打字中的 linkify 延迟版：末次击键 <1.5s 则顺延 600ms 再看，停笔后才真正手术。
+// 守卫只认「编辑器聚焦」的打字活跃——面板开着（remPanelOpen，遮罩挡正文）或焦点不在编辑器时
+// lastTypeAt 可能被程序化回写（v5.45 面板添加回写正文走 input 链）误刷新，那种场景没有打字，
+// 推迟会让下划线晚 ~1.6s 才出现（e2e V545-1 实锤），必须立即手术。
+function linkifyDeferred() {
+  if (Date.now() - lastTypeAt < 1500 && !remPanelOpen && document.activeElement === editor) {
+    clearTimeout(linkifyTimer);
+    linkifyTimer = setTimeout(linkifyDeferred, 600);
+    return;
+  }
+  linkifyEditor();
+}
 // I4：保存可靠性状态——pendingResave: busy 期间有输入待补存；
 // saveRetryTimer/saveRetryCount: 保存失败后的退避重试（3s/6s/12s，至多 3 次）
 let pendingResave = false, saveRetryTimer = null, saveRetryCount = 0;
@@ -2627,29 +2647,11 @@ function relocateCaretToVisible(range) {
     }
   }
 
-  // 3. 其他块的首个非空文本节点
-  if (block && block !== editor) {
-    let sibling = block.nextSibling;
-    let count = 0;
-    while (sibling && count < 3) {
-      const tw2 = document.createTreeWalker(sibling, NodeFilter.SHOW_TEXT);
-      while (tw2.nextNode()) {
-        const n = tw2.currentNode;
-        if (n.nodeValue && n.nodeValue.trim()) { candidates.push([n, 0]); break; }
-      }
-      sibling = sibling.nextSibling; count++;
-    }
-    sibling = block.previousSibling;
-    count = 0;
-    while (sibling && count < 3) {
-      const tw2 = document.createTreeWalker(sibling, NodeFilter.SHOW_TEXT);
-      while (tw2.nextNode()) {
-        const n = tw2.currentNode;
-        if (n.nodeValue && n.nodeValue.trim()) { candidates.push([n, n.nodeValue.length]); break; }
-      }
-      sibling = sibling.previousSibling; count++;
-    }
-  }
+  // v7.2.0（症状3根修）：原「3. 其他块的首个非空文本节点」候选层整层删除——
+  // linkify 手术后光标常落在 Chromium 暂不可绘制位（getClientRects=0 但位置合法、
+  // 排版一稳定即可绘制），旧候选序跨块把光标拽到相邻块首/尾，用户看到的就是
+  // 「一直打字，突然光标跳到下一行最前面」。同块内挪移可接受（视觉仍在同一行），
+  // 跨块绝对不行。
 
   // 逐个尝试，取第一个 rects>0 的
   for (const [node, off] of candidates) {
@@ -2659,23 +2661,18 @@ function relocateCaretToVisible(range) {
       tr.collapse(true);
       if (tr.getClientRects().length > 0) {
         setCaret(tr.startContainer, tr.startOffset);
-        return; // 成功重定位到可见位置
+        window.__relocateCount = (window.__relocateCount || 0) + 1; // v7.2.0：diag 探针
+        return; // 成功重定位到可见位置（同块内）
       }
     } catch (e) { /* 某些偏移可能非法（如 Element 节点越界），跳过 */ }
   }
 
-  // 所有候选都失败 → 回退到 ensureBlockWrapped + 末尾重建（与非法选区路径相同）
-  ensureBlockWrapped();
-  const last = editor.lastChild;
-  const fr = document.createRange();
-  if (last) {
-    const tw = document.createTreeWalker(last, NodeFilter.SHOW_TEXT);
-    let t = null; while (tw.nextNode()) t = tw.currentNode;
-    if (t) fr.setStart(t, t.length);
-    else fr.setStart(last, last.childNodes.length);
-  } else { fr.setStart(editor, 0); }
-  fr.collapse(true);
-  try { setCaret(fr.startContainer, fr.startOffset); } catch (e) {}
+  // v7.2.0（症状3根修）：同块候选全部失败 → 保持原位，绝不执行旧版
+  // 「ensureBlockWrapped + 全文末尾重建」回退——那一拽直接把光标丢到文末，
+  // 比光标暂不可见糟得多。暂不可见的光标逻辑上仍有效（能打字），下一次重排/
+  // 击键后 Chromium 自会恢复绘制；真正非法（节点已销毁）的选区走 ensureCaret
+  // 的 invalid 分支，不进本函数。
+  window.__relocateKept = (window.__relocateKept || 0) + 1; // v7.2.0：diag 探针（保持原位计数）
 }
 
 function ensureCaret(forceRepaint) {
@@ -2721,6 +2718,11 @@ function ensureCaret(forceRepaint) {
 
 editor.addEventListener('input', (e) => {
   const it = (e && e.inputType) || '';
+  // v7.2.0（症状3）：记录末次击键（含组字——IME 上屏也是活跃打字；撤销/重做不算）。
+  // v7.2.0 补丁：只认真实 InputEvent——程序化 new Event('input')（v5.45 面板回写、工具栏
+  // 插入等 4 处）不是打字，若刷 lastTypeAt 会误触发打字守卫，面板回写的下划线推迟 ~1.6s（e2e 实锤）。
+  const realType = (typeof InputEvent !== 'undefined') && (e instanceof InputEvent);
+  if (realType && it !== 'historyUndo' && it !== 'historyRedo') lastTypeAt = Date.now();
   if (isComposing) {
     // v5.53：组字（拼音→候选→上屏）期间完全旁路 DOM 手术——cleanup/linkify/撤销记录
     // 任何一项在组字中途执行都会打断 IME 组字（部分 WebView+输入法组合下 inputType
@@ -2736,7 +2738,7 @@ editor.addEventListener('input', (e) => {
     pendingResave = true;
     if (it !== 'historyUndo' && it !== 'historyRedo') {
       clearTimeout(linkifyTimer);
-      linkifyTimer = setTimeout(linkifyEditor, 500);
+      linkifyTimer = setTimeout(linkifyDeferred, 500); // v7.2.0：打字中推迟手术
       try { recordIfChanged(it); } catch (e2) {}
     }
     return;
@@ -2756,7 +2758,7 @@ editor.addEventListener('input', (e) => {
   // 撤销/重做后不挂 linkify：避免紧接着的程序化 DOM 手术污染/打断刚完成的撤销状态
   if (it !== 'historyUndo' && it !== 'historyRedo') {
     clearTimeout(linkifyTimer);
-    linkifyTimer = setTimeout(linkifyEditor, 500);
+    linkifyTimer = setTimeout(linkifyDeferred, 500); // v7.2.0：打字中推迟手术
   }
   // 用户真实编辑记入自管撤销栈；程序化改动（linkify/poll）不在此路径，由 syncCurrentState 同步
   if (it !== 'historyUndo' && it !== 'historyRedo') {
@@ -3049,8 +3051,10 @@ const remoteBar = $('#remoteBar');
 function showRemoteBar() { remoteBar.classList.remove('hidden'); }
 function hideRemoteBar() { remoteBar.classList.add('hidden'); }
 $('#remoteKeep').addEventListener('click', () => {
-  // 保留我的：用户明确覆盖远端——清挂起并重进 saveLocal 直传（服务端 v 照常递增，对端经 poll 拿到）
-  pendingRemoteNote = null; hideRemoteBar();
+  // 保留我的：用户明确覆盖远端——先采纳挂起版本的 v 作 baseV（v7.2.0：baseV 乐观并发起，
+  // 不采纳则 PUT 必再 409 死循环），清挂起后重进 saveLocal 直传（服务端 v 照常递增，对端经 poll 拿到）
+  const note = pendingRemoteNote; pendingRemoteNote = null; hideRemoteBar();
+  if (note && typeof note.v === 'number') localVer = note.v;
   saveLocal();
 });
 $('#remoteTake').addEventListener('click', async () => {
@@ -3161,17 +3165,35 @@ function resolveTimeAt(y, mo, d, h, mi) {
   if (d < 1 || d > new Date(y, mo, 0).getDate()) return null;
   return new Date(y, mo - 1, d, h, mi).getTime();
 }
-function collectTimeMatches(text) {
+// v7.2.0：全角→半角归一（数字０-９/：－／）——手机全角输入法打出的「９-１０　２０：０４」
+// 此前一个正则都不命中，chip 永不弹（用户实测报障症状1）。全角与半角同为 UTF-16 单码元，
+// 归一不改变字符串长度，match 的 index/length 与原文逐位对齐，matchTimeAt 偏移口径不受影响。
+// U+3000 全角空格刻意不归一（相对时间组靠它识别事项区「YYYY-M-D H:MM　事项」不二次命中）；
+// 但数字组 reFull/reShort 的日期-时刻分隔符已直接收 U+3000（B 层审计 P2：「9-10　20:04」全角分隔）。
+function normFullWidth(text) {
+  return text.replace(/[０-９：－／]/g, c => {
+    const code = c.charCodeAt(0);
+    if (code >= 0xFF10 && code <= 0xFF19) return String.fromCharCode(code - 0xFEE0);
+    if (c === '：') return ':';
+    if (c === '－') return '-';
+    return '/'; // ／
+  });
+}
+function collectTimeMatches(text, nowArg) {
+  text = normFullWidth(text); // v7.2.0：入口归一（等宽保索引，见上注）
+  // v7.2.0：now 可注入（MCP 对齐测试两端同源；不传=真实时间，调用方零改动）
+  const nowMs = (nowArg == null) ? Date.now() : +nowArg;
+  const nowDate = new Date(nowMs);
   const res = [];
   const spans = []; // 所有「带年份」形态命中的区间（无论时间是否有效都占位），短格式一律避让
   let m;
-  const reFull = /(\d{4})[-/](\d{1,2})[-/](\d{1,2})[ T](\d{1,2}):(\d{2})/g;
+  const reFull = /(\d{4})[-/](\d{1,2})[-/](\d{1,2})[ T\u3000](\d{1,2}):(\d{2})/g; // v7.2.0：分隔符收全角空格
   while ((m = reFull.exec(text)) !== null) {
     spans.push([m.index, m.index + m[0].length]);
     const at = resolveTimeAt(+m[1], +m[2], +m[3], +m[4], +m[5]);
     if (at === null) continue; // 非法值不命中（区间已占位防二次命中）
     // v5.39：过期时间仍返回但标 expired——chip 显示「已过期」灰态，不再无声无息
-    res.push({ at: at, index: m.index, length: m[0].length, expired: at <= Date.now() + 30000 });
+    res.push({ at: at, index: m.index, length: m[0].length, expired: at <= nowMs + 30000 });
   }
   // v7.1.0：带年份完整中文日期（2027年5月1日 07:00）——此前只有 reCn 内层「5月1日 07:00」命中，
   // 按今年解析 → 未来年份被误判过期假灰态。reFullCn 带年份完整解析（不滚动年份），命中区间占位
@@ -3181,28 +3203,28 @@ function collectTimeMatches(text) {
     spans.push([m.index, m.index + m[0].length]);
     const at = resolveTimeAt(+m[1], +m[2], +m[3], +m[4], +m[5]);
     if (at === null) continue;
-    res.push({ at: at, index: m.index, length: m[0].length, expired: at <= Date.now() + 30000 });
+    res.push({ at: at, index: m.index, length: m[0].length, expired: at <= nowMs + 30000 });
   }
   const overlaps = i => spans.some(s => i >= s[0] && i < s[1]);
   const pushShort = m => {
     if (overlaps(m.index)) return;
-    const now = new Date();
+    const now = nowDate;
     // v6.3：短格式（无年份）不再「本年已过就顺延明年」——那条兜底把过去的日期（8-30 9:00）
     // 判定成明年同刻的未来时间，悬停照样弹「添加提醒」、点了就加出一个明年的提醒（用户实测 P1）。
     // 规则统一（用户红线）：短格式一律按今年解析，已过 = expired，不给添加入口。
     // 代价：要设明年 5-1 的提醒得写全 2027-5-1 或用提醒面板。
     const at = resolveTimeAt(now.getFullYear(), +m[1], +m[2], +m[3], +m[4]);
     if (at === null) return;
-    res.push({ at: at, index: m.index, length: m[0].length, expired: at <= Date.now() + 30000 });
+    res.push({ at: at, index: m.index, length: m[0].length, expired: at <= nowMs + 30000 });
   };
-  const reShort = /(\d{1,2})[-/](\d{1,2})[ T](\d{1,2}):(\d{2})/g;
+  const reShort = /(\d{1,2})[-/](\d{1,2})[ T\u3000](\d{1,2}):(\d{2})/g; // v7.2.0：同上
   while ((m = reShort.exec(text)) !== null) pushShort(m);
   const reCn = /(\d{1,2})月(\d{1,2})日\s*(\d{1,2}):(\d{2})/g;
   while ((m = reCn.exec(text)) !== null) pushShort(m);
   // v7.1.0：相对时间组最后跑，避让已有命中区间（数字组的 spans 占位 + res 已产出区间），
   // 组内自占位互避（有效/无效 match 都占位，防「本月31日 10点」判无效后裸「10点」二次命中）。
   try {
-    const relAll = collectRelTimeMatches(text, Date.now());
+    const relAll = collectRelTimeMatches(text, nowMs);
     const relOverlap = r => spans.some(s => r.index >= s[0] && r.index < s[1]) ||
                             res.some(x => r.index >= x.index && r.index < x.index + x.length);
     for (const r of relAll) if (!relOverlap(r)) res.push(r);
@@ -3226,6 +3248,7 @@ function collectTimeMatches(text) {
 // 日期一律 new Date(y, mo, d, h, mi) 原生进位，禁止手工钳制月/年。
 function collectRelTimeMatches(text, now) {
   if (!text || typeof text !== 'string') return [];
+  text = normFullWidth(text); // v7.2.0：与数字组同一入口归一（幂等；collectTimeMatches 已归一时重跑无害）
   const n = (now instanceof Date) ? now : new Date(now == null ? Date.now() : +now);
   const res = [];
   const taken = []; // 组内已占位区间（有效/无效 match 都占位）
@@ -3237,10 +3260,13 @@ function collectRelTimeMatches(text, now) {
     '(?:\\d{1,2}:\\d{2}|\\d{1,2}点(?:\\d{1,2}分|\\d{1,2}|半)?)(?!\\d)' +
     '|' +
     // 分支 B：裸时刻（左邻排除 第/数字/年月日号:，以及不收的「周X/本周X/星期X/礼拜X」残留——
-    // 否则「本周五 18:00」整段不命中后，裸「 18:00」会被捡走产生错误提醒）
+    // 否则「本周五 18:00」整段不命中后，裸「 18:00」会被捡走产生错误提醒）。
+    // v7.2.0（B 层审计 P1）：时段词前的 [\s]* 改 [^\S\u3000]*（不含全角空格）——若吞 U+3000，
+    // 匹配起点会落在事项区分隔符上，slice(0,start) 防护查不到它，「事项　9:30」的裸时刻被
+    // 二次命中（幽灵提醒）。分支 A 保留 [\s]*：日期段已锁定语境，「明天　9:30」全角分隔须继续命中。
     '(?<!第)(?<!\\d)(?<![年月日号:])' +
     '(?<!周[一二三四五六日天]\\s?)(?<!本\\s?周[一二三四五六日天]\\s?)(?<!星期[一二三四五六日天]\\s?)(?<!礼拜[一二三四五六日天]\\s?)' +
-    '(?:凌晨|早上|上午|中午|下午|傍晚|晚上|夜里)?[\\s]*' +
+    '(?:凌晨|早上|上午|中午|下午|傍晚|晚上|夜里)?[^\\S\\u3000]*' +
     '(?:\\d{1,2}:\\d{2}|\\d{1,2}点(?:\\d{1,2}分|\\d{1,2}|半)?)(?!\\d)',
     'g'
   );
@@ -3349,7 +3375,8 @@ function caretInfoInEditor() {
 // ── v5.37 时间 chip：光标落在时间文本上时浮出快捷入口（v5.45 文案=时间·事项+蓝色「添加提醒」CTA）──
 // chip 是编辑器外的独立浮层；点 chip 即设提醒（pointerdown 三连 preventDefault，与工具栏按钮同套路防焦点丢失）
 let chipData = null, chipTimer = null, chipDeleteAt = null; // v5.47：chipDeleteAt=两行卡「删除」按钮的目标时间戳
-function hideTimeChip() { chipData = null; chipDeleteAt = null; timeChip.classList.add('hidden'); timeChip.classList.remove('feedback'); }
+let chipFromHover = false; // v7.2.0：chip 当前由鼠标悬停路弹出——caret 路不越权收（防互相误收）
+function hideTimeChip() { chipData = null; chipDeleteAt = null; chipFromHover = false; timeChip.classList.add('hidden'); timeChip.classList.remove('feedback'); }
 // v5.47：两行卡第一行尾随的「删除」伪按钮（span+描边；点击彻底移除该提醒——列表/下划线/响铃全清）
 function buildChipDeleteBtn() {
   const d = document.createElement('span');
@@ -3375,24 +3402,19 @@ function chipDeleteActivate(e) {
   removeReminder(at); // 异步：列表移除+持久化+下划线重算全在内部
   hideTimeChip();
 }
-function maybeShowTimeChip() {
-  if (Date.now() < chipFeedbackUntil) return; // 「✅ 提醒已添加」两行确认卡展示中
-  // v5.40：面板升级为全屏模态——遮罩挡正文，与 chip 回归互斥（下移错位方案退役）
-  if (!cryptoKey || editor.getAttribute('contenteditable') === 'false' || isComposing ||
-      remPanelOpen || !remCard.classList.contains('hidden')) { hideTimeChip(); return; }
-  const info = caretInfoInEditor();
-  if (!info) { hideTimeChip(); return; }
-  const m = matchTimeAt(info.text, info.offset);
-  if (!m) { hideTimeChip(); return; }
+// v7.2.0：chip 渲染主体抽出——caret 路（selectionchange）与 hover 路（mousemove）共用。
+// 返回 true=已展示，false=已收起；无效/过期/已提醒过期等分支内部 hideTimeChip。
+function showChipForMatch(m, text) {
+  if (!m) { hideTimeChip(); return false; }
   const now = Date.now();
   // v5.47：已添加的提醒优先判断，且展示口径与下划线一致（at<=now 才拦）——
   // 修复临近触发 30 秒内的窗口差：此前 expired 判断（now+30s 阈值）先把 chip 拦掉，
   // 而下划线（now 阈值）还在 → 「有下划线却不弹卡」（用户实测报障）
   if (reminders.some(r => r.at === m.at)) {
-    if (m.at <= now) { hideTimeChip(); return; } // 真已过期：与下划线同步消失，不弹
+    if (m.at <= now) { hideTimeChip(); return false; } // 真已过期：与下划线同步消失，不弹
     chipData = null; // 清残留：防此前 CTA chip 的旧目标被误触
     chipDeleteAt = m.at; // v5.47：展示卡带「删除」按钮
-    const item = itemAfterMatch(info.text, m);
+    const item = itemAfterMatch(text, m);
     timeChip.classList.add('feedback'); // 复用两行卡样式（圆角/居中/默认光标）
     timeChip.textContent = '';
     const l1 = document.createElement('div'); l1.className = 'chip-ok1';
@@ -3401,11 +3423,11 @@ function maybeShowTimeChip() {
     const l2 = document.createElement('div'); l2.className = 'chip-ok2'; l2.textContent = fmtRemTime(m.at) + (item ? '　' + item : '');
     timeChip.appendChild(l1); timeChip.appendChild(l2);
     timeChip.classList.remove('hidden');
-    return;
+    return true;
   }
   // v5.46：未添加的过期时间不浮 chip（零打扰）；「过去时间不能设提醒」硬规则不变
-  if (m.expired) { hideTimeChip(); return; }
-  const item = itemAfterMatch(info.text, m);
+  if (m.expired) { hideTimeChip(); return false; }
+  const item = itemAfterMatch(text, m);
   chipData = { at: m.at, item: item };
   chipDeleteAt = null;
   // v5.45：文案改版（用户拍板）——时间在前（裸文本节点防吃字），「添加提醒」蓝色 CTA 在后
@@ -3417,12 +3439,80 @@ function maybeShowTimeChip() {
   cta.textContent = '添加提醒';
   timeChip.appendChild(cta);
   timeChip.classList.remove('hidden');
+  return true;
+}
+// caret 路（selectionchange 250ms 防抖驱动）：光标落在时间上弹 chip
+function maybeShowTimeChip() {
+  if (Date.now() < chipFeedbackUntil) return; // 「✅ 提醒已添加」两行确认卡展示中
+  // v5.40：面板升级为全屏模态——遮罩挡正文，与 chip 回归互斥（下移错位方案退役）
+  if (!cryptoKey || editor.getAttribute('contenteditable') === 'false' || isComposing ||
+      remPanelOpen || !remCard.classList.contains('hidden')) { hideTimeChip(); return; }
+  const info = caretInfoInEditor();
+  // v7.2.0：caret 不在时间上时，若 chip 是 hover 路弹出的则不越权收（两路互不误收）
+  if (!info) { if (!chipFromHover) hideTimeChip(); return; }
+  const m = matchTimeAt(info.text, info.offset);
+  if (!m) { if (!chipFromHover) hideTimeChip(); return; }
+  chipFromHover = false; // caret 路接管展示
+  showChipForMatch(m, info.text);
 }
 document.addEventListener('selectionchange', () => {
   clearTimeout(chipTimer);
   chipTimer = setTimeout(maybeShowTimeChip, 250);
 });
 // v5.57：chip 补触发已并入 editor 的 compositionend 监听（isComposing 复位处），此处不重复挂
+// ── v7.2.0 hover 路：PC 鼠标悬停到时间上同样弹 chip（用户实测「光标移上去没反应」报障症状1）──
+// 此前只有 selectionchange（caret）一路，鼠标移上去永远无响应。仅 (hover:hover)+(pointer:fine)
+// 精确指针设备启用（触屏无 hover 概念，matchMedia 不存在时自然关闭——jsdom 即此形态）。
+// 落点换算与 caretInfoInEditor 同构：裸文本节点用节点自身文本+节点内偏移，否则算块内纯文本偏移。
+function hoverInfoFromPoint(x, y) {
+  let node = null, off = 0;
+  if (document.caretRangeFromPoint) { // Chromium/WebKit
+    const r = document.caretRangeFromPoint(x, y);
+    if (!r) return null;
+    node = r.startContainer; off = r.startOffset;
+  } else if (document.caretPositionFromPoint) { // Firefox
+    const p = document.caretPositionFromPoint(x, y);
+    if (!p) return null;
+    node = p.offsetNode; off = p.offset;
+  } else return null;
+  if (!node || !editor.contains(node)) return null;
+  if (node.nodeType === 3 && node.parentNode === editor) {
+    return { text: node.data || '', offset: off };
+  }
+  let block = node.nodeType === 3 ? node.parentNode : node;
+  while (block && block.parentNode !== editor) block = block.parentNode;
+  if (!block || block === editor) return null;
+  let boff;
+  try {
+    const pre = document.createRange();
+    pre.selectNodeContents(block);
+    pre.setEnd(node, off);
+    boff = pre.toString().length;
+  } catch (e) { return null; }
+  return { text: block.textContent || '', offset: boff };
+}
+const CHIP_HOVER_OK = !!(window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches);
+let hoverTimer = null;
+if (CHIP_HOVER_OK) {
+  editor.addEventListener('mousemove', e => {
+    clearTimeout(hoverTimer);
+    const x = e.clientX, y = e.clientY;
+    hoverTimer = setTimeout(() => { // 200ms 防抖：划过不弹，停住才弹
+      if (Date.now() < chipFeedbackUntil) return; // 确认卡展示中不抢
+      if (!cryptoKey || editor.getAttribute('contenteditable') === 'false' || isComposing ||
+          remPanelOpen || !remCard.classList.contains('hidden')) { if (chipFromHover) hideTimeChip(); return; }
+      const info = hoverInfoFromPoint(x, y);
+      if (!info) { if (chipFromHover) hideTimeChip(); return; }
+      const m = matchTimeAt(info.text, info.offset);
+      if (!m) { if (chipFromHover) hideTimeChip(); return; }
+      chipFromHover = showChipForMatch(m, info.text); // 展示成功才认领（过期/已提醒过期分支内部已收）
+    }, 200);
+  });
+  editor.addEventListener('mouseleave', () => {
+    clearTimeout(hoverTimer);
+    if (chipFromHover) hideTimeChip();
+  });
+}
 async function chipActivate(e) { // v6.3：async——要 await addReminder 的结果才决定弹成功卡还是收起
   if (e.button !== undefined && e.button !== 0) return;
   e.preventDefault();
@@ -3460,7 +3550,7 @@ let remMarkTimer = null;
 function scheduleRemMarkRefresh() {
   if (!cryptoKey) return;
   clearTimeout(remMarkTimer);
-  remMarkTimer = setTimeout(() => { if (!isLinkifying) { try { linkifyEditor(); } catch (e) {} } }, 400);
+  remMarkTimer = setTimeout(() => { if (!isLinkifying) { try { linkifyDeferred(); } catch (e) {} } }, 400); // v7.2.0：打字中推迟打标手术
 }
 // 旧明文 {at,text} → 新 [{at,text}] 的迁移统一在这里做；坏数据当无提醒。
 // v6.3 三项修正（用户实测 P0/P1）：
@@ -3559,7 +3649,13 @@ async function persistReminders() {
   } else {
     remCipher = null; remOut = null; // 显式 null = 服务端清除字段
   }
-  const r = await apiPut({ ct: body.ct, iv: body.iv, salt: currentSaltB64(), rem: remOut }); // v5.58：空盐兜底
+  let r;
+  try {
+    r = await apiPut({ ct: body.ct, iv: body.iv, salt: currentSaltB64(), rem: remOut, baseV: localVer }); // v5.58：空盐兜底；v7.2.0：baseV 乐观并发
+  } catch (e) {
+    if (e && e.status === 409) { await handleWriteConflict(); } // v7.2.0：版本落后→挂起等拍板（绝不覆盖），再抛给调用方按失败处理
+    throw e;
+  }
   localVer = r.v; lastHtml = html; clearDraft();
   if (prevHtml2 && prevHtml2 !== html) snapshotHistory(prevHtml2, false); // fire-and-forget，失败静默
   cachePut({ ct: body.ct, iv: body.iv, v: r.v, salt: serverSalt ? bufToB64(serverSalt) : null, savedAt: Date.now() }); // v5.50：提醒保存也是正文保存，同步刷新离线缓存；v5.54 附盐
@@ -4455,7 +4551,7 @@ async function saveLocal() {
       return;
     }
     const prevHtml = lastHtml; // v6.0：自动快照存「保存前的上一版」——正文被覆盖/误删时还有得救
-    const r = await apiPut({ ct: enc.ct, iv: enc.iv, salt: currentSaltB64() }); // v5.58：空盐兜底
+    const r = await apiPut({ ct: enc.ct, iv: enc.iv, salt: currentSaltB64(), baseV: localVer }); // v5.58：空盐兜底；v7.2.0：baseV 乐观并发（症状2根修：版本落后服务端 409 拒写，不再静默覆盖）
     localVer = r.v; lastHtml = html;
     if (prevHtml && prevHtml !== html) snapshotHistory(prevHtml, false); // fire-and-forget，失败静默
     saveRetryCount = 0;
@@ -4467,6 +4563,7 @@ async function saveLocal() {
   } catch (e) {
     if (e.locked) { setStatus(false, '已锁定，请稍后'); editor.contentEditable = false; }
     else if (!navigator.onLine) { setStatus(false, '离线'); showOfflineBar(currentSyncTime()); } // v5.50：断网保存失败不再显示误导性的「保存失败」循环
+    else if (e && e.status === 409) { await handleWriteConflict(); } // v7.2.0：版本落后被拒——挂起等拍板，绝不退避重试（baseV 不变重试必再 409 死循环）
     else {
       setStatus(false, '保存失败');
       scheduleSaveRetry(); // I4：失败自动退避重试，不再“失败即永久丢失，须手动再改一笔”
@@ -4481,6 +4578,22 @@ async function saveLocal() {
       saveTimer = setTimeout(saveLocal, 300);
     }
   }
+}
+
+// v7.2.0（症状2根修）：写入被 409 拒绝（本机版本落后）——GET 最新快照挂起 + 冲突条等用户拍板。
+// 绝不自动重试（baseV 不变重试必再 409）；PUT 前草稿已落盘，本机输入零丢失；
+// 拍板「保留我的」由 remoteKeep 采纳挂起 v 后重进 saveLocal，「使用远端」由 remoteTake 应用。
+async function handleWriteConflict() {
+  try {
+    const note = await apiGet();
+    if ((note.v || 0) > localVer && note.ct) {
+      pendingRemoteNote = note;
+      setStatus(false, '远端有更新，待处理');
+      showRemoteBar();
+      return;
+    }
+    saveLocal(); // 并发窗口已闭合（罕见：409 与 GET 之间版本未再变）：直接补一次保存
+  } catch (e2) { setStatus(false, '保存失败'); scheduleSaveRetry(); }
 }
 
 // I4：保存失败退避重试。内容仍在编辑器里（html !== lastHtml），重试只是重新加密上传当前内容；
@@ -4558,6 +4671,24 @@ async function poll() {
     hideOfflineBar();
     if ((note.v || 0) > localVer && note.ct) {
       const html = await decryptText(note.ct, note.iv, cryptoKey);
+      // v7.2.0（症状4根修）：远端三级分类——先判远端是不是实质变更，再决定弹不弹冲突条。
+      // 级0 严格相等：v 仅被 rem/附属字段 bump（他端到点标 fired 的 persistReminders 等）
+      //   → 静默消费版本，rem 变了照常应用；本机脏不脏都不弹条。
+      // 级1 装饰等价：远端只差打标装饰（u.rem-mark/s.rem-done/a[data-url]/ZWSP/裸span）
+      //   → 静默消费版本+rem，装饰差异由本机 linkify 自会重建，不弹条。
+      // 级2 真实文本变更：维持原路径（本机脏→挂起弹条；本机净→应用）。
+      if (html === lastHtml) {
+        localVer = note.v || localVer;
+        if ((note.rem || null) !== remCipher) { try { await loadReminder(note, cryptoKey); scheduleRemMarkRefresh(); } catch (e) {} }
+        return; // 级0
+      }
+      if (isDecorativelyEqual(html, lastHtml)) {
+        // 消费版本后，本机下一次保存以新 v 为 baseV 直写——被覆盖的只是远端装饰，零损失；
+        // lastHtml 不回填远端串（它继续保持「与本机编辑器同一份内容」的语义，保存判定不紊乱）。
+        localVer = note.v || localVer;
+        if ((note.rem || null) !== remCipher) { try { await loadReminder(note, cryptoKey); scheduleRemMarkRefresh(); } catch (e) {} }
+        return; // 级1
+      }
       // v5.56：有未保存改动即挂起远端（不再要求正聚焦——失焦未存的修改同样绝不覆盖）。
       // 旧版在此 localVer = note.v 消费版本号却不应用内容：下一轮 poll 条件不再成立，
       // 远端更新被永久吞掉，随后本地保存直接覆盖服务端（真机数据丢失实锤，「输入完成后合并」
@@ -4579,6 +4710,13 @@ async function poll() {
       // v5.57：恢复后无条件重绘下划线——远端只动提醒没动正文时 html 相等、
       // linkify 分支不跑，列表有下划线无（用户实测「有时候没下划线」实锤）
       if ((note.rem || null) !== remCipher) { try { await loadReminder(note, cryptoKey); scheduleRemMarkRefresh(); } catch (e) {} }
+      // v7.2.0（症状3）：用户正在编辑器里连续打字（末次击键 <1.5s）时推迟应用远端——
+      // innerHTML 整段替换会销毁当前 Range，随后的 caret 重建正是「打字中光标跳位」链条。
+      // 不消费版本号直接 return，下轮 poll 重试（用户停笔 1.5s 后即正常应用）。
+      if (document.activeElement === editor && Date.now() - lastTypeAt < 1500) {
+        window.__pollTypeDefer = (window.__pollTypeDefer || 0) + 1; // diag 探针
+        return;
+      }
       if (html !== editor.innerHTML) {
         const wasFocused = document.activeElement === editor;
         // 用字符偏移保存光标，而非 cloneRange：替换 innerHTML 后旧 Range 指向的节点被 detach，

@@ -7,16 +7,22 @@
 //
 // 环境变量（写在 ~/.workbuddy/mcp.json 的 env 字段，不进 git）：
 //   NOTESYNC_BASE        服务基址，默认 https://biji.xuyinji.com.cn
-//   NOTESYNC_NOTE        默认笔记名（工具入参 name 未传时用它）
+//   NOTESYNC_NOTE        默认笔记名（工具入参 name 未传时用它；也是注册表种子）
+//   NOTESYNC_NOTES       种子笔记名，逗号分隔（v7.2.0 注册表）
 //   NOTESYNC_PASSPHRASE  笔记口令（必填）
-//   NOTESYNC_OUT_DIR     note_read 生成图片的输出目录，默认系统临时目录/notesync-mcp
+//   NOTESYNC_OUT_DIR     note_read 图片/note_export zip 的输出目录，默认系统临时目录/notesync-mcp
+//   NOTESYNC_CACHE_DIR   注册表与索引的持久根目录，默认 ~/.notesync-mcp（v7.2.0）
+//   NOTESYNC_INDEX_PLAIN 置 1 时检索索引明文落盘（调试用，默认加密）
 //
 // 工具集：
 //   note_locate  按名称定位笔记（可附带试解密验证）
 //   note_read    获取笔记全文：text 纯文本 / html 原文 / image 长图 PNG
 //   note_edit    追加/插入/删除一段文字（纯文本语义，位置按可见字符计）
-//   note_image   本机图片上传 Cloudinary 后插入正文 <img>（v7.1.1，不压缩直传 ≤8MB）
+//   note_image   本机图片上传 Cloudinary 后插入正文 <img>（v7.1.1，不压缩直传 ≤8MB）；op=remove 按 URL 删图（v7.2.0）
 //   note_remind  提醒管理：add 设提醒（回写正文行）/ list 列出 / cancel 取消 / clear 清理过期（v7.1.1）
+//   note_search  全文检索：本地加密倒排索引+按版本号增量（v7.2.0）
+//   note_export  一键备份 zip：plain（md+html+附件+manifest 明文）/ raw（密文免口令）（v7.2.0）
+//   note_import  从备份 zip 恢复：默认 preview，白名单校验不静默剥离（v7.2.0）
 
 'use strict';
 
@@ -24,6 +30,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const zlib = require('zlib');
 
 const BASE = (process.env.NOTESYNC_BASE || 'https://biji.xuyinji.com.cn').replace(/\/+$/, '');
 const DEFAULT_NOTE = process.env.NOTESYNC_NOTE || '';
@@ -41,6 +48,15 @@ const UPLOAD_PRESET = 'NoteXCloudinary';
 const CLOUDINARY_URL = 'https://api.cloudinary.com/v1_1/' + CLOUD_NAME + '/image/upload';
 const IMG_MAX_BYTES = 8 * 1024 * 1024; // MCP 直传不压缩（web 端才压缩到 1920 宽），上限 8MB
 const IMG_EXT_RE = /\.(png|jpe?g|gif|webp)$/i;
+
+// ---------- 本地缓存根目录（v7.2.0 note_search/note_export） ----------
+// 注册表 + 索引都要求持久（系统临时目录会被清），默认 ~/.notesync-mcp，env 可改根目录。
+const CACHE_DIR = process.env.NOTESYNC_CACHE_DIR || path.join(os.homedir(), '.notesync-mcp');
+const REG_FILE = path.join(CACHE_DIR, 'registry.json');
+const INDEX_DIR = path.join(CACHE_DIR, 'index');
+const INDEX_SALT_FILE = path.join(CACHE_DIR, 'index.salt');
+const INDEX_PLAIN = process.env.NOTESYNC_INDEX_PLAIN === '1'; // 调试用：索引明文落盘（默认关）
+const SEED_NOTES_ENV = process.env.NOTESYNC_NOTES || '';       // 逗号分隔种子笔记名
 
 // ---------- 加解密（与 web 端同构） ----------
 const keyCache = new Map(); // key = name + '|' + saltB64
@@ -157,6 +173,237 @@ function plainToHtmlIndex(pm, p) {
   return pm.map[p].h;
 }
 
+// ---------- 笔记注册表（v7.2.0：note_search/note_export 的枚举前置） ----------
+// 服务端没有列表 API 也绝不加（无鉴权=公开广播全部笔记名，安全模型降级）——
+// 枚举走 MCP 本地注册表：env 种子 + 调用自动累积。stdio 单进程顺序执行，无需锁。
+function regLoad() {
+  let reg = null;
+  try { reg = JSON.parse(fs.readFileSync(REG_FILE, 'utf8')); } catch (e) { reg = null; }
+  if (!reg || !Array.isArray(reg.names)) reg = { names: [] };
+  reg.names = [...new Set(reg.names.filter(n => typeof n === 'string' && ID_RE.test(n)))];
+  return reg;
+}
+function regSave(reg) {
+  fs.mkdirSync(CACHE_DIR, { recursive: true });
+  reg.updatedAt = Date.now();
+  fs.writeFileSync(REG_FILE, JSON.stringify(reg, null, 2));
+}
+// 登记一个笔记名（自动累积）。注册表坏了自愈：重写只含本次名字。
+function regAdd(name) {
+  if (!name || !ID_RE.test(name)) return;
+  const reg = regLoad();
+  if (!reg.names.includes(name)) { reg.names.push(name); regSave(reg); }
+}
+// 启动种子：NOTESYNC_NOTE + NOTESYNC_NOTES 合入注册表（幂等，缺文件也能建）。
+function regSeed() {
+  const seeds = (DEFAULT_NOTE ? [DEFAULT_NOTE] : [])
+    .concat(SEED_NOTES_ENV.split(',').map(s => s.trim()).filter(Boolean));
+  if (!seeds.length) return;
+  try {
+    const reg = regLoad();
+    const add = seeds.filter(n => ID_RE.test(n) && !reg.names.includes(n));
+    if (add.length) { reg.names.push(...add); regSave(reg); }
+  } catch (e) { /* 种子失败不挡服务启动 */ }
+}
+// names 入参解析：显式 names[]（逐个入册）优先，否则注册表全部；一个都没有则报错。
+function resolveNames(args) {
+  const explicit = Array.isArray(args && args.names) ? args.names.filter(Boolean) : null;
+  const names = explicit || regLoad().names;
+  for (const n of names) assertName(n);
+  if (explicit) for (const n of names) regAdd(n);
+  if (!names.length) throw new Error('没有可用的笔记名：注册表为空（配置 env NOTESYNC_NOTE / NOTESYNC_NOTES，或调用任何工具时传 name/names 自动登记）');
+  return [...new Set(names)];
+}
+
+// ---------- 全文检索：分词与倒排索引（v7.2.0） ----------
+// CJK 连续段切二元组（bigram），拉丁/数字切整词（lowercase）；单字 CJK 段整字成词。
+// 返回 [{t, off}]：t=词元，off=该词元在纯文本中的偏移。
+function tokenize(text) {
+  const out = [];
+  const re = /[一-龥]+|[A-Za-z0-9_]+/g;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    const seg = m[0], base = m.index;
+    if (/[一-龥]/.test(seg[0])) {
+      if (seg.length === 1) out.push({ t: seg, off: base });
+      else for (let i = 0; i < seg.length - 1; i++) out.push({ t: seg.slice(i, i + 2), off: base + i });
+    } else {
+      out.push({ t: seg.toLowerCase(), off: base });
+    }
+  }
+  return out;
+}
+// 索引密钥：口令 + 专用本地盐（CACHE_DIR/index.salt，16B 首次生成）派生一次缓存。
+let indexKeyCache = null;
+function indexKey() {
+  mustPass();
+  if (indexKeyCache) return indexKeyCache;
+  let salt;
+  try { salt = fs.readFileSync(INDEX_SALT_FILE); } catch (e) { salt = null; }
+  if (!salt || salt.length !== 16) {
+    salt = crypto.randomBytes(16);
+    fs.mkdirSync(CACHE_DIR, { recursive: true });
+    fs.writeFileSync(INDEX_SALT_FILE, salt);
+  }
+  indexKeyCache = deriveKeySync(PASSPHRASE, salt);
+  return indexKeyCache;
+}
+// 索引落盘：AES-256-GCM 加密（索引含正文词元，明文落盘违背「本地只存密文」姿态）；
+// env NOTESYNC_INDEX_PLAIN=1 时明文（调试用）。坏文件读取返回 null（自愈重建）。
+function indexStore(name, payload) {
+  fs.mkdirSync(INDEX_DIR, { recursive: true });
+  const file = path.join(INDEX_DIR, name + '.idx.json');
+  if (INDEX_PLAIN) { fs.writeFileSync(file, JSON.stringify(payload)); return; }
+  const enc = encryptText(JSON.stringify(payload), indexKey());
+  fs.writeFileSync(file, JSON.stringify({ enc: 1, iv: enc.iv, ct: enc.ct }));
+}
+function indexLoad(name) {
+  let raw;
+  try { raw = fs.readFileSync(path.join(INDEX_DIR, name + '.idx.json'), 'utf8'); } catch (e) { return null; }
+  try {
+    const j = JSON.parse(raw);
+    if (j && j.enc === 1) return JSON.parse(decryptText(j.ct, j.iv, indexKey()));
+    if (INDEX_PLAIN && j && j.terms) return j; // 明文调试文件
+    return null;
+  } catch (e) { return null; }
+}
+// 单笔记索引项：{ name, v, updatedAt, docLen, terms:{词元:[offset...]} }——只存词元与偏移，不存原文。
+function buildIndexItem(name, v, updatedAt, plainText) {
+  const terms = {};
+  for (const { t, off } of tokenize(plainText)) (terms[t] = terms[t] || []).push(off);
+  return { name, v, updatedAt: updatedAt || 0, docLen: plainText.length, terms };
+}
+
+// ---------- 零依赖 zip（v7.2.0 note_export/note_import） ----------
+// method 8（raw deflate，zlib.deflateRawSync）+ CRC32 查表 + UTF-8 文件名标志位。
+const CRC_TABLE = (() => {
+  const t = new Int32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    t[n] = c;
+  }
+  return t;
+})();
+function crc32(buf) {
+  let c = -1;
+  for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ -1) >>> 0;
+}
+// entries: [{ name, data:Buffer }] → 标准 zip Buffer（local header + data + central dir + EOCD）。
+function buildZip(entries) {
+  const locals = [], centrals = [];
+  let offset = 0;
+  const dosTime = ((new Date().getHours() << 11) | (new Date().getMinutes() << 5) | (Math.floor(new Date().getSeconds() / 2))) & 0xFFFF;
+  const dosDate = (((new Date().getFullYear() - 1980) << 9) | ((new Date().getMonth() + 1) << 5) | new Date().getDate()) & 0xFFFF;
+  for (const e of entries) {
+    const nameBuf = Buffer.from(e.name, 'utf8');
+    const crc = crc32(e.data);
+    const comp = zlib.deflateRawSync(e.data);
+    const useComp = comp.length < e.data.length;
+    const data = useComp ? comp : e.data; // 小文件存原样也合法（method 0）
+    const lh = Buffer.alloc(30);
+    lh.writeUInt32LE(0x04034b50, 0);
+    lh.writeUInt16LE(20, 4);           // version needed
+    lh.writeUInt16LE(0x0800, 6);       // flags: UTF-8 文件名
+    lh.writeUInt16LE(useComp ? 8 : 0, 8);
+    lh.writeUInt16LE(dosTime, 10); lh.writeUInt16LE(dosDate, 12);
+    lh.writeUInt32LE(crc, 14);
+    lh.writeUInt32LE(data.length, 18);
+    lh.writeUInt32LE(e.data.length, 22);
+    lh.writeUInt16LE(nameBuf.length, 26);
+    lh.writeUInt16LE(0, 28);
+    locals.push(lh, nameBuf, data);
+    const ch = Buffer.alloc(46);
+    ch.writeUInt32LE(0x02014b50, 0);
+    ch.writeUInt16LE(20, 4); ch.writeUInt16LE(20, 6);
+    ch.writeUInt16LE(0x0800, 8);
+    ch.writeUInt16LE(useComp ? 8 : 0, 10);
+    ch.writeUInt16LE(dosTime, 12); ch.writeUInt16LE(dosDate, 14);
+    ch.writeUInt32LE(crc, 16);
+    ch.writeUInt32LE(data.length, 20);
+    ch.writeUInt32LE(e.data.length, 24);
+    ch.writeUInt16LE(nameBuf.length, 28);
+    ch.writeUInt16LE(0, 30); ch.writeUInt16LE(0, 32); ch.writeUInt16LE(0, 34);
+    ch.writeUInt16LE(0, 36); ch.writeUInt32LE(0, 38);
+    ch.writeUInt32LE(offset, 42);
+    centrals.push(ch, nameBuf);
+    offset += 30 + nameBuf.length + data.length;
+  }
+  const cdStart = offset;
+  const cdBuf = Buffer.concat(centrals);
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(0, 4); eocd.writeUInt16LE(0, 6);
+  eocd.writeUInt16LE(entries.length, 8); eocd.writeUInt16LE(entries.length, 10);
+  eocd.writeUInt32LE(cdBuf.length, 12);
+  eocd.writeUInt32LE(cdStart, 16);
+  eocd.writeUInt16LE(0, 20);
+  return Buffer.concat([...locals, cdBuf, eocd]);
+}
+// 读 zip：尾部搜 EOCD → central directory 逐条 → local header 对齐 → inflateRaw。
+// 返回 [{ name, data }]。条目名含 .. / 绝对路径 / 盘符一律拒绝（zip slip）。
+function readZip(buf) {
+  let eocd = -1;
+  for (let i = buf.length - 22; i >= Math.max(0, buf.length - 22 - 65535); i--) {
+    if (buf.readUInt32LE(i) === 0x06054b50) { eocd = i; break; }
+  }
+  if (eocd === -1) throw new Error('不是有效的 zip（找不到 EOCD）');
+  const count = buf.readUInt16LE(eocd + 10);
+  let p = buf.readUInt32LE(eocd + 16);
+  const out = [];
+  for (let i = 0; i < count; i++) {
+    if (buf.readUInt32LE(p) !== 0x02014b50) throw new Error('zip central directory 损坏');
+    const method = buf.readUInt16LE(p + 10);
+    const compSize = buf.readUInt32LE(p + 20);
+    const nameLen = buf.readUInt16LE(p + 28);
+    const extraLen = buf.readUInt16LE(p + 30);
+    const cmtLen = buf.readUInt16LE(p + 32);
+    const localOff = buf.readUInt32LE(p + 42);
+    const name = buf.slice(p + 46, p + 46 + nameLen).toString('utf8');
+    if (/(^|\/)\.\.(\/|$)/.test(name) || name.startsWith('/') || /^[A-Za-z]:/.test(name)) {
+      throw new Error('zip 条目名不安全（拒绝 zip slip）：' + name);
+    }
+    if (name.endsWith('/')) { p += 46 + nameLen + extraLen + cmtLen; continue; } // 目录条目跳过
+    const lhNameLen = buf.readUInt16LE(localOff + 26);
+    const lhExtraLen = buf.readUInt16LE(localOff + 28);
+    const dataStart = localOff + 30 + lhNameLen + lhExtraLen;
+    const data = buf.slice(dataStart, dataStart + compSize);
+    out.push({ name, data: method === 8 ? zlib.inflateRawSync(data) : Buffer.from(data) });
+    p += 46 + nameLen + extraLen + cmtLen;
+  }
+  return out;
+}
+
+// ---------- HTML → Markdown（有损，plain 导出给人看；恢复绝不从 md 重建） ----------
+function htmlToMd(html) {
+  let s = html;
+  s = s.replace(/<img\b[^>]*\ssrc="([^"]*)"[^>]*>/gi, (m, src) => '![](' + decodeEntities(src) + ')');
+  s = s.replace(/<a\b[^>]*\shref="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, (m, href, txt) => '[' + txt.replace(/<[^>]+>/g, '') + '](' + decodeEntities(href) + ')');
+  s = s.replace(/<(s|del|strike)\b[^>]*>([\s\S]*?)<\/\1>/gi, '~~$2~~');
+  s = s.replace(/<br\s*\/?>/gi, '\n');
+  s = s.replace(/<\/(div|p|h[1-6]|li)>/gi, '\n');
+  s = s.replace(/<[^>]+>/g, '');
+  s = s.replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&#0?39;|&apos;/g, "'").replace(/&amp;/g, '&');
+  return s.replace(/\n{3,}/g, '\n\n').trim();
+}
+
+// ---------- HTML 白名单校验（import 闸：未知标签报错列出，绝不静默剥离） ----------
+const HTML_WHITELIST = new Set(['div', 'br', 'u', 's', 'a', 'img', 'span', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li']);
+function assertWhitelistHtml(html) {
+  if (/<(script|iframe|object|embed|link|meta)\b/i.test(html)) {
+    throw new Error('HTML 含危险标签（script/iframe/object/embed/link/meta），拒绝导入（笔记正文不允许脚本）');
+  }
+  const unknown = new Set();
+  const re = /<\/?([a-zA-Z][a-zA-Z0-9]*)/g;
+  let m;
+  while ((m = re.exec(html)) !== null) {
+    if (!HTML_WHITELIST.has(m[1].toLowerCase())) unknown.add(m[1].toLowerCase());
+  }
+  if (unknown.size) throw new Error('HTML 含白名单外标签（允许：div/br/u/s/a/img/span/p/h1-6/li），拒绝导入：' + [...unknown].join(', '));
+}
+
 // ---------- 工具实现 ----------
 async function toolLocate(args) {
   const name = args.name || DEFAULT_NOTE;
@@ -261,12 +508,17 @@ async function toolEdit(args) {
   const name = args.name || DEFAULT_NOTE;
   assertName(name);
   const op = args.op;
-  if (!['append', 'insert', 'delete'].includes(op)) throw new Error('op 只支持 append | insert | delete');
-  if (op !== 'delete' && typeof args.text !== 'string') throw new Error('缺少 text');
+  if (!['append', 'insert', 'delete', 'replace_html'].includes(op)) throw new Error('op 只支持 append | insert | delete | replace_html');
+  if (op === 'replace_html') {
+    if (typeof args.html !== 'string') throw new Error('replace_html 缺少 html（整篇正文的 HTML 源串，建议 <div>行</div> 结构；空串=清空正文）');
+    if (/<script[\s>]/i.test(args.html)) throw new Error('html 含 <script>，拒绝写入（笔记正文不允许脚本）');
+  } else if (op !== 'delete' && typeof args.text !== 'string') throw new Error('缺少 text');
   return withRetry409(name, async () => {
     const { note, saltB64, key, html, fresh, v } = await loadNote(name);
     let nextHtml = html;
-    if (op === 'append') {
+    if (op === 'replace_html') {
+      nextHtml = args.html; // 整篇替换：不与旧正文拼接，结构由调用方负责（建议 <div>行</div>）；rem 原样透传
+    } else if (op === 'append') {
       const block = '<div>' + escapeHtml(args.text) + '</div>';
       nextHtml = html ? html + block : block;
     } else if (op === 'insert') {
@@ -399,6 +651,7 @@ async function toolRemind(args) {
 async function toolImage(args) {
   const name = args.name || DEFAULT_NOTE;
   assertName(name);
+  if (args.op === 'remove') return imageRemove(name, args); // v7.2.0：按 URL 删图
   const p = String(args.path || '');
   if (!p) throw new Error('path 必填（本机图片绝对路径）');
   if (!IMG_EXT_RE.test(p)) throw new Error('只支持 png/jpg/jpeg/gif/webp：' + p);
@@ -460,10 +713,288 @@ async function toolImage(args) {
   }
 }
 
+// ---------- note_image op=remove：按 match=图片 URL（或其子串）删正文 <img>（v7.2.0） ----------
+// 属性值按 escapeHtml 的逆序解码（&amp; 必须最后解，防 &amp;lt; 二次解码成 <）。
+function decodeAttr(s) {
+  return s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
+}
+async function imageRemove(name, args) {
+  const m = String(args.match || '').trim();
+  if (!m) throw new Error('remove 需要 match（图片 URL 或其子串；添加图片时返回的 url 可直接用）');
+  return withRetry409(name, async () => {
+    const { note, saltB64, key, html, v } = await loadNote(name);
+    const tags = html.match(/<img\b[^>]*>/gi) || [];
+    const srcOf = (t) => { const sm = t.match(/\ssrc="([^"]*)"/i); return sm ? decodeAttr(sm[1]) : '(无 src)'; };
+    const hit = tags.filter((t) => srcOf(t).includes(m));
+    if (hit.length === 0) {
+      const list = tags.map(srcOf);
+      throw new Error('未找到 match 对应的图片：' + m + (list.length ? '｜正文现有图片：' + list.join(' , ') : '｜正文里没有图片'));
+    }
+    if (hit.length > 1) throw new Error('match 命中 ' + hit.length + ' 张图片（歧义拒绝，请给更精确的 URL）：' + hit.map(srcOf).join(' , '));
+    const tag = hit[0];
+    const lineBlock = '<div>' + tag + '</div>'; // note_image add 的默认落盘形态（独立一行），连行一起删不留空壳 div
+    const asLine = html.includes(lineBlock);
+    const nextHtml = asLine ? html.split(lineBlock).join('') : html.split(tag).join('');
+    const enc = encryptText(nextHtml, key);
+    const body = { ct: enc.ct, iv: enc.iv, salt: saltB64, baseV: v };
+    if (note.rem !== undefined) body.rem = note.rem; // 只动正文，提醒原样透传
+    const r = await apiPut(name, body);
+    return { ok: true, op: 'remove', removed: { src: srcOf(tag), asLine }, v: r.v };
+  });
+}
+
 // 中文相对时间表（与 web 端逐字一致）：[日期段]? [\s]* [时段词]? [\s]* [时刻]，锚定全串匹配。
 // H 左邻不设 (?<![年月日号:])：锚定全串下「2026年9月8日18点」整体必不匹配（天然防护），
 // 而日期段结尾（日/号）直接接 H点 是合法形态（本月10日18点30 / 下周日9点）——裁决 2025-09-07。
 // 红线由 toolRemind 执行：算出过去（含 now+30s 内）一律视为过期。
+// ---------- note_search：全文检索（v7.2.0） ----------
+// 流程：注册表 names → 并行 GET（比对 v）→ v 未变用本地索引缓存 / 变了解密重建 →
+// 查询分词 AND 匹配 → 命中笔记解密纯文本做子串二次校验（bigram 固有误命中兜底）→ 摘要。
+async function toolSearch(args) {
+  const query = String(args.query || '').trim();
+  if (!query) throw new Error('缺少 query');
+  const limit = Math.max(1, Math.min(20, typeof args.limit === 'number' ? Math.floor(args.limit) : 5));
+  const names = resolveNames(args);
+  const rebuild = !!args.rebuild;
+  const now = Date.now();
+  let fresh = 0, stale = 0;
+
+  // query 分词：CJK 连续段必须整体连续命中（无空格 query 按「连续子串」校验）；
+  // 空格分隔多词时任一词连续命中即可（OR 校验，AND 命中已由索引层保证）。
+  const qTokens = tokenize(query).map(x => x.t);
+  if (!qTokens.length) throw new Error('query 分词后为空（需含中文或字母数字）');
+  const cjkSegments = (query.match(/[一-龥]+/g) || []);
+
+  const jobs = names.map(async (name) => {
+    const note = await apiGet(name);
+    if (!note.ct || !note.iv) return null; // 处女笔记没内容，无可检索
+    const v = note.v || 0;
+    let item = rebuild ? null : indexLoad(name);
+    if (item && item.v === v) { fresh++; }
+    else {
+      const saltB64 = note.salt || '';
+      if (!saltB64) return null;
+      const key = getKeyFor(name, saltB64);
+      let html;
+      try { html = decryptText(note.ct, note.iv, key); }
+      catch (e) { stale++; return null; } // 解密失败（口令不对？）该笔记跳过
+      item = buildIndexItem(name, v, note.updatedAt, htmlToPlainMap(html).text);
+      try { indexStore(name, item); } catch (e) { /* 索引落盘失败不挡检索 */ }
+    }
+    // AND 语义：全部 query 词元都在索引里才算命中
+    for (const t of qTokens) if (!item.terms[t]) return null;
+    let hitCount = 0, firstOff = Infinity;
+    for (const t of qTokens) {
+      const offs = item.terms[t];
+      hitCount += offs.length;
+      if (offs[0] < firstOff) firstOff = offs[0];
+    }
+    return { name, v, hitCount, firstOff };
+  });
+  const settled = await Promise.all(jobs.map(j => j.catch(() => { stale++; return null; })));
+
+  const results = [];
+  for (const hit of settled) {
+    if (!hit) continue;
+    // 子串二次校验：解密纯文本里确认 query 确实出现（bigram 拼接误命中兜底）。
+    // 无空格 CJK query 按连续段校验（「明天上午」必须原文连续出现）；空格分隔多词任一词连续出现即可。
+    let plain = null;
+    try {
+      const full = await apiGet(hit.name);
+      const saltB64 = full.salt || '';
+      const key = getKeyFor(hit.name, saltB64);
+      plain = htmlToPlainMap(decryptText(full.ct, full.iv, key)).text;
+    } catch (e) { stale++; continue; }
+    const probe = cjkSegments.find(seg => plain.includes(seg)) || qTokens.find(t => plain.includes(t));
+    if (!probe) continue; // bigram 误命中，丢弃
+    const at = plain.indexOf(probe);
+    const start = Math.max(0, at - 30), end = Math.min(plain.length, at + 40);
+    results.push({
+      name: hit.name, v: hit.v, hitCount: hit.hitCount,
+      snippets: [{ offset: at, text: (start > 0 ? '…' : '') + plain.slice(start, end) + (end < plain.length ? '…' : '') }],
+    });
+  }
+  // 排序：命中词频降序 → 笔记新旧（updatedAt）降序；截断 limit
+  results.sort((a, b) => (b.hitCount || 0) - (a.hitCount || 0) || (b.v || 0) - (a.v || 0));
+  return { results: results.slice(0, limit), indexed: names.length - fresh - stale, fresh, stale };
+}
+
+// ---------- note_export / note_import：一键备份与恢复（v7.2.0） ----------
+// plain=明文（md+html+附件+manifest，人读归档迁移，落盘即裸奔用户自管）；
+// raw=密文（ct/iv/salt/rem/v 原样，免口令可放云盘，零知识不外泄；恢复须同口令环境）。
+async function exportOne(name, mode, key) {
+  const note = await apiGet(name);
+  if (mode === 'raw') {
+    return { name, v: note.v || 0, updatedAt: note.updatedAt || 0, salt: note.salt || '',
+      json: { ct: note.ct || '', iv: note.iv || '', salt: note.salt || '', rem: note.rem || null, v: note.v || 0 },
+      html: null, remPlain: null, images: [] };
+  }
+  // plain：解密出 html + rem 明文
+  const saltB64 = note.salt || '';
+  if (!note.ct || !note.iv) return { name, v: 0, updatedAt: note.updatedAt || 0, salt: saltB64, json: null, html: '', remPlain: { list: [] }, images: [] };
+  const html = decryptText(note.ct, note.iv, key);
+  let remPlain = null;
+  if (note.rem) {
+    try { remPlain = JSON.parse(decryptText(JSON.parse(note.rem).ct, JSON.parse(note.rem).iv, key)); }
+    catch (e) { remPlain = null; }
+  }
+  return { name, v: note.v || 0, updatedAt: note.updatedAt || 0, salt: saltB64, json: null, html, remPlain, images: [] };
+}
+async function toolExport(args) {
+  const mode = args.mode || 'plain';
+  if (!['plain', 'raw'].includes(mode)) throw new Error('mode 只支持 plain | raw');
+  if (mode === 'plain') mustPass();
+  const names = resolveNames(args);
+  const downloadImages = args.download_images !== false;
+  const skipped = [], notes = [];
+  const entries = [];
+  const manifestNotes = [];
+  let imagesTotal = 0;
+
+  for (const name of names) {
+    try {
+      // plain 模式逐笔记现取盐派生 key（处女笔记无盐走空正文分支）
+      let one;
+      if (mode === 'raw') one = await exportOne(name, 'raw', null);
+      else {
+        const pre = await apiGet(name);
+        const saltB64 = pre.salt || '';
+        const k = saltB64 ? getKeyFor(name, saltB64) : null;
+        one = await exportOne(name, 'plain', k);
+      }
+      if (one.json === null && one.html === null) throw new Error('导出内容为空');
+      const m = { name: one.name, v: one.v, updatedAt: one.updatedAt, salt: one.salt };
+      if (mode === 'plain') {
+        m.rem = one.remPlain || { list: [] };
+        // 图片下载：Cloudinary 原图 → attachments/<name>/<i>.<ext>，md 内链接改写相对路径（原 URL 注释保留）
+        // src 兼容带/不带 https:// 前缀两种形态，捕获完整 src 值（md 转换产物里是原文）
+        const imgRe = /<img\b[^>]*\ssrc="((?:https?:\/\/)?res\.cloudinary\.com\/[^"]+)"[^>]*>/gi;
+        const imgs = [];
+        let im;
+        while ((im = imgRe.exec(one.html)) !== null) imgs.push(decodeEntities(im[1]));
+        const rels = [];
+        for (let i = 0; i < imgs.length; i++) {
+          const url = imgs[i];
+          const ext = (url.match(IMG_EXT_RE) || [])[0] || '.jpg';
+          let buf = null;
+          try {
+            const r = await fetch(url.startsWith('http') ? url : 'https://' + url, { cache: 'no-store' });
+            if (r.ok) buf = Buffer.from(await r.arrayBuffer());
+          } catch (e) { /* 下载失败不挡导出：md 保留原 URL */ }
+          if (buf) {
+            const rel = 'attachments/' + name + '/' + i + ext;
+            entries.push({ name: rel, data: buf });
+            rels.push({ url, rel });
+            imagesTotal++;
+          }
+        }
+        let md = htmlToMd(one.html);
+        for (const { url, rel } of rels) {
+          md = md.split(url).join(rel);
+          md = md.replace('![](' + rel + ')', '![](' + rel + ') <!-- 原 URL: ' + url + ' -->');
+        }
+        entries.push({ name: name + '.md', data: Buffer.from(md, 'utf8') });
+        entries.push({ name: name + '.html', data: Buffer.from(one.html, 'utf8') });
+        notes.push({ name: one.name, v: one.v, chars: one.html.length, images: rels.length });
+      } else {
+        entries.push({ name: name + '.json', data: Buffer.from(JSON.stringify(one.json, null, 2), 'utf8') });
+        notes.push({ name: one.name, v: one.v, chars: (one.json.ct || '').length, images: 0 });
+      }
+      manifestNotes.push(m);
+    } catch (e) {
+      skipped.push({ name, reason: e.message });
+    }
+  }
+  if (!manifestNotes.length) throw new Error('没有可导出的笔记：' + skipped.map(s => s.name + '(' + s.reason + ')').join('; '));
+  const manifest = { app: 'notesync', schema: 1, exportedAt: Date.now(), mode, notes: manifestNotes };
+  entries.unshift({ name: 'manifest.json', data: Buffer.from(JSON.stringify(manifest, null, 2), 'utf8') });
+  const zip = buildZip(entries);
+  fs.mkdirSync(OUT_DIR, { recursive: true });
+  const outPath = args.out || path.join(OUT_DIR, 'notesync-backup-' + new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '').replace(/^(\d{8})(\d{4})$/, '$1-$2') + '.zip');
+  fs.writeFileSync(outPath, zip);
+  return { ok: true, path: outPath, bytes: zip.length, notes, skipped, images: imagesTotal };
+}
+
+// import：默认 preview（只报告不写）；apply 时 create（新盐）/ update（v 一致直写）/ skip-conflict（force 才覆盖）。
+async function toolImport(args) {
+  const from = String(args.from || '');
+  if (!from) throw new Error('缺少 from（本工具导出的 zip 绝对路径）');
+  let entries;
+  try { entries = readZip(fs.readFileSync(from)); }
+  catch (e) { throw new Error('读取 zip 失败：' + e.message); }
+  const manEntry = entries.find(e => e.name === 'manifest.json');
+  if (!manEntry) throw new Error('zip 里没有 manifest.json（须为本工具导出的备份）');
+  let manifest;
+  try { manifest = JSON.parse(manEntry.data.toString('utf8')); }
+  catch (e) { throw new Error('manifest.json 解析失败：' + e.message); }
+  if (manifest.app !== 'notesync' || manifest.schema !== 1) throw new Error('manifest 不是 notesync 备份（app/schema 不符）');
+  const mode = args.mode || 'preview';
+  if (!['preview', 'apply'].includes(mode)) throw new Error('mode 只支持 preview | apply');
+  const force = !!args.force;
+  const namesFilter = Array.isArray(args.names) ? args.names.filter(Boolean) : null;
+  const singleTo = args.to || null;
+  if (singleTo) assertName(singleTo);
+
+  const plan = [], applied = [], skipped = [];
+  const items = manifest.notes.filter(m => !namesFilter || namesFilter.includes(m.name));
+  if (!items.length) throw new Error('zip 里没有匹配的笔记');
+  if (singleTo && items.length > 1) throw new Error('to（改名导入）仅单篇导入时可用（zip 内匹配到 ' + items.length + ' 篇，请用 names 先限定一篇）');
+  for (const m of items) {
+    const target = singleTo || m.name;
+    try { assertName(target); } catch (e) { skipped.push({ name: m.name, reason: e.message }); continue; }
+    let remote = null;
+    try { remote = await apiGet(target); } catch (e) { remote = null; } // 404/无内容=新建
+    const remoteV = remote && remote.v ? remote.v : null;
+    let action;
+    if (!remoteV || !remote.ct) action = 'create';
+    else if (remoteV === m.v) action = 'update';
+    else action = force ? 'update' : 'skip-conflict';
+    plan.push({ name: m.name, target, remoteV, exportV: m.v, action });
+  }
+  if (mode === 'preview') return { plan, skipped };
+
+  // apply：逐条执行。plain 在此白名单校验（报错不静默剥离）；rem 明文用当前口令重加密随同一 PUT 原子提交。
+  for (const p of plan) {
+    if (p.action === 'skip-conflict') { skipped.push({ name: p.name, reason: '远端 v=' + p.remoteV + ' ≠ 导出 v=' + p.exportV + '（force=true 可覆盖）' }); continue; }
+    try {
+      const m = manifest.notes.find(x => x.name === p.name);
+      if (manifest.mode === 'raw') {
+        const jEntry = entries.find(e => e.name === p.name + '.json');
+        if (!jEntry) throw new Error('zip 缺 ' + p.name + '.json');
+        const j = JSON.parse(jEntry.data.toString('utf8'));
+        if (!j.ct || !j.iv || !j.salt) throw new Error(p.name + '.json 缺 ct/iv/salt');
+        const body = { ct: j.ct, iv: j.iv, salt: j.salt, baseV: p.remoteV || 0 };
+        if (j.rem !== undefined && j.rem !== null) body.rem = j.rem; // raw：rem 密文原样（须同口令环境）
+        const r = await apiPut(p.target, body);
+        applied.push({ name: p.name, target: p.target, action: p.action, v: r.v });
+      } else {
+        const hEntry = entries.find(e => e.name === p.name + '.html');
+        if (!hEntry) throw new Error('zip 缺 ' + p.name + '.html');
+        const html = hEntry.data.toString('utf8');
+        assertWhitelistHtml(html); // 白名单外标签报错拒绝，绝不静默剥离
+        let remCipher = undefined;
+        if (m && m.rem && Array.isArray(m.rem.list)) {
+          const pre = await apiGet(p.target).catch(() => ({}));
+          const saltB64 = (pre && pre.salt) || crypto.randomBytes(16).toString('base64');
+          const k = getKeyFor(p.target, saltB64);
+          const list = normRemList(m.rem.list.map(r => ({ at: r.at, text: r.text || '', fired: !!r.fired })));
+          const enc = encryptText(JSON.stringify({ list }), k);
+          remCipher = JSON.stringify({ ct: enc.ct, iv: enc.iv });
+        }
+        const fresh = await loadNote(p.target);
+        const enc2 = encryptText(html, fresh.key);
+        const body = { ct: enc2.ct, iv: enc2.iv, salt: fresh.saltB64, baseV: fresh.v };
+        if (remCipher !== undefined) body.rem = remCipher;
+        const r = await apiPut(p.target, body);
+        applied.push({ name: p.name, target: p.target, action: p.action, v: r.v });
+      }
+    } catch (e) {
+      skipped.push({ name: p.name, reason: e.message });
+    }
+  }
+  return { ok: true, applied, skipped };
+}
+
 const REL_RE = /^(大后天|明天|后天|今天|这周[一二三四五六日天]|下周[一二三四五六日天]|(?:这个月|本月)(\d{1,2})[日号]|(?:下个月|下月)(\d{1,2})[日号])?\s*(凌晨|早上|上午|中午|下午|傍晚|晚上|夜里)?\s*(?:(?<!\d)(\d{1,2}):(\d{2})(?!\d)|(?<!\d)(?<!第)(\d{1,2})点(?:(\d{1,2})分?|(半))?(?!\d))$/;
 const REL_WD = { '一': 0, '二': 1, '三': 2, '四': 3, '五': 4, '六': 5, '日': 6, '天': 6 }; // 周首日=周一
 // 带年份完整中文日期（与 web 端 reFullCn 同构）：绝对年份不滚动，hh:mm 直用，锚定整串
@@ -472,8 +1003,20 @@ const REL_FULLCN_RE = /^(\d{4})年(\d{1,2})月(\d{1,2})日\s*(\d{1,2}):(\d{2})$/
 // = 形似时间但被防护拒绝（10:301 / 3点2019 / 本周五 18:00 / 会议纪要　明天10点 …），
 // 一律 null，绝不放进 Date.parse（V8 会把 10:301 之类误解析成 1970 年怪值）。
 const REL_GATE_RE = /年|月|\d{1,2}:\d{1,2}|\d{1,2}点|今天|明天|后天|这周|下周|本周|星期|礼拜/;
+// v7.2.0：全角→半角归一（与 web 端 normFullWidth 逐字同表）——手机全角输入法打出的
+// 「９-１０ ２０：０４」此前一个分支都不命中直接 null。等宽替换不改变长度，索引口径不受影响。
+function normFullWidthMcp(s) {
+  return s.replace(/[０-９：－／]/g, c => {
+    const code = c.charCodeAt(0);
+    if (code >= 0xFF10 && code <= 0xFF19) return String.fromCharCode(code - 0xFEE0);
+    if (c === '：') return ':';
+    if (c === '－') return '-';
+    return '/'; // ／
+  });
+}
 function parseAt(s, now = Date.now()) {
   if (typeof s !== 'string' || !s) return null;
+  s = normFullWidthMcp(s); // v7.2.0：入口归一（与 web 端 collectTimeMatches/collectRelTimeMatches 同口径）
   let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})[ T](\d{1,2}):(\d{2})$/);
   if (m) {
     const t = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]).getTime();
@@ -562,12 +1105,13 @@ const TOOLS = [
   },
   {
     name: 'note_edit',
-    description: '编辑笔记正文。op=append 在末尾追加一行；op=insert 按 position（纯文本字符偏移）或 match（HTML 源串子串，where=before/after）插入；op=delete 按 match 或 position+length 删除（不允许跨结构边界）',
+    description: '编辑笔记正文。op=append 在末尾追加一行；op=insert 按 position（纯文本字符偏移）或 match（HTML 源串子串，where=before/after）插入；op=delete 按 match 或 position+length 删除（不允许跨结构边界）；op=replace_html（v7.2.0）整篇替换为给定 HTML（建议 <div>行</div> 结构，含 <script> 拒绝；空串=清空正文）',
     inputSchema: {
       type: 'object',
       properties: {
         name: { type: 'string' },
-        op: { type: 'string', enum: ['append', 'insert', 'delete'] },
+        op: { type: 'string', enum: ['append', 'insert', 'delete', 'replace_html'] },
+        html: { type: 'string', description: 'replace_html：整篇正文的 HTML 源串（建议 <div>行</div> 结构；含 <script> 会被拒绝；空串=清空正文）' },
         text: { type: 'string', description: 'append/insert 要写入的文字（自动 HTML 转义）' },
         position: { type: 'number', description: '纯文本可见字符偏移（insert 起点 / delete 起点）' },
         length: { type: 'number', description: 'delete 删除的可见字符数' },
@@ -579,17 +1123,17 @@ const TOOLS = [
   },
   {
     name: 'note_image',
-    description: '把本机图片加入笔记：上传 Cloudinary 后在正文插入 <img>（线上 CSP 已放行该域）。默认追加为正文末尾独立一行；给 match（纯文本子串，where=before/after）或 position（纯文本偏移）可内联插入。png/jpg/jpeg/gif/webp，≤8MB，直传不压缩',
+    description: '把本机图片加入笔记：上传 Cloudinary 后在正文插入 <img>（线上 CSP 已放行该域）。默认追加为正文末尾独立一行；给 match（纯文本子串，where=before/after）或 position（纯文本偏移）可内联插入。png/jpg/jpeg/gif/webp，≤8MB，直传不压缩。op=remove（v7.2.0）按 match=图片 URL（或其子串）删除正文里的 <img>：独占一行的连行删除，内联的只摘标签；命中多张会歧义拒绝',
     inputSchema: {
       type: 'object',
       properties: {
         name: { type: 'string' },
-        path: { type: 'string', description: '本机图片绝对路径' },
-        match: { type: 'string', description: '定位锚点（纯文本子串），与 where 配合内联插入' },
-        position: { type: 'number', description: '纯文本可见字符偏移（与 match 二选一）' },
-        where: { type: 'string', enum: ['before', 'after'], description: '相对 match 的位置，默认 after' },
+        op: { type: 'string', enum: ['add', 'remove'], description: 'add=加图（默认）/ remove=删图（v7.2.0）' },
+        path: { type: 'string', description: '本机图片绝对路径（仅 add）' },
+        match: { type: 'string', description: 'add：定位锚点（纯文本子串），与 where 配合内联插入；remove：图片 URL 或其子串（添加时返回的 url 可直接用）' },
+        position: { type: 'number', description: '纯文本可见字符偏移（与 match 二选一，仅 add）' },
+        where: { type: 'string', enum: ['before', 'after'], description: '相对 match 的位置，默认 after（仅 add）' },
       },
-      required: ['path'],
     },
   },
   {
@@ -605,9 +1149,51 @@ const TOOLS = [
       },
     },
   },
+  {
+    name: 'note_search',
+    description: '全文检索（v7.2.0）：遍历注册表全部笔记（或 names 显式指定），中文按二元组索引（AND 语义）+解密纯文本子串二次校验，返回命中笔记与 ±30 字摘要。索引按笔记版本号增量更新并加密落盘本机（不存原文）；names 显式指定的也会自动登记进注册表',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: '检索词（中文连续段必须整体连续命中；空格分隔多词任一命中即返回）' },
+        names: { type: 'array', items: { type: 'string' }, description: '限定检索的笔记名列表（默认注册表全部）' },
+        limit: { type: 'number', description: '返回上限，默认 5' },
+        rebuild: { type: 'boolean', description: '强制全量重建索引（默认按版本号增量）' },
+      },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'note_export',
+    description: '一键备份（v7.2.0）：把注册表全部笔记（或 names 指定）导出为 zip。mode=plain（默认）产出 manifest+每篇 .md/.html+附件图片（明文！落盘即裸奔，用户自行保管）；mode=raw 只打包密文（ct/iv/salt/rem/v 原样），免口令可放心放云盘，恢复须同口令环境。隐私提示：plain 产物含笔记明文与提醒事项，注意保管位置',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        names: { type: 'array', items: { type: 'string' }, description: '导出的笔记名列表（默认注册表全部）' },
+        mode: { type: 'string', enum: ['plain', 'raw'] },
+        download_images: { type: 'boolean', description: 'plain 模式是否下载图片到 attachments/（默认 true；false 时 md 保留 Cloudinary 原 URL）' },
+        out: { type: 'string', description: '输出 zip 绝对路径（默认 OUT_DIR/notesync-backup-<时间戳>.zip）' },
+      },
+    },
+  },
+  {
+    name: 'note_import',
+    description: '从本工具导出的 zip 恢复（v7.2.0）：默认 mode=preview 只报告导入计划不写远端；mode=apply 才写入。目标不存在=新建（新盐），远端版本=导出版本直接更新，不一致默认跳过（force=true 才覆盖）。plain 的 HTML 按白名单校验（div/br/u/s/a/img/span/p/h1-6/li），白名单外标签报错拒绝绝不静默剥离；提醒按当前口令重加密随正文原子恢复；raw 恢复须与导出口令一致',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        from: { type: 'string', description: '备份 zip 绝对路径（须为本工具 note_export 的产物）' },
+        mode: { type: 'string', enum: ['preview', 'apply'], description: 'preview=只看计划（默认）/ apply=执行写入' },
+        names: { type: 'array', items: { type: 'string' }, description: '只导入指定笔记（默认 zip 内全部）' },
+        to: { type: 'string', description: '改名导入的目标笔记名（仅单篇导入时可用）' },
+        force: { type: 'boolean', description: '远端版本与导出版本不一致时强制覆盖（默认跳过）' },
+      },
+      required: ['from'],
+    },
+  },
 ];
 
-const IMPLS = { note_locate: toolLocate, note_read: toolRead, note_edit: toolEdit, note_image: toolImage, note_remind: toolRemind };
+const IMPLS = { note_locate: toolLocate, note_read: toolRead, note_edit: toolEdit, note_image: toolImage, note_remind: toolRemind, note_search: toolSearch, note_export: toolExport, note_import: toolImport };
 
 function rpcResult(id, result) { process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id, result }) + '\n'); }
 function rpcError(id, code, message) {
@@ -622,7 +1208,7 @@ function handleLine(line) {
     rpcResult(id, {
       protocolVersion: '2024-11-05',
       capabilities: { tools: {} },
-      serverInfo: { name: 'notesync', version: '7.1.1' },
+      serverInfo: { name: 'notesync', version: '7.2.0' },
     });
     return;
   }
@@ -638,6 +1224,12 @@ function handleLine(line) {
     const fn = IMPLS[name];
     if (!fn) { rpcError(id, -32602, 'unknown tool: ' + name); return; }
     fn(args).then(result => {
+      // 自动累积：任何调用成功后把涉笔的名字登记进本地注册表（search/export 的 names 数组逐个入册）
+      try {
+        if (Array.isArray(args.names)) { for (const n of args.names) regAdd(n); }
+        const n1 = args.name || DEFAULT_NOTE;
+        if (n1) regAdd(n1);
+      } catch (e) { /* 注册表失败不挡返回 */ }
       rpcResult(id, { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] });
     }).catch(e => {
       rpcResult(id, { content: [{ type: 'text', text: 'ERROR: ' + (e.message || String(e)) }], isError: true });
@@ -649,6 +1241,7 @@ function handleLine(line) {
 
 // 仅直接运行时启动 stdio 服务；被 require（如对齐测试）时不挂住 stdin/stdout
 if (require.main === module) {
+  regSeed(); // NOTESYNC_NOTE / NOTESYNC_NOTES 种子合入注册表
   let buf = '';
   process.stdin.setEncoding('utf8');
   process.stdin.on('data', chunk => {
@@ -664,4 +1257,11 @@ if (require.main === module) {
   process.stderr.write('[notesync-mcp] ready base=' + BASE + ' note=' + (DEFAULT_NOTE || '(per-call)') + ' pass=' + (PASSPHRASE ? 'set' : 'MISSING') + '\n');
 }
 
-module.exports = { parseAt, toolRemind, toolImage, fmtRemLine, encryptText, decryptText, getKeyFor };
+module.exports = {
+  parseAt, toolRemind, toolImage, fmtRemLine, encryptText, decryptText, getKeyFor,
+  // v7.2.0：注册表 / 检索 / 备份恢复（测试与对齐用）
+  regLoad, regAdd, regSeed, resolveNames,
+  tokenize, buildIndexItem, indexLoad, indexStore,
+  crc32, buildZip, readZip, htmlToMd, assertWhitelistHtml,
+  toolSearch, toolExport, toolImport, htmlToPlainMap,
+};

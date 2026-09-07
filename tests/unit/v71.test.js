@@ -29,8 +29,8 @@ const pad = x => String(x).padStart(2, '0');
 const wall = at => { const d = new Date(at); return [d.getFullYear(), d.getMonth() + 1, d.getDate(), d.getHours(), d.getMinutes()]; };
 
 // ── A：版本号 ──
-test('V71-A 版本号 7.1.1 / BUILD_DATE 2026-09-07', () => {
-  assert.ok(SRC.includes("const APP_VERSION = '7.1.1';"), 'APP_VERSION 应 7.1.1');
+test('V71-A 版本号 7.2.0 / BUILD_DATE 2026-09-07', () => {
+  assert.ok(SRC.includes("const APP_VERSION = '7.2.0';"), 'APP_VERSION 应 7.2.0');
   assert.ok(SRC.includes("const BUILD_DATE = '2026-09-07';"), 'BUILD_DATE 应 2026-09-07');
 });
 
@@ -191,7 +191,8 @@ test('V71-C3 fixtures 与 MCP parseAt 两端对齐', t => {
       // MCP parseAt 是「整串时间表达式」语义——正文混排（事项后缀）用例不适用，豁免。
       // 判定口径用 collectTimeMatches（P2-3：collectRelTimeMatches 看不到 reFullCn 数字组命中，
       // 会把「2027年5月1日 07:00」这类整串用例误豁免出 MCP 对齐）。
-      const webHit = appAll.window.collectTimeMatches(c.text)[0];
+      // v7.2.0：now 注入两端同源（v7.1.0 缺陷：web 侧用真实 now，fixtures 隔日必红——#79 实锤）。
+      const webHit = appAll.window.collectTimeMatches(c.text, now.getTime())[0];
       const pureTime = webHit && webHit.length === c.text.length;
       if (!pureTime && c.expect !== 'null') continue;
       let ret = null;

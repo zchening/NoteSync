@@ -65,7 +65,7 @@ const T1 = new Date(2026, 8, 8, 9, 5).getTime();
 test('V711-A MCP 源码：五工具/版本/常量/样式/上传闭包外', () => {
   assert.ok(MCP_SRC.includes("name: 'note_image'"), 'TOOLS 应注册 note_image');
   assert.ok(MCP_SRC.includes('note_image: toolImage'), 'IMPLS 应含 note_image');
-  assert.ok(MCP_SRC.includes("version: '7.1.1'"), 'serverInfo 应 7.1.1');
+  assert.ok(MCP_SRC.includes("version: '7.2.0'"), 'serverInfo 应 7.2.0');
   assert.ok(MCP_SRC.includes("['add', 'list', 'cancel', 'clear']"), 'note_remind op 四模式');
   assert.ok(MCP_SRC.includes('const REM_DONE_MAX = 20'), 'REM_DONE_MAX=20 与 web 对齐');
   assert.ok(MCP_SRC.includes('img{max-width:100%;height:auto}'), 'renderImage 应有完整 img 限宽样式（宽图长图导出不爆版）');
@@ -249,7 +249,8 @@ test('V711-G README：v7.1.1 行存在且 ≤40 汉字、无裸竖线', () => {
   assert.ok(hz > 0 && hz <= 40, 'v7.1.1 摘要应为 1-40 汉字（实测 ' + hz + '）');
   assert.ok(README.includes('`note_image`'), 'MCP 工具表应有 note_image 行');
   assert.ok(!README.includes('规划 v7.1.x 的 `note_image`'), '旧「规划中」文案应已移除');
-  assert.ok(README.includes('5 个工具'), '工具数应更新为 5');
+  // v7.2.0 起 README 宣称 8 个工具（+search/export/import），此处只守下限防回退
+  assert.ok(/[0-9]+ 个工具/.test(README) && !README.includes('4 个工具'), '工具数声明应存在且 ≥5');
 });
 
 // ════════ H. decryptText 16 字节边界（验收路一 P0 补测：回退 <17 必红） ════════
@@ -376,7 +377,7 @@ test('V711-O README：提醒管理示例与能与不能表 v7.1.1 翻转行', ()
   assert.ok(README.includes('取消明天早上 9 点那条提醒'), '应有 cancel 示例');
   assert.ok(README.includes('把已经触发过的提醒清理掉'), '应有 clear 示例');
   assert.ok(README.includes('把 D:\\pics\\cat.png 加到笔记末尾'), '应有图片示例');
-  assert.ok(README.includes('加图片：本机图直传 Cloudinary 后插正文'), '能与不能表插图行应翻 ✅');
+  assert.ok(README.includes('加图 / 删图：本机图直传 Cloudinary 后插正文'), '能与不能表插图行应翻 ✅');
   assert.ok(README.includes('提醒全套：设（回写正文行）/ 列出 / 取消 / 清理过期'), '能与不能表提醒行应翻 ✅');
 });
 

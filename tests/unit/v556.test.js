@@ -129,8 +129,11 @@ test('F6 冲突全流程：挂起不消费版本 → 用服务器版 → 再造�
   assert.equal(putCount, 0, '用服务器版不产生 PUT');
 
   // 路径二：再造一次冲突 → 保留我的 → PUT 覆盖远端
+  // v7.2.0：第二次远端内容必须真实不同（remote2）——症状4修复后 poll 三级分类：
+  // 远端解密 html 与 lastHtml 严格相等=级0 静默消费版本不亮条（防 rem-fired 类空 bump 误报）。
   editor.innerHTML = '<div>local2</div>';
-  note = { v: 10, ct: remoteCt.ct, iv: remoteCt.iv, salt: 'x' };
+  const remote2Ct = await window.encryptText('<div>remote2</div>', key);
+  note = { v: 10, ct: remote2Ct.ct, iv: remote2Ct.iv, salt: 'x' };
   await window.poll();
   assert.ok(!bar.classList.contains('hidden'), '再次冲突应再亮条');
   window.document.getElementById('remoteKeep').click();
@@ -192,8 +195,8 @@ test('F8 MainActivity assets 兜底 + RemPlugin.cacheInfo + build.gradle/CI 版�
   assert.ok(plugin.includes('MainActivity.interceptCount'), 'cacheInfo 应读 MainActivity 计数');
 
   const gradle = fs.readFileSync(path.join(__dirname, '..', '..', 'android', 'app', 'build.gradle'), 'utf8');
-  assert.ok(gradle.includes('versionCode 711'), 'build.gradle versionCode 应 bump 为 711（v7.1.1）');
-  assert.ok(gradle.includes('versionName "7.1.1"'), 'build.gradle versionName 应 bump 为 7.1.1');
+  assert.ok(gradle.includes('versionCode 720'), 'build.gradle versionCode 应 bump 为 720（v7.2.0）');
+  assert.ok(gradle.includes('versionName "7.2.0"'), 'build.gradle versionName 应 bump 为 7.2.0');
 
   const wf = fs.readFileSync(path.join(__dirname, '..', '..', '.github', 'workflows', 'build-apk.yml'), 'utf8');
   assert.ok(wf.includes('GITHUB_REF_NAME#v'), 'CI 应从 tag 注入 versionName（v5.55 APK 自报 5.54 的治本）');
