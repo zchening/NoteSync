@@ -24,6 +24,9 @@ node tests/e2e/_probe_<name>.js             # 各专项回归探针（退出码 
 6. **撤销栈纪律**：用户 input 压栈（recordIfChanged）；程序化改动（linkify/poll/粘贴收尾整理）只 `syncCurrentState()` 不压栈；`historyUndo/historyRedo` 不触发 linkify、不参与首尾空行清理；回车类输入（insertParagraph/insertLineBreak）绝不清理空块（bug 4）。
 7. **fetchRetry 对 4xx 不重试**（锁定/非法名等客户端错误，重试只浪费时间）。
 8. **保存/冲突纪律（v7.3.0 定）**：baseV 一律 localVer（SSE 只触发 poll，绝不抬 baseV）；409 后必须**解密远端正文与本机比较再决策**（AES-GCM 随机 IV，绝不比 ct/iv），真实差异挂起弹条绝不静默覆盖；提醒系统 409 走系统通道只合并列表、不弹用户条。
+9. **组字态纪律（v7.3.2 定）**：compositionend 前的组字窗口内禁止 linkify/poll 等任何 DOM 手术——手术 detach 组字目标节点后 compositionend 不再冒泡，isComposing 永真卡死，光标消失且一切编辑被拦（bug c 事故）。linkifyEditor 入口必须 `if (isComposing) return;`（且先于 isLinkifying=true，防死锁形态）；editor blur 必须复位 isComposing=false（最后防线）；compositionend 必须补调 scheduleRemMarkRefresh 兜底重跑被拦下的手术。
+10. **焦点归还纪律（v7.3.2 定）**：PC 端（CHIP_HOVER_OK）任何「关闭后回到编辑器」的模态/浮层路径必须归还焦点 `if (CHIP_HOVER_OK) { try { editor.focus(); ensureCaret(); } catch (e) {} }`（面板/提醒卡×2/菜单遮罩/关于/诊断/改口令取消与成功/扫码/历史版本恢复，共 11 处）；漏补 → 编辑器失焦、光标不绘制（bug c 事故）。跳转/接力路径（开新模态/跳页）不得误补。工具栏按钮须 pointerdown/mousedown preventDefault 防焦点抢夺。
+11. **拆包纪律（v7.3.2 定）**：行首/行尾回车格式克隆占位标记拆包必须保 `<br>`——Blink insertParagraph 把新空块的 `<br>` 包进格式克隆标记（`<u class="rem-mark"><br></u>` 等），按 textContent 整体替换会把 `<br>` 一起销毁、空行塌缩、内容回跳（bug b 事故）。一律走 unwrapMark：空占位拆子节点、块级空占位补 br、行内空标记直接移除、非空标记遍历子节点保 BR。
 
 ## 测试与发布纪律
 
