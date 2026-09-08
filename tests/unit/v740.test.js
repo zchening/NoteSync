@@ -184,10 +184,13 @@ test('P7 源码形态：A1 草稿先行 / A2 挂起守卫 / A3 bodyChanged / B �
   assert.ok(!seg.includes('applyRemoteBody'), '级1.5 不应用内容（免空块闪现）');
   // A3：persistReminders bodyChanged 双豁免
   assert.ok(src.includes('const bodyChanged = !isDecorativelyEqual(html, lastHtml) && !isPlaceholderEqual(html, lastHtml);'), 'persistReminders bodyChanged 应占位豁免（第三条 PUT 路径堵截）');
-  // B：409 等价采纳集两处都补占位
-  assert.ok((src.match(/isPlaceholderEqual\(remoteHtml, lastHtml\) \|\| isPlaceholderEqual\(remoteHtml, pendingHtml\)/g) || []).length === 2, 'handleWriteConflict + retryKeepMineSave 等价集都应补占位');
+  // B：409 等价采纳集补占位——v7.4.0 补两处（handleWriteConflict + retryKeepMineSave），
+  // v7.5.0（修4）补第三处（handleReminderConflict），此后不得低于三处（对抗审核曾指出本断言把缺口固化成基线）
+  assert.ok((src.match(/isPlaceholderEqual\(remoteHtml, lastHtml\) \|\| isPlaceholderEqual\(remoteHtml, pendingHtml\)/g) || []).length >= 3, '三处 409 等价集（handleWriteConflict/retryKeepMineSave/handleReminderConflict）都应补占位');
   // 草稿清理 + flushDirtySave
-  assert.ok(src.includes('(isDecorativelyEqual(html, lastHtml) || isPlaceholderEqual(html, lastHtml)) && (d.baseV === localVer)'), '草稿清理应占位豁免（免假草稿条）');
+  // v7.5.0（F1'）：等价草稿不再要求 baseV 相同（自冲突幻影根修）——断言改为等价即静默清
+  assert.ok(src.includes('if (isDecorativelyEqual(html, lastHtml) || isPlaceholderEqual(html, lastHtml)) {'), '草稿清理应占位/装饰等价即静默清（F1' + "'" + '）');
+  assert.ok(src.includes("try { toast('旧草稿与云端一致，已自动清理'); } catch (e2) {}"), '等价草稿清理应有 toast 提示');
   assert.ok(src.includes('if (isPlaceholderEqual(editor.innerHTML, lastHtml)) return; // v7.4.0'), 'flushDirtySave 应占位豁免');
   // 对账闸门 + 四个挂点
   assert.ok(src.includes('if (pendingRemoteNote) return; // 挂起期绝不对账'), '对账必须有挂起期闸门（审核 P0 修正）');
@@ -200,8 +203,11 @@ test('P7 源码形态：A1 草稿先行 / A2 挂起守卫 / A3 bodyChanged / B �
 // ── P8：源码形态——移动端键盘守卫 + 笔记名条件 ──
 test('P8 源码形态：ensureCaret 守卫 + POINTER_FINE + 品牌位条件扩展', () => {
   const src = readSrc();
-  assert.ok(src.includes('if ((CHIP_HOVER_OK || POINTER_FINE()) && document.activeElement !== editor)'), 'ensureCaret 非法分支应带移动端守卫（2780 单点）');
-  assert.ok(src.includes('function POINTER_FINE()'), 'POINTER_FINE 兜底函数应存在');
+  // v7.5.0（修8）：POINTER_FINE 从守卫移除——any-pointer:fine 在触屏笔/蓝牙鼠标/部分国产 WebView 恒真，
+  // deferred linkify/解锁路径的 ensureCaret 会在移动端弹软键盘（用户实测）。守卫只认 CHIP_HOVER_OK。
+  assert.ok(src.includes('if (CHIP_HOVER_OK && document.activeElement !== editor) { try { editor.focus(); } catch (e) {} }'), 'ensureCaret 非法分支守卫应只认 CHIP_HOVER_OK（v7.5.0 修8）');
+  assert.ok(!src.includes('CHIP_HOVER_OK || POINTER_FINE()'), 'POINTER_FINE 不得再参与守卫');
+  assert.ok(src.includes('function POINTER_FINE()'), 'POINTER_FINE 函数保留（?diag 读数）');
   assert.ok(src.includes('if (noteId && (isNativeApp() || !CHIP_HOVER_OK)) {'), '品牌位笔记名应扩展到移动网页端');
   // v732 既有守卫行不得被误改（抽取核对）
   assert.ok((src.match(/if \(CHIP_HOVER_OK\) \{ try \{ editor\.focus\(\); ensureCaret\(\); \} catch \(e\) \{\} \}/g) || []).length >= 10, '既有 CHIP_HOVER_OK 门控 focus 行应保持原样');
