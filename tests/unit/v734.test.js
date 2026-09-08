@@ -104,7 +104,8 @@ test('V734-B1：handleWriteConflict 真冲突分支先尝试 autoMergeSave', () 
 });
 
 test('V734-B2：poll 级2 脏路径先尝试 autoMergeSave（打字活跃期内静默推迟）', () => {
-  const idx = SRC.indexOf('const unsaved = !isDecorativelyEqual(editor.innerHTML, lastHtml);');
+  // v7.4.0：unsaved 判定扩为「装饰等价 + 占位等价」双豁免，锚点随形态更新
+  const idx = SRC.indexOf('const unsaved = !isDecorativelyEqual(editor.innerHTML, lastHtml) && !isPlaceholderEqual(editor.innerHTML, lastHtml);');
   assert.ok(idx > -1, '应存在 poll 级2 脏路径');
   const seg = SRC.slice(idx, idx + 700);
   assert.ok(/if \(await autoMergeSave\(note, html\)\)/.test(seg), 'poll 脏路径应尝试三方合并');

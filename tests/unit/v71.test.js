@@ -29,8 +29,8 @@ const pad = x => String(x).padStart(2, '0');
 const wall = at => { const d = new Date(at); return [d.getFullYear(), d.getMonth() + 1, d.getDate(), d.getHours(), d.getMinutes()]; };
 
 // ── A：版本号 ──
-test('V71-A 版本号 7.3.4 / BUILD_DATE 2026-09-08', () => {
-  assert.ok(SRC.includes("const APP_VERSION = '7.3.4';"), 'APP_VERSION 应 7.3.4');
+test('V71-A 版本号 7.4.0 / BUILD_DATE 2026-09-08', () => {
+  assert.ok(SRC.includes("const APP_VERSION = '7.4.0';"), 'APP_VERSION 应 7.4.0');
   assert.ok(SRC.includes("const BUILD_DATE = '2026-09-08';"), 'BUILD_DATE 应 2026-09-08');
 });
 
@@ -49,8 +49,10 @@ test('V71-B1 isDecorativelyEqual/normDecorHtml/backfill 函数与挂载', () => 
 });
 
 test('V71-B2 判定点：poll unsaved 与 flushDirtySave 用装饰等价，严格比对三点不动', () => {
-  assert.ok(SRC.includes('const unsaved = !isDecorativelyEqual(editor.innerHTML, lastHtml);'), 'poll unsaved 应装饰等价判定');
+  // v7.4.0：unsaved 扩为「装饰等价 + 占位等价」双豁免——占位（回车格式克隆空块）同样不算未保存
+  assert.ok(SRC.includes('const unsaved = !isDecorativelyEqual(editor.innerHTML, lastHtml) && !isPlaceholderEqual(editor.innerHTML, lastHtml);'), 'poll unsaved 应装饰等价+占位等价双判定');
   assert.ok(SRC.includes('if (isDecorativelyEqual(editor.innerHTML, lastHtml)) return;'), 'flushDirtySave 应装饰等价跳过');
+  assert.ok(SRC.includes('if (isPlaceholderEqual(editor.innerHTML, lastHtml)) return;'), 'flushDirtySave 应占位等价跳过（v7.4.0）');
   // 严格比对三点（v7.1.0 铁律：真实字节差异必须走原路径）
   assert.ok(/if\s*\((?:\!force\s*&&\s*)?html === lastHtml\)\s*return;/.test(SRC), 'saveLocal 早退严格比对不得归一化（v7.3.3 恢复场景新增 force 旁路，仍严格比对）');
   assert.ok(SRC.includes('if (html === lastHtml) { clearDraft(); return; }'), '冲突草稿判定严格比对不得归一化');

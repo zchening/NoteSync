@@ -15,15 +15,18 @@ function readServer() {
   return fs.readFileSync(path.join(__dirname, '..', '..', 'server.js'), 'utf8');
 }
 
-// ── H1：冲突卡加宽更醒目 + 文案定稿（保留本机 / 使用新版本）──
-test('H1 confcard 加宽 420 + 强调条 + 文案「发现另一台设备…」+ 按钮保留本机/使用新版本', () => {
+// ── H1：冲突卡加宽更醒目 + 文案定稿（v7.4.0：检测到同步冲突 / 保留本机 / 使用云端）──
+test('H1 confcard 加宽 420 + 强调条 + 文案「其他设备上有更新…」+ 按钮保留本机/使用云端', () => {
   const src = readSrc();
   assert.ok(src.includes('width:min(92vw,420px)'), '浮卡应加宽到 min(92vw,420px)（用户反馈太窄实锤）');
   assert.ok(src.includes('border-top:3px solid var(--accent)'), '浮卡应有顶部强调色条（更醒目）');
   assert.ok(src.includes('min-height:44px'), '冲突卡按钮应 44px 触控高');
-  assert.ok((src.match(/发现另一台设备上的更新，与本机未保存的修改不一致/g) || []).length >= 2, '两卡正文应为用户拍板文案');
+  assert.ok((src.match(/>检测到同步冲突<\/div>/g) || []).length === 2, '两卡标题应为「检测到同步冲突」');
+  assert.ok((src.match(/其他设备上有更新，与本地改动冲突。/g) || []).length >= 3, '两卡正文 + draftMsg 动态分支应为 v7.4.0 拍板文案（共 3 处）');
   assert.ok((src.match(/>保留本机<\/button>/g) || []).length === 2, '两卡主按钮应为「保留本机」');
-  assert.ok((src.match(/>使用新版本<\/button>/g) || []).length === 2, '两卡次按钮应为「使用新版本」');
+  assert.ok((src.match(/>使用云端<\/button>/g) || []).length === 2, '两卡次按钮应为「使用云端」');
+  assert.ok(!src.includes('发现冲突：选哪边'), 'v7.3.x 旧标题应退役');
+  assert.ok(!src.includes('使用新版本') && !src.includes('发现另一台设备'), 'v7.3.x 旧按钮/正文文案应退役');
   assert.ok(!src.includes('保留本机修改') && !src.includes('使用服务器版本'), 'v5.57 旧按钮文案应退役');
   assert.ok(!src.includes('服务器上有更新的内容，本机还有未保存的修改'), 'v5.57 旧正文应退役');
 });

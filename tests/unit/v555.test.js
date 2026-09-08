@@ -197,9 +197,13 @@ test('E6 menuBox 无「菜单」标题；收藏列表无 ✕ 删除按钮', () =
 // ── E7：poll 未保存改动挂起（v5.56 起不再消费版本号——合并吞噬修复）──
 test('E7 poll 跳过提示：不消费版本号 + stash 快照 + 冲突条 + 诊断计数', () => {
   const src = readSrc();
-  const idx = src.indexOf('const unsaved = !isDecorativelyEqual(editor.innerHTML, lastHtml);');
-  assert.ok(idx > -1, '应有未保存判定（v5.56 起不再要求正聚焦；v7.1.0 起装饰等价不算未保存）');
-  const seg = src.slice(idx, idx + 950);
+  // v7.4.0：unsaved 判定扩为「装饰等价 + 占位等价」双豁免，锚点随形态更新
+  const idx = src.indexOf('const unsaved = !isDecorativelyEqual(editor.innerHTML, lastHtml) && !isPlaceholderEqual(editor.innerHTML, lastHtml);');
+  assert.ok(idx > -1, '应有未保存判定（v5.56 起不再要求正聚焦；v7.1.0 装饰等价 / v7.4.0 占位等价不算未保存）');
+  // 段取「unsaved → 挂起分支 showRemoteBar 收尾」，不把级2 本机净路径（含 localVer = note.v）裹进来
+  const end = src.indexOf('showRemoteBar()', idx);
+  assert.ok(end > -1, '挂起分支应存在诊断计数');
+  const seg = src.slice(idx, end + 20);
   assert.ok(seg.includes('pendingRemoteNote = note;'), '挂起应 stash 远端快照');
   assert.ok(!seg.includes('localVer = note.v'), '挂起分支不得消费版本号（旧版吞噬远端更新的根因）');
   assert.ok(seg.includes('__pollSkipCount'), '跳过应计入 __pollSkipCount 供 ?diag 展示');

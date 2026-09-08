@@ -382,16 +382,16 @@
 </div>
 <div id="draftBar" class="conflictbar hidden">
   <div class="confcard">
-    <div class="conf-title">发现冲突：选哪边？</div>
-    <div class="conf-msg" id="draftMsg">发现另一台设备上的更新，与本机未保存的修改不一致</div>
-    <div class="conf-btns"><button type="button" id="draftRestore">保留本机</button><button type="button" id="draftDiscard">使用新版本</button></div>
+    <div class="conf-title">检测到同步冲突</div>
+    <div class="conf-msg" id="draftMsg">其他设备上有更新，与本地改动冲突。</div>
+    <div class="conf-btns"><button type="button" id="draftRestore">保留本机</button><button type="button" id="draftDiscard">使用云端</button></div>
   </div>
 </div>
 <div id="remoteBar" class="conflictbar hidden">
   <div class="confcard">
-    <div class="conf-title">发现冲突：选哪边？</div>
-    <div class="conf-msg">发现另一台设备上的更新，与本机未保存的修改不一致</div>
-    <div class="conf-btns"><button type="button" id="remoteKeep">保留本机</button><button type="button" id="remoteTake">使用新版本</button></div>
+    <div class="conf-title">检测到同步冲突</div>
+    <div class="conf-msg">其他设备上有更新，与本地改动冲突。</div>
+    <div class="conf-btns"><button type="button" id="remoteKeep">保留本机</button><button type="button" id="remoteTake">使用云端</button></div>
   </div>
 </div>
 <div id="installBar" class="hintbar hidden">
@@ -514,7 +514,7 @@ function markJumped() {
 }
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '7.3.4';
+const APP_VERSION = '7.4.0';
 const BUILD_DATE = '2026-09-08';
 
 const $ = s => document.querySelector(s);
@@ -2777,7 +2777,10 @@ function ensureCaret(forceRepaint) {
   // 折叠光标优先落在最后一个文本节点内（最贴近浏览器原生落点，Chromium 必绘制）；
   // 找不到文本节点（空块/空编辑器）则落在块/编辑器本身末尾。
   ensureBlockWrapped();
-  if (document.activeElement !== editor) { try { editor.focus(); } catch (e) {} }
+  // v7.4.0：移动端（无精确指针）不程序化 focus——打开笔记/解锁/菜单后异步重绘等链路走到这里时，
+  // focus 会拉起软键盘（用户报障：打开笔记就弹键盘）。桌面（hover 或 any-pointer:fine）行为不变；
+  // 移动端仅跳过 focus，下方选区重建保留，用户点正文即正常输入。
+  if ((CHIP_HOVER_OK || POINTER_FINE()) && document.activeElement !== editor) { try { editor.focus(); } catch (e) {} }
   const r = document.createRange();
   const last = editor.lastChild;
   if (last) {
@@ -3099,13 +3102,14 @@ async function restoreDraftIfNeeded(key) {
   if (!html) { clearDraft(); return; }
   if (html === lastHtml) { clearDraft(); return; }
   // P0-3：草稿与当前内容仅差装饰（打标 u.rem-mark / 链接 a[data-url] / ZWSP / 裸 span），
+  // 或仅差回车格式克隆空块（v7.4.0 isPlaceholderEqual），
   // 且草稿版本 == 当前版本 → 草稿语义等于当前内容，静默清（零损失）；版本漂移则保守弹条交用户确认。
-  if (isDecorativelyEqual(html, lastHtml) && (d.baseV === localVer)) { clearDraft(); return; }
+  if ((isDecorativelyEqual(html, lastHtml) || isPlaceholderEqual(html, lastHtml)) && (d.baseV === localVer)) { clearDraft(); return; }
   // v5.49：任何与当前内容不符的草稿都不再静默覆盖，统一交给冲突条由用户决定
-  // v5.58：文案统一「发现…与…不一致」句式（用户拍板）；按钮 保留本机/使用新版本
+  // v7.4.0：文案更新（用户拍板）——标题「检测到同步冲突」/正文「其他设备上有更新，与本地改动冲突。」/按钮 保留本机/使用云端
   const msg = document.getElementById('draftMsg');
   if (msg) msg.textContent = (d.baseV !== localVer)
-    ? '发现另一台设备上的更新，与本机未保存的修改不一致'
+    ? '其他设备上有更新，与本地改动冲突。'
     : '发现本机有一份离线草稿，与当前内容不一致';
   showDraftBar();
 }
@@ -3183,6 +3187,8 @@ $('#remoteTake').addEventListener('click', async () => {
     clearDraft();
     ensureBlockWrapped(); try { linkifyEditor(); } catch (e) {} ensureCaret();
     if ((note.rem || null) !== remCipher) { try { await loadReminder(note, cryptoKey); scheduleRemMarkRefresh(); } catch (e) {} } // v5.57：同 poll，补下划线重绘
+    // v7.4.0：拍板「使用云端」后对账（挂点③）——远端正文可能已删 chip，本端联动删提醒
+    setTimeout(() => { reconcileRemindersFromBody(htmlToRemText(lastHtml)).catch(() => {}); }, 50);
     // HB4（对抗审核二轮）：拍板「使用远端」后补入挂起期间新增/取消的提醒草稿（P1-4 守卫期显式提醒
     // 操作零丢失——用户刚设的提醒不能随整表替换静默消失），随后持久化。
     const draft = takeReminderDraft();
@@ -3260,6 +3266,16 @@ const timeChip = $('#timeChip');
 const REM_MAX = 10;      // 未来提醒上限（addReminder 只数未过期的条数）
 const REM_DONE_MAX = 20; // v6.3：已过期/已推送条目的保留上限（供删除线渲染），FIFO 挤最旧
 let reminders = [], remCipher = null, remTimer = null, remPanelOpen = false;
+// v7.4.0 正文→提醒删除联动：本会话确认删除的 tombstone（at→ts，10min 内 merge 不复活，
+// 离线设备回网防救尸；对账时顺带清过期）+ 本会话见过的 at（懒基线一半，另一半=当前 lastHtml 解析）
+const remTombstones = new Map();
+const remSeenSession = new Set();
+function remTombstoneLive(at) {
+  const t = remTombstones.get(at);
+  if (!t) return false;
+  if (Date.now() - t > 600000) { remTombstones.delete(at); return false; }
+  return true;
+}
 let cardShownAts = []; // 当前卡片展示的提醒时间戳，「知道了」据此全部标记
 let chipFeedbackUntil = 0; // chip「已设」反馈窗口内不再被 selectionchange 改写
 
@@ -3466,6 +3482,20 @@ function parseTimeMatches(text) {
   if (!text || typeof text !== 'string' || text.length > 4000) return [];
   return collectTimeMatches(text);
 }
+// v7.4.0（B 层 P1）：parseTimeMatches 有 4000 字符硬上限，超限直接返回空——长文下联动对账
+// liveAt/newAts 全空，改时间串会被判「不在正文」误删提醒+tombstone。按块分段逐段解析后聚合，
+// index 加段偏移修正（itemOf 依赖 index+length 切事项文本，偏移必须保真）。
+function parseTimeMatchesLong(text) {
+  const s = String(text || '');
+  if (s.length <= 4000) return parseTimeMatches(s);
+  const out = [];
+  let base = 0;
+  for (const seg of s.split('\n')) {
+    for (const m of parseTimeMatches(seg)) out.push({ at: m.at, index: m.index + base, length: m.length, expired: m.expired });
+    base += seg.length + 1;
+  }
+  return out;
+}
 function matchTimeAt(text, offset) {
   const all = parseTimeMatches(text);
   // 光标落在时间串上（含紧贴前后沿：点击首个字符/刚输完最后一个字符都在区间内）
@@ -3630,6 +3660,11 @@ function hoverInfoFromPoint(x, y) {
   return { text: block.textContent || '', offset: boff };
 }
 const CHIP_HOVER_OK = !!(window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches);
+// v7.4.0：桌面级输入判定——CHIP_HOVER_OK 之外再放行「有精确指针」设备（插鼠标/键盘的触屏本、
+// 平板+触控笔等有物理键盘场景，程序化 focus 不弹软键盘）。安全访问：matchMedia 缺失按 false。
+function POINTER_FINE() {
+  try { return !!(window.matchMedia && window.matchMedia('(any-pointer: fine)').matches); } catch (e) { return false; }
+}
 let hoverTimer = null;
 if (CHIP_HOVER_OK) {
   editor.addEventListener('mousemove', e => {
@@ -3837,7 +3872,8 @@ async function persistReminders(retryLeft = 2) {
     const prevHtml2 = lastHtml; // v6.0：自动快照存「保存前的上一版」，与 saveLocal 同规则
     // P0-1：正文未变化（装饰等价）时不再重传——服务器空 ct 保留原正文（server.js 空值保护），
     // 避免每次改提醒都把（可能陈旧的）底版 v+1 广播，他端 poll 误判正文有更新（伪冲突的主噪声源）。
-    const bodyChanged = !isDecorativelyEqual(html, lastHtml);
+    // v7.4.0（A3）：占位等价豁免——回车格式克隆差异不算正文变更，改提醒时不把中间态一起 PUT 落库
+    const bodyChanged = !isDecorativelyEqual(html, lastHtml) && !isPlaceholderEqual(html, lastHtml);
     const body = bodyChanged ? await encryptText(html, cryptoKey) : null;
     if (body) writeDraft(body.ct, body.iv); // 正文真变了才落草稿；空 ct 时正文未变，无内容可丢
     let remOut = null;
@@ -3919,6 +3955,7 @@ async function handleReminderConflict(retryLeft) {
           if ((note.rem || null) !== remCipher) {
             try { await mergeRemoteReminders(note, cryptoKey); } catch (e) {} // 远端提醒为准 + 保留本机刚加的条目
           }
+          setTimeout(() => { reconcileRemindersFromBody(htmlToRemText(editor.innerHTML)).catch(() => {}); }, 50); // v7.4.0（D 层补）：409 自动采纳也是应用远端正文，删除联动不缺席
         } catch (e) {
           pendingRemoteNote = note; // 应用异常（极罕见）：绝不冒险覆盖——挂起等拍板
           try { await stashReminderDraft(); } catch (e2) {} // P0-5（对抗审 v7.3.3）：挂起即把本轮提醒改动落草稿，防重载丢提醒
@@ -3951,7 +3988,10 @@ async function mergeRemoteReminders(note, key) {
   }
   let merged = [];
   const seen = new Set();
-  for (const r of remote) { merged.push({ at: r.at, text: r.text || '', fired: !!r.fired, _local: false }); seen.add(r.at); }
+  for (const r of remote) {
+    if (remTombstoneLive(r.at)) continue; // v7.4.0：本会话已确认从正文删除的条目，10min 内不随远端 rem 复活（离线回网防救尸）
+    merged.push({ at: r.at, text: r.text || '', fired: !!r.fired, _local: false }); seen.add(r.at);
+  }
   for (const l of reminders) {
     if (seen.has(l.at)) {
       const m = merged.find(x => x.at === l.at);
@@ -4014,6 +4054,71 @@ async function removeReminder(at) {
   reminders = reminders.filter(r => r.at !== at);
   scheduleRemMarkRefresh(); // v5.45：删除提醒后正文下划线拆掉
   try { await persistReminders(); } catch (e) { setStatus(false, '保存失败'); }
+}
+// ── v7.4.0 正文→提醒删除联动（用户拍板）────────────────────────
+// 旧现状：reminders 只增不减——正文删掉时间文本后，面板/浮层/系统闹钟里残留幽灵条目。
+// 对账时机（正文落定后）：①saveLocal 成功后（本机删 chip 的主路径）②poll 应用远端成功后
+// （他端删了 chip，本端跟随）③remoteTake 应用远端后 ④autoMergeSave 合并落地后。
+// 判删三条件（同时成立才删）：①r.at 不在正文解析结果中 ②fmtRemInsert 精确串不在正文
+// （防"改到一半"误删）③该 at 曾被见过（懒基线=本会话 seen ∪ lastHtml 解析）——面板刚加、
+// 回写未落、merge 进来的他端条目一律不可删（与 mergeRemoteReminders「保留本机独有」对齐）。
+// 改时间（审核 P0 修正）：正文出现「新时间串 + 相同事项文本」→ 更新 at 而非删除，不丢提醒。
+// 铁律闸：pendingRemoteNote 挂起期绝不对账（拍板「使用云端」回滚正文时防误删失联）。
+function htmlToRemText(html) {
+  try {
+    const doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
+    return Array.from(doc.body.children).map(b => b.textContent || '').join('\n');
+  } catch (e) { return String(html || ''); }
+}
+async function reconcileRemindersFromBody(bodyText) {
+  if (!cryptoKey || !reminders.length) return;
+  if (pendingRemoteNote) return; // 挂起期绝不对账（审核 P0 修正）
+  const now = Date.now();
+  for (const t of Array.from(remTombstones.keys())) if (now - remTombstones.get(t) > 600000) remTombstones.delete(t);
+  const matches = parseTimeMatchesLong(bodyText || '');
+  const liveAt = new Set(matches.map(m => m.at));
+  for (const m of matches) remSeenSession.add(m.at);
+  const seenBase = new Set(remSeenSession);
+  try { parseTimeMatchesLong(htmlToRemText(lastHtml)).forEach(m => seenBase.add(m.at)); } catch (e) {} // v7.4.0（B 层 P1）：与 bodyText 同源抽取（htmlToRemText 按块换行），超 4000 长文分段不失效；旧写法剥标签成空格=单段超限→基线全空→长文误删
+  // 正文中「列表里没有的未来时间串」（改时间判定候选源，循环前一次算清，itemAfterMatch 同口径）
+  const itemOf = m => {
+    let s = (bodyText || '').slice(m.index + m.length).trim().replace(/^[·\s\u3000]+/, '');
+    return s.length > 20 ? s.slice(0, 20) + '…' : s;
+  };
+  const newAts = matches.filter(m => m.at > now && !reminders.some(x => x.at === m.at))
+                        .map(m => ({ at: m.at, item: itemOf(m) }));
+  const usedNew = new Set();
+  let changed = false;
+  for (const r of Array.from(reminders)) {
+    if (r.at <= now) continue; // 过期条目不参与联动（保留画删除线）
+    if (liveAt.has(r.at)) continue; // 仍在正文
+    // 改时间：正文出现「新时间串 + 相同事项文本」→ 更新 at 而非删除，绝不静默丢提醒（审核 P0 修正）
+    const m2 = newAts.find(n => !usedNew.has(n.at) && n.item &&
+      (n.item === r.text || (r.text && r.text.endsWith('…') && n.item.indexOf(r.text.slice(0, -1)) === 0)));
+    if (m2) {
+      usedNew.add(m2.at);
+      reminders = reminders.filter(x => x.at !== r.at);
+      reminders.push({ at: m2.at, text: r.text || '', fired: false });
+      reminders.sort((a, b) => a.at - b.at);
+      remTombstones.delete(r.at); // 改时间不是删除，清旧 tombstone
+      changed = true;
+      toast('提醒时间已更新：' + fmtRemTime(m2.at));
+      continue;
+    }
+    // 删除三条件
+    if (!seenBase.has(r.at)) continue; // ③从未见过 → 绝不删（他端 merge 新条目/面板刚加未回写）
+    const exact = fmtRemInsert(r.at);
+    const flat = (bodyText || '').replace(/[\s\u3000]+/g, ' ');
+    if (flat.indexOf(exact) !== -1) continue; // ②精确串仍在正文（改到一半）→ 不删
+    reminders = reminders.filter(x => x.at !== r.at); // ①不在正文 → 删
+    remTombstones.set(r.at, Date.now());
+    changed = true;
+    toast('已从正文移除提醒：' + (r.text || fmtRemTime(r.at)));
+  }
+  if (changed) {
+    renderRemBtn(); scheduleReminders(); syncRemindersToNative(); scheduleRemMarkRefresh();
+    try { await persistReminders(2); } catch (e) {}
+  }
 }
 function scheduleReminders() {
   clearTimeout(remTimer); remTimer = null;
@@ -4937,6 +5042,14 @@ async function saveLocal(force) {
       showRemoteBar();
       return;
     }
+    // v7.4.0（A1'）：占位等价早退——回车格式克隆空块与已同步版本语义零差异，不 PUT 不占版本
+    //（草稿上方 writeDraft 已落，关页零丢失）；用户继续输入则 isPlaceholderEqual 不再成立、
+    // 自然走正常 PUT，占位差异随真实内容一并落库，无 dirtyPending 标记需求。
+    if (!force && isPlaceholderEqual(html, lastHtml)) {
+      setStatus(true, '已同步');
+      lastSyncAt = Date.now();
+      return;
+    }
     const prevHtml = lastHtml; // v6.0：自动快照存「保存前的上一版」——正文被覆盖/误删时还有得救
     const r = await apiPut({ ct: enc.ct, iv: enc.iv, salt: currentSaltB64(), baseV: localVer }); // v5.58：空盐兜底；v7.2.0：baseV 乐观并发（症状2根修：版本落后服务端 409 拒写，不再静默覆盖）；v7.3.0（HB3）：baseV 用 localVer，SSE 已知版本不抬高
     localVer = r.v; lastHtml = html;
@@ -4948,6 +5061,9 @@ async function saveLocal(force) {
     hideOfflineBar();
     lastSyncAt = Date.now(); // v5.50：保存成功=与服务端通信成功
     setStatus(true, '已同步');
+    // v7.4.0：本机删 chip 的联动对账（挂点①）——正文已落库，对账删条后 persistReminders 独立推 rem；
+    // 延迟 50ms 等 finally 把 busy 置 false，persistReminders 不撞保存互斥。
+    setTimeout(() => { reconcileRemindersFromBody(htmlToRemText(html)).catch(() => {}); }, 50);
   } catch (e) {
     if (e.locked) { setStatus(false, '已锁定，请稍后'); editor.contentEditable = false; }
     else if (!navigator.onLine) { setStatus(false, '离线'); showOfflineBar(currentSyncTime()); } // v5.50：断网保存失败不再显示误导性的「保存失败」循环
@@ -4991,7 +5107,8 @@ async function retryKeepMineSave() {
       const pendingHtml = editor.innerHTML;
       if (remoteHtml !== null && (
           remoteHtml === lastHtml || isDecorativelyEqual(remoteHtml, lastHtml) ||
-          remoteHtml === pendingHtml || isDecorativelyEqual(remoteHtml, pendingHtml))) {
+          remoteHtml === pendingHtml || isDecorativelyEqual(remoteHtml, pendingHtml) ||
+          isPlaceholderEqual(remoteHtml, lastHtml) || isPlaceholderEqual(remoteHtml, pendingHtml))) {
         localVer = n2.v;
         if ((n2.rem || null) !== remCipher) { try { await mergeRemoteReminders(n2, cryptoKey); pendingRemPush = true; } catch (e) {} } // 与 handleWriteConflict 对称：等价采纳时合并远端提醒补推
         pendingResave = true;
@@ -5022,7 +5139,10 @@ async function handleWriteConflict() {
       const pendingHtml = editor.innerHTML;
       if (remoteHtml !== null && (
           remoteHtml === lastHtml || isDecorativelyEqual(remoteHtml, lastHtml) ||
-          remoteHtml === pendingHtml || isDecorativelyEqual(remoteHtml, pendingHtml))) {
+          remoteHtml === pendingHtml || isDecorativelyEqual(remoteHtml, pendingHtml) ||
+          isPlaceholderEqual(remoteHtml, lastHtml) || isPlaceholderEqual(remoteHtml, pendingHtml))) {
+        // v7.4.0（B）：占位等价并入采纳集——409 后若挂起版本只是他端回车中间态，采纳版本+
+        // pendingResave（重进 saveLocal 走 A1' 早退零写入），不弹条。
         localVer = note.v || localVer;
         if ((note.rem || null) !== remCipher) { try { await mergeRemoteReminders(note, cryptoKey); pendingRemPush = true; } catch (e) {} } // 提醒差异只合并列表，绝不替换正文（P0-5 同铁律）；HB2：合并后补推 rem 与系统通道对称（否则合并结果只存内存，关页即丢）
         pendingResave = true; // saveLocal finally 以新 baseV 补挂重传（严格相等时早退，装饰等价时落一版）
@@ -5105,6 +5225,8 @@ async function autoMergeSave(note, remoteHtml) {
       setTimeout(() => { persistReminders(2).catch(() => { setStatus(false, '提醒同步失败'); }); }, 300);
     }
     setStatus(true, '已同步');
+    // v7.4.0：合并结果可能含「他端已删 chip」→ 落地后对账联动删提醒（挂点④）
+    setTimeout(() => { reconcileRemindersFromBody(htmlToRemText(editor.innerHTML)).catch(() => {}); }, 50);
     return true;
   } catch (e) { return false; }
 }
@@ -5171,6 +5293,59 @@ function isDecorativelyEqual(a, b) {
 }
 window.isDecorativelyEqual = isDecorativelyEqual;
 window.normDecorHtml = normDecorHtml;
+// ── v7.4.0 占位等价（保存冲突高频根修）────────────────────────
+// 行首/行尾回车时 Blink 的 insertParagraph 会把新空块的 <br> 包进「格式克隆」占位标记
+// （<u class="rem-mark"><br></u> / <a data-url="1"><br></a> / <s class="rem-done"><br></s>，
+// 见 2407 注释）。该中间态与已同步版本语义零差异，却使 innerHTML 必然≠lastHtml →
+// 800ms 防抖必 PUT 一个"回车中间态"版本 → 对端 poll 判真实变更参与写 → 拍板重发竞争 409。
+// 归一规则（精准病灶，绝不误伤）：
+//   ①只剥「textContent 为空」的占位壳（连壳内 <br> 一起消失）——带文本的克隆壳（<u>foo<br></u>）
+//     保留文本参与比较，绝不丢字；
+//   ②顶层块内容若全部由「空白文本 + 空占位壳」构成 → 整块剥（格式克隆空块）；
+//   ③真实空行 <div><br></div> 的 <br> 是裸标签、不在壳里 → 判定不满足 → 保留，绝不吞用户空行。
+function normPlaceholderHtml(html) {
+  const root = document.createElement('div');
+  root.innerHTML = String(html == null ? '' : html);
+  const ZWSP = /\u200B/g;
+  function isEmptyShell(el) {
+    if (!el || el.nodeType !== 1) return false;
+    const shell = (el.tagName === 'U' && el.classList.contains('rem-mark')) ||
+                  (el.tagName === 'A' && el.getAttribute('data-url') === '1') ||
+                  (el.tagName === 'S' && el.classList.contains('rem-done'));
+    return shell && !(el.textContent || '').trim() && !el.querySelector('img,iframe'); // v7.4.0（B 层 P2）：壳内藏图不判空壳
+  }
+  function walk(node) {
+    let out = '';
+    for (let c = node.firstChild; c; c = c.nextSibling) {
+      if (c.nodeType === 3) { out += c.nodeValue.replace(ZWSP, ''); continue; }
+      if (c.nodeType !== 1) continue;
+      if (isEmptyShell(c)) continue; // 空壳连子树剥（壳内 <br> 一并消失）
+      const lt = c.tagName.toLowerCase();
+      let attrs = '';
+      if (lt === 'a') attrs = ' href="' + (c.getAttribute('href') || '') + '"';
+      if (lt === 'img') attrs = ' src="' + (c.getAttribute('src') || '') + '"';
+      out += '<' + lt + attrs + '>' + walk(c) + '</' + lt + '>';
+    }
+    return out;
+  }
+  let out = '';
+  for (let b = root.firstChild; b; b = b.nextSibling) {
+    if (b.nodeType !== 1) { out += (b.nodeValue || '').replace(ZWSP, ''); continue; }
+    const kids = Array.from(b.childNodes);
+    const onlyShell = kids.length > 0 && kids.every(n =>
+      n.nodeType === 3 ? !(n.nodeValue || '').trim() : isEmptyShell(n));
+    if (onlyShell) continue; // 格式克隆空块：整块剥
+    const lt = b.tagName.toLowerCase();
+    out += '<' + lt + '>' + walk(b) + '</' + lt + '>';
+  }
+  return out;
+}
+function isPlaceholderEqual(a, b) {
+  if (a === b) return true;
+  try { return normPlaceholderHtml(a) === normPlaceholderHtml(b); } catch (e) { return false; }
+}
+window.isPlaceholderEqual = isPlaceholderEqual;
+window.normPlaceholderHtml = normPlaceholderHtml;
 // 回填规则（根修）：程序化 DOM 写点（linkify 打标/打链接、applyStrike、undo/redo 恢复等）写完后，
 // 若结果与 lastHtml 装饰等价则 lastHtml = editor.innerHTML。用户真实打字必然改变文本 → 不装饰等价
 // → 不回填 → saveLocal 照常保存；纯打标重写则等价 → 回填 → 假 dirty 消失。
@@ -5183,6 +5358,7 @@ function backfillLastHtmlIfDecorativelyEqual() {
 function flushDirtySave() {
   if (!cryptoKey || busy) return;
   if (isDecorativelyEqual(editor.innerHTML, lastHtml)) return; // v7.1.0：打标重写等装饰差异不算 dirty
+  if (isPlaceholderEqual(editor.innerHTML, lastHtml)) return; // v7.4.0：回车格式克隆空块不算 dirty（A1' 同口径）
   saveLocal();
 }
 
@@ -5424,6 +5600,15 @@ async function poll() {
         if ((note.rem || null) !== remCipher) { try { await loadReminder(note, cryptoKey); scheduleRemMarkRefresh(); } catch (e) {} }
         return; // 级1
       }
+      // v7.4.0（A2'）：级1.5 占位等价——他端（旧版本客户端）落库的回车格式克隆中间态，
+      // 与本地语义零差异：静默消费版本、不应用内容（免整段替换空行闪现）；挂起守卫与级0/级1 同款
+      //（挂起期只刷新快照不消费版本，铁律：绝不静默覆盖用户拍板前的决策窗口）。
+      if (isPlaceholderEqual(html, lastHtml)) {
+        if (pendingRemoteNote) { pendingRemoteNote = note; return; }
+        localVer = note.v || localVer;
+        if ((note.rem || null) !== remCipher) { try { await loadReminder(note, cryptoKey); scheduleRemMarkRefresh(); } catch (e) {} }
+        return; // 级1.5
+      }
       // v5.56：有未保存改动即挂起远端（不再要求正聚焦——失焦未存的修改同样绝不覆盖）。
       // 旧版在此 localVer = note.v 消费版本号却不应用内容：下一轮 poll 条件不再成立，
       // 远端更新被永久吞掉，随后本地保存直接覆盖服务端（真机数据丢失实锤，「输入完成后合并」
@@ -5431,7 +5616,9 @@ async function poll() {
       // v7.1.0：装饰等价判定——打标重写（u.rem-mark 等）与 lastHtml 装饰等价不算「本机未保存修改」，
       // 否则 B 端加提醒 → 本端 400ms 后打标 → 下轮 poll 误弹假冲突条（实锤复现源）。
       // 用户真实输入必然改变文本 → 不装饰等价 → 照常挂起。
-      const unsaved = !isDecorativelyEqual(editor.innerHTML, lastHtml);
+      // v7.4.0：占位等价豁免——本机仅差回车格式克隆空块（视觉零差异）不算「未保存修改」，
+      // 不因此对远端真实变更挂条/合并（占位差异由 saveLocal A1' 自行吞掉）。
+      const unsaved = !isDecorativelyEqual(editor.innerHTML, lastHtml) && !isPlaceholderEqual(editor.innerHTML, lastHtml);
       if (unsaved) {
         // v7.3.4：本机脏 + 远端真变——先尝试块级三方合并自动并集重发零冲突条；
         // 打字活跃期（<1.5s）静默推迟下轮 poll 再合（免疫击键间隙吵条）；真同行冲突回落弹条。
@@ -5473,6 +5660,8 @@ async function poll() {
       }
       if (applyRemoteBody(note, html)) {
         localVer = note.v;
+        // v7.4.0：他端删 chip → 本端跟随联动删提醒（挂点②；rem 整表替换在上方已做，对账兜底）
+        setTimeout(() => { reconcileRemindersFromBody(htmlToRemText(html)).catch(() => {}); }, 50);
       } else {
         return; // 组字中跳过本次应用，下轮 poll 重试（组字结束后照常应用，不吞版本）
       }
@@ -5578,10 +5767,12 @@ function isNativeApp() {
 }
 
 // v7.3.2：App 端品牌位显示当前笔记名——左上角 logo 之后的「NoteSync」文字让位给笔记名。
-// App 无地址栏看不见笔记名；PC/手机网页看 URL 即知，仅 App 端替换，网页端零感知。
+// v7.4.0：扩展到移动网页端（用户拍板，推翻 v7.3.2「网页端零感知」）——手机网页同样无
+// 桌面级窗口标题可依，顶栏常驻笔记名更直观；PC 网页（精确指针+可 hover）维持品牌字不动。
 // 首页（noteId 为空）维持「NoteSync」；首页名只允许 [A-Za-z0-9_-]，decodeURIComponent 仅为兼容
-// 二维码配对历史中文名兜底。同时隐藏品牌 b 文字（App 宽屏 >560px 时避免「NoteSync+笔记名」同显）。
-if (isNativeApp() && noteId) {
+// 二维码配对历史中文名兜底。同时隐藏品牌 b 文字（宽屏 >560px 时避免「NoteSync+笔记名」同显；
+// ≤560px 手机 b 已被 CSS 隐藏，再设 display:none 无副作用）。
+if (noteId && (isNativeApp() || !CHIP_HOVER_OK)) {
   let brandNm = noteId;
   try { brandNm = decodeURIComponent(noteId); } catch (e) {}
   const brandNoteEl = document.getElementById('brandNote');

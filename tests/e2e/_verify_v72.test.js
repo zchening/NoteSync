@@ -161,7 +161,7 @@ test('V72-1 双客户端竞态：B 落后版本 PUT 触发 409 → 冲突条 →
   assert.strictEqual(st.remoteBarHidden, false, '409 后应弹远端冲突条 #remoteBar');
   assert.ok(/待处理/.test(st.status), '状态应为「远端有更新，待处理」: ' + st.status);
   assert.strictEqual(st.hasKeep, true, '应存在「保留我的」按钮');
-  assert.strictEqual(st.hasTake, true, '应存在「使用新版本」按钮');
+  assert.strictEqual(st.hasTake, true, '应存在「使用云端」按钮');
   console.log('V72-1 证据: bLocalVer=' + bLocalVer + ' capturedBaseV=' + capturedBaseV + ' A看到内容=' + JSON.stringify(aSeesA) + ' status=' + JSON.stringify(st.status));
 
   // 点「保留我的」：采纳挂起 v 后重发 PUT（放行到真实服务端）
