@@ -29,8 +29,8 @@ const pad = x => String(x).padStart(2, '0');
 const wall = at => { const d = new Date(at); return [d.getFullYear(), d.getMonth() + 1, d.getDate(), d.getHours(), d.getMinutes()]; };
 
 // ── A：版本号 ──
-test('V71-A 版本号 7.3.1 / BUILD_DATE 2026-09-08', () => {
-  assert.ok(SRC.includes("const APP_VERSION = '7.3.1';"), 'APP_VERSION 应 7.3.1');
+test('V71-A 版本号 7.3.2 / BUILD_DATE 2026-09-08', () => {
+  assert.ok(SRC.includes("const APP_VERSION = '7.3.2';"), 'APP_VERSION 应 7.3.2');
   assert.ok(SRC.includes("const BUILD_DATE = '2026-09-08';"), 'BUILD_DATE 应 2026-09-08');
 });
 
@@ -43,8 +43,8 @@ test('V71-B1 isDecorativelyEqual/normDecorHtml/backfill 函数与挂载', () => 
   assert.ok(SRC.includes('window.collectRelTimeMatches = collectRelTimeMatches;'), 'collectRelTimeMatches 应挂 window 供测试');
   const calls = (SRC.match(/backfillLastHtmlIfDecorativelyEqual\(\);/g) || []).length;
   assert.ok(calls >= 3, '回填应至少 3 个调用点（linkify finally/applyStrike/applyState），实测 ' + calls);
-  // linkify finally 内回填必须发生在 syncCurrentState 之后
-  const finallyIdx = SRC.indexOf('syncCurrentState();\n    backfillLastHtmlIfDecorativelyEqual();');
+  // linkify finally 内回填必须发生在 syncCurrentState 之后（\r?\n：容忍 CRLF/LF 漂移，同 V61-8 先例）
+  const finallyIdx = SRC.search(/syncCurrentState\(\);\r?\n    backfillLastHtmlIfDecorativelyEqual\(\);/);
   assert.ok(finallyIdx > -1, 'linkify finally 应在 syncCurrentState 后回填');
 });
 

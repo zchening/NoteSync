@@ -58,14 +58,18 @@ function scenario({ html = '', remList = null } = {}) {
 }
 const decryptHtml = (st) => mcp.decryptText(st.ct, st.iv, st.key);
 const decryptRem = (st) => { if (!st.rem) return null; return JSON.parse(mcp.decryptText(JSON.parse(st.rem).ct, JSON.parse(st.rem).iv, st.key)).list; };
-const H = '2026-09-08 09:05'; // ISO 可解析
-const T1 = new Date(2026, 8, 8, 9, 5).getTime();
+// v7.3.2：硬编码固定日期会随当日时间流逝过期（09:05 后「未来」变「过去」→ add/clear 用例全红，
+// 同日 23:00 后超限用例再红）。改为 now 相对时间（+2h 保证未来），任意时刻运行都稳定。
+// 且必须分钟对齐（毫秒归零）：parseAt(fmtRemLine(T1)) 只到分钟精度，带毫秒的 T1 会使
+// add 落库值≠T1、cancel 字符串命中失败（V711-C/C2/D2/N 全红根因）。
+const T1 = Math.floor(Date.now() / 60000) * 60000 + 2 * 3600 * 1000;
+const H = mcp.fmtRemLine(T1); // 与 fmtRemInsert 同构的 MCP 行格式，parseAt 可回解
 
 // ════════ A. 源码断言 ════════
 test('V711-A MCP 源码：五工具/版本/常量/样式/上传闭包外', () => {
   assert.ok(MCP_SRC.includes("name: 'note_image'"), 'TOOLS 应注册 note_image');
   assert.ok(MCP_SRC.includes('note_image: toolImage'), 'IMPLS 应含 note_image');
-  assert.ok(MCP_SRC.includes("version: '7.3.1'"), 'serverInfo 应 7.3.1');
+  assert.ok(MCP_SRC.includes("version: '7.3.2'"), 'serverInfo 应 7.3.2');
   assert.ok(MCP_SRC.includes("['add', 'list', 'cancel', 'clear']"), 'note_remind op 四模式');
   assert.ok(MCP_SRC.includes('const REM_DONE_MAX = 20'), 'REM_DONE_MAX=20 与 web 对齐');
   assert.ok(MCP_SRC.includes('img{max-width:100%;height:auto}'), 'renderImage 应有完整 img 限宽样式（宽图长图导出不爆版）');
@@ -94,9 +98,9 @@ test('V711-C add：单 PUT 原子带正文行+提醒，行格式与 web 同构',
   global.fetch = makeFetch(st);
   const r = await mcp.toolRemind({ name: NOTE, at: H, text: '  晨会  ' });
   assert.strictEqual(r.ok, true);
-  assert.strictEqual(r.bodyLine, '2026-9-8 9:05　晨会', '回写行=fmtRemLine+全角空格+trim 后事项');
+  assert.strictEqual(r.bodyLine, H + '　晨会', '回写行=fmtRemLine+全角空格+trim 后事项');
   assert.strictEqual(r.text, '晨会', 'text 先 trim 再截断');
-  assert.strictEqual(decryptHtml(st), '<div>购物清单</div><div>2026-9-8 9:05　晨会</div>', '正文末尾追加 div 行');
+  assert.strictEqual(decryptHtml(st), '<div>购物清单</div><div>' + H + '　晨会</div>', '正文末尾追加 div 行');
   const list = decryptRem(st);
   assert.ok(list.some(x => x.at === T1 && x.text === '晨会' && x.fired === false), 'rem 应含新提醒');
   assert.strictEqual(st.putLog.length, 1, '单次 PUT 原子提交');
@@ -105,7 +109,7 @@ test('V711-C2 add：空事项行只有时间串；同刻重设=覆盖不重复�
   const st = scenario({ html: '', remList: [{ at: T1, text: '旧文案', fired: false }] });
   global.fetch = makeFetch(st);
   const r = await mcp.toolRemind({ name: NOTE, at: H, text: '' });
-  assert.strictEqual(r.bodyLine, '2026-9-8 9:05', '空事项无全角空格段（与 web insertRemLine 一致）');
+  assert.strictEqual(r.bodyLine, H, '空事项无全角空格段（与 web insertRemLine 一致）');
   assert.strictEqual(decryptRem(st).filter(x => x.at === T1).length, 1, '同刻重设只保留一条');
   assert.ok(r.overwrote === true, '返回 overwrote 标记');
 });
@@ -116,7 +120,7 @@ test('V711-C3 add：过去/30 秒内拒绝；未来满 10 条拒绝', async () =
   const full = Array.from({ length: 10 }, (_, i) => ({ at: T1 + 86400000 * (i + 1), text: 'f' + i, fired: false }));
   const st2 = scenario({ html: '<div>x</div>', remList: full });
   global.fetch = makeFetch(st2);
-  await assert.rejects(() => mcp.toolRemind({ name: NOTE, at: '2026-09-08 23:00', text: 'b' }), /提醒最多 10 条/);
+  await assert.rejects(() => mcp.toolRemind({ name: NOTE, at: mcp.fmtRemLine(T1 + 86400000 * 11), text: 'b' }), /提醒最多 10 条/);
 });
 
 // ════════ D. list / cancel / clear ════════
@@ -138,7 +142,7 @@ test('V711-D2 cancel：只删 rem，正文明文逐字不变（对齐 web remove
   assert.strictEqual(decryptHtml(st), '<div>会议记录</div>', '正文明文不变');
   assert.strictEqual(decryptRem(st).some(x => x.at === T1), false, 'rem 已删');
   await assert.rejects(() => mcp.toolRemind({ name: NOTE, op: 'cancel', at: 12345 }), /未找到该时刻的提醒/);
-  const r2 = await mcp.toolRemind({ name: NOTE, op: 'cancel', at: '2026-9-9 9:05' }); // 字符串→parseAt→精确命中
+  const r2 = await mcp.toolRemind({ name: NOTE, op: 'cancel', at: mcp.fmtRemLine(T1 + 86400000) }); // 字符串→parseAt→精确命中
   assert.strictEqual(r2.removed.at, T1 + 86400000, 'cancel 支持时间串');
 });
 test('V711-D3 clear：只清过期/已触发；清空→rem:null；无可清不 PUT', async () => {
@@ -342,7 +346,7 @@ test('V711-L add：事项 trim 后截 20 字，正文行与 rem 同步截断', a
   global.fetch = makeFetch(st);
   const r = await mcp.toolRemind({ name: NOTE, at: H, text: long });
   assert.strictEqual(r.text, long.slice(0, 20), '事项截 20 字');
-  assert.strictEqual(r.bodyLine, '2026-9-8 9:05　' + long.slice(0, 20), '正文行用截断后文案');
+  assert.strictEqual(r.bodyLine, H + '　' + long.slice(0, 20), '正文行用截断后文案');
   assert.strictEqual(decryptRem(st)[0].text, long.slice(0, 20), 'rem 内也是截断后文案');
 });
 

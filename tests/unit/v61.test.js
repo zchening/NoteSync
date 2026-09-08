@@ -95,7 +95,7 @@ test("V61-8 彩蛋：连点「关于NoteSync」标题 4 次弹出诊断模态", 
   const src = readSrc();
   assert.ok(src.includes('aboutTaps >= 4'), '应连点 4 次触发');
   assert.ok(src.includes('setTimeout(() => { aboutTaps = 0; }, 800)'), '800ms 连击窗口');
-  assert.ok(src.includes('aboutMask.classList.add(\'hidden\');\n    openDiagModal();'), '触发后应关关于弹窗并开诊断模态');
+  assert.ok(/aboutMask\.classList\.add\('hidden'\);[\s\S]{0,8}openDiagModal\(\);/.test(src), '触发后应关关于弹窗并开诊断模态');
 });
 
 // ── 9. 诊断模态：居中可读 + 复制 + 自动关闭 ──
@@ -106,7 +106,7 @@ test('V61-9 诊断模态：主题前景色可读、collectDiagLines 快照、复
   assert.ok(src.includes("pre.textContent = window.collectDiagLines().join('\\n');"), '模态应取采样快照');
   assert.ok(src.includes('#diagContent{margin:0 0 14px;padding:12px;background:var(--hover);border-radius:10px;font:13px/1.6 ui-monospace,Consolas,monospace;color:var(--fg)'), '诊断正文应用主题前景色（日夜可读）');
   assert.ok(src.includes('navigator.clipboard.writeText(txt).then(done, () => fallbackCopyText(txt, done))'), '复制应有 clipboard+降级双路');
-  assert.ok(src.includes('diagMask.addEventListener(\'click\', e => { if (e.target === diagMask) diagMask.classList.add(\'hidden\'); })'), '点弹窗外应关闭');
+  assert.ok(/diagMask\.addEventListener\('click', e => \{ if \(e\.target === diagMask\) \{ diagMask\.classList\.add\('hidden'\);[\s\S]{0,120}editor\.focus\(\);/.test(src), '点弹窗外应关闭并归还焦点');
   assert.ok(src.includes("editor.addEventListener('scroll', () => { if (!diagMask.classList.contains('hidden')) diagMask.classList.add('hidden'); })"), '滚动笔记应自动关闭');
   assert.ok(src.includes('复制诊断信息'), '应有复制按钮文案');
 });
@@ -142,7 +142,7 @@ test('V61-12 menuBox X 退役：menuClose 全链路移除 + menuBox 瘦身', () 
   assert.ok(!src.includes('id="menuClose"'), 'menuClose 按钮应退役');
   assert.ok(!src.includes("$('#menuClose')"), 'menuClose wiring 应移除');
   assert.ok(src.includes('#menuBox{width:min(86vw,300px);text-align:left;padding:14px 16px}'), 'menuBox 应瘦身（300px/14px 16px）');
-  assert.ok(src.includes("menuMask.addEventListener('click', e => { if (e.target === menuMask) menuMask.classList.add('hidden'); });"), '遮罩点击关闭应保留为退出路径');
+  assert.ok(src.includes("menuMask.addEventListener('click', e => { if (e.target === menuMask) { menuMask.classList.add('hidden'); if (CHIP_HOVER_OK) { try { editor.focus(); ensureCaret(); } catch (e) {} } } });"), '遮罩点击关闭应保留为退出路径（v7.3.2 附带 PC 焦点归还）');
 });
 
 // ── 13. 扫码文案分流（PC 扫码修复配套）──
@@ -158,10 +158,10 @@ test('V61-13 扫码提示分流：HTTPS/组件失败/无摄像头/权限拒绝 �
 // ── 14. 版本升格（v7.0 起断言跟随最新版）──
 test('V61-14 版本升格：APP_VERSION 7.0.1 / BUILD_DATE / gradle 701+7.0.1 / README 条目 ≤40 汉字', () => {
   const src = readSrc();
-  assert.ok(src.includes("const APP_VERSION = '7.3.1';"), 'APP_VERSION 应 7.3.1');
+  assert.ok(src.includes("const APP_VERSION = '7.3.2';"), 'APP_VERSION 应 7.3.2');
   assert.ok(src.includes("const BUILD_DATE = '2026-09-08';"), 'BUILD_DATE 应更新');
   const gradle = readRel('android/app/build.gradle');
-  assert.ok(gradle.includes('versionCode 731') && gradle.includes('versionName "7.3.1"'), 'gradle 应 731/7.3.1');
+  assert.ok(gradle.includes('versionCode 732') && gradle.includes('versionName "7.3.2"'), 'gradle 应 732/7.3.2');
   const readme = readRel('README.md');
   const row = (readme.match(/^\| v7\.0\.1 \|[^|]+\|([^|]+)\|/m) || [])[1] || '';
   const hz = (row.match(/[一-龥]/g) || []).length;

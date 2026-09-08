@@ -510,7 +510,7 @@ function markJumped() {
 }
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '7.3.1';
+const APP_VERSION = '7.3.2';
 const BUILD_DATE = '2026-09-08';
 
 const $ = s => document.querySelector(s);
@@ -521,6 +521,15 @@ const uploadBtn = $('#uploadBtn'), fileInput = $('#fileInput'), uploadStatus = $
 const themeBtn = $('#themeBtn');
 const strikeBtn = $('#strikeBtn');
 const copyBtn = $('#copyBtn'), exportImgBtn = $('#exportImgBtn');
+// v7.3.2：工具栏按钮防焦点抢夺——mousedown/pointerdown preventDefault 后按钮不夺焦，
+// 编辑器光标不消失（用户报障「光标莫名其妙消失」根因2的点击路径）；只拦鼠标不拦触屏，
+// 移动端按钮行为零改动（触屏无焦点抢夺问题，且 pointerdown preventDefault 会干扰点击合成）。
+['themeBtn', 'strikeBtn', 'remBtn', 'uploadBtn', 'copyBtn', 'exportImgBtn', 'qrBtn', 'lock', 'menuBtn'].forEach(id => {
+  const b = document.getElementById(id);
+  if (!b) return;
+  b.addEventListener('pointerdown', e => { if (e.pointerType === 'mouse') e.preventDefault(); });
+  b.addEventListener('mousedown', e => { if (e.button === 0) e.preventDefault(); });
+});
 
 // 输入法组字状态：组字期间（拼音未上屏）任何对选区/caret 的程序化干预都会吞字，一律跳过。
 let isComposing = false;
@@ -533,7 +542,14 @@ editor.addEventListener('compositionend', () => {
   // 结束后补一次——否则中文输完事项后光标在时间附近 chip 不弹（「有时候不弹」嫌疑之二）
   clearTimeout(chipTimer);
   chipTimer = setTimeout(maybeShowTimeChip, 250);
+  // v7.3.2：组字期间被 linkifyEditor 的 isComposing 守卫拦掉的手术兜底重调度——
+  // 否则本次输入的时间/链接/提醒标记要等下次输入才 linkify（光标消失修复链的一环）
+  try { scheduleRemMarkRefresh(); } catch (e) {}
 });
+// v7.3.2：组字态兜底复位——DOM 手术（linkify/poll）若 detach 组字目标节点，
+// compositionend 不再冒泡，isComposing 卡死会拦截 ensureCaret/repaintCaret 等
+// 关键函数（用户报障「光标莫名其妙消失」根因1）；blur 是最后防线，组字中失焦即复位。
+editor.addEventListener('blur', () => { isComposing = false; });
 
 // 回车换行统一产出 <div> 块，与 cleanupLeadingTrailingBreaks / currentBlock 对块结构的预期一致
 try { document.execCommand('defaultParagraphSeparator', false, 'div'); } catch (e) {}
@@ -2058,7 +2074,7 @@ qrBtn.addEventListener('click', () => { // v5.21 直出：打开弹层即渲染�
   if (!cryptoKey) { resetQrHolder(); return; } // 锁定态：显示"解锁后才可用"提示
   revealQr();
 });
-$('#qrClose').addEventListener('click', () => { resetQrHolder(); qrMask.classList.add('hidden'); });
+$('#qrClose').addEventListener('click', () => { resetQrHolder(); qrMask.classList.add('hidden'); if (CHIP_HOVER_OK) { try { editor.focus(); ensureCaret(); } catch (e) {} } });
 
 // --- 解锁 ---
 async function applyUnlocked(key, note) {
@@ -2384,9 +2400,47 @@ function remMatchesFor(txt) {
   return out;
 }
 
+// v7.3.2：行首/行尾回车时 Blink 的 insertParagraph 会把新空块的 <br> 包进「格式克隆」占位标记
+// （<u class="rem-mark"><br></u> / <a data-url="1"><br></a> / <s class="rem-done"><br></s>）。
+// 旧实现按 textContent 整体替换 → 占位标记 textContent 为空 → <br> 随节点销毁，空行塌缩成
+// 零高 div，提醒行视觉回跳（用户报障）。占位标记改为拆子节点保住 <br>；无子节点的空占位补 <br>。
+function unwrapMark(el, stripZwsp) {
+  if (el.textContent !== '') {
+    // v7.3.2：非空分支遍历子节点而非整体替换——「文本+br」混合占位（<u>foo<br></u> 克隆形态）
+    // 若按 textContent 整体替换会连 br 一起销毁，与空占位同类塌缩。文本按 stripZwsp 处理、BR 原样前移。
+    while (el.firstChild) {
+      const c = el.firstChild;
+      el.removeChild(c); // 先摘出再插（insertBefore 会转移节点，若先插后 removeChild 会报「非子节点」）
+      if (c.nodeType === 3) el.parentNode.insertBefore(document.createTextNode(stripZwsp ? c.nodeValue.replace(/\u200B/g, '') : c.nodeValue), el);
+      else if (c.tagName === 'BR') el.parentNode.insertBefore(c, el);
+      else el.parentNode.insertBefore(document.createTextNode(stripZwsp ? c.textContent.replace(/\u200B/g, '') : c.textContent), el);
+    }
+    el.remove();
+    return;
+  }
+  if (!el.firstChild) {
+    // v7.3.2：仅块级占位（父块无其他非空白内容）才补 <br>——行内空标记（<div>abc<u></u>def</div>）
+    // 补 br 会把一行硬断成两行。无子节点的空占位若在行内，直接移除即可（父块文本已相邻）。
+    const parent = el.parentNode;
+    let hasContent = false;
+    for (const c of parent.childNodes) {
+      if (c === el) continue;
+      if (c.nodeType === 3) {
+        if (c.nodeValue.replace(/\u200B/g, '').trim() !== '') { hasContent = true; break; }
+      } else if (c.tagName !== 'BR') { hasContent = true; break; }
+    }
+    if (hasContent) { el.remove(); return; }
+    el.parentNode.insertBefore(document.createElement('br'), el);
+  }
+  while (el.firstChild) el.parentNode.insertBefore(el.firstChild, el);
+  el.remove();
+}
 function linkifyEditor(opts) {
   const keepSelection = opts ? opts.keepSelection !== false : true;
   if (isLinkifying) return;
+  // v7.3.2：组字中绝不手术——replaceWith 重建会 detach 组字目标节点，compositionend 丢失后
+  // isComposing 卡死、光标消失（用户报障）。跳过由 compositionend → scheduleRemMarkRefresh 兜底重跑。
+  if (isComposing) return;
   isLinkifying = true;
   try {
     // 方案 URL、www. 域名、裸域名（带常见 TLD）均视为网址
@@ -2440,21 +2494,15 @@ function linkifyEditor(opts) {
     // linkify 是程序化改动，不向撤销栈压入新条目，Ctrl+Z 直接命中用户的上一步。
     // 1) 先把所有自动生成的 <a data-url="1"> 拆回纯文本，再统一重新识别。
     //    只拆自动链接（data-url="1"），手动创建的链接不受影响。
-    autoLinks.forEach(a => {
-      const t = document.createTextNode(a.textContent.replace(/\u200B/g, ''));
-      a.replaceWith(t);
-    });
+    // v7.3.2：统一走 unwrapMark——行首/行尾回车时 Blink 的 insertParagraph 会把新空块的
+    // <br> 包进「格式克隆」占位标记（<u class="rem-mark"><br></u> 等），按 textContent 整体
+    // 替换会连 <br> 一起销毁、空行塌缩、提醒行视觉回跳（用户报障 bug b）；拆子节点保住 <br>
+    autoLinks.forEach(a => unwrapMark(a, true));
     // 1.5) v5.45：提醒标记 <u.rem-mark> 同样拆回纯文本，与链接同一轮重建——
     //      删提醒→下划线消失、到点→标记回归普通正文，都靠整轮重算
-    remMarks.forEach(u => {
-      const t = document.createTextNode(u.textContent);
-      u.replaceWith(t);
-    });
+    remMarks.forEach(u => unwrapMark(u, false));
     // 1.6) v6.3：已推送删除线同样拆回纯文本，与链接/下划线同一轮重建
-    remDones.forEach(s => {
-      const t = document.createTextNode(s.textContent);
-      s.replaceWith(t);
-    });
+    remDones.forEach(s => unwrapMark(s, false));
     // 2) 把浏览器在块合并/格式保留时自动插入的纯 <span> 包装层拍平（应用本身从不创建 span，
     //    这些 span 无语义）。只拍平 <span>，不动 <s>(删除线) 等语义标签。
     straySpans.forEach(s => {
@@ -3439,8 +3487,16 @@ function caretInfoInEditor() {
 // ── v5.37 时间 chip：光标落在时间文本上时浮出快捷入口（v5.45 文案=时间·事项+蓝色「添加提醒」CTA）──
 // chip 是编辑器外的独立浮层；点 chip 即设提醒（pointerdown 三连 preventDefault，与工具栏按钮同套路防焦点丢失）
 let chipData = null, chipTimer = null, chipDeleteAt = null; // v5.47：chipDeleteAt=两行卡「删除」按钮的目标时间戳
+let chipAutoHideTimer = null; // v7.3.2：已添加展示卡自动关闭定时器（bug a——浮卡常驻被误认「弹窗未关闭」）
 let chipFromHover = false; // v7.2.0：chip 当前由鼠标悬停路弹出——caret 路不越权收（防互相误收）
-function hideTimeChip() { chipData = null; chipDeleteAt = null; chipFromHover = false; timeChip.classList.add('hidden'); timeChip.classList.remove('feedback'); }
+function hideTimeChip() {
+  chipData = null; chipDeleteAt = null; chipFromHover = false;
+  clearTimeout(chipAutoHideTimer);
+  clearTimeout(chipTimer); // v7.3.2：pending selectionchange 防抖若不收，3s 自动隐藏后卡会立刻复活（对齐 L5181 锁定路径先例）
+  timeChip.classList.add('hidden'); timeChip.classList.remove('feedback');
+}
+// v7.3.2：自动隐藏路径补短冷却——防 hover/caret 路在 3s 收卡后立即重弹成闪烁循环
+function autoHideTimeChip() { chipFeedbackUntil = Date.now() + 2000; hideTimeChip(); }
 // v5.47：两行卡第一行尾随的「删除」伪按钮（span+描边；点击彻底移除该提醒——列表/下划线/响铃全清）
 function buildChipDeleteBtn() {
   const d = document.createElement('span');
@@ -3470,6 +3526,8 @@ function chipDeleteActivate(e) {
 // 返回 true=已展示，false=已收起；无效/过期/已提醒过期等分支内部 hideTimeChip。
 function showChipForMatch(m, text) {
   if (!m) { hideTimeChip(); return false; }
+  // v7.3.2：任何新展示都作废旧自动关闭定时器——防「已添加」卡残留定时器误收后续 CTA 卡
+  clearTimeout(chipAutoHideTimer);
   const now = Date.now();
   // v5.47：已添加的提醒优先判断，且展示口径与下划线一致（at<=now 才拦）——
   // 修复临近触发 30 秒内的窗口差：此前 expired 判断（now+30s 阈值）先把 chip 拦掉，
@@ -3487,6 +3545,10 @@ function showChipForMatch(m, text) {
     const l2 = document.createElement('div'); l2.className = 'chip-ok2'; l2.textContent = fmtRemTime(m.at) + (item ? '　' + item : '');
     timeChip.appendChild(l1); timeChip.appendChild(l2);
     timeChip.classList.remove('hidden');
+    // v7.3.2（bug a）：面板添加提醒后 chip 常驻被误认「弹窗未关闭」——已添加展示卡
+    // 与 chipActivate 确认卡同款 3 秒自动关闭（caret 停在时间上时也会弹这条，3 秒即收）
+    clearTimeout(chipAutoHideTimer);
+    chipAutoHideTimer = setTimeout(autoHideTimeChip, 3000); // v7.3.2：走冷却包装——收卡后 2s 内不重弹，防闪烁循环
     return true;
   }
   // v5.46：未添加的过期时间不浮 chip（零打扰）；「过去时间不能设提醒」硬规则不变
@@ -3599,7 +3661,8 @@ async function chipActivate(e) { // v6.3：async——要 await addReminder 的�
   const l2 = document.createElement('div'); l2.className = 'chip-ok2'; l2.textContent = fmtRemTime(at) + (item ? '　' + item : '');
   timeChip.appendChild(l1); timeChip.appendChild(l2);
   clearTimeout(chipTimer);
-  setTimeout(hideTimeChip, 3000);
+  clearTimeout(chipAutoHideTimer); // v7.3.2：先清旧——防此前「已添加」卡残留定时器 3s 后误收这张 CTA 确认卡
+  chipAutoHideTimer = setTimeout(autoHideTimeChip, 3000); // v7.3.2：CTA 卡也挂追踪定时器（hideTimeChip 统一可清，堵泄漏）
 }
 if (window.PointerEvent) timeChip.addEventListener('pointerdown', chipActivate);
 timeChip.addEventListener('touchstart', chipActivate, { passive: false });
@@ -4002,12 +4065,14 @@ function showRemCard(items, isCatchup) {
 remCardAck.addEventListener('click', () => {
   cardShownAts = [];
   remCard.classList.add('hidden');
+  // v7.3.2：提醒卡关闭后 PC 端焦点还给编辑器（与面板关闭同源修复——失焦光标不绘制）
+  if (CHIP_HOVER_OK) { try { editor.focus(); ensureCaret(); } catch (e) {} }
 });
 remCardAck.addEventListener('keydown', e => { // v5.39 div 伪按钮保留键盘可达性
   if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); remCardAck.click(); }
 });
 // v7.1.0：右上角 X 关闭（div 伪按钮同 v5.39 铁律；remCardX=关卡片，remPanelX=收面板）
-$('#remCardX').addEventListener('click', () => { cardShownAts = []; remCard.classList.add('hidden'); });
+$('#remCardX').addEventListener('click', () => { cardShownAts = []; remCard.classList.add('hidden'); if (CHIP_HOVER_OK) { try { editor.focus(); ensureCaret(); } catch (e) {} } });
 $('#remCardX').addEventListener('keydown', e => {
   if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('#remCardX').click(); }
 });
@@ -4219,6 +4284,9 @@ function toggleRemPanel(force) {
     focusRemItemInput(); // v7.1.0：仅 PC 补聚焦事项输入框（后调覆盖滚轮焦点；移动端不聚焦）
   } else {
     remMask.classList.add('hidden');
+    // v7.3.2：面板关闭后 PC 端把焦点还给编辑器——否则编辑器失焦光标不绘制
+    //（用户报障「光标莫名其妙消失」根因2）；移动端不还（防软键盘弹出打断）
+    if (CHIP_HOVER_OK) { try { editor.focus(); ensureCaret(); } catch (e) {} }
   }
 }
 // v5.45：面板添加提醒成功后，把「时间　事项」写回正文光标处（用户拍板）。
@@ -4242,6 +4310,28 @@ function insertRemLine(at, item) {
   } catch (e) {}
   panelSavedSel = null;
   insertNodeAtCaret(document.createTextNode(text));
+  // v7.3.2 需求：提醒写回后光标自动换行——连续添加多个提醒文字不会连在一起
+  //（用户拍板：新提醒行之后紧跟一个空行，光标落在空行行首可直接继续输入）
+  placeCaretAfterReminderLine();
+}
+// v7.3.2：在提醒行之后插入一个空块并落光标。空块必须带 <br>（contenteditable 空块
+// 无 <br> 则零高且光标无法绘制）；块结构（<div>）与回车处理/currentBlock 的预期一致；
+// linkify 只碰含文本的节点，纯 <br> 空块不会被清掉；cleanupLeadingTrailingBreaks 仅
+// 在删除类输入且光标不在该块时清理，光标正停在空行上时安全。
+function placeCaretAfterReminderLine() {
+  try {
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return;
+    const blk = currentBlock(sel.getRangeAt(0).startContainer);
+    if (!blk || blk === editor) return;
+    // v7.3.2：下一块已是空块则直接复用落光标——连续添加多个提醒不堆积空行
+    if (blk.nextSibling && isBlankBlock(blk.nextSibling)) { placeCaretInBlock(blk.nextSibling); return; }
+    const nb = document.createElement('div');
+    nb.appendChild(document.createElement('br'));
+    if (blk.nextSibling) blk.parentNode.insertBefore(nb, blk.nextSibling);
+    else blk.parentNode.appendChild(nb);
+    placeCaretInBlock(nb);
+  } catch (e) {}
 }
 // v5.40：点遮罩空白处或 Esc 关闭提醒模态
 remMask.addEventListener('click', e => { if (e.target === remMask) toggleRemPanel(false); });
@@ -4328,7 +4418,7 @@ function renderMenu() {
   });
 }
 $('#menuBtn').addEventListener('click', () => { renderMenu(); menuMask.classList.remove('hidden'); });
-menuMask.addEventListener('click', e => { if (e.target === menuMask) menuMask.classList.add('hidden'); });
+menuMask.addEventListener('click', e => { if (e.target === menuMask) { menuMask.classList.add('hidden'); if (CHIP_HOVER_OK) { try { editor.focus(); ensureCaret(); } catch (e) {} } } });
 // v6.2：菜单盒右上角 X（menuClose）退役——遮罩空白点击关闭（上行）已覆盖三视图退出路径
 // v5.55：主视图 ↔ 收藏夹二级视图
 $('#menuFavEntry').addEventListener('click', () => {
@@ -4382,7 +4472,7 @@ $('#aboutTitle').addEventListener('click', () => {
     openDiagModal();
   }
 });
-aboutMask.addEventListener('click', e => { if (e.target === aboutMask) aboutMask.classList.add('hidden'); });
+aboutMask.addEventListener('click', e => { if (e.target === aboutMask) { aboutMask.classList.add('hidden'); if (CHIP_HOVER_OK) { try { editor.focus(); ensureCaret(); } catch (e) {} } } });
 // 诊断模态：居中弹窗 + 主题前景色（修复右下角黑底浮层日间不可读）+ 复制按钮 + 自动关闭
 function openDiagModal() {
   const pre = $('#diagContent');
@@ -4403,12 +4493,12 @@ function fallbackCopyText(txt, done) {
   try { if (document.execCommand('copy')) done(); } catch (e) {}
   ta.remove();
 }
-diagMask.addEventListener('click', e => { if (e.target === diagMask) diagMask.classList.add('hidden'); });
+diagMask.addEventListener('click', e => { if (e.target === diagMask) { diagMask.classList.add('hidden'); if (CHIP_HOVER_OK) { try { editor.focus(); ensureCaret(); } catch (e) {} } } });
 // 滚动笔记自动关闭诊断模态（用户拍板：滚动即视为离开诊断）
 editor.addEventListener('scroll', () => { if (!diagMask.classList.contains('hidden')) diagMask.classList.add('hidden'); });
 // v5.58：三端菜单/左下角布局统一——扫一扫、日夜间切换、退出锁定全平台可见（平台差异化机制退役），
 // 顶栏 themeBtn/lock 全平台移除（见样式区 #themeBtn, #lock{display:none}）
-$('#menuTheme').addEventListener('click', () => { menuMask.classList.add('hidden'); themeBtn.click(); });
+$('#menuTheme').addEventListener('click', () => { menuMask.classList.add('hidden'); themeBtn.click(); if (CHIP_HOVER_OK) { try { editor.focus(); ensureCaret(); } catch (e) {} } });
 $('#menuLock').addEventListener('click', () => { menuMask.classList.add('hidden'); document.getElementById('lock').click(); });
 
 // ── 修改口令（v6.0，Y 简单式）──
@@ -4436,7 +4526,7 @@ function cpNewGuard() { if (cpStage === 1) cpOk.disabled = !(cpNew.value && cpNe
 cpNew.addEventListener('input', cpNewGuard);
 cpNew2.addEventListener('input', cpNewGuard);
 cpOk.addEventListener('click', async () => { if (cpStage === 0) await cpVerify(); else await cpRotate(); });
-$('#cpCancel').addEventListener('click', () => { cpMask.classList.add('hidden'); });
+$('#cpCancel').addEventListener('click', () => { cpMask.classList.add('hidden'); if (CHIP_HOVER_OK) { try { editor.focus(); ensureCaret(); } catch (e) {} } });
 async function cpVerify() {
   const pass = cpOld.value;
   if (!pass) return;
@@ -4482,6 +4572,7 @@ async function cpRotate() {
     scheduleReminders(); renderRemBtn();
     syncRemindersToNative();
     cpMask.classList.add('hidden'); cpReset();
+    if (CHIP_HOVER_OK) { try { editor.focus(); ensureCaret(); } catch (e) {} }
     showUploadStatus('口令已修改');
     migrateHistoryKeys(keyOld, keyNew); // v6.3：历史快照全部换新钥（fire-and-forget，失败条目预览时置灰）
     setTimeout(() => { if (uploadStatus.textContent.indexOf('口令已修改') === 0) hideUploadStatus(); }, 2600);
@@ -4588,6 +4679,7 @@ async function loadHistList() {
         pendingRemoteNote = null; hideRemoteBar(); // 恢复 = 用户显式拍板，任何远端挂起一并作废
         editor.innerHTML = html; lastHtml = html;
         menuMask.classList.add('hidden');
+        if (CHIP_HOVER_OK) { try { editor.focus(); ensureCaret(); } catch (e) {} }
         saveLocal(); // 正常保存 → 服务端 v+1，其他设备经 poll 收到；历史不删
         showUploadStatus('已恢复所选版本');
         setTimeout(() => { if (uploadStatus.textContent === '已恢复所选版本') hideUploadStatus(); }, 2200);

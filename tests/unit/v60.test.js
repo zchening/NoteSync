@@ -123,7 +123,7 @@ test('T6b 历史版本语义：恢复走 saveLocal 绝不删历史 + saveLocal/p
   const sv = readServer();
 
   // 恢复 = 用户显式拍板：作废远端挂起 → 应用正文 → 正常保存（v+1，其他设备经 poll 收到）
-  assert.ok(/pendingRemoteNote = null; hideRemoteBar\(\);[\s\S]{0,120}editor\.innerHTML = html; lastHtml = html;[\s\S]{0,120}saveLocal\(\);/.test(src), '恢复应作废远端挂起并走正常 saveLocal，生成新版本而非回退');
+  assert.ok(/pendingRemoteNote = null; hideRemoteBar\(\);[\s\S]{0,120}editor\.innerHTML = html; lastHtml = html;[\s\S]{0,200}saveLocal\(\);/.test(src), '恢复应作废远端挂起并走正常 saveLocal，生成新版本而非回退');
   assert.ok(src.includes('历史不删'), '恢复语义必须注明「历史不删」——防误删的最后保障');
 
   // 自动快照：两处保存成功路径都挂「上一版」

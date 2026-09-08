@@ -39,7 +39,7 @@ test('V62-4 menuClose 退役：按钮/wiring 全移除，遮罩点击关闭保�
   const src = readSrc();
   assert.ok(!src.includes('id="menuClose"'), 'menuClose 按钮应移除');
   assert.ok(!src.includes("$('#menuClose')"), 'menuClose wiring 应移除');
-  assert.ok(src.includes("menuMask.addEventListener('click', e => { if (e.target === menuMask) menuMask.classList.add('hidden'); });"), '遮罩点击关闭应保留');
+  assert.ok(src.includes("menuMask.addEventListener('click', e => { if (e.target === menuMask) { menuMask.classList.add('hidden'); if (CHIP_HOVER_OK) { try { editor.focus(); ensureCaret(); } catch (e) {} } } });"), '遮罩点击关闭应保留（v7.3.2 附带 PC 焦点归还）');
 });
 
 // ── 5. 菜单主视图滚动 + 收纳盒瘦身（v7.0.1：flex+42px+26px 图标+72vh，用户反馈一屏放下）──
@@ -56,9 +56,9 @@ test('V62-5 菜单滚动与瘦身：主视图 72vh 内滚、盒 300px、条目 4
 // ── 6. 版本升格 ──
 test('V62-6 版本升格 6.2/62 + README 条目 ≤40 汉字（v7.0 起断言跟随最新版）', () => {
   const src = readSrc();
-  assert.ok(src.includes("const APP_VERSION = '7.3.1';"), 'APP_VERSION 应 7.3.1');
+  assert.ok(src.includes("const APP_VERSION = '7.3.2';"), 'APP_VERSION 应 7.3.2');
   const gradle = readRel('android/app/build.gradle');
-  assert.ok(gradle.includes('versionCode 731') && gradle.includes('versionName "7.3.1"'), 'gradle 应 731/7.3.1');
+  assert.ok(gradle.includes('versionCode 732') && gradle.includes('versionName "7.3.2"'), 'gradle 应 732/7.3.2');
   const readme = readRel('README.md');
   const row = (readme.match(/^\| v7\.0\.0 \|[^|]+\|([^|]+)\|/m) || [])[1] || '';
   const hz = (row.match(/[一-龥]/g) || []).length;

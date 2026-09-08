@@ -403,7 +403,7 @@ test('v5.47：chip 两行卡带「删除」伪按钮（三板锁色）+ 30 秒�
   assert.ok(/'#timeChip \.chip-del\{color:#E3E3E5!important[^}]*border:1px solid #13151D!important/.test(SRC), 'SHELL_CSS 必须预反色锁删除按钮（目标日间前景/描边）');
   // ── chipDeleteAt 生命周期 ──
   assert.ok(/let chipData = null, chipTimer = null, chipDeleteAt = null;/.test(SRC), 'chipDeleteAt 必须与 chipData 同址声明');
-  assert.ok(/function hideTimeChip\(\) \{ chipData = null; chipDeleteAt = null;/.test(SRC), 'hideTimeChip 必须同时清 chipDeleteAt（防旧目标误删）');
+  assert.ok(/function hideTimeChip\(\) \{[\s\S]{0,30}chipData = null; chipDeleteAt = null;/.test(SRC), 'hideTimeChip 必须同时清 chipDeleteAt（防旧目标误删；v7.3.2 起函数体多行，容忍换行）');
   assert.ok((SRC.match(/chipDeleteAt = /g) || []).length >= 4, 'chipDeleteAt 赋值点：声明+清除+展示卡+确认卡');
   // ── 30 秒窗口差修复：已添加分支优先，口径与下划线一致 ──
   assert.ok(/if \(m\.at <= now\) \{ hideTimeChip\(\); return false; \}/.test(SRC), '已添加分支以 at<=now 拦截（与下划线阈值一致，修 30s 窗口差；v7.2.0 起渲染主体抽为 showChipForMatch 返回布尔）');
