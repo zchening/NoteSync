@@ -28,6 +28,7 @@ node tests/e2e/_probe_<name>.js             # 各专项回归探针（退出码 
 10. **焦点归还纪律（v7.3.2 定）**：PC 端（CHIP_HOVER_OK）任何「关闭后回到编辑器」的模态/浮层路径必须归还焦点 `if (CHIP_HOVER_OK) { try { editor.focus(); ensureCaret(); } catch (e) {} }`（面板/提醒卡×2/菜单遮罩/关于/诊断/改口令取消与成功/扫码/历史版本恢复，共 11 处）；漏补 → 编辑器失焦、光标不绘制（bug c 事故）。跳转/接力路径（开新模态/跳页）不得误补。工具栏按钮须 pointerdown/mousedown preventDefault 防焦点抢夺。
 11. **拆包纪律（v7.3.2 定）**：行首/行尾回车格式克隆占位标记拆包必须保 `<br>`——Blink insertParagraph 把新空块的 `<br>` 包进格式克隆标记（`<u class="rem-mark"><br></u>` 等），按 textContent 整体替换会把 `<br>` 一起销毁、空行塌缩、内容回跳（bug b 事故）。一律走 unwrapMark：空占位拆子节点、块级空占位补 br、行内空标记直接移除、非空标记遍历子节点保 BR。
 12. **收敛采纳纪律（v7.3.3 定）**：干净设备（本机正文与 lastHtml 装饰等价）可自动采纳他端真实变更不弹条，但采纳前必须过 `cleanBody` 全守卫（`!pendingRemoteNote && isDraftBarHidden() && !isComposing && 恢复保护窗外 && isDecorativelyEqual(editor, lastHtml)`）——任一不满足、或解密失败/无法确认等价，一律挂起弹条，绝不静默吞；真实文本编辑必属「未保存脏」故永不误采纳（对抗审事故）。恢复内容必须经 `saveLocal(true)` force 落库且 force 意图 busy 时随补挂保留（pendingForceResave），恢复后 `lastRestoreAt` 3s 保护窗贯彻到 poll 级2 主路径（本机净也挂起不静默撤恢复）；系统通道 409 挂起与重试预算耗尽必须 `stashReminderDraft()` 落提醒草稿（防关页丢本轮提醒）。
+13. **等价集同步纪律（v7.5.0 定）**：装饰/占位等价规则（isDecorativelyEqual / isPlaceholderEqual / blocksEqual+normPlaceholderHtml）消费点多处独立（poll 409×2、handleReminderConflict、autoMergeSave 合并器、restoreDraftIfNeeded、bodyChanged）——新增豁免形态必须 grep 全部消费点同步改，漏一处=冲突误报复发（v7.5.0 事故）。且 unwrapMark 延迟手术会把格式克隆壳 `<u class="rem-mark"><br></u>` 拆成真实空行 `<div><br></div>`——等价判定必须对手术前后两种形态都成立：壳可剥、真实空行保留块结构。键盘守卫禁止用 matchMedia('any-pointer:fine') 判鼠标（触屏笔/蓝牙鼠标恒命中，v7.4.0~v7.5.0 事故）。
 
 ## 测试与发布纪律
 
@@ -41,5 +42,5 @@ node tests/e2e/_probe_<name>.js             # 各专项回归探针（退出码 
 | 要了解 | 去哪 |
 |---|---|
 | 用法 / 部署架构 / 版本更新历史 | `README.md` |
-| 历史 bug 根因与核对要点（A-M 类） | `BUG_CHECKLIST.md` |
+| 历史 bug 根因与核对要点（A-S 类） | `BUG_CHECKLIST.md` |
 | 回归探针清单与断言 | `tests/e2e/_probe_*.js` 头部注释 |
