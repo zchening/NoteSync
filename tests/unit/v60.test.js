@@ -86,7 +86,7 @@ test('T5 修改口令：旧口令显式验证 → 新盐轮换 → 本机密钥/
   assert.ok(/cpVerify[\s\S]{0,900}await deriveKey\(pass, saltBuf\)[\s\S]{0,200}await decryptText\(note\.ct, note\.iv, k\)/.test(src), '验证必须重派生并解开服务端当前密文，不能只信内存密钥');
   assert.ok(src.includes('crypto.getRandomValues(new Uint8Array(16))'), '应生成 16 字节新随机盐');
   assert.ok(/cpRotate[\s\S]{0,1400}await deriveKey\(p1, saltNew\)/.test(src), '新密钥必须由新口令+新盐派生');
-  assert.ok(/cpRotate[\s\S]{0,2400}apiPut\(\{ ct: enc\.ct, iv: enc\.iv, salt: bufToB64\(saltNew\), rem: remOut \}\)/.test(src), 'PUT 应携带新盐与非空 ct（服务端 v5.58 只挡空盐，非空直接采纳）');
+  assert.ok(/cpRotate[\s\S]{0,2400}apiPut\(\{ ct: enc\.ct, iv: enc\.iv, salt: bufToB64\(saltNew\), rem: remOut(?:, baseV: localVer)? \}\)/.test(src), 'PUT 应携带新盐与非空 ct（服务端 v5.58 只挡空盐，非空直接采纳；v7.3.3 补 baseV 乐观并发红线8）');
   assert.ok(/cpRotate[\s\S]{0,3200}localStorage\.setItem\(KEY_STORE, bufToB64\(await crypto\.subtle\.exportKey\('raw', keyNew\)\)\)/.test(src), '改完必须更新本机记住的密钥');
   assert.ok(/cpRotate[\s\S]{0,3600}cachePut\(\{ ct: enc\.ct, iv: enc\.iv, v: r\.v, salt: bufToB64\(saltNew\)/.test(src), '离线缓存必须换新密文，绝不能留旧密钥的缓存');
   assert.ok(/cpRotate[\s\S]{0,4000}clearDraft\(\)/.test(src), '旧密钥加密的草稿必须清除');
@@ -123,7 +123,7 @@ test('T6b 历史版本语义：恢复走 saveLocal 绝不删历史 + saveLocal/p
   const sv = readServer();
 
   // 恢复 = 用户显式拍板：作废远端挂起 → 应用正文 → 正常保存（v+1，其他设备经 poll 收到）
-  assert.ok(/pendingRemoteNote = null; hideRemoteBar\(\);[\s\S]{0,120}editor\.innerHTML = html; lastHtml = html;[\s\S]{0,200}saveLocal\(\);/.test(src), '恢复应作废远端挂起并走正常 saveLocal，生成新版本而非回退');
+  assert.ok(/const html = await decryptText\(j2\.ct, j2\.iv, cryptoKey\);[\s\S]{0,80}pendingRemoteNote = null; hideRemoteBar\(\);[\s\S]{0,80}editor\.innerHTML = html; lastHtml = html;[\s\S]{0,80}lastRestoreAt = Date\.now\(\);[\s\S]{0,320}saveLocal\(true\);/.test(src), '恢复应作废远端挂起、标记恢复窗口并走 saveLocal(true) 强制落库，生成新版本而非回退');
   assert.ok(src.includes('历史不删'), '恢复语义必须注明「历史不删」——防误删的最后保障');
 
   // 自动快照：两处保存成功路径都挂「上一版」

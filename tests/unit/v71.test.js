@@ -29,8 +29,8 @@ const pad = x => String(x).padStart(2, '0');
 const wall = at => { const d = new Date(at); return [d.getFullYear(), d.getMonth() + 1, d.getDate(), d.getHours(), d.getMinutes()]; };
 
 // ── A：版本号 ──
-test('V71-A 版本号 7.3.2 / BUILD_DATE 2026-09-08', () => {
-  assert.ok(SRC.includes("const APP_VERSION = '7.3.2';"), 'APP_VERSION 应 7.3.2');
+test('V71-A 版本号 7.3.3 / BUILD_DATE 2026-09-08', () => {
+  assert.ok(SRC.includes("const APP_VERSION = '7.3.3';"), 'APP_VERSION 应 7.3.3');
   assert.ok(SRC.includes("const BUILD_DATE = '2026-09-08';"), 'BUILD_DATE 应 2026-09-08');
 });
 
@@ -52,7 +52,7 @@ test('V71-B2 判定点：poll unsaved 与 flushDirtySave 用装饰等价，严�
   assert.ok(SRC.includes('const unsaved = !isDecorativelyEqual(editor.innerHTML, lastHtml);'), 'poll unsaved 应装饰等价判定');
   assert.ok(SRC.includes('if (isDecorativelyEqual(editor.innerHTML, lastHtml)) return;'), 'flushDirtySave 应装饰等价跳过');
   // 严格比对三点（v7.1.0 铁律：真实字节差异必须走原路径）
-  assert.ok(SRC.includes('if (html === lastHtml) return;'), 'saveLocal 早退严格比对不得归一化');
+  assert.ok(/if\s*\((?:\!force\s*&&\s*)?html === lastHtml\)\s*return;/.test(SRC), 'saveLocal 早退严格比对不得归一化（v7.3.3 恢复场景新增 force 旁路，仍严格比对）');
   assert.ok(SRC.includes('if (html === lastHtml) { clearDraft(); return; }'), '冲突草稿判定严格比对不得归一化');
   assert.ok(SRC.includes('if (html !== editor.innerHTML) {'), 'poll 替换判定严格比对不得归一化');
 });

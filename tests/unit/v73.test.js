@@ -52,9 +52,9 @@ test('V73-S1 HB3：baseV 一律 localVer——无 sseV/currentBaseV，SSE 不记
 });
 
 test('V73-S2 P2-4：saveLocal 入口 busy 守卫排队补挂 + persistReminders 等待互斥', () => {
-  assert.ok(/function saveLocal[\s\S]{0,250}if \(busy\) \{ pendingResave = true; return; \}/.test(SRC), 'saveLocal 入口应排队补挂');
+  assert.ok(/function saveLocal[\s\S]{0,250}if \(busy\) \{ if \(force\) pendingForceResave = true; pendingResave = true; return; \}/.test(SRC), 'saveLocal 入口应排队补挂（v7.3.3 起 force 也随补挂保留）');
   assert.ok(/async function persistReminders[\s\S]{0,250}while \(busy\) await/.test(SRC), 'persistReminders 应等待上一轮保存收尾');
-  assert.ok(/pendingResave = false;[\s\S]{0,120}saveTimer = setTimeout\(saveLocal, 300\)/.test(SRC), '互斥收尾应补挂正文保存');
+  assert.ok(/pendingResave = false;[\s\S]{0,120}saveTimer = setTimeout\(\(\) => \{ saveLocal\(takeForceResave\(\)\); \}, 300\)/.test(SRC), '互斥收尾应补挂正文保存（v7.3.3 起保留 force：saveLocal(true) busy 排队时恢复内容不落库）');
 });
 
 test('V73-S3 P0-5：提醒 409 走系统通道 handleReminderConflict，绝不弹用户条', () => {
@@ -273,36 +273,42 @@ test('V73-B5 P0-5：提醒保存 409 走系统通道——合并列表 + 限次�
   assert.equal(window.document.getElementById('statustext').textContent, '已同步', '收口后状态应为已同步');
 });
 
-test('V73-B6 HB2：提醒 409 且远端正文真实差异——挂起弹条，绝不静默覆盖', async t => {
+test('V73-B6 HB2/P0-4：干净设备提醒 409 + 远端真实差异——自动采纳远端正文，提醒保留，不再弹条', async t => {
   const app = freshApp();
   t.after(() => app.dom.window.close());
-  const { window } = app;
+  const { window, editor } = app;
   const key = await makeKey();
   const baseCt = await window.encryptText('<div>base</div>', key);
   const remoteCt = await window.encryptText('<div>base</div><div>他端新内容</div>', key); // 远端真实差异
-  let puts = 0;
+  let notePuts = 0, secondPutBody = null;
   // 远端状态机：解锁期 v5（applyUnlocked 内 startSync 的立即 poll GET v5 静默），
-  // persistReminders 前推进 v6 + 真实差异正文（poll 的 2s 轮询来不及再跑）
+  // persistReminders 前推进 v6 + 真实差异正文
   let remoteNote = { v: 5, ct: baseCt.ct, iv: baseCt.iv, salt: 'x', rem: null };
   window.fetch = (url, opts) => {
     const m = (opts && opts.method) || 'GET';
-    if (m === 'PUT') {
-      puts++;
-      return Promise.resolve({ ok: false, status: 409, json: () => Promise.resolve({ v: 6 }) });
+    const u = String(url);
+    if (m === 'PUT' && u.includes('/api/note/') && !u.includes('/history')) {
+      notePuts++;
+      if (notePuts === 1) return Promise.resolve({ ok: false, status: 409, json: () => Promise.resolve({ v: 6 }) });
+      secondPutBody = JSON.parse(opts.body);
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ v: 6 }) });
     }
+    if (m === 'PUT') return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ v: 6 }) });
     return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(remoteNote) });
   };
   await window.applyUnlocked(key, { v: 5, ct: baseCt.ct, iv: baseCt.iv, salt: 'x' });
   await sleep(50); // 等 startSync 的立即 poll（GET v5）收尾，避免抢先应用远端
   remoteNote = { v: 6, ct: remoteCt.ct, iv: remoteCt.iv, salt: 'x', rem: null };
   window.eval('reminders = [{ at: ' + (Date.now() + 3600e3) + ", text: '本机提醒', fired: false }];");
-  await window.persistReminders(); // PUT baseV=5 → 409 → 系统通道 → 正文真实差异 → 挂起，不重传
-  assert.equal(puts, 1, '真实差异不得以本机旧正文重传覆盖（puts=' + puts + '）');
-  assert.equal(window.eval('pendingRemoteNote') !== null, true, '应挂起远端快照');
-  assert.equal(remoteBarOf(window).classList.contains('hidden'), false, '应弹冲突条让用户拍板');
-  assert.equal(window.eval('localVer'), 5, '真实差异时不得采纳远端 v（挂起等拍板）');
-  const merged = window.eval('reminders');
-  assert.ok(merged.some(r => r.text === '本机提醒'), '本机提醒列表不受影响');
+  await window.persistReminders(); // PUT#1 baseV=5 → 409 → 系统通道 → P0-4 干净设备自动采纳
+  // P0-4：正文干净（仅改提醒）→ 采纳远端正文 + 保留本机提醒，不弹冲突条
+  assert.equal(window.eval('pendingRemoteNote'), null, '干净设备应自动采纳，不挂起');
+  assert.ok(remoteBarOf(window).classList.contains('hidden'), '干净设备不弹冲突条');
+  assert.equal(window.eval('localVer'), 6, '自动采纳远端 v');
+  assert.ok(editor.innerHTML.includes('他端新内容'), '远端正文应已采纳到编辑器');
+  assert.ok(window.eval('reminders').some(r => r.text === '本机提醒'), '本机提醒应保留');
+  assert.equal(notePuts, 2, '采纳后应重传一次（带本机提醒），不静默覆盖远端');
+  assert.ok(secondPutBody && (secondPutBody.ct === '' || secondPutBody.ct === null || secondPutBody.ct === undefined), '重传不得携带本机旧正文（远端正文保持权威，P0-1 空 ct）');
 });
 
 test('V73-B7 HB1：拍板「保留我的」合并远端提醒并补推 rem——他端提醒不丢', async t => {
@@ -535,6 +541,33 @@ test('V73-B12 P1-A：挂起期 poll 级0（rem-only bump）不得整表替换本
   assert.ok(merged.some(r => r.text === '挂起期提醒'), '挂起期本机提醒应保留');
   assert.ok(remPushSeen, '应有带 rem 的 PUT 补推合并结果');
   assert.equal(window.eval('keepMineArmed'), false, '拍板后武装应清');
+});
+
+// ── v7.3.3 模块定向审核闸（子代理发现的 3 处缺陷回归护栏）──
+test('V73-S6（对抗审 v7.3.3）：恢复保护窗在 poll 级2 主路径生效（lastRestoreAt 守卫），不静默撤销恢复', () => {
+  assert.ok(/if \(Date\.now\(\) - lastRestoreAt <= RESTORE_GUARD_MS\)/.test(SRC), 'poll 级2 干净路径应用远端前应查恢复保护窗');
+  assert.ok(/__pollRestoreGuard/.test(SRC), '恢复守卫应有诊断探针 __pollRestoreGuard');
+  assert.ok(/takeForceResave/.test(SRC) && /pendingForceResave/.test(SRC), '应有 force 补挂保留状态 pendingForceResave + 取用函数 takeForceResave');
+});
+
+test('V73-S7（对抗审 v7.3.3）：系统通道挂起路径落提醒草稿（stashReminderDraft），防重载丢本轮提醒', () => {
+  // handleReminderConflict 的真实差异挂起 / 应用异常两路 return 前都应 stash
+  const suspIdx = SRC.indexOf('他端正文有真实修改：绝不静默覆盖——挂起等用户拍板');
+  assert.ok(suspIdx > -1, '应存在真实差异挂起分支');
+  const seg = SRC.slice(suspIdx, suspIdx + 400);
+  assert.ok(/await stashReminderDraft\(\)/.test(seg), '真实差异挂起 return 前应 stashReminderDraft 落草稿');
+  const errIdx = SRC.indexOf('应用异常（极罕见）：绝不冒险覆盖——挂起等拍板');
+  assert.ok(errIdx > -1, '应存在应用异常挂起分支');
+  const seg2 = SRC.slice(errIdx, errIdx + 400);
+  assert.ok(/await stashReminderDraft\(\)/.test(seg2), '应用异常挂起 return 前应 stashReminderDraft 落草稿');
+});
+
+test('V73-S8（对抗审 v7.3.3）：persistReminders 409 重试预算耗尽 throw 前也 stash 提醒草稿（三设备并发防丢提醒）', () => {
+  const idx = SRC.indexOf('async function persistReminders');
+  assert.ok(idx > -1, '应存在 persistReminders');
+  const seg = SRC.slice(idx, idx + 2600);
+  // retryLeft>0 走系统通道；409 且预算耗尽的 catch 分支应先 stashReminderDraft 再 throw
+  assert.ok(/if \(e && e\.status === 409 && retryLeft > 0\)[\s\S]{0,400}if \(e && e\.status === 409\)[\s\S]{0,120}stashReminderDraft[\s\S]{0,200}throw e;/.test(seg), '预算耗尽 409 应 stash 提醒草稿后抛出');
 });
 
 test('V73-B13 P1-B：解锁 read-back 恢复挂起期提醒草稿 + 陈旧草稿（>24h）直接清除不注入', async t => {
