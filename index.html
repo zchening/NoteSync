@@ -514,7 +514,7 @@ function markJumped() {
 }
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '7.3.3';
+const APP_VERSION = '7.3.4';
 const BUILD_DATE = '2026-09-08';
 
 const $ = s => document.querySelector(s);
@@ -5028,6 +5028,9 @@ async function handleWriteConflict() {
         pendingResave = true; // saveLocal finally 以新 baseV 补挂重传（严格相等时早退，装饰等价时落一版）
         return;
       }
+      // v7.3.4：本机脏 + 远端真变——先尝试块级三方合并（两端改不同块自动并集重发零冲突条）；
+        // 真同行冲突/任何不确定 → 回落挂起弹条（铁律12：绝不静默吞/静默覆盖）。
+        if (await autoMergeSave(note, remoteHtml)) { window.__wconAutoMerge = (window.__wconAutoMerge || 0) + 1; return; }
       pendingRemoteNote = note;
       setStatus(false, '远端有更新，待处理');
       showRemoteBar();
@@ -5039,6 +5042,71 @@ async function handleWriteConflict() {
     if ((note.v || 0) < localVer) { localVer = note.v || 0; setStatus(false, '服务端版本回退，本机内容重传'); }
     saveLocal(); // 并发窗口已闭合（罕见：409 与 GET 之间版本未再变）：直接补一次保存
   } catch (e2) { setStatus(false, '保存失败'); scheduleSaveRetry(); }
+}
+
+// ── v7.3.4 块级三方合并落地（"几乎从不冲突"唯一正道）────────
+// 409/poll级2 的"真冲突"（本机脏 + 远端真变）由 two 处弹条入口自动化解：
+// 以 lastHtml 为共同祖先，把本机未保存输入(mine)与远端权威快照(theirs)做块级三方合并。
+// 两端改不同块 → 自动并集重发，零冲突条；真同行冲突/任何不确定 → false 回落弹条，绝吞内容。
+// 成功返回 true（已合并并落库）；不可安全合并或任一异常 → false（调用方回落弹条）。
+async function autoMergeSave(note, remoteHtml) {
+  if (isComposing) return false;                              // 组字中合并毁 IME 缓冲/光标
+  if (Date.now() - lastRestoreAt <= RESTORE_GUARD_MS) return false; // 恢复保护窗内绝不自动合并（铁律9）
+  if (!remoteHtml) return false;
+  let merged;
+  try {
+    merged = threeWayMergeBlocks(blockize(lastHtml), blockize(editor.innerHTML), blockize(remoteHtml));
+  } catch (e) { return false; }
+  if (!merged || !merged.ok || (merged.conflicts && merged.conflicts.length)) return false;
+  const mergedHtml = merged.blocks.join('');
+  if (!mergedHtml || !mergedHtml.trim()) return false;        // 合并结果空/变空一律不落地（防误清空）
+  try {
+    const enc = await encryptText(mergedHtml, cryptoKey);
+    writeDraft(enc.ct, enc.iv);                               // 合并结果先落草稿，关页不丢
+    const prevHtml = lastHtml;
+    const r = await apiPut({ ct: enc.ct, iv: enc.iv, salt: currentSaltB64(), baseV: note.v || localVer });
+    localVer = r.v; lastHtml = mergedHtml;
+    pendingRemoteNote = null;
+    if (prevHtml && prevHtml !== mergedHtml) snapshotHistory(prevHtml, false);
+    saveRetryCount = 0; keepMineArmed = false;
+    clearDraft();
+    cachePut({ ct: enc.ct, iv: enc.iv, v: r.v, salt: serverSalt ? bufToB64(serverSalt) : null, savedAt: Date.now() });
+    hideOfflineBar(); lastSyncAt = Date.now();
+    // 合并结果落地后编辑器被整体重写，先按字符偏移保存光标、linkify 后重建，避免合并时用户光标跳回文首
+    const wasFocused = document.activeElement === editor;
+    let savedOffsets = null;
+    if (wasFocused) {
+      const sel = window.getSelection();
+      if (sel.rangeCount > 0) {
+        const r = sel.getRangeAt(0);
+        if (editor.contains(r.commonAncestorContainer)) {
+          try { savedOffsets = saveSelectionOffsets(editor, r); } catch (e) {}
+        }
+      }
+    }
+    editor.innerHTML = mergedHtml;
+    linkifyEditor({ keepSelection: false });
+    if (wasFocused && savedOffsets) {
+      editor.focus();
+      const newRange = restoreSelectionOffsets(editor, savedOffsets.start, savedOffsets.end);
+      if (newRange) setSel(newRange);
+      else {
+        const r = document.createRange();
+        r.selectNodeContents(editor); r.collapse(false);
+        setSel(r);
+      }
+    }
+    syncCurrentState();
+    if ((note.rem || null) !== remCipher) { try { await mergeRemoteReminders(note, cryptoKey); pendingRemPush = true; } catch (e) {} }
+    // 参谋C 发布关口：poll 级2 直接调 autoMergeSave（index.html:5437），不经 saveLocal finally，
+    // pendingRemPush 无人消费会随关页丢弃合并进来的远端提醒 → 此处与 saveLocal finally 对称补推（置灰防重复）。
+    if (pendingRemPush) {
+      pendingRemPush = false;
+      setTimeout(() => { persistReminders(2).catch(() => { setStatus(false, '提醒同步失败'); }); }, 300);
+    }
+    setStatus(true, '已同步');
+    return true;
+  } catch (e) { return false; }
 }
 
 // I4：保存失败退避重试。内容仍在编辑器里（html !== lastHtml），重试只是重新加密上传当前内容；
@@ -5058,6 +5126,19 @@ function scheduleSaveRetry() {
 // isDecorativelyEqual：两侧做白名单归一化后比较——只解包自动链接 a[data-url]、u.rem-mark、
 // s.rem-done、无样式裸 span、零宽空格 \u200B；保留块结构与其他所有标签（<b><i><s> 等用户格式绝不剥）。
 // 严格比对三点（saveLocal 早退 / 冲突草稿判定 / poll 替换判定）不使用本函数——真实字节差异必须走原路径。
+// v7.3.4（D1 对抗审）：normDecorHtml 结果缓存——块级三方合并的 lcsPairs 会对同串做 O(n·m) 次
+// 装饰性比对，每次重 parse DOM 会让数百行便签合并冻结主线程十几秒。缓存后每串只归一化一次，O(n·m) 退化为快速串比较。
+const decorNormCache = new Map();
+const DECOR_NORM_CACHE_MAX = 20000;
+function cachedNormDecorHtml(html) {
+  const key = String(html);
+  const hit = decorNormCache.get(key);
+  if (hit !== undefined) return hit;
+  if (decorNormCache.size >= DECOR_NORM_CACHE_MAX) { decorNormCache.clear(); }
+  const out = normDecorHtml(key);
+  decorNormCache.set(key, out);
+  return out;
+}
 function normDecorHtml(html) {
   const root = document.createElement('div');
   root.innerHTML = String(html == null ? '' : html);
@@ -5086,7 +5167,7 @@ function normDecorHtml(html) {
 }
 function isDecorativelyEqual(a, b) {
   if (a === b) return true;
-  try { return normDecorHtml(a) === normDecorHtml(b); } catch (e) { return false; }
+  try { return cachedNormDecorHtml(a) === cachedNormDecorHtml(b); } catch (e) { return false; }
 }
 window.isDecorativelyEqual = isDecorativelyEqual;
 window.normDecorHtml = normDecorHtml;
@@ -5104,6 +5185,169 @@ function flushDirtySave() {
   if (isDecorativelyEqual(editor.innerHTML, lastHtml)) return; // v7.1.0：打标重写等装饰差异不算 dirty
   saveLocal();
 }
+
+// ── v7.3.4 块级三方合并（"几乎从不冲突"正解）──────────────
+// 409"真冲突弹条"的唯一残留路径：本机脏（有未保存输入）+ 远端真变。v7.3.3 只救"本机干净"设备，
+// 跨设备切换编辑 + 同步延迟时本机几乎总是脏 → 必然弹条。块级三方合并让这类冲突自动化解：
+//   ancestor = lastHtml（本机已保存基线）、mine = 当前编辑器（= 基线 + 本机未保存输入）、
+//   theirs = 远端权威快照。两端改不同块 → 自动并集重发，零冲突条；
+//   只有同一块两端都改且结果不同（真同行冲突）→ 才回落弹条让用户拍板。
+// 铁律：合并只在"净、无重叠、无任何不确定"时执行。任一步不满足 → 返回 conflict 由调用方弹条，
+// 绝不吞本机输入、绝不静默丢远端内容。
+
+function blockize(html) {
+  const root = document.createElement('div');
+  root.innerHTML = String(html == null ? '' : html);
+  const blocks = [];
+  for (let i = 0; i < root.childNodes.length; i++) {
+    const n = root.childNodes[i];
+    if (n.nodeType === 3) { if (n.nodeValue.trim()) blocks.push(n.nodeValue); }
+    else if (n.nodeType === 1) blocks.push(n.outerHTML);
+  }
+  return blocks;
+}
+function blocksEqual(a, b) { return a === b || isDecorativelyEqual(a, b); }
+function lcsPairs(a, b) {
+  // 当归等价块的最长公共子序列下标对（按双双升序），用于三路对齐
+  const n = a.length, m = b.length;
+  if (n * m > 1_000_000) return []; // 块数过多：放弃对齐（调用方回落弹条）
+  const dp = Array.from({ length: n + 1 }, () => new Int32Array(m + 1));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) {
+    dp[i][j] = blocksEqual(a[i], b[j]) ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+  }
+  const pairs = []; let i = 0, j = 0;
+  while (i < n && j < m) {
+    if (blocksEqual(a[i], b[j])) { pairs.push([i, j]); i++; j++; }
+    else if (dp[i + 1][j] >= dp[i][j + 1]) i++;
+    else j++;
+  }
+  return pairs;
+}
+function reblock(block) {
+  // 裸文本块补 <div> 包裹，保证编辑器根下全为块级子节点（ensureBlockWrapped 纪律）
+  const s = String(block == null ? '' : block).trim();
+  if (!s) return '';
+  return s.charAt(0) === '<' ? s : '<div>' + s + '</div>';
+}
+// 三方合并。返回 { ok:true, blocks, conflicts } 或 { ok:false }。
+// conflicts 非空即"真同行冲突"，调用方必须回落弹条（此时 blocks 不可用）。
+function threeWayMergeBlocks(ancestor, mine, theirs) {
+  const aLen = ancestor.length, mLen = mine.length, tLen = theirs.length;
+  if (aLen * mLen > 1_000_000 || aLen * tLen > 1_000_000) return { ok: false };
+  const pairsAM = lcsPairs(ancestor, mine);
+  const pairsAT = lcsPairs(ancestor, theirs);
+  const amIdx = new Map(), atIdx = new Map();
+  pairsAM.forEach(([i, j]) => { amIdx.set(i, j); });
+  pairsAT.forEach(([i, j]) => { atIdx.set(i, j); });
+  // ancestor 中在两端都"原样保留"的块（作为合并锚点，把文档切成互不干扰的 gap）
+  const commonBoth = [];
+  for (let i = 0; i < aLen; i++) if (amIdx.has(i) && atIdx.has(i)) commonBoth.push(i);
+  const out = []; const conflicts = [];
+  const emitGap = (i0, i1, m0, m1, t0, t1) => {
+    if (i0 >= i1 && m0 >= m1 && t0 >= t1) return; // 两端都没动
+    const sub = mergeGap(ancestor, mine, theirs, amIdx, atIdx, i0, i1, m0, m1, t0, t1);
+    if (sub.ok) out.push(...sub.out);
+    else if (sub.conflict) conflicts.push(sub.conflict);
+  };
+  if (!commonBoth.length) {
+    // ancestor 无任何"两端都保留"的块 = 整篇几乎都被双方改过 → 交给 mergeGap 逐块判定（仅当逐块可归位才合并）
+    const sub = mergeGap(ancestor, mine, theirs, amIdx, atIdx, 0, aLen, 0, mLen, 0, tLen);
+    if (sub.ok) return { ok: true, blocks: sub.out.map(reblock).filter(Boolean), conflicts: [] };
+    return { ok: false };
+  }
+  emitGap(0, commonBoth[0], 0, amIdx.get(commonBoth[0]), 0, atIdx.get(commonBoth[0]));
+  for (let k = 0; k < commonBoth.length; k++) {
+    const i = commonBoth[k];
+    out.push(ancestor[i]);
+    const iNext = k + 1 < commonBoth.length ? commonBoth[k + 1] : aLen;
+    emitGap(i + 1, iNext,
+      amIdx.get(i) + 1, k + 1 < commonBoth.length ? amIdx.get(commonBoth[k + 1]) : mLen,
+      atIdx.get(i) + 1, k + 1 < commonBoth.length ? atIdx.get(commonBoth[k + 1]) : tLen);
+  }
+  return { ok: true, blocks: out.map(reblock).filter(Boolean), conflicts };
+}
+
+// 单 gap 收敛（hunk 模型）：以 base 块为粒度，用 amIdx/atIdx 全文档 keep 映射导出两侧"变更 hunk"。
+// base 区间只被一侧改(含多块/删除/纯插入) → 采纳该侧片断，并集零冲突；
+// 同一 base 块两侧都改 → 仅当改得完全一致才合并，否则回落 conflict 弹条（铁律：绝不错位、绝不吞任一侧）。
+function bothSameArr(x, y) { return x.length === y.length && x.every((v, k) => blocksEqual(v, y[k])); }
+// 单侧在 gap 内的"变更 hunk"：(base 区间 [bstart,bend), side 区间 [sstart,send))。
+// base 区间非空(bstart<bend) = 该侧替换/删除了这些 base 块(send≤sstart 即删除=空替代)；
+// base 区间空(bstart===bend) = 纯插入。hunk 之间按 side 顺序且 base 范围互不重叠。
+function hunksFor(keepMap, i0, i1, s0, s1) {
+  const kept = [];
+  for (let i = i0; i < i1; i++) if (keepMap.has(i)) kept.push(i);
+  const hunks = [];
+  const l = kept.length;
+  for (let k = 0; k <= l; k++) {
+    const bstart = k === 0 ? i0 : kept[k - 1] + 1;
+    const bend = k === l ? i1 : kept[k];
+    const sstart = k === 0 ? s0 : keepMap.get(kept[k - 1]) + 1;
+    const send = k === l ? s1 : keepMap.get(kept[k]);
+    if (bstart < bend || send > sstart) hunks.push({ bstart, bend, sstart, send }); // 非空变更或纯插入
+  }
+  return hunks;
+}
+// gap 三方收敛（root）：区别于旧"单块替换"模型，用 hunk 显式建模两侧独立插入，
+// 从根本上杜绝「本机插入 + 远端改同 gap 另一块」时静默吞掉本机输入(数据丢失)，
+// 并修复「单块文档本机编辑、远端未动」被"整文档无保留"守卫误判为冲突的假回落。
+//   base 区间只被一侧改 → 采纳该侧片断(可多块/删除/纯插入)，零冲突；
+//   base 区间两侧都改 → 仅当对单块改成一模一样才合并，否则回落 conflict 弹条（铁律：绝不吞任一侧）。
+function mergeGap(ancestor, mine, theirs, amIdx, atIdx, i0, i1, m0, m1, t0, t1) {
+  const n = i1 - i0, aLen = ancestor.length, mLen = mine.length, tLen = theirs.length;
+  if (n === 0) {
+    // 纯插入 gap：两侧都插且不一致 → 都保留(先本机后远端)，零冲突不吞任一侧
+    const mp = mine.slice(m0, m1), tp = theirs.slice(t0, t1);
+    if (mp.length === 0 && tp.length === 0) return { ok: true, out: [] };
+    if (mp.length && tp.length) {
+      if (bothSameArr(mp, tp)) return { ok: true, out: mp.slice() };
+      return { ok: true, out: [...mp, ...tp] };
+    }
+    return { ok: true, out: (mp.length ? mp : tp).slice() };
+  }
+  if (n * mLen > 200_000 || n * tLen > 200_000) return { ok: false, conflict: { anc: ancestor.slice(i0, i1) } };
+
+  const mH = hunksFor(amIdx, i0, i1, m0, m1);
+  const tH = hunksFor(atIdx, i0, i1, t0, t1);
+  const mByBlock = new Map(), tByBlock = new Map(); // base 块 -> 该侧替代片断(可空=删除)
+  const mIns = new Map(), tIns = new Map();          // base 位置(0..n) -> 插入块数组数组
+  const cover = (map, by, h) => { for (let j = h.bstart; j < h.bend; j++) map.set(j, by); };
+  for (const h of mH) (h.bstart === h.bend)
+    ? (mIns.has(h.bstart) ? mIns.get(h.bstart).push(mine.slice(h.sstart, h.send)) : mIns.set(h.bstart, [mine.slice(h.sstart, h.send)]))
+    : cover(mByBlock, mine.slice(h.sstart, h.send), h);
+  for (const h of tH) (h.bstart === h.bend)
+    ? (tIns.has(h.bstart) ? tIns.get(h.bstart).push(theirs.slice(h.sstart, h.send)) : tIns.set(h.bstart, [theirs.slice(h.sstart, h.send)]))
+    : cover(tByBlock, theirs.slice(h.sstart, h.send), h);
+
+  // 冲突判定：任一块两侧都改。仅当单块且两侧改得完全一致 → 合并；否则回落弹条。
+  for (let j = i0; j < i1; j++) {
+    if (mByBlock.has(j) && tByBlock.has(j)) {
+      const ms = mByBlock.get(j), ts = tByBlock.get(j);
+      if (!bothSameArr(ms, ts)) return { ok: false, conflict: { anc: [ancestor[j]], mine: ms, theirs: ts } };
+    }
+  }
+
+  // 装配：按 base 顺序——先摆到位间隙的两侧插入(先本机后远端)，再置该 base 块的合并结果。
+  const out = [];
+  for (let j = i0; j <= i1; j++) {
+    const mi = mIns.get(j), ti = tIns.get(j);
+    if (mi) for (const a of mi) out.push(...a);
+    if (ti) for (const a of ti) out.push(...a);
+    if (j < i1) {
+      if (mByBlock.has(j) && tByBlock.has(j)) out.push(...mByBlock.get(j)); // 两侧一致，取其一
+      else if (mByBlock.has(j)) out.push(...mByBlock.get(j)); // 仅本机改
+      else if (tByBlock.has(j)) out.push(...tByBlock.get(j)); // 仅远端改 → 导入
+      else out.push(ancestor[j]);                              // 未动 context（gap 内理论不应出现，防呆）
+    }
+  }
+  return { ok: true, out };
+}
+
+// 供测试探针导出
+window.__threeWayMerge = function (anc, mine, theirs) {
+  try { return threeWayMergeBlocks(blockize(anc), blockize(mine), blockize(theirs)); }
+  catch (e) { return { ok: false }; }
+};
 
 // v7.3.x：poll 级2（真实文本变更、本机干净）应用远端正文的唯一入口。
 // 端点：strict 比对 + 光标偏移重建 + linkify + syncCurrentState——与 producer 端语义完全一致。
@@ -5189,6 +5433,15 @@ async function poll() {
       // 用户真实输入必然改变文本 → 不装饰等价 → 照常挂起。
       const unsaved = !isDecorativelyEqual(editor.innerHTML, lastHtml);
       if (unsaved) {
+        // v7.3.4：本机脏 + 远端真变——先尝试块级三方合并自动并集重发零冲突条；
+        // 打字活跃期（<1.5s）静默推迟下轮 poll 再合（免疫击键间隙吵条）；真同行冲突回落弹条。
+        if (!isComposing && !(Date.now() - lastRestoreAt <= RESTORE_GUARD_MS)) {
+          if (document.activeElement === editor && Date.now() - lastTypeAt < 1500) {
+            window.__pollTypeDefer = (window.__pollTypeDefer || 0) + 1;
+            return; // 打字中：静默推迟，绝不在击键间隙弹条
+          }
+          if (await autoMergeSave(note, html)) { window.__pollLevel2Merge = (window.__pollLevel2Merge || 0) + 1; return; }
+        }
         pendingRemoteNote = note;
         window.__pollSkipCount = (window.__pollSkipCount || 0) + 1;
         setStatus(false, '远端有更新，待处理');

@@ -199,7 +199,7 @@ test('E7 poll 跳过提示：不消费版本号 + stash 快照 + 冲突条 + 诊
   const src = readSrc();
   const idx = src.indexOf('const unsaved = !isDecorativelyEqual(editor.innerHTML, lastHtml);');
   assert.ok(idx > -1, '应有未保存判定（v5.56 起不再要求正聚焦；v7.1.0 起装饰等价不算未保存）');
-  const seg = src.slice(idx, idx + 520);
+  const seg = src.slice(idx, idx + 950);
   assert.ok(seg.includes('pendingRemoteNote = note;'), '挂起应 stash 远端快照');
   assert.ok(!seg.includes('localVer = note.v'), '挂起分支不得消费版本号（旧版吞噬远端更新的根因）');
   assert.ok(seg.includes('__pollSkipCount'), '跳过应计入 __pollSkipCount 供 ?diag 展示');

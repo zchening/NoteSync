@@ -110,8 +110,8 @@ test('O5 poll 失败按 onLine 区分「离线」与「同步中断」', async t
 // ── O6：源码形态断言（lastSyncAt 语义 + 守卫齐全）────────────
 test('O6 v5.50 源码形态：lastSyncAt 语义与守卫', () => {
   const src = fs.readFileSync(INDEX_PATH, 'utf8');
-  assert.strictEqual((src.match(/lastSyncAt = Date\.now\(\)/g) || []).length, 6,
-    'lastSyncAt 写入点应为 6 处（解锁/在线加载/保存/轮询/提醒保存/改口令——v6.0 起改口令也是一次成功同步）');
+  assert.strictEqual((src.match(/lastSyncAt = Date\.now\(\)/g) || []).length, 7,
+    'lastSyncAt 写入点应为 7 处（解锁/在线加载/保存/轮询/提醒保存/改口令/autoMergeSave——v7.3.4 三方自动合并成功也是一次合法同步）');
   assert.ok(src.includes('lastSyncAt = 0; hideOfflineBar()'), '退出锁定应清时刻并收条');
   assert.ok(src.includes('if (!navigator.onLine) retries = 0;'), 'fetchRetry 应有离线快败');
   const m = src.match(/async function loadCachedBody\(key\) \{[\s\S]*?\n\}/);
