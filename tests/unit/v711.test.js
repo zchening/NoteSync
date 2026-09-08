@@ -65,7 +65,7 @@ const T1 = new Date(2026, 8, 8, 9, 5).getTime();
 test('V711-A MCP 源码：五工具/版本/常量/样式/上传闭包外', () => {
   assert.ok(MCP_SRC.includes("name: 'note_image'"), 'TOOLS 应注册 note_image');
   assert.ok(MCP_SRC.includes('note_image: toolImage'), 'IMPLS 应含 note_image');
-  assert.ok(MCP_SRC.includes("version: '7.3.0'"), 'serverInfo 应 7.3.0');
+  assert.ok(MCP_SRC.includes("version: '7.3.1'"), 'serverInfo 应 7.3.1');
   assert.ok(MCP_SRC.includes("['add', 'list', 'cancel', 'clear']"), 'note_remind op 四模式');
   assert.ok(MCP_SRC.includes('const REM_DONE_MAX = 20'), 'REM_DONE_MAX=20 与 web 对齐');
   assert.ok(MCP_SRC.includes('img{max-width:100%;height:auto}'), 'renderImage 应有完整 img 限宽样式（宽图长图导出不爆版）');

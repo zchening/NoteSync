@@ -39,7 +39,7 @@ test('V61-3 口令弹窗：无圆环图标、标题「输入口令」、右上�
   assert.ok(!src.includes('输入访问口令'), '旧标题「输入访问口令」应退役');
   assert.ok(!src.includes('id="unlockHome"'), '「返回首页」按钮应退役');
   assert.ok(/id="mask"[\s\S]{0,400}id="maskClose"/.test(src), '口令弹窗内应有 maskClose X');
-  assert.ok(src.includes("$('#maskClose').addEventListener('click', () => { location.assign('/'); });"), 'X 点击应回首页');
+  assert.ok(/\$\('#maskClose'\)[\s\S]{0,160}markJumped\(\)[\s\S]{0,80}location\.assign\('\/'\)/.test(src), 'X 点击应回首页（v7.3.1 起先打跳转标记防 APK 自动跳回）');
   assert.ok(src.includes('.modal-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 8px}'), 'v6.2 X 应融入标题行（flex 头部：标题左、X 右）');
   assert.ok(src.includes('.box-x{width:36px;height:36px'), 'v6.2 X 应为 36px 热区流内按钮');
   assert.ok(!src.includes('.box-x{position:absolute'), 'v6.1 绝对定位悬浮式应退役');
@@ -158,10 +158,10 @@ test('V61-13 扫码提示分流：HTTPS/组件失败/无摄像头/权限拒绝 �
 // ── 14. 版本升格（v7.0 起断言跟随最新版）──
 test('V61-14 版本升格：APP_VERSION 7.0.1 / BUILD_DATE / gradle 701+7.0.1 / README 条目 ≤40 汉字', () => {
   const src = readSrc();
-  assert.ok(src.includes("const APP_VERSION = '7.3.0';"), 'APP_VERSION 应 7.3.0');
+  assert.ok(src.includes("const APP_VERSION = '7.3.1';"), 'APP_VERSION 应 7.3.1');
   assert.ok(src.includes("const BUILD_DATE = '2026-09-08';"), 'BUILD_DATE 应更新');
   const gradle = readRel('android/app/build.gradle');
-  assert.ok(gradle.includes('versionCode 730') && gradle.includes('versionName "7.3.0"'), 'gradle 应 730/7.3.0');
+  assert.ok(gradle.includes('versionCode 731') && gradle.includes('versionName "7.3.1"'), 'gradle 应 731/7.3.1');
   const readme = readRel('README.md');
   const row = (readme.match(/^\| v7\.0\.1 \|[^|]+\|([^|]+)\|/m) || [])[1] || '';
   const hz = (row.match(/[一-龥]/g) || []).length;

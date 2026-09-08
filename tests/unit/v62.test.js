@@ -56,9 +56,9 @@ test('V62-5 菜单滚动与瘦身：主视图 72vh 内滚、盒 300px、条目 4
 // ── 6. 版本升格 ──
 test('V62-6 版本升格 6.2/62 + README 条目 ≤40 汉字（v7.0 起断言跟随最新版）', () => {
   const src = readSrc();
-  assert.ok(src.includes("const APP_VERSION = '7.3.0';"), 'APP_VERSION 应 7.3.0');
+  assert.ok(src.includes("const APP_VERSION = '7.3.1';"), 'APP_VERSION 应 7.3.1');
   const gradle = readRel('android/app/build.gradle');
-  assert.ok(gradle.includes('versionCode 730') && gradle.includes('versionName "7.3.0"'), 'gradle 应 730/7.3.0');
+  assert.ok(gradle.includes('versionCode 731') && gradle.includes('versionName "7.3.1"'), 'gradle 应 731/7.3.1');
   const readme = readRel('README.md');
   const row = (readme.match(/^\| v7\.0\.0 \|[^|]+\|([^|]+)\|/m) || [])[1] || '';
   const hz = (row.match(/[一-龥]/g) || []).length;

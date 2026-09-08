@@ -221,6 +221,10 @@
 
   /* ── 解锁弹窗 ───────────────────────── */
   .mask{position:fixed;inset:0;background:rgba(20,20,18,.42);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:center;z-index:10}
+  /* v7.3.1：菜单遮罩提到所有非模态浮层之上（冲突浮卡 55/版本条 60/提醒卡 80）——
+     浮卡 pointer-events:auto 会物理挡掉 menuHome「返回首页」的点击（v7.3.0 后冲突弹条
+     场景多，用户实测"点了没反应"）；菜单是模态独占交互，关闭后浮层恢复可见，铁律不受影响 */
+  #menuMask{z-index:90}
   .mask.hidden{display:none!important}
   .box{background:var(--box-bg);border:1px solid var(--line);border-radius:18px;padding:34px 30px 28px;width:min(90vw,380px);box-shadow:0 24px 70px rgba(20,20,18,.16);transition:background .3s;animation:rise .5s cubic-bezier(.2,.7,.3,1) both}
   /* v6.1：.box .mark 退役——口令弹窗去图标后全站无 mark 使用者（用户拍板方案 A） */
@@ -489,9 +493,24 @@ const FAIL_LIMIT = 10;
 // v5.52：APK 冷启动自动进入上次笔记（仅原生环境，Web 端不受影响）
 const NOTE_LAST_KEY = 'notesync_last_note';
 const NOTE_JUMPED_KEY = 'notesync_jumped';
+// v7.3.1：跳转标记带时间戳——冷启动自动跳转只需防「刚回过首页」的弹回；
+// 窗口取 120s：标记只须桥接「写入 → 根页 init 读取」这一小段（菜单点击/返回键到根页加载，
+// 亚秒~几秒），过长会把「回首页后快速重开 App」误杀成停在首页，v5.52 免输名特性受损
+const JUMP_WINDOW_MS = 120 * 1000;
+function jumpedRecently() {
+  try {
+    const t = Number(sessionStorage.getItem(NOTE_JUMPED_KEY));
+    const age = Date.now() - t;
+    // age >= 0：时钟回拨/未来时间戳（负差值）视为过期放行——否则标记永不过期，冷启动特性被静默杀死
+    return Number.isFinite(t) && age >= 0 && age < JUMP_WINDOW_MS;
+  } catch (e) { return false; }
+}
+function markJumped() {
+  try { sessionStorage.setItem(NOTE_JUMPED_KEY, String(Date.now())); } catch (e) {}
+}
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '7.3.0';
+const APP_VERSION = '7.3.1';
 const BUILD_DATE = '2026-09-08';
 
 const $ = s => document.querySelector(s);
@@ -4321,7 +4340,13 @@ $('#menuFavBack').addEventListener('click', () => {
   document.getElementById('menuFavView').classList.add('hidden');
   document.getElementById('menuMainView').classList.remove('hidden');
 });
-$('#menuHome').addEventListener('click', () => { menuMask.classList.add('hidden'); location.assign('/'); });
+$('#menuHome').addEventListener('click', () => {
+  menuMask.classList.add('hidden');
+  // v7.3.1：主动返回首页必须打"已跳转"标记——否则 APK 里 init() 的冷启动自动跳转逻辑
+  // 会把用户又弹回 NOTE_LAST_KEY 记的笔记（手动输名/扫码/收藏夹进入时从未设过该标记）
+  markJumped();
+  location.assign('/');
+});
 // v6.1：菜单「诊断」一级项退役（用户拍板）——诊断入口收进「关于 Note Sync」弹窗彩蛋（标题连点 4 次）
 // 与 ?diag URL 通道；v5.56 的免 URL 开关浮层逻辑（__toggleDiag/localStorage 标记）保留供 ?diag 使用。
 const aboutMask = $('#aboutMask'), diagMask = $('#diagMask');
@@ -5060,6 +5085,10 @@ document.addEventListener('visibilitychange', () => {
   else flushDirtySave();
 });
 window.addEventListener('pagehide', flushDirtySave);
+// v7.3.1：离开笔记页（Android 返回键/手势回首页）前打"已跳转"标记——扫码/深链/收藏夹
+// 进入的笔记从未设过该标记，返回键落回首页时 init() 的冷启动自动跳转会再把用户弹回本
+// 笔记（"返回首页有时没反应"的另一现场）；仅笔记页注册，首页→笔记的导航不受影响
+if (noteId) window.addEventListener('pagehide', markJumped);
 
 // v5.50：运行时断网/恢复感知——此前离线只在「打开页面那一刻」判定（init 回退），
 // 用着用着断网零感知（页脚停在残影「已同步」、离线条永不出现）。现在：
@@ -5078,7 +5107,8 @@ window.addEventListener('online', () => {
 
 $('#ok').addEventListener('click', () => unlock(pw.value));
 // v6.1：口令框「返回首页」按钮退役（用户拍板）——右上角 X 接管该出口，行为不变（回首页）
-$('#maskClose').addEventListener('click', () => { location.assign('/'); });
+// v7.3.1：同样打"已跳转"标记，防 APK 冷启动自动跳转把用户弹回原笔记（与 menuHome 同款）
+$('#maskClose').addEventListener('click', () => { markJumped(); location.assign('/'); });
 pw.addEventListener('keydown', e => { if (e.key === 'Enter') unlock(pw.value); });
 pw.addEventListener('input', () => { $('#ok').disabled = pw.value.length === 0; });
 $('#lock').addEventListener('click', () => {
@@ -5107,11 +5137,11 @@ function isNativeApp() {
   if (!noteId) {
     // v5.52：APK 冷启动自动进入上次打开的笔记，免掉每次输笔记名。
     // 用 assign 而非 replace —— 留下历史记录，用户按返回键可退回首页换笔记。
-    // sessionStorage 标记防止「退回首页 → 又自动跳走」的死循环。
-    if (isNativeApp() && !sessionStorage.getItem(NOTE_JUMPED_KEY)) {
+    // v7.3.1：标记带时间戳——仅当「本会话刚回过首页」才抑制，跨冷启动残留的旧标记过期放行
+    if (isNativeApp() && !jumpedRecently()) {
       const last = localStorage.getItem(NOTE_LAST_KEY);
       if (last && /^[A-Za-z0-9_-]{1,64}$/.test(last)) {
-        sessionStorage.setItem(NOTE_JUMPED_KEY, '1');
+        markJumped();
         location.assign('/' + encodeURIComponent(last));
         return;
       }

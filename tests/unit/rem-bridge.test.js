@@ -46,8 +46,8 @@ test('B5 APK 冷启动自动跳上次笔记：isNativeApp + assign + sessionStor
     '应通过 Capacitor 官方 API 判断（官方注入，零时机问题）');
   assert.ok(src.includes("location.assign('/' + encodeURIComponent(last))"),
     '应用 assign 而非 replace —— 保留历史，返回键可退回首页换笔记');
-  assert.ok(src.includes("sessionStorage.setItem(NOTE_JUMPED_KEY, '1')"),
-    '应打 sessionStorage 标记，防「退回首页又自动跳走」死循环');
+  assert.ok(src.includes('!jumpedRecently()'),
+    '应打 sessionStorage 标记，防「退回首页又自动跳走」死循环（v7.3.1 起带时间戳）');
   assert.ok(src.includes("localStorage.setItem(NOTE_LAST_KEY, noteId)"),
     '解锁成功应记住笔记名，供下次冷启动');
 });

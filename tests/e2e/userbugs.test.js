@@ -154,7 +154,8 @@ test('Bug2b 解锁后退出锁定，解锁按钮回到禁用态', guard(async ()
   await page.click('#menuBtn');
   await page.waitForSelector('#menuLock');
   await page.click('#menuLock');
-  await page.waitForSelector('#pw');
+  // #pw 常驻 DOM（锁态遮罩内），waitForSelector 形同虚设会读到清空前的旧值——等实际清空完成
+  await page.waitForFunction(() => document.getElementById('pw').value === '', undefined, { timeout: 5000 });
   assert.strictEqual(await page.evaluate(() => document.getElementById('pw').value), '', '退出后口令框应清空');
   assert.strictEqual(await page.evaluate(() => document.getElementById('ok').disabled), true, '退出后解锁按钮必须回到禁用态');
 }));
