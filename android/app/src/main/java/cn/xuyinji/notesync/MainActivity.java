@@ -24,6 +24,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 
 import cn.xuyinji.notesync.rem.RemPlugin;
+import cn.xuyinji.notesync.img.ImgClipPlugin;
 
 public class MainActivity extends BridgeActivity {
 
@@ -40,6 +41,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         // v5.51：注册自定义提醒桥（Capacitor 7 也支持自动扫描，显式注册更稳）
         registerPlugin(RemPlugin.class);
+        registerPlugin(ImgClipPlugin.class); // v7.7.0：图片写系统剪贴板原生桥
         super.onCreate(savedInstanceState);
 
         // v5.53：返回键接 WebView 历史——Capacitor 不接管返回键，默认 finish 直接回桌面。

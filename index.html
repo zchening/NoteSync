@@ -284,6 +284,12 @@
   #landing button{height:46px;padding:0 24px;border:0;border-radius:10px;background:var(--fg);color:var(--bg);font-size:15px;font-weight:500;letter-spacing:.06em;cursor:pointer;white-space:nowrap;transition:opacity .2s}
   #landing button:hover{opacity:.85}
   #landing .warn{color:#C0453E;font-size:12px;margin:14px 0 0;letter-spacing:.04em}
+  /* v7.7.0 首页扫码入口：ghost 胶囊与输入框同族（细线边框、muted 字色、hover 主色），全走变量自适应日夜 */
+  #landing .scan-row{margin:26px 0 0}
+  #landing #landingScan{display:inline-flex;align-items:center;gap:8px;color:var(--muted);font-size:13px;letter-spacing:.1em;padding:11px 20px;border:1px solid var(--line);border-radius:999px;cursor:pointer;transition:border-color .2s,color .2s;-webkit-tap-highlight-color:transparent;touch-action:manipulation;min-height:44px}
+  #landing #landingScan:active{opacity:.6}
+  #landing #landingScan:hover{border-color:var(--accent);color:var(--accent)}
+  #landing #landingScan svg{width:16px;height:16px;display:block}
   #landing .hint{color:var(--muted);font-size:12px;margin:26px 0 0;line-height:1.7;letter-spacing:.05em;opacity:.8}
   @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
   /* v5.44：remCard 专用入场——to 帧保留 translate(-50%,-50%)，动画结束不丢居中偏移 */
@@ -325,6 +331,7 @@
     <button id="landingBtn" disabled>打开</button>
   </div>
   <p id="landingWarn" class="warn hidden">仅支持英文、数字、下划线和短横线</p>
+  <div class="scan-row"><span id="landingScan" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8V4h4"/><path d="M16 4h4v4"/><path d="M20 16v4h-4"/><path d="M8 20H4v-4"/><path d="M7.5 12h9"/></svg>扫码打开笔记</span></div>
   <p class="hint">在网址后加笔记名即可，如 <span class="dyn-domain"></span>/notes</p>
 </div>
 <header>
@@ -340,6 +347,7 @@
   <button type="button" id="uploadBtn" title="上传图片"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg></button>
   <button type="button" id="copyBtn" title="复制到剪贴板"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect width="13" height="13" x="9" y="9" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
   <button type="button" id="exportImgBtn" title="导出为图片并复制"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg></button>
+  <button type="button" id="scanBtn" title="扫一扫"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V4h4"/><path d="M16 4h4v4"/><path d="M20 16v4h-4"/><path d="M8 20H4v-4"/><path d="M7.5 12h9"/></svg></button>
   <button type="button" id="qrBtn" title="二维码配对"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="3" height="3"/><rect x="18" y="14" width="3" height="3"/><rect x="14" y="18" width="3" height="3"/><rect x="18" y="18" width="3" height="3"/></svg></button>
   <button type="button" id="lock" title="退出锁定"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="11" x="4" y="11" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></button>
 </header>
@@ -367,7 +375,7 @@
       <div id="menuFav" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.8l2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4-3.9-3.8 5.4-.8z"/></svg>收藏笔记</div>
       <div id="menuFavEntry" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 18.5V6.5h5.5l2 2h9.5v10z"/></svg>收藏夹</div>
       <div id="menuHistEntry" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>历史版本</div>
-      <div id="menuScan" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8V4h4"/><path d="M16 4h4v4"/><path d="M20 16v4h-4"/><path d="M8 20H4v-4"/><path d="M7.5 12h9"/></svg>扫一扫</div>
+      <div id="menuBackup" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8V4h4"/><path d="M16 4h4v4"/><path d="M20 16v4h-4"/><path d="M8 20H4v-4"/><path d="M12 8v8"/><path d="M8 12h8"/></svg>备份换机码</div>
       <div id="menuTheme" class="menu-item" role="button" tabindex="0"><span id="menuThemeIcon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg></span><span id="menuThemeLabel">夜间模式</span></div>
       <div id="menuPass" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7.5" cy="15.5" r="4.5"/><path d="M11 12l9.5-9.5"/><path d="M16.5 6.5 20 10"/></svg>修改口令</div>
       <div id="menuLock" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8.5 10.5V7.2a3.5 3.5 0 0 1 6.9-.8"/></svg>退出锁定</div>
@@ -520,7 +528,7 @@ function markJumped() {
 }
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '7.6.0';
+const APP_VERSION = '7.7.0';
 const BUILD_DATE = '2026-09-09';
 
 const $ = s => document.querySelector(s);
@@ -534,7 +542,7 @@ const copyBtn = $('#copyBtn'), exportImgBtn = $('#exportImgBtn');
 // v7.3.2：工具栏按钮防焦点抢夺——mousedown/pointerdown preventDefault 后按钮不夺焦，
 // 编辑器光标不消失（用户报障「光标莫名其妙消失」根因2的点击路径）；只拦鼠标不拦触屏，
 // 移动端按钮行为零改动（触屏无焦点抢夺问题，且 pointerdown preventDefault 会干扰点击合成）。
-['themeBtn', 'strikeBtn', 'remBtn', 'uploadBtn', 'copyBtn', 'exportImgBtn', 'qrBtn', 'lock', 'menuBtn'].forEach(id => {
+['themeBtn', 'strikeBtn', 'remBtn', 'uploadBtn', 'copyBtn', 'exportImgBtn', 'scanBtn', 'qrBtn', 'lock', 'menuBtn'].forEach(id => {
   const b = document.getElementById(id);
   if (!b) return;
   b.addEventListener('pointerdown', e => { if (e.pointerType === 'mouse') e.preventDefault(); });
@@ -1970,7 +1978,106 @@ async function exportImage() {
     return;
   }
   showUploadStatus('正在生成图片…');
-
+  // v7.7.0（移动端报障根修）：旧链路「渲染完再 clipboard.write」——移动端 html2canvas(scale:2)
+  // 动辄数秒，用户手势（transient activation）过期必被拒；且 Android WebView 对图片写剪贴板
+  // 长期不可用、`<a download>` 在壳内是哑弹。新链路：①渲染 Promise 直接装进 ClipboardItem，
+  // write() 留在手势窗口内；②失败逐级回退：APP 原生桥真复制 → 系统分享面板 → 全屏预览长按保存。
+  const blobP = renderNotePng();
+  let blob = null, renderErr = null, clipTried = false;
+  blobP.catch(() => {}); // 防回退路径未消费时 unhandledrejection 污染 pageerror（_verify_v529 零错断言）
+  try {
+    if (navigator.clipboard && navigator.clipboard.write && typeof ClipboardItem !== 'undefined') {
+      clipTried = true;
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blobP })]);
+      showUploadStatus('图片已复制，可直接 Ctrl+V 粘贴');
+      setTimeout(hideUploadStatus, 3000);
+      return;
+    }
+  } catch (e) { /* 写入被拒/超时/不支持——继续走回退阶梯 */ }
+  try { blob = await blobP; } catch (e) { renderErr = e; }
+  if (renderErr) {
+    showUploadStatus(renderErr.name === 'SecurityError' ? '导出失败：可能因外链图片跨域，请使用支持CORS的图床' : '导出失败：' + (renderErr.message || '渲染异常'));
+    setTimeout(hideUploadStatus, 3000);
+    return;
+  }
+  if (!blob) { showUploadStatus('导出失败：渲染异常'); setTimeout(hideUploadStatus, 3000); return; }
+  // v7.7.0：Promise 形态被个别旧内核拒（只认 Blob）——渲染完成后用 Blob 再试一次，保住桌面「复制」语义
+  if (clipTried && !isNativeApp()) {
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      showUploadStatus('图片已复制，可直接 Ctrl+V 粘贴');
+      setTimeout(hideUploadStatus, 3000);
+      return;
+    } catch (e) { /* 仍被拒（手势过期等）→ 继续回退 */ }
+  }
+  // ① APP 原生桥：ClipboardManager 真·复制图片（新内核 WebView 剪贴板被拒时的确定性路径）
+  try {
+    const cap = window.Capacitor;
+    const ic = (cap && cap.Plugins && cap.Plugins.ImgClip) || null;
+    if (isNativeApp() && ic && typeof ic.copyImage === 'function') {
+      const res = await ic.copyImage({ base64: await blobToB64(blob), mime: 'image/png' });
+      if (res && res.ok) {
+        showUploadStatus('图片已复制，可直接粘贴');
+        setTimeout(hideUploadStatus, 2400);
+        return;
+      }
+    }
+  } catch (e) { /* 桥异常继续分享回退 */ }
+  // ② 系统分享面板：手机上「发给微信」比剪贴板更符合诉求；用户取消（AbortError）静默收场
+  try {
+    const file = new File([blob], 'note.png', { type: 'image/png' });
+    if (navigator.canShare && navigator.canShare({ files: [file] }) && navigator.share) {
+      await navigator.share({ files: [file] });
+      showUploadStatus('已通过系统分享发出');
+      setTimeout(hideUploadStatus, 2400);
+      return;
+    }
+  } catch (e) {
+    if (e && e.name === 'AbortError') { hideUploadStatus(); return; } // 用户主动取消分享
+  }
+  // ③ 全屏预览：长按图片可保存/转发（浏览器与 WebView 原生支持长按），或点按保存下载（桌面/支持时）
+  showImagePreview(blob);
+}
+function blobToB64(blob) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => { const s = String(fr.result || ''); resolve(s.slice(s.indexOf(',') + 1)); };
+    fr.onerror = () => reject(fr.error || new Error('blob read failed'));
+    fr.readAsDataURL(blob);
+  });
+}
+function showImagePreview(blob) {
+  hideUploadStatus();
+  const url = URL.createObjectURL(blob);
+  const overlay = document.createElement('div');
+  overlay.className = 'mask'; overlay.id = 'imgPreviewMask'; overlay.style.zIndex = '40';
+  const box = document.createElement('div'); box.className = 'box'; box.setAttribute('style', 'text-align:center;max-width:92vw');
+  const h = document.createElement('h1'); h.className = 'qr-title'; h.textContent = '图片已生成';
+  const img = document.createElement('img');
+  img.src = url; img.alt = '笔记图片';
+  img.setAttribute('style', 'max-width:100%;max-height:60vh;border-radius:12px;background:#fff');
+  const tip = document.createElement('p');
+  tip.textContent = '长按图片可保存或发送；点「下载」也可直接保存';
+  tip.setAttribute('style', 'font-size:12px;color:var(--muted);line-height:1.7;margin:12px 0 0');
+  const btnRow = document.createElement('div'); btnRow.setAttribute('style', 'display:flex;gap:12px;justify-content:center;margin-top:14px');
+  const dl = document.createElement('a');
+  dl.textContent = '下载'; dl.href = url; dl.download = 'note.png';
+  dl.setAttribute('style', 'padding:10px 22px;border:1px solid var(--line);border-radius:999px;font-size:13px;color:var(--fg);text-decoration:none');
+  const cancel = document.createElement('button'); cancel.textContent = '完 成'; cancel.id = 'imgPreviewClose';
+  cancel.setAttribute('style', 'padding:10px 22px');
+  btnRow.appendChild(dl); btnRow.appendChild(cancel);
+  box.appendChild(h); box.appendChild(img); box.appendChild(tip); box.appendChild(btnRow);
+  overlay.appendChild(box); document.body.appendChild(overlay);
+  const close = () => {
+    overlay.remove();
+    URL.revokeObjectURL(url);
+    if (CHIP_HOVER_OK) { try { editor.focus(); ensureCaret(); } catch (e) {} } // 红线10：关闭回编辑器归还焦点
+  };
+  cancel.addEventListener('click', close);
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+}
+// 渲染离屏副本并出 PNG Blob（Promise 化：手势窗口内可直接装入 ClipboardItem 延迟兑现）
+async function renderNotePng() {
   const cs = getComputedStyle(editor);
   const tmp = document.createElement('div');
   tmp.style.cssText = 'position:absolute;left:-9999px;top:0;width:' + editor.clientWidth + 'px;padding:' + cs.padding + ';font:' + cs.font + ';line-height:2.2;white-space:pre-wrap;word-break:break-all;overflow-wrap:anywhere;background:' + cs.backgroundColor + ';color:' + cs.color;
@@ -2010,26 +2117,10 @@ async function exportImage() {
       windowWidth: tmp.scrollWidth,
       windowHeight: tmp.scrollHeight
     });
-    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-    if (navigator.clipboard && navigator.clipboard.write && typeof ClipboardItem !== 'undefined') {
-      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-      showUploadStatus('图片已复制，可直接 Ctrl+V 粘贴');
-    } else {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'note.png';
-      a.click();
-      URL.revokeObjectURL(url);
-      showUploadStatus('图片已下载');
-    }
-  } catch (e) {
-    const msg = e.name === 'SecurityError' ? '导出失败：可能因外链图片跨域，请使用支持CORS的图床' : '导出失败：' + e.message;
-    showUploadStatus(msg);
+    return await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
   } finally {
     document.body.removeChild(tmp);
   }
-  setTimeout(hideUploadStatus, 3000);
 }
 
 if (window.PointerEvent) {
@@ -2204,6 +2295,7 @@ async function applyUnlocked(key, note) {
   undoStack = []; redoStack = []; lastState = captureState(); // 新笔记会话：清空并重置撤销栈基线
   startSync();
   tryShowInstallBar(); // v5.35：解锁后再弹安装引导，不在落地页打扰
+  consumeBackupImportMsg(); // v7.7.0：首页扫备份码跳转解锁后的一次性成功提示
 }
 
 async function unlock(pass) {
@@ -2421,10 +2513,26 @@ function buildLinkSafe(text, urlRegex, phoneRegex, breakSeparators, remMatches) 
   matches.sort((a, b) => a.start - b.start);
   const frag = document.createDocumentFragment();
   let pos = 0;
+  // v7.7.0：时间形态子串保护——ZWSP 绝不允许插进日期/时刻内部（`2026-09-15`、`18:00`、
+  // 汉字日期、秒级时刻）。旧实现整串门控（只要句中出现 ≥15 连续非空白就在全文每个
+  // -/:/& 等分隔符后插 ZWSP）会拦腰截断同行时间串：collectTimeMatches/remMatchesFor/
+  // parseTimeMatchesLong 全部不命中 → 悬浮"添加提醒"卡不弹、rem-mark 建不起来、
+  // 对账兜底②字面 indexOf 又不认前导零手写形态 → 提醒被误删、正文退化裸文本（用户报障）。
+  const TIME_GUARD = /\d{4}[-\/年]\d{1,2}[-\/月]\d{1,2}日?(?:[T ]\d{1,2}[:：]\d{2}(?:[:：]\d{2})?)?|\d{1,2}[:：]\d{2}/g;
+  const addBreaks = w => w.replace(breakSeparators, '$1\u200B');
+  const breakLongWords = str => str.replace(/\S{15,}/g, w => {
+    let out = '', last = 0, t;
+    TIME_GUARD.lastIndex = 0;
+    while ((t = TIME_GUARD.exec(w)) !== null) {
+      out += addBreaks(w.slice(last, t.index)) + t[0];
+      last = t.index + t[0].length;
+    }
+    return out + addBreaks(w.slice(last));
+  });
   const addText = str => {
     if (!str) return;
-    // 长词（≥15 连续非空白）在分隔符后插 ZWSP 以便换行，与原实现一致
-    if (/\S{15,}/.test(str)) str = str.replace(breakSeparators, '$1\u200B');
+    // 长词（≥15 连续非空白）在分隔符后插 ZWSP 以便换行——v7.7.0 起只长在长词自身范围内
+    if (/\S{15,}/.test(str)) str = breakLongWords(str);
     frag.appendChild(document.createTextNode(str));
   };
   for (const mt of matches) {
@@ -2651,6 +2759,20 @@ function linkifyEditor(opts) {
     // 避免下轮 poll 把打标 DOM 误判为「本机未保存修改」弹假冲突条。
     syncCurrentState();
     backfillLastHtmlIfDecorativelyEqual();
+    // v7.7.0 术后补存（用户报障步骤3「对端不更新」根修）：800ms 防抖保存早于延迟手术时，
+    // 保存看到「壳中间态」被 A1' 占位等价豁免（不 PUT、saveTimer 使命完成），随后拆壳成
+    // 真实空行的终态是程序化 DOM 改动、不派发 input——行移动终态永不达服务器。手术收口后
+    // 若终态与 lastHtml 三重等价（字面/装饰/占位）都不认且机器完全安静，补挂一次 300ms 保存。
+    // 各程序化写点（applyRemoteBody/remoteTake/undo）术后均已回填等价，不会误触发。
+    try {
+      const body = editor.innerHTML;
+      if (cryptoKey && !busy && !pendingRemoteNote && !isComposing && !document.hidden &&
+          isDraftBarHidden() && Date.now() - lastRestoreAt > RESTORE_GUARD_MS &&
+          body !== lastHtml && !isDecorativelyEqual(body, lastHtml) && !isPlaceholderEqual(body, lastHtml)) {
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(() => { saveLocal(takeForceResave()); }, 300); // force 意图随补挂保留（P0-5 同款）
+      }
+    } catch (e) {}
   }
 }
 
@@ -4185,12 +4307,18 @@ async function removeReminder(at) {
 function htmlToRemText(html) {
   try {
     const doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
-    return Array.from(doc.body.children).map(b => b.textContent || '').join('\n');
+    // v7.7.0：剥 ZWSP + 全角归一——历史毒化存量（长词断行曾把 ZWSP 插进时间串）在判删①
+    // 时间戳口径下即可正确解析，不再滑落到兜底②字面比对被误删
+    return remSanitize(Array.from(doc.body.children).map(b => b.textContent || '').join('\n'));
   } catch (e) { return String(html || ''); }
 }
+// v7.7.0：对账统一净化入口——剥零宽断行符（不改语义字符，允许变长：解析与切片同源同串，
+// 偏移自洽）再过 normFullWidth（等宽归一，全角数字/冒号/横杠/斜杠→半角）
+function remSanitize(s) { return normFullWidth(String(s || '').replace(/\u200B/g, '')); }
 async function reconcileRemindersFromBody(bodyText) {
   if (!cryptoKey || !reminders.length) return;
   if (pendingRemoteNote) return; // 挂起期绝不对账（审核 P0 修正）
+  bodyText = remSanitize(bodyText); // v7.7.0：入口处净化，后续解析/itemOf 切片/兜底②同串
   const now = Date.now();
   for (const t of Array.from(remTombstones.keys())) if (now - remTombstones.get(t) > 600000) remTombstones.delete(t);
   const matches = parseTimeMatchesLong(bodyText || '');
@@ -4211,8 +4339,10 @@ async function reconcileRemindersFromBody(bodyText) {
     if (r.at <= now) continue; // 过期条目不参与联动（保留画删除线）
     if (liveAt.has(r.at)) continue; // 仍在正文
     // 改时间：正文出现「新时间串 + 相同事项文本」→ 更新 at 而非删除，绝不静默丢提醒（审核 P0 修正）
+    // v7.7.0（对抗审）：n.item 出自净化后 bodyText，r.text 是创建时原始串——比对侧同过 remSanitize（幂等）防口径裂缝
+    const rt = remSanitize(r.text || '');
     const m2 = newAts.find(n => !usedNew.has(n.at) && n.item &&
-      (n.item === r.text || (r.text && r.text.endsWith('…') && n.item.indexOf(r.text.slice(0, -1)) === 0)));
+      (n.item === rt || (rt && rt.endsWith('…') && n.item.indexOf(rt.slice(0, -1)) === 0)));
     if (m2) {
       usedNew.add(m2.at);
       reminders = reminders.filter(x => x.at !== r.at);
@@ -5046,17 +5176,18 @@ function loadJsQR() {
 async function scanWithWebCamera() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     // v6.1：文案不再误导为「请用 APP」——PC 网页端本就支持扫码，此提示只可能因非安全上下文（HTTP）
-    setStatus(false, '当前环境无法调用摄像头（需 HTTPS）');
+    scanFeedback('当前环境无法调用摄像头（需 HTTPS）');
     return null;
   }
   const useDetector = typeof window.BarcodeDetector !== 'undefined';
   if (!useDetector && !(await loadJsQR())) {
-    setStatus(false, '扫码组件加载失败，请稍后重试'); // v6.1：多为 /jsQR.js 不可达，与「不支持扫码」区分
+    scanFeedback('扫码组件加载失败，请稍后重试'); // v6.1：多为 /jsQR.js 不可达，与「不支持扫码」区分
     return null;
   }
   const overlay = document.createElement('div');
   overlay.className = 'mask';
   overlay.id = 'scanMask';
+  overlay.style.zIndex = '40'; // v7.7.0：首页扫码——landing 覆盖层 z30，.mask 默认 z10 会被压住
   const box = document.createElement('div');
   box.className = 'box';
   box.setAttribute('style', 'text-align:center');
@@ -5102,17 +5233,35 @@ async function scanWithWebCamera() {
   } catch (e) {
     cleanup();
     // v6.1：错误分流——权限拒绝 / 无摄像头设备 / 其他，不再一律「扫码启动失败」
-    setStatus(false,
+    scanFeedback(
       (e && e.name === 'NotAllowedError') ? '相机权限被拒绝' :
       (e && e.name === 'NotFoundError') ? '未检测到可用摄像头' : '扫码启动失败');
     return null;
   }
 }
+// v7.7.0：扫码反馈统一口——笔记内走页脚 setStatus；首页 landing（z30）盖住页脚状态区，
+// 改显 landingWarn，3s 自动收回（带「文案仍是它才清」守卫，红线15 同款）。
+function scanFeedback(msg) {
+  if (noteId) { setStatus(false, msg); return; }
+  const w = document.getElementById('landingWarn');
+  if (!w) return;
+  w.textContent = msg; w.classList.remove('hidden');
+  setTimeout(() => { if (w.textContent === msg) w.classList.add('hidden'); }, 3000);
+}
+// v7.7.0：首页扫备份码 → 跳第一篇笔记（自动解锁）后的一次性成功提示（sessionStorage 单程，跨整页导航）
+function consumeBackupImportMsg() {
+  try {
+    const n = sessionStorage.getItem('ns_backup_import');
+    if (n) { sessionStorage.removeItem('ns_backup_import'); setStatus(true, '已从备份码恢复 ' + n + ' 篇收藏'); }
+  } catch (e) {}
+}
 // v5.57：APP「扫一扫」——ML Kit 插件（@capacitor-mlkit/barcode-scanning）原生侧挂
 // Capacitor.Plugins.BarcodeScanner（与 RemBridge 同套路，单文件无打包器不走 import）。
 // 扫 PC「二维码配对」弹窗 → 解析出 /笔记名#k=密钥 → assign 后走既有配对接收端自动解锁。
-$('#menuScan').addEventListener('click', async () => {
-  menuMask.classList.add('hidden');
+// v7.7.0：入口由 ☰ 菜单迁至顶栏 scanBtn 与首页 landingScan，流程抽成公共函数复用；
+// 同轮接入「备份换机码」——扫到 notesync-backup:v1: 前缀直接批量恢复密钥与收藏。
+const BACKUP_PREFIX = 'notesync-backup:v1:';
+async function doScanAndOpen() {
   const cap = window.Capacitor;
   const bs = (cap && cap.Plugins && cap.Plugins.BarcodeScanner) || null;
   let raw = '';
@@ -5121,7 +5270,7 @@ $('#menuScan').addEventListener('click', async () => {
       if (typeof bs.requestPermissions === 'function') {
         try {
           const p = await bs.requestPermissions();
-          if (p && p.camera === 'denied') { setStatus(false, '相机权限被拒绝'); return; }
+          if (p && p.camera === 'denied') { scanFeedback('相机权限被拒绝'); return; }
         } catch (e) {}
       }
       const ret = await bs.scan();
@@ -5130,10 +5279,100 @@ $('#menuScan').addEventListener('click', async () => {
   } else {
     raw = (await scanWithWebCamera()) || ''; // v5.58：网页端走自写扫码层
   }
+  if (!raw) return;
+  if (raw.indexOf(BACKUP_PREFIX) === 0) { await applyBackupBundle(raw); return; } // v7.7.0 换机备份码
   const dest = parsePairLink(raw);
   if (dest) location.assign(dest);
-  else if (raw) setStatus(false, '不是 NoteSync 配对二维码');
+  else scanFeedback('不是 NoteSync 配对二维码');
+}
+$('#scanBtn').addEventListener('click', () => { dismissKeyboardForTouch(); doScanAndOpen(); });
+$('#landingScan').addEventListener('click', () => { doScanAndOpen(); });
+$('#landingScan').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ' || e.code === 'Space') { e.preventDefault(); doScanAndOpen(); } });
+// ── v7.7.0 备份换机码（用户拍板：收藏夹一键导出成一张二维码，重装/换机后首页扫一扫一键恢复）──
+// 载荷 = BACKUP_PREFIX + base64(JSON{v,f:[[noteId, 密钥raw-b64], ...]})；密钥经二维码传递与
+// 配对弹窗 #k= 同一安全模型（局域网/拍照场景下自持）。仅收录本机有密钥的收藏笔记。
+async function buildBackupPayload() {
+  const favs = readFavs();
+  if (!favs.length) return null;
+  if (cryptoKey && !localStorage.getItem(KEY_STORE)) { // 当前笔记内存有密钥但 KEY_STORE 缺失（v5.21 revealQr 同款补写）
+    try { localStorage.setItem(KEY_STORE, bufToB64(await crypto.subtle.exportKey('raw', cryptoKey))); } catch (e) {}
+  }
+  const entries = []; let skipped = 0;
+  for (const id of favs) {
+    const k = localStorage.getItem('notesync_key_' + id) || '';
+    if (/^[A-Za-z0-9+/_-]{43,44}={0,2}$/.test(k)) entries.push([id, k]); else skipped++; // KEY_STORE 为标准 base64（含 +/）
+  }
+  if (!entries.length) return null;
+  let b64 = '';
+  try { b64 = btoa(JSON.stringify({ v: 1, f: entries })); } catch (e) { return null; }
+  return { payload: BACKUP_PREFIX + b64, count: entries.length, skipped };
+}
+$('#menuBackup').addEventListener('click', () => {
+  dismissKeyboardForTouch();
+  (async () => {
+    menuMask.classList.add('hidden');
+    if (!cryptoKey) { setStatus(false, '解锁后才可生成备份码'); return; }
+    const bk = await buildBackupPayload();
+    if (!bk) { setStatus(false, '收藏夹里还没有本机可备份的笔记'); return; }
+    const overlay = document.createElement('div'); overlay.className = 'mask'; overlay.id = 'backupMask';
+    const box = document.createElement('div'); box.className = 'box'; box.setAttribute('style', 'text-align:center');
+    const h = document.createElement('h1'); h.className = 'qr-title'; h.textContent = '备份换机码';
+    const cv = document.createElement('canvas');
+    try { drawQrTo(cv, bk.payload); } catch (e) { setStatus(false, '备份内容过大，二维码生成失败'); return; }
+    const tip = document.createElement('p');
+    tip.textContent = '截图或拍照保存这张码；换机/重装后在首页「扫码打开笔记」对准它，' + bk.count + ' 篇收藏一键恢复' + (bk.skipped ? '（' + bk.skipped + ' 篇本机无密钥未包含）' : '');
+    tip.setAttribute('style', 'font-size:12px;color:var(--muted);line-height:1.7;margin:14px 0 0');
+    const cancel = document.createElement('button'); cancel.id = 'backupClose'; cancel.textContent = '关 闭';
+    cancel.setAttribute('style', 'margin-top:16px');
+    box.appendChild(h); box.appendChild(cv); box.appendChild(tip); box.appendChild(cancel);
+    overlay.appendChild(box); document.body.appendChild(overlay);
+    const close = () => {
+      overlay.remove();
+      // 红线10：关闭回编辑器的模态必须归还焦点（桌面）；触屏不动（v7.5.1 收键盘路径无 blur 需求，菜单本就浮层）
+      if (CHIP_HOVER_OK) { try { editor.focus(); ensureCaret(); } catch (e) {} }
+    };
+    cancel.addEventListener('click', close);
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  })().catch(() => {});
 });
+// 扫到备份码 → 校验并批量写回密钥 + 合并收藏。首页场景恢复后直跳第一篇（KEY_STORE 已在，
+// init 走 loadStoredKey 自动解锁）；跨页成功提示经 sessionStorage 单程携带。
+async function applyBackupBundle(raw) {
+  let data = null;
+  try { data = JSON.parse(atob(raw.slice(BACKUP_PREFIX.length))); } catch (e) {}
+  const list = data && data.v === 1 && Array.isArray(data.f) ? data.f : null;
+  if (!list) { scanFeedback('备份码格式不正确'); return; }
+  const ok = [];
+  const hadBefore = {};
+  for (const it of list) {
+    try {
+      const id = it && it[0], k = it && it[1];
+      if (typeof id !== 'string' || typeof k !== 'string') continue;
+      if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) continue;
+      if (!/^[A-Za-z0-9+/_-]{43,44}={0,2}$/.test(k)) continue;
+      if (b64ToBuf(k).byteLength !== 32) continue; // 仅收合法 AES-256 raw 密钥
+      hadBefore[id] = !!localStorage.getItem('notesync_key_' + id); // v7.7.0（对抗审）：覆盖统计必须在写入前取
+      localStorage.setItem('notesync_key_' + id, k);
+      ok.push(id);
+    } catch (e) {}
+  }
+  if (!ok.length) { scanFeedback('备份码里没有可恢复的笔记'); return; }
+  // v7.7.0（对抗审）：透明化——覆盖过既有同名密钥、合并超 FAVS_MAX 截断，都要如实进提示，不静默
+  let renewed = 0;
+  for (const id of ok) if (hadBefore[id]) renewed++;
+  const favs = readFavs();
+  for (const f of favs) if (ok.indexOf(f) < 0) ok.push(f); // 备份优先序在前，本机已有收藏并入尾部
+  writeFavs(ok);
+  const capped = ok.length > 20 ? ok.length - 20 : 0;
+  const msg = '已恢复 ' + Math.min(ok.length, 20) + ' 篇收藏' +
+    (renewed ? '（覆盖 ' + renewed + ' 篇旧密钥）' : '') +
+    (capped ? '，收藏夹满 20 篇已丢弃最旧 ' + capped + ' 项' : '');
+  if (noteId) { setStatus(true, msg); renderMenu(); }
+  else {
+    try { sessionStorage.setItem('ns_backup_import', String(ok.length)); } catch (e) {}
+    location.href = '/' + encodeURIComponent(ok[0]);
+  }
+}
 $('#menuFav').addEventListener('click', () => {
   if (!noteId) return;
   const favs = readFavs(); const i = favs.indexOf(noteId);
@@ -5401,6 +5640,21 @@ function cachedNormDecorHtml(html) {
   decorNormCache.set(key, out);
   return out;
 }
+// v7.7.0：Blink 合并/换行格式克隆会给 span 附一堆「零效果」样式（background-color:transparent、
+// color/font-family/line-height:inherit……），等价集旧口径只认「无 style 无 class」裸 span，
+// 克隆形态判真实差异 → 本机假脏、云端假变更落库、三方合并失败弹条（用户报障行首编辑链根因）。
+// 仅当 span 无 class、且 style 每条声明值都 ∈ {inherit, transparent, currentcolor} 时视为克隆噪声；
+// 任何有实际效果的样式（如 color:red）一律不参与拍平。
+function isCloneNoiseSpan(el) {
+  if (!el || el.nodeType !== 1 || el.tagName !== 'SPAN' || el.getAttribute('class')) return false;
+  const st = el.getAttribute('style');
+  if (st == null) return true; // 裸 span（v7.5.0 修6 原口径）
+  const decls = String(st).split(';').map(s => s.trim()).filter(Boolean);
+  return !decls.length || decls.every(d => {
+    const i = d.indexOf(':');
+    return i > 0 && /^(inherit|transparent|currentcolor)$/i.test(d.slice(i + 1).trim());
+  });
+}
 function normDecorHtml(html) {
   const root = document.createElement('div');
   root.innerHTML = String(html == null ? '' : html);
@@ -5414,7 +5668,7 @@ function normDecorHtml(html) {
       if (tag === 'A' && child.getAttribute('data-url') === '1') { out += walk(child); continue; }
       if (tag === 'U' && child.classList.contains('rem-mark')) { out += walk(child); continue; }
       if (tag === 'S' && child.classList.contains('rem-done')) { out += walk(child); continue; }
-      if (tag === 'SPAN' && !child.getAttribute('style') && !child.getAttribute('class')) { out += walk(child); continue; }
+      if (tag === 'SPAN' && isCloneNoiseSpan(child)) { out += walk(child); continue; } // v7.7.0：克隆噪声 span 同裸 span 拍平
       const lt = tag.toLowerCase();
       let attrs = '';
       if (tag === 'A') attrs = ' href="' + (child.getAttribute('href') || '') + '"';
@@ -5451,7 +5705,8 @@ function normPlaceholderHtml(html) {
     if (!el || el.nodeType !== 1) return false;
     // v7.5.0（修6）：裸 span（无 style/class）透传递归——Blink 偶发把壳再包一层 span，
     // 不透传会让 onlyShell/空壳判定静默失效；span 内全空壳/空白才判空壳。
-    if (el.tagName === 'SPAN' && !el.getAttribute('style') && !el.getAttribute('class')) {
+    // v7.7.0：口径并入 isCloneNoiseSpan——带「零效果克隆样式」的 span 同裸 span 透传。
+    if (isCloneNoiseSpan(el)) {
       const kids = Array.from(el.childNodes);
       return kids.length === 0 || kids.every(n =>
         n.nodeType === 3 ? !(n.nodeValue || '').replace(/\u200B/g, '').trim() : isEmptyShell(n));
@@ -5469,7 +5724,7 @@ function normPlaceholderHtml(html) {
       if (c.nodeType === 3) { out += c.nodeValue.replace(ZWSP, ''); continue; }
       if (c.nodeType !== 1) continue;
       if (isEmptyShell(c)) continue; // 空壳连子树剥（壳内 <br> 一并消失）
-      if (c.tagName === 'SPAN' && !c.getAttribute('style') && !c.getAttribute('class')) { out += walk(c); continue; } // v7.5.0（修6）：拍平无属性 span（对齐 normDecorHtml 口径），壳外 span 包装差异不再干扰占位等价
+      if (isCloneNoiseSpan(c)) { out += walk(c); continue; } // v7.5.0（修6）拍平裸 span + v7.7.0 克隆噪声 span（对齐 normDecorHtml 口径），包装差异不再干扰占位等价
       const lt = c.tagName.toLowerCase();
       let attrs = '';
       if (lt === 'a') attrs = ' href="' + (c.getAttribute('href') || '') + '"';
@@ -6051,6 +6306,7 @@ if (noteId && (isNativeApp() || !CHIP_HOVER_OK)) {
     ensureCaret(); // 自动加载后显式重建合法折叠光标
     undoStack = []; redoStack = []; lastState = captureState(); // 新笔记会话：清空并重置撤销栈基线
     startSync();
+    consumeBackupImportMsg(); // v7.7.0：首页扫备份码跳转解锁后的一次性成功提示
   } else {
     loadingEl.classList.add('hidden');
     mask.classList.remove('hidden');

@@ -64,4 +64,8 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- v7.7.0：扫一扫——ML Kit BarcodeScanner 插件自带 manifest 为空，CAMERA 必须 app 声明；
+         原生 requestPermissions() 与 WebView 扫码层 getUserMedia 两条路径都依赖它 -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
 </manifest>

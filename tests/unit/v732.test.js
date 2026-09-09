@@ -109,9 +109,9 @@ test('V732-S9 修复c：全部模态/浮层关闭路径 PC 端焦点归还（CHI
   for (const [name, re] of targets) {
     assert.ok(re.test(SRC), name + ' 关闭路径应归还焦点（缺漏会再次触发光标消失）');
   }
-  // 跳转/接力路径不得误补（menuHome 跳首页、menuAbout 开关于、menuLock 开锁定、menuScan 开扫码、aboutTitle 彩蛋开诊断）
-  // 对抗审补丁：正则必须兼容 async () => 形态（menuAbout/menuScan 是 async），否则死断言假绿
-  const mustNot = ['menuHome', 'menuAbout', 'menuLock', 'menuScan', 'aboutTitle'];
+  // 跳转/接力路径不得误补（menuHome 跳首页、menuAbout 开关于、menuLock 开锁定、scanBtn/landingScan 开扫码（v7.7.0 menuScan 退役）、aboutTitle 彩蛋开诊断）
+  // 对抗审补丁：正则必须兼容 async () => 形态（menuAbout 是 async），否则死断言假绿
+  const mustNot = ['menuHome', 'menuAbout', 'menuLock', 'scanBtn', 'landingScan', 'aboutTitle'];
   for (const id of mustNot) {
     const m = new RegExp("\\$\\('#" + id + "'\\)\\.addEventListener\\('click', (?:async )?\\(\\) => \\{[\s\S]{0,250}?editor\\.focus\\(\\)");
     assert.ok(!m.test(SRC), '#' + id + ' 是跳转/接力路径，不应误补 editor.focus()');

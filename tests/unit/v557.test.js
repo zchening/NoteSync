@@ -74,13 +74,18 @@ test('G6 自动解锁路径补写 NOTE_LAST_KEY（共两处：口令+自动）',
   assert.ok(hits.length >= 2, '口令解锁与自动解锁两条路径都应写 NOTE_LAST_KEY（此前仅口令路径写，记住密钥/扫码配对进来的设备跳转键从不更新）');
 });
 
-// ── G7：菜单收纳（v5.58 起三端统一，形态断言移交 v558.test.js；此处仅保 wiring 不回退）──
+// ── G7：菜单收纳（v5.58 起三端统一；v7.7.0 扫一扫迁出菜单 → 顶栏 scanBtn + 首页 landingScan，菜单新增换机备份码 menuBackup）──
 test('G7 菜单三件套 DOM + wiring', () => {
   const src = readSrc();
-  assert.ok(src.includes('id="menuScan"') && src.includes('id="menuTheme"') && src.includes('id="menuLock"'), '菜单应有扫一扫/日夜间切换/退出锁定三项');
+  assert.ok(!src.includes('id="menuScan"'), 'v7.7.0：☰ 菜单应不再有扫一扫项（入口迁顶栏与首页）');
+  assert.ok(src.includes('id="scanBtn"') && src.includes("$('#scanBtn').addEventListener('click'"), '顶栏应有扫一扫按钮 DOM+wiring');
+  assert.ok(src.includes('id="landingScan"') && src.includes("$('#landingScan').addEventListener('click'"), '首页应有扫码入口 DOM+wiring');
+  assert.ok(src.includes('id="menuBackup"') && src.includes("$('#menuBackup').addEventListener('click'"), '菜单应有备份换机码 DOM+wiring');
+  assert.ok(src.includes('async function doScanAndOpen('), '扫码流程应抽公共函数 doScanAndOpen');
+  assert.ok(src.includes('await scanWithWebCamera()'), 'doScanAndOpen 应保留网页扫码层分支');
+  assert.ok(src.includes('id="menuTheme"') && src.includes('id="menuLock"'), '菜单应有日夜间切换/退出锁定两项');
   assert.ok(src.includes("$('#menuTheme').addEventListener('click'"), 'menuTheme 应有 wiring');
   assert.ok(src.includes("$('#menuLock').addEventListener('click'"), 'menuLock 应有 wiring');
-  assert.ok(src.includes("$('#menuScan').addEventListener('click'"), 'menuScan 应有 wiring');
 });
 
 // ── G8：parsePairLink 扫码解析三形态（jsdom 行为）──
