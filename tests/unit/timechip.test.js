@@ -269,9 +269,18 @@ test('TC12 selectionchange 后光标在时间上浮出 chip，移开隐藏', asy
   place(idx + 2);
   await sleep(400);
   assert.ok(!chip.classList.contains('hidden'), '光标落在时间上 chip 必须浮出');
-  assert.ok(chip.textContent.includes('添加提醒'), 'v5.45 chip 文案必须含蓝色 CTA「添加提醒」（「设提醒」退役）');
-  assert.ok(chip.querySelector('.chip-cta'), 'CTA 必须是独立元素（双色需要）');
-  assert.ok(chip.textContent.includes('　开'), 'chip 文案应含时间后文提取的事项（v5.39；v5.47 分隔符=全角空格）');
+  assert.ok(chip.textContent.includes('添加提醒'), 'v5.45 chip 文案必须含 CTA「添加提醒」（「设提醒」退役）');
+  assert.ok(chip.querySelector('.chip-cta'), 'CTA 必须是独立元素（实底伪按钮需要）');
+  // v7.8.0：单行胶囊 → 三行小卡，事项独立成行（不再与时间挤在同一行用全角空格分隔），
+  // 布局截断只落在事项行——旧断言 chip.textContent.includes('　开') 随该结构退役
+  const when = chip.querySelector('.chip-when');
+  assert.ok(when && /7:05/.test(when.textContent), '首行必须是时间（v5.39 时间后文提取口径不变）: ' + (when && when.textContent));
+  const what = chip.querySelector('.chip-what');
+  assert.ok(what && what.textContent === '开', '事项必须独占 .chip-what 行: ' + (what && what.textContent));
+  assert.ok(chip.querySelector('.chip-sep'), 'CTA 卡必须带分隔线');
+  const day = chip.querySelector('.chip-day');
+  assert.ok(day && day.textContent === '明天', '明天的时间必须带相对日标签「明天」: ' + (day && day.textContent));
+  assert.ok(!chip.classList.contains('feedback'), '未添加的时间弹的必须是 CTA 卡，不是展示卡');
   assert.ok(!chip.textContent.includes('设提醒'), '旧文案「设提醒」不得再出现');
 
   place(0);
@@ -476,7 +485,7 @@ test('TC14 已添加提醒处于临近触发 30 秒窗口内，光标落时间�
   document.dispatchEvent(new window.Event('selectionchange'));
   await sleep(400);
   assert.ok(!chip.classList.contains('hidden'), '已添加且未到点的提醒：即使处于 30 秒过期判定窗口，也必须弹展示卡');
-  assert.ok(chip.classList.contains('feedback'), '弹的必须是两行展示卡，不是蓝色 CTA');
+  assert.ok(chip.classList.contains('feedback'), '弹的必须是两行展示卡，不是「添加提醒」按钮');
   assert.ok(chip.querySelector('.chip-del'), 'v5.47 展示卡必须带「删除」按钮');
 });
 

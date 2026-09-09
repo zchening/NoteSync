@@ -87,10 +87,10 @@ test('内联 qrcode 库可为真实配对 URL 生成模块矩阵', () => {
 });
 
 // ── Q5：版本号 ──────────────────────────────
-test('APP_VERSION 为 7.7.0', () => {
+test('APP_VERSION 为 7.8.0', () => {
   const fs = require('fs');
   const src = fs.readFileSync(require('../helpers').INDEX_PATH, 'utf8');
-  assert.ok(src.includes("const APP_VERSION = '7.7.0';"), 'index.html 应声明 APP_VERSION = 7.7.0');
+  assert.ok(src.includes("const APP_VERSION = '7.8.0';"), 'index.html 应声明 APP_VERSION = 7.8.0');
 });
 
 // ── Q5b：v5.48 键盘视口策略（Chrome 安卓菜单栏被顶飞修复）──

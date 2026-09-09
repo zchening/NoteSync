@@ -375,8 +375,19 @@ test('v5.45+v5.46：提醒下划线标记由 linkify 管理（先拆后建）并
   assert.ok(/#editor s\.rem-done\{text-decoration:line-through/.test(SRC), '删除线样式必须存在（用户指定 text-decoration:line-through）');
   assert.ok(/#editor u\.rem-mark\{color:\$\{p\.fg\}!important/.test(SRC), '动态板必须锁 rem-mark 前景色');
   assert.ok(/'#editor u\.rem-mark\{color:#E3E3E5!important/.test(SRC), 'SHELL_CSS 必须预反色锁 rem-mark（目标日间前景）');
-  assert.ok(/#timeChip \.chip-cta\{color:\$\{chipCta\}!important/.test(SRC), '动态板必须锁 chip CTA 蓝色');
-  assert.ok(/'#timeChip \.chip-cta\{color:#DA9C14!important/.test(SRC), 'SHELL_CSS 必须预反色锁 chip CTA（目标日间蓝 #2563EB）');
+  // v7.8.0：chip 改三行小卡，CTA 由蓝字升为实底伪按钮（与 #remCardAck 同一套反相语言）
+  assert.ok(/#timeChip \.chip-cta\{color:\$\{p\.bg\}!important;-webkit-text-fill-color:\$\{p\.bg\}!important;background:\$\{p\.fg\}!important\}/.test(SRC), '动态板必须把 chip CTA 锁成实底伪按钮（p.fg 底 / p.bg 字）');
+  assert.ok(/'#timeChip \.chip-cta\{color:#040407!important;-webkit-text-fill-color:#040407!important;background:#E3E3E5!important\}/.test(SRC), 'SHELL_CSS 必须预反色锁 chip CTA（与 #remCardAck 同值：目标日间 fg 底/bg 字）');
+  // v7.8.0 新增三行元素：漏锁一处即夜间模式吃字（v5.39 铁律）
+  assert.ok(/#timeChip \.chip-hd,#timeChip \.chip-when\{color:\$\{p\.fg\}!important/.test(SRC), '动态板必须锁 chip 时间行前景');
+  assert.ok(/#timeChip \.chip-day,#timeChip \.chip-what\{color:\$\{p\.muted\}!important/.test(SRC), '动态板必须锁 chip 相对日/事项行次要色');
+  assert.ok(/#timeChip \.chip-sep\{background:\$\{p\.line\}!important\}/.test(SRC), '动态板必须锁 chip 分隔线');
+  assert.ok(/'#timeChip \.chip-hd,#timeChip \.chip-when\{color:#E3E3E5!important/.test(SRC), 'SHELL_CSS 必须预反色锁 chip 时间行');
+  assert.ok(/'#timeChip \.chip-day,#timeChip \.chip-what\{color:#676A75!important/.test(SRC), 'SHELL_CSS 必须预反色锁 chip 相对日/事项行');
+  assert.ok(/'#timeChip \.chip-sep\{background:#13151D!important\}/.test(SRC), 'SHELL_CSS 必须预反色锁 chip 分隔线');
+  // 确认卡两行色阶：第一行前景、第二行次要灰（对抗审发现捆成前景会让静态 muted 永久失效）
+  assert.ok(/#timeChip \.chip-ok1\{color:\$\{p\.fg\}!important/.test(SRC) && /#timeChip \.chip-ok2\{color:\$\{p\.muted\}!important/.test(SRC), '动态板必须分开锁确认卡两行（ok1=前景 / ok2=次要灰）');
+  assert.ok(/'#timeChip \.chip-ok1\{color:#E3E3E5!important/.test(SRC) && /'#timeChip \.chip-ok2\{color:#676A75!important/.test(SRC), 'SHELL_CSS 必须分开锁确认卡两行（预反色 同上）');
 });
 
 test('v5.46+v5.47：已添加的未来时间悬停两行展示卡（不可点、移开即消失），分隔符改全角空格「　」', () => {
@@ -418,7 +429,7 @@ test('v5.47：chip 两行卡带「删除」伪按钮（三板锁色）+ 30 秒�
   assert.ok(!/' · ' \+ (item|r\.text)/.test(SRC), '时间与事项之间的「 · 」分隔符必须全部退役');
 });
 
-test('v5.45：chip 文案改版（蓝色 CTA）+ 两行确认卡 + 过期零打扰 + 面板添加回写正文', () => {
+test('v5.45：chip 文案改版（「添加提醒」按钮）+ 两行确认卡 + 过期零打扰 + 面板添加回写正文', () => {
   assert.ok(/cta\.textContent = '添加提醒'/.test(SRC), 'chip CTA 必须是「添加提醒」（与面板按钮统一，「设提醒」退役）');
   assert.ok(!/'设提醒：'/.test(SRC), '旧文案「设提醒：」必须删除');
   assert.ok(!/已过期 ' \+ fmtRemTime/.test(SRC), '旧「已过期」chip 文案必须删除（过期不再浮 chip）');

@@ -4,7 +4,7 @@
 //   ① 面板添加提醒成功 → 正文光标处回写「时间　事项」（v5.47：分隔符=全角空格），可 Ctrl+Z 撤销
 //   ② 已设提醒的时间串带下划线（u.rem-mark，linkify 管理）；未添加的日期无标记
 //      （v5.46：下划线只包时间串，事项不带）
-//   ③ 正文时间文本上的 chip 更明显（14px + 蓝色 CTA「添加提醒」）
+//   ③ 正文时间文本上的 chip 更明显（14px + 「添加提醒」按钮「添加提醒」）
 //   ④ 已过期/已提醒过的时间回归普通正文（v5.46：无下划线不变灰，标记直接消失）；
 //      删除提醒后标记消失
 //   ⑤ 过期时间光标移上 → chip 完全不出现（零打扰）
@@ -135,8 +135,8 @@ test('V545-1 面板添加后正文回写「时间　买牛奶」（全角空格�
   } finally { await ctx.close(); }
 }));
 
-// ── ③⑥ chip 明显化：蓝色 CTA「添加提醒」+ 两行确认卡 ────────────────────
-test('V545-2 光标落时间上 chip 含蓝色「添加提醒」，点后变两行确认卡', guard(async () => {
+// ── ③⑥ chip 明显化：「添加提醒」按钮「添加提醒」+ 两行确认卡 ────────────────────
+test('V545-2 光标落时间上 chip 含「添加提醒」按钮，点后变两行确认卡', guard(async () => {
   const { ctx, page } = await openDesktopEditor('V545B');
   try {
     const S = await page.evaluate(() => {
@@ -153,7 +153,9 @@ test('V545-2 光标落时间上 chip 含蓝色「添加提醒」，点后变两�
       return true;
     });
     assert.ok(S, '前置就绪');
-    await page.waitForTimeout(450);
+    // 250ms 防抖 + 解锁解密在整套并发跑时会饿死固定 sleep（v7.8.0 加用例后实测漂移），改等真实条件
+    await page.waitForFunction(() => !document.getElementById('timeChip').classList.contains('hidden'), null, { timeout: 10000 });
+    await page.waitForTimeout(150); // 让 rAF/动画落定再取几何
     const chip = await page.evaluate(() => {
       const c = document.getElementById('timeChip');
       const cta = c.querySelector('.chip-cta');
@@ -161,18 +163,20 @@ test('V545-2 光标落时间上 chip 含蓝色「添加提醒」，点后变两�
         visible: !c.classList.contains('hidden'),
         text: c.textContent,
         ctaColor: cta ? getComputedStyle(cta).color : '',
+        ctaBg: cta ? getComputedStyle(cta).backgroundColor : '',
       };
     });
     assert.ok(chip.visible, '未来时间 chip 必须浮出');
     assert.ok(chip.text.includes('添加提醒'), 'chip 必须含「添加提醒」CTA: ' + chip.text);
     assert.ok(!chip.text.includes('设提醒'), '旧文案「设提醒」不得出现');
-    // CTA 双板锁色：浅 #2563EB / 深 #7EB1FF——主题按时间切换（07:00/19:00），晚间跑套件时页面为夜间，
-    // 断言必须按 body.dark 取对应板色（2026-09-05 19:24 首次暴露：写死浅色板导致晚 7 点后必挂）
+    // CTA 双板锁色：v7.8.0 起为实底伪按钮（fg 底 / bg 字）——主题按时间切换（07:00/19:00），
+    // 晚间跑套件时页面为夜间，断言必须按 body.dark 取对应板色（2026-09-05 19:24 教训：写死浅色板晚 7 点后必挂）
     const expectDark = await page.evaluate(() => document.body.classList.contains('dark'));
-    assert.strictEqual(chip.ctaColor, expectDark ? 'rgb(126, 177, 255)' : 'rgb(37, 99, 235)', 'CTA 必须是当前主题对应板色（浅 #2563EB / 深 #7EB1FF）');
+    assert.strictEqual(chip.ctaBg, expectDark ? 'rgb(233, 232, 227)' : 'rgb(28, 28, 26)', 'CTA 底色必须是当前主题的前景板色');
+    assert.strictEqual(chip.ctaColor, expectDark ? 'rgb(15, 15, 17)' : 'rgb(251, 251, 248)', 'CTA 文字色必须是当前主题的背景板色（实底反相）');
 
     await page.click('#timeChip');
-    await page.waitForTimeout(200);
+    await page.waitForFunction(() => document.getElementById('timeChip').classList.contains('feedback'), null, { timeout: 10000 });
     const fb = await page.evaluate(() => {
       const c = document.getElementById('timeChip');
       const l1 = c.querySelector('.chip-ok1'), l2 = c.querySelector('.chip-ok2');
@@ -452,8 +456,8 @@ test('V547-3 展示卡点「删除」→ 提醒彻底移除（rem 清空同步�
     assert.strictEqual(st.count, before - 1, '点删除后提醒必须从列表彻底移除');
     assert.ok(!st.hasU, '删除后正文下划线必须消失');
     assert.ok(!st.chipFeedback, '两行展示卡必须收起');
-    // 删除后光标仍停在时间串上：该时间已变回「未添加」，chip 回到蓝色「添加提醒」CTA（预期状态转换）
-    assert.ok(st.chipCta, '时间已未添加：chip 应回到蓝色「添加提醒」CTA');
+    // 删除后光标仍停在时间串上：该时间已变回「未添加」，chip 回到带「添加提醒」按钮的 CTA 卡（预期状态转换）
+    assert.ok(st.chipCta, '时间已未添加：chip 应回到带「添加提醒」按钮的 CTA 卡');
     assert.deepStrictEqual(page.__errors, [], '不应有页面 JS 错误');
   } finally { await ctx.close(); }
 }));
@@ -475,7 +479,7 @@ test('V547-4 chip 点「添加提醒」后的确认卡点「删除」→ 提醒�
       document.dispatchEvent(new window.Event('selectionchange'));
     });
     await page.waitForTimeout(450);
-    assert.ok(await page.evaluate(() => !!document.querySelector('#timeChip .chip-cta')), '前置：蓝色 CTA 已浮出');
+    assert.ok(await page.evaluate(() => !!document.querySelector('#timeChip .chip-cta')), '前置：「添加提醒」按钮 已浮出');
     await page.click('#timeChip'); // 单行 CTA chip 无删除热区，坐标点击安全
     await page.waitForTimeout(200);
     assert.ok(await page.evaluate(() => !!document.querySelector('#timeChip .chip-del')), '前置：确认卡带「删除」按钮');

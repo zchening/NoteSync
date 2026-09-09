@@ -1208,7 +1208,7 @@ function handleLine(line) {
     rpcResult(id, {
       protocolVersion: '2024-11-05',
       capabilities: { tools: {} },
-      serverInfo: { name: 'notesync', version: '7.7.0' },
+      serverInfo: { name: 'notesync', version: '7.8.0' },
     });
     return;
   }

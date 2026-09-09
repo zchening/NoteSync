@@ -101,19 +101,29 @@
      会被国产浏览器夜间模式强制涂黑）；定位写在 #remCardX 上，.box-x 本体保持流内（v6.2 断言约束） */
   #remCardX{position:absolute;top:14px;right:14px}
   #remPanelX{flex:none}
-  /* v5.45：chip 改版——14px 加大更明显；尾部蓝色 CTA「添加提醒」做按钮感；
+  /* v5.45：chip 改版——14px 加大更明显；尾部「添加提醒」CTA 做按钮感（v7.8.0 起为实底伪按钮）；
      点添加后原地变两行确认卡（✅ 提醒已添加 / 时间　事项）；
-     v5.46：已添加的未来时间悬停同款两行展示卡（不可点）；过期时间不浮任何 chip（零打扰） */
-  #timeChip{position:fixed;top:54px;left:50%;transform:translateX(-50%);z-index:56;padding:10px 18px;font-size:14px;color:var(--fg);background:var(--box-bg);border:1px solid var(--line);border-radius:999px;box-shadow:0 6px 20px rgba(0,0,0,.18);cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:manipulation;-webkit-tap-highlight-color:transparent;white-space:nowrap;max-width:92vw;overflow:hidden;text-overflow:ellipsis}
-  #timeChip .chip-cta{color:#2563EB;font-weight:600;margin-left:12px}
+     v5.46：已添加的未来时间悬停同款两行展示卡（不可点）；过期时间不浮任何 chip（零打扰）；
+     v7.8.0（用户拍板方案 C）：单行胶囊 → 三行小卡（时间＋相对日 / 事项 / 主按钮）。旧胶囊
+     white-space:nowrap + max-width:92vw 在窄屏把尾随 CTA 整颗挤出屏幕（手机端看不见「添加提醒」，
+     用户实测）。现在宽度 min(86vw,340px) 桌面手机同一套；省略号截断只落在事项行——截断代价归事项，
+     CTA 恒完整可见可点；按钮沿用提醒面板「知道了」的 fg 底/bg 字反相语言（仍是 span 伪按钮，三板锁色） */
+  #timeChip{position:fixed;top:54px;left:50%;transform:translateX(-50%);z-index:56;width:min(86vw,340px);max-width:92vw;padding:13px 15px 15px;display:flex;flex-direction:column;gap:9px;font-size:14px;color:var(--fg);background:var(--box-bg);border:1px solid var(--line);border-radius:16px;box-shadow:0 14px 36px rgba(20,20,18,.16);cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:manipulation;-webkit-tap-highlight-color:transparent;animation:chipRise .28s cubic-bezier(.2,.7,.3,1) both}
+  #timeChip .chip-hd{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+  #timeChip .chip-when{flex:none;font-size:16px;font-weight:600;line-height:1.35;font-variant-numeric:tabular-nums}
+  #timeChip .chip-day{flex:none;font-size:11px;font-weight:400;line-height:1.35;color:var(--muted);letter-spacing:.08em}
+  #timeChip .chip-what{font-size:13px;line-height:1.5;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #timeChip .chip-sep{height:1px;margin:1px -15px 2px;background:var(--line)}
+  #timeChip .chip-cta{display:flex;align-items:center;justify-content:center;min-height:42px;border-radius:11px;font-size:14.5px;font-weight:600;letter-spacing:.02em;color:var(--bg);-webkit-text-fill-color:var(--bg);background:var(--fg)}
+  #timeChip .chip-cta:active{opacity:.82}
   /* v5.47：两行卡第一行尾随「删除」伪按钮（span+描边——chip 不在 .box 深色保护圈，
      原生 button 会被国产浏览器夜间模式强制全黑，沿 v5.39 铁律） */
-  #timeChip .chip-del{display:inline-block;margin-left:12px;padding:2px 10px;font-size:12px;font-weight:400;color:var(--fg);border:1px solid var(--line);border-radius:999px;cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+  #timeChip .chip-del{flex:none;padding:2px 10px;font-size:12px;font-weight:400;color:var(--fg);border:1px solid var(--line);border-radius:999px;cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
   #timeChip .chip-del:hover{border-color:var(--muted)}
   #timeChip .chip-del:active{opacity:.7}
-  #timeChip.feedback{border-radius:16px;white-space:normal;text-align:center;cursor:default}
-  #timeChip .chip-ok1{font-size:14px;font-weight:600;line-height:1.5}
-  #timeChip .chip-ok2{font-size:13.5px;line-height:1.5;margin-top:2px}
+  #timeChip.feedback{gap:5px;cursor:default}
+  #timeChip .chip-ok1{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:14.5px;font-weight:600;line-height:1.4}
+  #timeChip .chip-ok2{font-size:13px;line-height:1.5;margin-top:0;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   #timeChip.hidden{display:none}
   /* v5.45：面板时间行——日期(原生) + 时:分 自建小输入框（打开面板焦点落分钟框且全选） */
   #remBoxForm .rem-time-row{display:flex;gap:8px;align-items:center;justify-content:center}
@@ -294,6 +304,9 @@
   @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
   /* v5.44：remCard 专用入场——to 帧保留 translate(-50%,-50%)，动画结束不丢居中偏移 */
   @keyframes remRise{from{opacity:0;transform:translate(-50%,-50%) translateY(14px)}to{opacity:1;transform:translate(-50%,-50%)}}
+  /* v7.8.0：chip 专用入场——同 remRise 的道理，通用 rise 的 to 帧是 transform:none，
+     会把 #timeChip 居中用的 translateX(-50%) 抹掉导致卡片横向跳动 */
+  @keyframes chipRise{from{opacity:0;transform:translateX(-50%) translateY(-8px)}to{opacity:1;transform:translateX(-50%)}}
 
   /* ── 提示气泡 / 加载 ────────────────── */
   .upload-status{position:fixed;bottom:44px;left:50%;transform:translateX(-50%);background:var(--upload-bg);color:var(--bg);padding:10px 20px;border-radius:999px;font-size:13px;letter-spacing:.03em;z-index:20;opacity:0;transition:opacity .3s;pointer-events:none;box-shadow:0 10px 30px rgba(20,20,18,.2)}
@@ -528,7 +541,7 @@ function markJumped() {
 }
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '7.7.0';
+const APP_VERSION = '7.8.0';
 const BUILD_DATE = '2026-09-09';
 
 const $ = s => document.querySelector(s);
@@ -616,7 +629,6 @@ function themeOverrideCss(dark) {
   const accentSoft = dark ? 'rgba(212,176,104,.08)' : 'rgba(143,113,38,.07)';
   const dot = dark ? '#7A786F' : '#C9C7BE';
   const warn = '#C0453E';
-  const chipCta = dark ? '#7EB1FF' : '#2563EB'; // v5.45：chip 蓝色 CTA（浅 #2563EB / 深 #7EB1FF）
   return `
     body{background:${p.bg}!important;color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important}
     #editor{background:transparent!important;color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important}
@@ -642,8 +654,12 @@ function themeOverrideCss(dark) {
     #remBoxList .rem-row{color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important;background:none!important}
     #remBoxList .rem-row button{background:none!important;color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important;border:1px solid ${p.line}!important}
     #timeChip{background:${p.box}!important;color:${p.fg}!important;border-color:${p.line}!important;-webkit-text-fill-color:${p.fg}!important}
-    #timeChip .chip-cta{color:${chipCta}!important;-webkit-text-fill-color:${chipCta}!important;background:none!important}
-    #timeChip .chip-ok1,#timeChip .chip-ok2{color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important;background:none!important}
+    #timeChip .chip-hd,#timeChip .chip-when{color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important;background:none!important}
+    #timeChip .chip-day,#timeChip .chip-what{color:${p.muted}!important;-webkit-text-fill-color:${p.muted}!important;background:none!important}
+    #timeChip .chip-sep{background:${p.line}!important}
+    #timeChip .chip-cta{color:${p.bg}!important;-webkit-text-fill-color:${p.bg}!important;background:${p.fg}!important}
+    #timeChip .chip-ok1{color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important;background:none!important}
+    #timeChip .chip-ok2{color:${p.muted}!important;-webkit-text-fill-color:${p.muted}!important;background:none!important}
     #timeChip .chip-del{color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important;background:none!important;border:1px solid ${p.line}!important}
     #editor u.rem-mark{color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important;text-decoration-color:${p.fg}!important}
     #landing{background:radial-gradient(ellipse 720px 480px at 50% 30%,${accentSoft},transparent),${p.bg}!important;color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important}
@@ -722,8 +738,12 @@ const SHELL_CSS = [
   '#remBoxList .rem-row{color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important;background:none!important}',
   '#remBoxList .rem-row button{background:none!important;color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important;border:1px solid #13151D!important}',
   '#timeChip{background:#000000!important;color:#E3E3E5!important;border-color:#13151D!important;-webkit-text-fill-color:#E3E3E5!important}',
-  '#timeChip .chip-cta{color:#DA9C14!important;-webkit-text-fill-color:#DA9C14!important;background:none!important}',
-  '#timeChip .chip-ok1,#timeChip .chip-ok2{color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important;background:none!important}',
+  '#timeChip .chip-hd,#timeChip .chip-when{color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important;background:none!important}',
+  '#timeChip .chip-day,#timeChip .chip-what{color:#676A75!important;-webkit-text-fill-color:#676A75!important;background:none!important}',
+  '#timeChip .chip-sep{background:#13151D!important}',
+  '#timeChip .chip-cta{color:#040407!important;-webkit-text-fill-color:#040407!important;background:#E3E3E5!important}',
+  '#timeChip .chip-ok1{color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important;background:none!important}',
+  '#timeChip .chip-ok2{color:#676A75!important;-webkit-text-fill-color:#676A75!important;background:none!important}',
   '#timeChip .chip-del{color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important;background:none!important;border:1px solid #13151D!important}',
   '#editor u.rem-mark{color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important;text-decoration-color:#E3E3E5!important}',
   '#landing{background:radial-gradient(ellipse 720px 480px at 50% 30%,rgba(112,142,217,.07),transparent),#040407!important;color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important}',
@@ -3305,7 +3325,7 @@ async function loadCachedBody(key) {
 // 检测差异，恢复后保持这个差异，草稿内容才会被补传上去（成功后 clearDraft）。
 const draftBar = $('#draftBar'), draftRestoreBtn = $('#draftRestore'), draftDiscardBtn = $('#draftDiscard');
 function hideDraftBar() { draftBar.classList.add('hidden'); }
-function showDraftBar() { draftBar.classList.remove('hidden'); }
+function showDraftBar() { draftBar.classList.remove('hidden'); hideTimeChip(); } // v7.8.0：条与浮卡同位(top:54px)，条弹出时浮卡立刻让位（防盖「保留本机/使用云端」）
 function isDraftBarHidden() { return draftBar.classList.contains('hidden'); } // P0-1：草稿条挂起期间绝不清草稿（红线8）
 function scheduleDraftResave() {
   clearTimeout(saveTimer);
@@ -3531,6 +3551,19 @@ function fmtRemTime(at) {
   const hm = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
   const md = (d.getMonth() + 1) + '月' + d.getDate() + '日';
   return d.toDateString() === now.toDateString() ? '今天 ' + hm : md + ' ' + hm;
+}
+// v7.8.0：chip 首行右上角相对日标签。同日返回空——fmtRemTime 已带「今天」前缀，再挂标签是重复；
+// 按日历天（本地零点差）取整，避开 23:59→00:01 这类跨分钟误差。过期时间不弹卡，故无负数分支。
+function chipDayLabel(at) {
+  const d = new Date(at), now = new Date();
+  const target = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const n = Math.round((target - today) / 86400e3);
+  if (n <= 0) return '';
+  if (n === 1) return '明天';
+  if (n === 2) return '后天';
+  if (n < 7) return '周' + '日一二三四五六'.charAt(d.getDay());
+  return n + '天后';
 }
 
 // ── v5.37 时间文本识别（纯函数，绝不改正文 DOM——linkify 拍平 span 的约束）──
@@ -3763,7 +3796,7 @@ function caretInfoInEditor() {
   return { block: block, text: block.textContent || '', offset: off };
 }
 
-// ── v5.37 时间 chip：光标落在时间文本上时浮出快捷入口（v5.45 文案=时间·事项+蓝色「添加提醒」CTA）──
+// ── v5.37 时间 chip：光标落在时间文本上时浮出快捷入口（v5.45 文案=时间·事项+「添加提醒」CTA；v7.8.0 起排版为三行小卡+实底按钮）──
 // chip 是编辑器外的独立浮层；点 chip 即设提醒（pointerdown 三连 preventDefault，与工具栏按钮同套路防焦点丢失）
 let chipData = null, chipTimer = null, chipDeleteAt = null; // v5.47：chipDeleteAt=两行卡「删除」按钮的目标时间戳
 let chipAutoHideTimer = null; // v7.3.2：已添加展示卡自动关闭定时器（bug a——浮卡常驻被误认「弹窗未关闭」）
@@ -3835,10 +3868,34 @@ function showChipForMatch(m, text) {
   const item = itemAfterMatch(text, m);
   chipData = { at: m.at, item: item };
   chipDeleteAt = null;
-  // v5.45：文案改版（用户拍板）——时间在前（裸文本节点防吃字），「添加提醒」蓝色 CTA 在后
-  //（按钮感；元素盒必需故用 span，动态板+SHELL_CSS 双板锁色防夜间吃字/反色）
+  // v5.45 定案文案顺序不变（时间在前、「添加提醒」在后）；v7.8.0（用户拍板方案 C）排版改三行小卡：
+  // 时间＋相对日 / 事项（单行省略号，截断代价归事项）/ 主按钮。旧胶囊 nowrap+92vw 在窄屏会把
+  // 尾随 CTA 整颗裁出屏幕，事项再长也必须让按钮完整可见可点。
+  timeChip.classList.remove('feedback'); // v7.8.0：从「已添加」展示卡直接切到未添加时间时不经过 hideTimeChip，残留 feedback 会让 CTA 卡丢手型光标
   timeChip.textContent = '';
-  timeChip.appendChild(document.createTextNode(fmtRemTime(m.at) + (item ? '　' + item : '')));
+  const hd = document.createElement('div');
+  hd.className = 'chip-hd';
+  const when = document.createElement('span');
+  when.className = 'chip-when';
+  when.appendChild(document.createTextNode(fmtRemTime(m.at))); // 裸文本节点防吃字（v5.45 规矩）
+  hd.appendChild(when);
+  const dayTxt = chipDayLabel(m.at);
+  if (dayTxt) {
+    const day = document.createElement('span');
+    day.className = 'chip-day';
+    day.textContent = dayTxt;
+    hd.appendChild(day);
+  }
+  timeChip.appendChild(hd);
+  if (item) {
+    const what = document.createElement('div');
+    what.className = 'chip-what';
+    what.textContent = item;
+    timeChip.appendChild(what);
+  }
+  const sep = document.createElement('div');
+  sep.className = 'chip-sep';
+  timeChip.appendChild(sep);
   const cta = document.createElement('span');
   cta.className = 'chip-cta';
   cta.textContent = '添加提醒';
@@ -3850,8 +3907,10 @@ function showChipForMatch(m, text) {
 function maybeShowTimeChip() {
   if (Date.now() < chipFeedbackUntil) return; // 「✅ 提醒已添加」两行确认卡展示中
   // v5.40：面板升级为全屏模态——遮罩挡正文，与 chip 回归互斥（下移错位方案退役）
+  // v7.8.0（对抗审 P1）：卡片长高后与草稿/冲突条同位 top:54px 且 z56>z55，条在位时浮卡会盖住
+  // 「保留本机/使用云端」并把点击吃进整卡 chipActivate（误加提醒）——沿「草稿冲突优先，不叠条」先例让位
   if (!cryptoKey || editor.getAttribute('contenteditable') === 'false' || isComposing ||
-      remPanelOpen || !remCard.classList.contains('hidden')) { hideTimeChip(); return; }
+      remPanelOpen || !remCard.classList.contains('hidden') || !isDraftBarHidden()) { hideTimeChip(); return; }
   const info = caretInfoInEditor();
   // v7.2.0：caret 不在时间上时，若 chip 是 hover 路弹出的则不越权收（两路互不误收）
   if (!info) { if (!chipFromHover) hideTimeChip(); return; }
@@ -3910,7 +3969,7 @@ if (CHIP_HOVER_OK) {
     hoverTimer = setTimeout(() => { // 200ms 防抖：划过不弹，停住才弹
       if (Date.now() < chipFeedbackUntil) return; // 确认卡展示中不抢
       if (!cryptoKey || editor.getAttribute('contenteditable') === 'false' || isComposing ||
-          remPanelOpen || !remCard.classList.contains('hidden')) { if (chipFromHover) hideTimeChip(); return; }
+          remPanelOpen || !remCard.classList.contains('hidden') || !isDraftBarHidden()) { if (chipFromHover) hideTimeChip(); return; }
       const info = hoverInfoFromPoint(x, y);
       if (!info) { if (chipFromHover) hideTimeChip(); return; }
       const m = matchTimeAt(info.text, info.offset);
