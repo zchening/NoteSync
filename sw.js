@@ -32,9 +32,9 @@ self.addEventListener('notificationclick', e => {
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET') return;
-  // html2canvas（CDN 版本固定 1.4.1）：内容不变，cache-first —— 离线时「导出为图片」不再失效。
-  // <script> 标签加载为 no-cors 请求，缓存的是 opaque response（状态 0），可整体缓存与命中。
-  if (url.hostname === 'cdn.jsdelivr.net' && url.pathname.includes('html2canvas')) {
+  // v7.5.1：html2canvas 改为同源 /html2canvas.min.js（懒加载，点导出时才拉）。cache-first ——
+  // 首次联网导出后即纳入缓存，之后离线「导出为图片」不再失效。同源普通响应（非 opaque），可整块缓存命中。
+  if (url.pathname === '/html2canvas.min.js') {
     e.respondWith(
       caches.match(e.request).then(r => r || fetch(e.request).then(resp => {
         const copy = resp.clone();

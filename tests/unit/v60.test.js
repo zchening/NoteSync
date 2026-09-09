@@ -25,7 +25,7 @@ test('T1 落盐不写空 ct + 接回 v + 在途写入闸门 + 服务端空 ct �
 
   assert.ok(!/apiPut\(\{\s*ct:\s*''/.test(src), '不得再用空 ct 覆写服务端（会清空并发端刚写入的正文）');
   assert.ok(src.includes("const rr = await apiPut({ ct: note.ct || '', iv: note.iv || '', salt: currentSaltB64() });"), '落盐应回写 GET 到的 ct/iv');
-  assert.ok(src.includes("if (rr && typeof rr.v === 'number') localVer = rr.v;"), '落盐必须接回 v 回写 localVer');
+  assert.ok(src.includes("if (rr && typeof rr.v === 'number') { localVer = rr.v; note.v = rr.v; }"), '落盐必须接回 v 回写 localVer，并同步 note.v 防 applyUnlocked 用旧快照覆盖回 0');
 
   assert.ok(src.includes('let inflightWrites = 0;'), '应有在途写入计数');
   assert.ok(src.includes('inflightWrites++;'), 'apiPut 发出时应 +1');
@@ -61,7 +61,8 @@ test('T3 右下角刷新按钮：1.7px 细线 + 44px 触控 + 复用 poll 冲突
   assert.ok(src.slice(btnIdx, btnIdx + 400).includes('stroke-width="1.7"'), '图标应是 1.7px 细线，与顶栏同族');
   assert.ok(src.includes('#refreshBtn.spinning svg{animation:spin'), '刷新中应有旋转反馈');
   assert.ok(src.includes("if (!cryptoKey) { showUploadStatus('请先解锁'); return; }"), '未解锁应明确提示，不静默');
-  assert.ok(src.includes('if (busy || inflightWrites > 0) return;'), '保存/写入在途时不重复拉');
+  assert.ok(src.includes('if (busy || inflightWrites > 0) {') && src.includes("showUploadStatus('正在保存中"), '保存/写入在途时不重复拉，且给轻提示不再纯静默（v7.5.1）');
+  assert.ok(!src.includes('if (busy || inflightWrites > 0) return;'), '旧的忙/在途纯静默 return 应退役');
   assert.ok(src.includes('try { await poll(); }'), '复用 poll——有未保存改动时走冲突卡，绝不静默覆盖');
 });
 

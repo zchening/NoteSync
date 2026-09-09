@@ -100,7 +100,7 @@ test('V732-S9 修复c：全部模态/浮层关闭路径 PC 端焦点归还（CHI
   const targets = [
     ['qrClose', /resetQrHolder\(\); qrMask\.classList\.add\('hidden'\); if \(CHIP_HOVER_OK\) \{ try \{ editor\.focus\(\); ensureCaret\(\); \} catch \(e\) \{\} \}/],
     ['aboutMask 点击关闭', /e\.target === aboutMask\) \{ aboutMask\.classList\.add\('hidden'\); if \(CHIP_HOVER_OK\) \{ try \{ editor\.focus\(\); ensureCaret\(\); \} catch \(e\) \{\} \}/],
-    ['diagMask 点击关闭', /e\.target === diagMask\) \{ diagMask\.classList\.add\('hidden'\); if \(CHIP_HOVER_OK\) \{ try \{ editor\.focus\(\); ensureCaret\(\); \} catch \(e\) \{\} \}/],
+    ['diagMask 点击关闭', /e\.target === diagMask\) \{ diagMask\.classList\.add\('hidden'\); (?:hideUploadStatus\(\); )?if \(CHIP_HOVER_OK\) \{ try \{ editor\.focus\(\); ensureCaret\(\); \} catch \(e\) \{\} \}/],
     ['menuTheme', /menuMask\.classList\.add\('hidden'\); themeBtn\.click\(\); if \(CHIP_HOVER_OK\) \{ try \{ editor\.focus\(\); ensureCaret\(\); \} catch \(e\) \{\} \}/],
     ['cpCancel', /cpMask\.classList\.add\('hidden'\); if \(CHIP_HOVER_OK\) \{ try \{ editor\.focus\(\); ensureCaret\(\); \} catch \(e\) \{\} \}/],
     ['cpRotate 成功', /cpMask\.classList\.add\('hidden'\); cpReset\(\);\r?\n\s{8}if \(CHIP_HOVER_OK\) \{ try \{ editor\.focus\(\); ensureCaret\(\); \} catch \(e\) \{\} \}/],

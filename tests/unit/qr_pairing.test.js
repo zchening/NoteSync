@@ -87,10 +87,10 @@ test('内联 qrcode 库可为真实配对 URL 生成模块矩阵', () => {
 });
 
 // ── Q5：版本号 ──────────────────────────────
-test('APP_VERSION 为 7.5.0', () => {
+test('APP_VERSION 为 7.6.0', () => {
   const fs = require('fs');
   const src = fs.readFileSync(require('../helpers').INDEX_PATH, 'utf8');
-  assert.ok(src.includes("const APP_VERSION = '7.5.0';"), 'index.html 应声明 APP_VERSION = 7.5.0');
+  assert.ok(src.includes("const APP_VERSION = '7.6.0';"), 'index.html 应声明 APP_VERSION = 7.6.0');
 });
 
 // ── Q5b：v5.48 键盘视口策略（Chrome 安卓菜单栏被顶飞修复）──
@@ -130,4 +130,31 @@ test('v5.27 biji 域直出自身域名（无中转），与 note 分支并列', 
   const src = fs.readFileSync(require('../helpers').INDEX_PATH, 'utf8');
   assert.ok(src.includes("location.hostname === 'biji.xuyinji.com.cn'"), 'biji 分支应在 buildPairingUrl 中显式声明');
   assert.ok(/'https:\/\/biji\.xuyinji\.com\.cn\/' \+ encodeURIComponent\(noteId\) \+ '#k=' \+ b64ToUrlSafe\(b64\)/.test(src), 'biji 分支应直出 biji.xuyinji.com.cn/<id>#k=...（无中转）');
+});
+
+// ── Q9：v7.5.1 去掉二维码 60 秒自动隐藏 ──────────────────
+test('v7.5.1 去掉二维码 60 秒自动隐藏', () => {
+  const fs = require('fs');
+  const src = fs.readFileSync(require('../helpers').INDEX_PATH, 'utf8');
+  assert.ok(!src.includes('setTimeout(resetQrHolder, 60000)'), 'revealQr 的 60s 自动隐藏应移除（弹窗开着码常驻，仅关闭才清）');
+});
+
+// ── Q10：v7.5.1 点码全屏放大（纯白、压于遮罩上、点任意处收回）──
+test('v7.5.1 配对码点按全屏放大', () => {
+  const fs = require('fs');
+  const src = fs.readFileSync(require('../helpers').INDEX_PATH, 'utf8');
+  assert.ok(src.includes("cv.addEventListener('click', () => showQrLarge(url))"), '弹窗码应绑定点击→全屏放大');
+  assert.ok(src.includes('function showQrLarge(') && src.includes('function hideQrLarge('), '应有 showQrLarge/hideQrLarge');
+  assert.ok(/#qrLarge\{[^}]*z-index:300[^}]*background:#fff/.test(src), '放大层应全屏纯白、z-index 高于遮罩(10) 压在弹窗之上');
+  assert.ok(src.includes("el.addEventListener('click', hideQrLarge)"), '点放大层任意处应收回原弹窗');
+});
+
+// ── Q11：v7.5.1 静默 wakeLock（特性检测 + 开申请/关释放 + 零用户可见提示）──
+test('v7.5.1 配对期间静默屏幕常亮且无界面提示', () => {
+  const fs = require('fs');
+  const src = fs.readFileSync(require('../helpers').INDEX_PATH, 'utf8');
+  assert.ok(src.includes("if (!('wakeLock' in navigator) || !navigator.wakeLock || !navigator.wakeLock.request) return;"), 'wakeLock 必须特性检测，不支持即静默跳过');
+  assert.ok(/revealQr\(\);\s*\n\s*acquireQrWakeLock\(\);/.test(src), '打开配对弹窗（解锁态）应申请常亮');
+  assert.ok(src.includes('hideQrLarge(); releaseQrWakeLock(); resetQrHolder();'), '关闭配对应释放常亮并收回放大层');
+  assert.ok(!src.includes('已保持常亮') && !/showUploadStatus\([^)]*常亮/.test(src) && !/setStatus\([^)]*常亮/.test(src), '不得向用户展示任何“屏幕常亮/防熄屏”类提示文案');
 });

@@ -107,7 +107,7 @@ test('V61-9 诊断模态：主题前景色可读、collectDiagLines 快照、复
   assert.ok(src.includes('#diagContent{margin:0 0 14px;padding:12px;background:var(--hover);border-radius:10px;font:13px/1.6 ui-monospace,Consolas,monospace;color:var(--fg)'), '诊断正文应用主题前景色（日夜可读）');
   assert.ok(src.includes('navigator.clipboard.writeText(txt).then(done, () => fallbackCopyText(txt, done))'), '复制应有 clipboard+降级双路');
   assert.ok(/diagMask\.addEventListener\('click', e => \{ if \(e\.target === diagMask\) \{ diagMask\.classList\.add\('hidden'\);[\s\S]{0,120}editor\.focus\(\);/.test(src), '点弹窗外应关闭并归还焦点');
-  assert.ok(src.includes("editor.addEventListener('scroll', () => { if (!diagMask.classList.contains('hidden')) diagMask.classList.add('hidden'); })"), '滚动笔记应自动关闭');
+  assert.ok(src.includes("editor.addEventListener('scroll', () => { if (!diagMask.classList.contains('hidden')) { diagMask.classList.add('hidden'); hideUploadStatus(); } })"), '滚动笔记应自动关闭（并清提示 v7.5.1）');
   assert.ok(src.includes('复制诊断信息'), '应有复制按钮文案');
 });
 
@@ -158,10 +158,10 @@ test('V61-13 扫码提示分流：HTTPS/组件失败/无摄像头/权限拒绝 �
 // ── 14. 版本升格（v7.0 起断言跟随最新版）──
 test('V61-14 版本升格：APP_VERSION 7.0.1 / BUILD_DATE / gradle 701+7.0.1 / README 条目 ≤40 汉字', () => {
   const src = readSrc();
-  assert.ok(src.includes("const APP_VERSION = '7.5.0';"), 'APP_VERSION 应 7.5.0');
-  assert.ok(src.includes("const BUILD_DATE = '2026-09-08';"), 'BUILD_DATE 应更新');
+  assert.ok(src.includes("const APP_VERSION = '7.6.0';"), 'APP_VERSION 应 7.6.0');
+  assert.ok(src.includes("const BUILD_DATE = '2026-09-09';"), 'BUILD_DATE 应更新');
   const gradle = readRel('android/app/build.gradle');
-  assert.ok(gradle.includes('versionCode 750') && gradle.includes('versionName "7.5.0"'), 'gradle 应 750/7.5.0');
+  assert.ok(gradle.includes('versionCode 760') && gradle.includes('versionName "7.6.0"'), 'gradle 应 760/7.6.0');
   const readme = readRel('README.md');
   const row = (readme.match(/^\| v7\.0\.1 \|[^|]+\|([^|]+)\|/m) || [])[1] || '';
   const hz = (row.match(/[一-龥]/g) || []).length;

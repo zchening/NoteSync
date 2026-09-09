@@ -20,7 +20,8 @@
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" href="/favicon.svg?v=5.14" type="image/svg+xml">
 <title>NoteSync</title>
-<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<!-- v7.5.1：html2canvas 不再挂公共 CDN（jsdelivr 在大陆常不可达→手机「图片导出组件未加载」）。
+     改为导出时从同源 /html2canvas.min.js 懒加载（见 loadHtml2Canvas），与 jsQR 同范式。 -->
 <style>
   :root{
     --bg:#FBFBF8; --fg:#1C1C1A; --muted:#98958A; --line:#ECEAE2;
@@ -252,6 +253,11 @@
   #qrHolder{display:flex;align-items:center;justify-content:center;min-height:236px;margin:0 0 12px}
   #qrHolder button{width:100%}
   #qrCanvas{border-radius:12px;border:1px solid var(--line);background:#fff;max-width:100%}
+  /* v7.5.1：点码全屏放大（反光/夜里更好扫）——放大层纯白铺满、码放大约 88vmin、pixelated 保边缘锐利 */
+  #qrHolder #qrCanvas{cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+  #qrLarge{position:fixed;inset:0;z-index:300;background:#fff;display:none;align-items:center;justify-content:center;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+  #qrLarge.show{display:flex}
+  #qrLarge canvas{width:88vmin;height:88vmin;max-width:92vw;max-height:92vh;display:block;image-rendering:pixelated}
   .qr-warn{font-size:12px;color:#C0453E;line-height:1.65;margin:0 0 16px}
   .qr-lock-warn{font-size:13px;color:var(--muted)}
 
@@ -514,8 +520,8 @@ function markJumped() {
 }
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '7.5.0';
-const BUILD_DATE = '2026-09-08';
+const APP_VERSION = '7.6.0';
+const BUILD_DATE = '2026-09-09';
 
 const $ = s => document.querySelector(s);
 const editor = $('#editor'), mask = $('#mask'), pw = $('#pw'), err = $('#err');
@@ -534,6 +540,15 @@ const copyBtn = $('#copyBtn'), exportImgBtn = $('#exportImgBtn');
   b.addEventListener('pointerdown', e => { if (e.pointerType === 'mouse') e.preventDefault(); });
   b.addEventListener('mousedown', e => { if (e.button === 0) e.preventDefault(); });
 });
+
+// v7.5.1：工具栏图标「开弹层/写剪贴板前收键盘」——footer/工具栏按钮不可聚焦，触屏点它们抢不走编辑器
+// 焦点；随后全屏弹层（菜单/二维码/提醒）重排或 clipboard.write 会让安卓把仍聚焦的可编辑框软键盘重新弹起
+// （用户实测「光标在笔记内点 ☰/二维码/复制/闹钟 弹键盘」）。仅触屏主动 blur 收 IME；桌面（CHIP_HOVER_OK）
+// 行为零变化（其关闭路径本就按 CHIP_HOVER_OK 归位光标），故只在 !CHIP_HOVER_OK 时执行。
+function dismissKeyboardForTouch() {
+  // 组字中绝不 blur（iOS/部分 WebView 在 composition 期 blur 会吞字；对齐"组字期禁程序化干预"红线）
+  if (!CHIP_HOVER_OK && !isComposing && document.activeElement === editor) { try { editor.blur(); } catch (e) {} }
+}
 
 // 输入法组字状态：组字期间（拼音未上屏）任何对选区/caret 的程序化干预都会吞字，一律跳过。
 let isComposing = false;
@@ -1906,6 +1921,7 @@ fileInput.addEventListener('change', e => {
 
 // --- 复制到剪贴板 ---
 copyBtn.addEventListener('click', async () => {
+  dismissKeyboardForTouch(); // v7.5.1：光标在笔记内点复制不弹软键盘（blur 不改动编辑器内容）
   try {
     // ZWSP（\u200B）仅用于编辑器内长词/链接断行，复制出去会污染其它应用，剥离
     const html = editor.innerHTML.replace(/\u200B/g, '');
@@ -1928,10 +1944,29 @@ copyBtn.addEventListener('click', async () => {
 });
 
 // --- 导出为图片并复制 ---
+// v7.5.1：html2canvas 自托管 + 懒加载（点导出时才从同源 /html2canvas.min.js 拉一次，之后复用）。
+// 不再依赖公共 CDN，规避大陆网络下 jsdelivr 不可达导致的「图片导出组件未加载」。范式对齐 loadJsQR。
+function loadHtml2Canvas() {
+  return new Promise(resolve => {
+    if (typeof window.html2canvas === 'function') return resolve(true);
+    const s = document.createElement('script');
+    s.src = '/html2canvas.min.js';
+    s.onload = () => {
+      const ok = typeof window.html2canvas === 'function';
+      if (!ok) console.error('[export] /html2canvas.min.js 已加载但 window.html2canvas 非函数（检查文件内容/UMD 形态）');
+      resolve(ok);
+    };
+    s.onerror = e => {
+      console.error('[export] /html2canvas.min.js 加载失败（服务端未部署该文件 / 断网 / CSP script-src 缺 \'self\'）', e);
+      resolve(false);
+    };
+    document.head.appendChild(s);
+  });
+}
 async function exportImage() {
-  if (typeof html2canvas === 'undefined') {
-    showUploadStatus('图片导出组件未加载');
-    setTimeout(hideUploadStatus, 2000);
+  if (typeof window.html2canvas !== 'function' && !(await loadHtml2Canvas())) {
+    showUploadStatus('图片导出组件加载失败，请检查网络后重试');
+    setTimeout(hideUploadStatus, 2400);
     return;
   }
   showUploadStatus('正在生成图片…');
@@ -2028,15 +2063,20 @@ function buildPairingUrl() {
   // 本地/自建部署：直连当前源，无中转环节
   return location.origin + '/' + encodeURIComponent(noteId) + '#k=' + b64ToUrlSafe(b64);
 }
-function drawQrTo(canvas, text) {
+function drawQrTo(canvas, text, wantPx) {
   const qr = qrcode(0, 'M'); // typeNumber=0 自动选版本；纠错级别 M
   qr.addData(text, 'Byte');
   qr.make();
-  const n = qr.getModuleCount(), scale = 5, quiet = scale * 4; // 4 模块静区
+  const n = qr.getModuleCount();
+  // 弹窗态（wantPx 省略）：固定 scale 5、显示 min(size,260)；放大态：按目标位图宽度反推整数 scale，
+  // 使位图约 wantPx 宽（含两侧各 4 模块静区 → 共 n+8 模块），再交给 CSS(#qrLarge canvas) 放大显示 → 边缘锐利利于扫码。
+  let scale, shown;
+  if (wantPx) { scale = Math.max(4, Math.floor(wantPx / (n + 8))); }
+  else { scale = 5; }
+  const quiet = scale * 4;
   const size = n * scale + quiet * 2;
   canvas.width = size; canvas.height = size;
-  const shown = Math.min(size, 260);
-  canvas.style.width = shown + 'px'; canvas.style.height = shown + 'px';
+  if (!wantPx) { shown = Math.min(size, 260); canvas.style.width = shown + 'px'; canvas.style.height = shown + 'px'; }
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, size, size);
   ctx.fillStyle = '#111111';
@@ -2079,16 +2119,53 @@ async function revealQr() {
   const cv = document.createElement('canvas');
   cv.id = 'qrCanvas';
   try { drawQrTo(cv, url); } catch (e) { resetQrHolder(); return; }
+  cv.addEventListener('click', () => showQrLarge(url)); // v7.5.1：点码全屏放大，方便反光/夜里对拍
   qrHolder.appendChild(cv);
-  clearTimeout(qrHideTimer);
-  qrHideTimer = setTimeout(resetQrHolder, 60000); // 60 秒自动隐藏，缩短密钥暴露窗口
+  // v7.5.1：去掉 60 秒自动隐藏——弹窗开着就让码常驻，仅点「关闭」才清；切后台只释放常亮、不自动收码
 }
 qrBtn.addEventListener('click', () => { // v5.21 直出：打开弹层即渲染二维码，无需二次点击
+  dismissKeyboardForTouch(); // v7.5.1：光标在笔记内点二维码不弹软键盘
   qrMask.classList.remove('hidden');
   if (!cryptoKey) { resetQrHolder(); return; } // 锁定态：显示"解锁后才可用"提示
   revealQr();
+  acquireQrWakeLock(); // v7.5.1：配对期间静默申请屏幕常亮（仅防闲置变暗/息屏，不改亮度、无任何界面提示）
 });
-$('#qrClose').addEventListener('click', () => { resetQrHolder(); qrMask.classList.add('hidden'); if (CHIP_HOVER_OK) { try { editor.focus(); ensureCaret(); } catch (e) {} } });
+$('#qrClose').addEventListener('click', () => { hideQrLarge(); releaseQrWakeLock(); resetQrHolder(); qrMask.classList.add('hidden'); if (CHIP_HOVER_OK) { try { editor.focus(); ensureCaret(); } catch (e) {} } });
+// v7.5.1：全屏放大配对码（反光/夜里更好扫）——纯白铺满、点任意处收回原弹窗；全程无文字提示。
+function showQrLarge(url) {
+  let el = document.getElementById('qrLarge');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'qrLarge';
+    el.addEventListener('click', hideQrLarge); // 点放大层任意处 → 收回（弹窗仍在）
+    document.body.appendChild(el);
+  }
+  el.innerHTML = '';
+  const cv = document.createElement('canvas');
+  // 位图按 88vmin 的设备像素（含 DPR）取高 scale，再交 CSS 显示 → 边缘锐利，摄像头更易分辨
+  const vmin = Math.min(window.innerWidth, window.innerHeight);
+  const wantPx = Math.max(480, Math.floor(vmin * 0.88 * (window.devicePixelRatio || 2)));
+  try { drawQrTo(cv, url, wantPx); } catch (e) { return; }
+  el.appendChild(cv);
+  el.classList.add('show');
+}
+function hideQrLarge() { const el = document.getElementById('qrLarge'); if (el) el.classList.remove('show'); }
+let qrWakeLock = null;
+async function acquireQrWakeLock() {
+  try {
+    if (!('wakeLock' in navigator) || !navigator.wakeLock || !navigator.wakeLock.request) return; // 特性检测：不支持即静默跳过
+    if (qrWakeLock && !qrWakeLock.__released) return;
+    const s = await navigator.wakeLock.request('screen');
+    if (qrMask.classList.contains('hidden') || document.hidden) { try { s.release().catch(() => {}); } catch (e) {} return; } // 开→秒关/切后台竞态：弹窗已关则立即释放，不留常亮句柄
+    s.addEventListener('release', () => { s.__released = true; if (qrWakeLock === s) qrWakeLock = null; });
+    qrWakeLock = s;
+  } catch (e) {}
+}
+function releaseQrWakeLock() { try { if (qrWakeLock) { qrWakeLock.release().catch(() => {}); qrWakeLock = null; } } catch (e) {} }
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') { if (!qrMask.classList.contains('hidden')) acquireQrWakeLock(); }
+  else releaseQrWakeLock(); // 切后台：释放常亮（系统本也会回收）；不自动收码
+});
 
 // --- 解锁 ---
 async function applyUnlocked(key, note) {
@@ -2180,7 +2257,7 @@ async function unlock(pass) {
           await decryptText(note.ct, note.iv, k2); // 服务端正文校验：证明服务端密文同盐
           serverSalt = b64ToBuf(c.salt);
           key = k2;
-          if (!note.salt) { try { const rr2 = await apiPut({ ct: note.ct, iv: note.iv, salt: c.salt }); if (rr2 && typeof rr2.v === 'number') localVer = rr2.v; } catch (e2) {} } // 回写盐（v6.0：接回 v，避免 localVer 落后误报冲突）
+          if (!note.salt) { try { const rr2 = await apiPut({ ct: note.ct, iv: note.iv, salt: c.salt }); if (rr2 && typeof rr2.v === 'number') { localVer = rr2.v; note.v = rr2.v; } } catch (e2) {} } // 回写盐（v6.0：接回 v，避免 localVer 落后误报冲突；v7.5.1：同步 note.v 防 applyUnlocked 用旧快照覆盖回 0 → baseV 恒 0 永久 409）
           healed = true;
         } catch (e2) { healed = false; }
       }
@@ -2192,7 +2269,7 @@ async function unlock(pass) {
   if (!note.salt) {
     try {
       const rr = await apiPut({ ct: note.ct || '', iv: note.iv || '', salt: currentSaltB64() });
-      if (rr && typeof rr.v === 'number') localVer = rr.v;
+      if (rr && typeof rr.v === 'number') { localVer = rr.v; note.v = rr.v; } // v7.5.1：同步 note.v，防紧随的 applyUnlocked:2102 用旧快照(note.v=0)把 localVer 覆盖回 0 → 首端 baseV 恒 0 永久 409、正文永不落库
     } catch (e) {}
   }
   await applyUnlocked(key, note);
@@ -3058,8 +3135,13 @@ function showOfflineBar(ts) {
 const refreshBtnEl = document.getElementById('refreshBtn');
 if (refreshBtnEl) {
   refreshBtnEl.addEventListener('click', async () => {
-    if (!cryptoKey) { showUploadStatus('请先解锁'); return; }
-    if (busy || inflightWrites > 0) return;
+    if (!cryptoKey) { showUploadStatus('请先解锁'); setTimeout(() => { if (uploadStatus.textContent === '请先解锁') hideUploadStatus(); }, 2000); return; }
+    hideUploadStatus(); // v7.5.1：点刷新先清掉可能卡住的临时提示（与浏览器刷新的观感对齐）
+    if (busy || inflightWrites > 0) { // v7.5.1：忙/在途写入窗口不再纯静默无反馈
+      showUploadStatus('正在保存中，稍候自动同步');
+      setTimeout(() => { if (uploadStatus.textContent.indexOf('正在保存中') === 0) hideUploadStatus(); }, 1500);
+      return;
+    }
     refreshBtnEl.classList.add('spinning');
     try { await poll(); } finally { setTimeout(() => refreshBtnEl.classList.remove('spinning'), 450); }
   });
@@ -4534,7 +4616,7 @@ function askRemPermission() {
     }
   } catch (e) {}
 }
-remBtn.addEventListener('click', () => { if (!cryptoKey) return; toggleRemPanel(); });
+remBtn.addEventListener('click', () => { if (!cryptoKey) return; dismissKeyboardForTouch(); toggleRemPanel(); });
 
 // ── 页脚 ☰ 菜单（v5.54）：返回首页 / 收藏切换 / 收藏夹 ──
 // 收藏纯本机（localStorage，不碰服务器——笔记名本就明文在 URL，无新增暴露面）；
@@ -4605,7 +4687,10 @@ function renderMenu() {
     list.appendChild(row);
   });
 }
-$('#menuBtn').addEventListener('click', () => { renderMenu(); menuMask.classList.remove('hidden'); });
+$('#menuBtn').addEventListener('click', () => {
+  dismissKeyboardForTouch(); // v7.5.1：光标在笔记内点 ☰ 不弹软键盘（见 helper 注释）
+  renderMenu(); menuMask.classList.remove('hidden');
+});
 menuMask.addEventListener('click', e => { if (e.target === menuMask) { menuMask.classList.add('hidden'); if (CHIP_HOVER_OK) { try { editor.focus(); ensureCaret(); } catch (e) {} } } });
 // v6.2：菜单盒右上角 X（menuClose）退役——遮罩空白点击关闭（上行）已覆盖三视图退出路径
 // v5.55：主视图 ↔ 收藏夹二级视图
@@ -4666,11 +4751,17 @@ function openDiagModal() {
   const pre = $('#diagContent');
   try { pre.textContent = window.collectDiagLines().join('\n'); }
   catch (e) { pre.textContent = '诊断信息生成失败: ' + (e && e.message || e); }
+  hideUploadStatus(); // v7.5.1：打开诊断前清掉残留提示，避免与诊断内的 toast 叠加
   diagMask.classList.remove('hidden');
 }
 $('#diagCopy').addEventListener('click', () => {
   const txt = $('#diagContent').textContent || '';
-  const done = () => showUploadStatus('已复制诊断信息');
+  const done = () => {
+    showUploadStatus('已复制诊断信息');
+    // v7.5.1 主修：旧版此处漏排 setTimeout(hideUploadStatus) → 「已复制诊断信息」常驻，只能整页刷新才消失。
+    // 补自动隐藏，并加「文案仍是它才清」守卫，防误清随后出现的新提示。
+    setTimeout(() => { if (uploadStatus.textContent === '已复制诊断信息') hideUploadStatus(); }, 2200);
+  };
   if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done, () => fallbackCopyText(txt, done));
   else fallbackCopyText(txt, done);
 });
@@ -4681,9 +4772,9 @@ function fallbackCopyText(txt, done) {
   try { if (document.execCommand('copy')) done(); } catch (e) {}
   ta.remove();
 }
-diagMask.addEventListener('click', e => { if (e.target === diagMask) { diagMask.classList.add('hidden'); if (CHIP_HOVER_OK) { try { editor.focus(); ensureCaret(); } catch (e) {} } } });
+diagMask.addEventListener('click', e => { if (e.target === diagMask) { diagMask.classList.add('hidden'); hideUploadStatus(); if (CHIP_HOVER_OK) { try { editor.focus(); ensureCaret(); } catch (e) {} } } });
 // 滚动笔记自动关闭诊断模态（用户拍板：滚动即视为离开诊断）
-editor.addEventListener('scroll', () => { if (!diagMask.classList.contains('hidden')) diagMask.classList.add('hidden'); });
+editor.addEventListener('scroll', () => { if (!diagMask.classList.contains('hidden')) { diagMask.classList.add('hidden'); hideUploadStatus(); } });
 // v5.58：三端菜单/左下角布局统一——扫一扫、日夜间切换、退出锁定全平台可见（平台差异化机制退役），
 // 顶栏 themeBtn/lock 全平台移除（见样式区 #themeBtn, #lock{display:none}）
 $('#menuTheme').addEventListener('click', () => { menuMask.classList.add('hidden'); themeBtn.click(); if (CHIP_HOVER_OK) { try { editor.focus(); ensureCaret(); } catch (e) {} } });

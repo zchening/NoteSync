@@ -51,6 +51,16 @@ function startServer() {
       return;
     }
 
+    // v7.5.1：懒加载库占位——e2e 不真引入 ~199KB html2canvas/jsQR。返回合法 JS（故意不定义全局），
+    // 使 loadHtml2Canvas()/loadJsQR() 走「加载成功但库缺失 → 优雅降级」路径；
+    // 否则会被下面 SPA 回退成 index.html(text/html)，作为经典 <script> 执行报 SyntaxError 污染 pageerror，令 V529 等用例非确定红。
+    if (p === '/html2canvas.min.js' || p === '/jsQR.js') {
+      res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.end('/*e2e stub: ' + p + ' intentionally undefined*/');
+      return;
+    }
+
     // SPA 回退：任何非 api、非已知静态文件的路径都返回 index.html，
     // 让 '/<noteName>' 等笔记路径在刷新/直达时也能正确加载应用。
     sendFile(res, path.join(ROOT, 'index.html'), 'text/html; charset=utf-8');

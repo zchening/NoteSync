@@ -83,7 +83,7 @@ test('H5 server.js 空盐不覆写 + currentSaltB64 三处兜底 + 自愈 + 诊�
   const offIdx = src.indexOf('serverSalt = b64ToBuf(c.salt); // v5.58：离线解锁路径也落地 serverSalt');
   assert.ok(offIdx > -1, '离线缓存解锁路径应落地 serverSalt');
   assert.ok(src.includes('let healed = false;') && src.includes('if (!healed) { await reportFail(); return; }'), '解锁失败应先走缓存盐自愈，两步都不过才计失败');
-  assert.ok(src.includes('if (!note.salt) { try { const rr2 = await apiPut({ ct: note.ct, iv: note.iv, salt: c.salt }); if (rr2 && typeof rr2.v === \'number\') localVer = rr2.v; } catch (e2) {} }'), '自愈成功应回写服务端盐并接回 v（v6.0 起同步 localVer）');
+  assert.ok(src.includes('if (!note.salt) { try { const rr2 = await apiPut({ ct: note.ct, iv: note.iv, salt: c.salt }); if (rr2 && typeof rr2.v === \'number\') { localVer = rr2.v; note.v = rr2.v; } } catch (e2) {} }'), '自愈成功应回写服务端盐并接回 v（v6.0 起同步 localVer；v7.5.1 起同步 note.v 防 applyUnlocked 覆盖）');
   assert.ok(src.includes("'salt=' + (typeof serverSalt !== 'undefined' && serverSalt ? 'ok' : 'NONE')"), '诊断应含服务端盐状态');
   assert.ok(src.includes("'  cacheSalt='"), '诊断应含缓存盐状态');
 });

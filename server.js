@@ -377,6 +377,16 @@ const server = http.createServer((req, res) => {
         return;
       }
     }
+    // v7.5.1：html2canvas 自托管（导出图片用）——替代公共 CDN jsdelivr（大陆常不可达→「图片导出组件未加载」）。
+    // 独立文件不内联进 index.html：约 199KB 只在点导出时懒加载一次（immutable 缓存，离线经 SW cache-first 兜底）。
+    if (url === '/html2canvas.min.js') {
+      const f = path.join(APP_DIR, 'html2canvas.min.js');
+      if (fs.existsSync(f)) {
+        res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'public, max-age=31536000, immutable' });
+        fs.createReadStream(f).pipe(res);
+        return;
+      }
+    }
     // v6.3：MCP 工具公开下载（零知识不破——这两个文件不含任何秘密，口令走调用端 env）。
     // 新机器接入：curl 拿 setup 脚本 → 跑一条命令自动写 mcp.json，免 clone 免手工配置。
     // 精确文件名白名单（url 完全匹配才命中），无路径穿越面；no-cache 保证拿到最新版。
