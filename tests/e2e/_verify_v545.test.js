@@ -384,12 +384,17 @@ test('V547-2 已添加提醒处于 30 秒过期判定窗口内（下划线在）
     await page.keyboard.press('Control+End');
     // 等到秒数≥30：下一个分钟边界必落在 (now, now+30s] 过期判定窗口内
     //（此窗口内旧逻辑 expired 先拦 chip、下划线却还在 → 「有下划线不弹卡」）
-    await page.waitForFunction(() => new Date().getSeconds() >= 30, null, { timeout: 35000 });
+    // v8.0.2 漂移修：旧「秒≥30 即走」在并发饿死下 rAF 轮询可迟滞到 :5X 才命中——目标整点仅剩几秒,
+    // addViaPanelAt 面板流程超时即破坏前提（提醒先触发→不弹卡, T2 轮2 V547-2 实锤）。
+    // 改「落进 :30–:42 窄带」（500ms 轮询最坏 :42.5, 对目标分钟恒留 ≥17.5s 缓冲）+ 前提自诊断。
+    await page.waitForFunction(() => { const s = new Date().getSeconds(); return s >= 30 && s <= 42; }, null, { timeout: 130000, polling: 500 });
     const t = new Date(Date.now());
     t.setSeconds(0, 0);
     t.setMinutes(t.getMinutes() + 1);
     const ymd = t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0');
     await addViaPanelAt(page, ymd, String(t.getHours()), String(t.getMinutes()).padStart(2, '0'), '快到点了');
+    const preface = await page.evaluate((tt) => Date.now() < tt, t.getTime());
+    assert.ok(preface, '前提守护：面板添加完成时目标分钟尚未到达（此红=addViaPanelAt 超 17.5s 缓冲，查环境并发负载而非产品）');
     // 程序化把光标放进下划线时间串（本用例测阈值逻辑，鼠标路径由 V547-1 覆盖）
     await page.evaluate(() => {
       const ed = document.getElementById('editor');

@@ -1,5 +1,5 @@
 // v8.0.1 抽屉菜单「图标列起线齐」真浏览器几何守护（发版闸 R3 建议：静态断言无 computed 层=jsdom 伪绿同族盲区）。
-// 断言 #menuMainView 九行行首 svg 视口 x 全等（±1px）——任何让 .menu-item 回到整组居中/参差的改动必红。
+// 断言 #menuMainView 可见行行首 svg 与标签列视口 x 各自全等（±1px）+ 标签不溢出定宽列——对齐性/均衡性任何回潮必红。
 const { test, before, after } = require('node:test');
 const assert = require('node:assert');
 const { setup, teardown } = require('./harness');
@@ -23,13 +23,23 @@ test('M1 桌面+移动双视口九行 svg.x 全等（±1px，v8.0.1 左列对齐
     await page.waitForFunction(() => !document.getElementById('menuMask').classList.contains('hidden'), { timeout: 3000 });
     const r = await page.evaluate(() => {
       // 只量可见行：#menuFav（收藏笔记）未开笔记时 display:none 属既有设计，隐藏行 rect 全 0 会假报参差
-      const xs = [...document.querySelectorAll('#menuMainView .menu-item')]
-        .filter(r => r.offsetParent !== null)
-        .map(r => r.querySelector('svg').getBoundingClientRect().x);
-      return { n: xs.length, spread: Math.max(...xs) - Math.min(...xs) };
+      const rows = [...document.querySelectorAll('#menuMainView .menu-item')].filter(r => r.offsetParent !== null);
+      const xs = rows.map(r => r.querySelector('svg').getBoundingClientRect().x);
+      // v8.0.2 定宽标签列：文字起线同样必须全等，且长标签「关于 NoteSync」不得溢出列宽
+      const labels = rows.map(r => r.querySelector('.mi-l, #menuThemeLabel')).filter(Boolean);
+      window.__lx = labels.map(l => l.getBoundingClientRect().x);
+      window.__fit = labels.map(l => l.scrollWidth - l.clientWidth);
+      window.__h = rows.map(r => r.getBoundingClientRect().height);
+      return { n: xs.length, spread: Math.max(...xs) - Math.min(...xs),
+               lspread: Math.max(...window.__lx) - Math.min(...window.__lx),
+               overflow: Math.max(...window.__fit),
+               hspread: Math.max(...window.__h) - Math.min(...window.__h) };
     });
     assert.ok(r.n >= 8, '主菜单可见行图标数应 ≥8（收藏行条件隐藏），实测 ' + r.n);
     assert.ok(r.spread <= 1, '图标列 x 参差应 ≤1px，实测 spread=' + r.spread.toFixed(3) + 'px @' + viewport.width);
+    assert.ok(r.lspread <= 1, '文字起线 x 参差应 ≤1px，实测 ' + r.lspread.toFixed(3) + 'px @' + viewport.width);
+    assert.ok(r.overflow <= 2, '标签不得溢出定宽列（scrollWidth-clientWidth），实测 ' + r.overflow + 'px @' + viewport.width);
+    assert.ok(r.hspread <= 1, '行高必须全等（定宽列若换行会撑高=盲区补位），实测 ' + r.hspread.toFixed(2) + 'px @' + viewport.width);
     await page.close();
   }
 });

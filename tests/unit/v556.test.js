@@ -195,8 +195,8 @@ test('F8 MainActivity assets 兜底 + RemPlugin.cacheInfo + build.gradle/CI 版�
   assert.ok(plugin.includes('MainActivity.interceptCount'), 'cacheInfo 应读 MainActivity 计数');
 
   const gradle = fs.readFileSync(path.join(__dirname, '..', '..', 'android', 'app', 'build.gradle'), 'utf8');
-  assert.ok(gradle.includes('versionCode 801'), 'build.gradle versionCode 应 bump 为 801（v8.0.1）');
-  assert.ok(gradle.includes('versionName "8.0.1"'), 'build.gradle versionName 应 bump 为 8.0.1');
+  assert.ok(gradle.includes('versionCode 802'), 'build.gradle versionCode 应 bump 为 802（v8.0.2）');
+  assert.ok(gradle.includes('versionName "8.0.2"'), 'build.gradle versionName 应 bump 为 8.0.2');
 
   const wf = fs.readFileSync(path.join(__dirname, '..', '..', '.github', 'workflows', 'build-apk.yml'), 'utf8');
   assert.ok(wf.includes('GITHUB_REF_NAME#v'), 'CI 应从 tag 注入 versionName（v5.55 APK 自报 5.54 的治本）');

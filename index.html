@@ -195,10 +195,12 @@
   #menuBtn svg{width:19px;height:19px;display:block}
   #menuBox{width:min(86vw,300px);text-align:left;padding:14px 16px} /* v7.0.1：上下再瘦（20→14px）配合按钮瘦身，小屏一屏放下 9 项 */
   /* v5.58：菜单项触控区全端加大（原 v5.57 只在 APP 端加大，用户要求三端一致） */
-  .menu-item{display:flex;align-items:center;justify-content:flex-start;gap:12px;box-sizing:border-box;width:100%;padding:9px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:5px;cursor:pointer;color:var(--fg);font-size:15px;min-height:42px;line-height:1.4;touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:border-color .2s} /* v7.0.1：改 flex（行框与图标尺寸解耦）+瘦身（48→42px、margin 7→5px），图标可独立加大而按钮变矮；text-align:center 由 justify-content 接管 */ /* v8.0.1：center→flex-start+gap12——字数长短不再让图标列锯齿（用户报「菜单乱」根因=整组居中），起线齐=编辑部列表规矩 */
+  .menu-item{display:flex;align-items:center;justify-content:center;gap:12px;box-sizing:border-box;width:100%;padding:9px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:5px;cursor:pointer;color:var(--fg);font-size:15px;min-height:42px;line-height:1.4;touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:border-color .2s} /* v7.0.1：改 flex（行框与图标尺寸解耦）+瘦身（48→42px、margin 7→5px），图标可独立加大而按钮变矮；text-align:center 由 justify-content 接管 */ /* v8.0.1：center→flex-start+gap12——字数长短不再让图标列锯齿（用户报「菜单乱」根因=整组居中），起线齐=编辑部列表规矩 */ /* v8.0.2：定宽标签列(.mi-l 112px 左对齐)让图标列仍严格对齐，整组居中让右侧空白变为两侧对称留白（用户反馈贴左大片空=失衡观感） */
   .menu-item:active{background:var(--hover)}
   /* v6.0：菜单前缀换 1.7px 细线 SVG（与顶栏同族）——Unicode 字形（⌂ ★ ▣ ◐…）本身比汉字小一圈，
      行高加再大字形也不会变大；20px SVG 与 15px 文字基线对齐才是真正的「加大」 */
+  .menu-item .mi-l,#menuThemeLabel{width:112px;text-align:left}
+  #menuThemeIcon{display:flex;align-items:center}
   .menu-item svg{width:26px;height:26px;flex:none} /* v7.0.1：22→26px（用户反馈仍偏小；flex 布局下 vertical-align/margin-right 退役，间距由 gap 接管（v8.0.1 现值 12px）），线宽仍 1.9 */
   /* v5.58：三端菜单与左下角布局统一——扫一扫/日夜间切换/退出锁定全平台进菜单（平台差异化机制退役），
      顶栏 themeBtn/lock 全平台移除（不再只在 APP 端隐藏）；菜单项与 ☰ 加大已在上方全局生效 */
@@ -413,26 +415,26 @@
 <div class="mask hidden" id="menuMask">
   <div class="box" id="menuBox">
     <div id="menuMainView">
-      <div id="menuHome" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.4 10.6 12 3.5l8.6 7.1"/><path d="M5.6 9.1v9.4a2 2 0 0 0 2 2h8.8a2 2 0 0 0 2-2V9.1"/><path class="g" d="M10 20.5v-4.7a2 2 0 0 1 4 0v4.7"/></svg>返回首页</div>
-      <div id="menuFav" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.8l2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4-3.9-3.8 5.4-.8z"/></svg>收藏笔记</div>
-      <div id="menuFavEntry" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 7A2.5 2.5 0 0 1 6 4.5h3.6a2 2 0 0 1 1.6.8l1.3 1.7H18A2.5 2.5 0 0 1 20.5 9.5v7.8A2.5 2.5 0 0 1 18 19.8H6a2.5 2.5 0 0 1-2.5-2.5Z"/><path class="g" d="M3.5 11.6h17"/></svg>收藏夹</div>
-      <div id="menuHistEntry" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path class="g" d="M12 7.2V12l3.4 2.2"/></svg>历史版本</div>
-      <div id="menuBackup" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5V6a3 3 0 0 1 3-3h2.5"/><path d="M15.5 3H18a3 3 0 0 1 3 3v2.5"/><path d="M21 15.5V18a3 3 0 0 1-3 3h-2.5"/><path d="M8.5 21H6a3 3 0 0 1-3-3v-2.5"/><path class="g" d="M12 8.6v6.8"/><path class="g" d="M8.6 12h6.8"/></svg>备份换机码</div>
+      <div id="menuHome" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.4 10.6 12 3.5l8.6 7.1"/><path d="M5.6 9.1v9.4a2 2 0 0 0 2 2h8.8a2 2 0 0 0 2-2V9.1"/><path class="g" d="M10 20.5v-4.7a2 2 0 0 1 4 0v4.7"/></svg><span class="mi-l">返回首页</span></div>
+      <div id="menuFav" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.8l2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4-3.9-3.8 5.4-.8z"/></svg><span class="mi-l">收藏笔记</span></div>
+      <div id="menuFavEntry" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 7A2.5 2.5 0 0 1 6 4.5h3.6a2 2 0 0 1 1.6.8l1.3 1.7H18A2.5 2.5 0 0 1 20.5 9.5v7.8A2.5 2.5 0 0 1 18 19.8H6a2.5 2.5 0 0 1-2.5-2.5Z"/><path class="g" d="M3.5 11.6h17"/></svg><span class="mi-l">收藏夹</span></div>
+      <div id="menuHistEntry" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path class="g" d="M12 7.2V12l3.4 2.2"/></svg><span class="mi-l">历史版本</span></div>
+      <div id="menuBackup" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5V6a3 3 0 0 1 3-3h2.5"/><path d="M15.5 3H18a3 3 0 0 1 3 3v2.5"/><path d="M21 15.5V18a3 3 0 0 1-3 3h-2.5"/><path d="M8.5 21H6a3 3 0 0 1-3-3v-2.5"/><path class="g" d="M12 8.6v6.8"/><path class="g" d="M8.6 12h6.8"/></svg><span class="mi-l">备份换机码</span></div>
       <div id="menuTheme" class="menu-item" role="button" tabindex="0"><span id="menuThemeIcon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.6 14.3A8.7 8.7 0 0 1 9.7 3.4a8.7 8.7 0 1 0 10.9 10.9Z"/><path class="gf" d="M17.3 3.2l.6 1.5 1.5.6-1.5.6-.6 1.5-.6-1.5-1.5-.6 1.5-.6Z"/></svg></span><span id="menuThemeLabel">夜间模式</span></div>
-      <div id="menuPass" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.2 12.8 20 4"/><path d="M16.4 7.6 19 10.2"/><path d="M13.6 10.4l2.2 2.2"/><circle class="g" cx="8.2" cy="15.8" r="4.2"/></svg>修改口令</div>
-      <div id="menuLock" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10" width="16" height="10.5" rx="3"/><path d="M7.8 10V7.6a4.2 4.2 0 0 1 8.2-1.4"/><circle class="gf" cx="12" cy="14.3" r="1.35"/><path class="g" d="M12 15.6v1.7"/></svg>退出锁定</div>
-      <div id="menuAbout" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path class="g" d="M12 11.1v5.1"/><circle class="gf" cx="12" cy="7.9" r="1.1"/></svg>关于 NoteSync</div>
+      <div id="menuPass" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.2 12.8 20 4"/><path d="M16.4 7.6 19 10.2"/><path d="M13.6 10.4l2.2 2.2"/><circle class="g" cx="8.2" cy="15.8" r="4.2"/></svg><span class="mi-l">修改口令</span></div>
+      <div id="menuLock" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10" width="16" height="10.5" rx="3"/><path d="M7.8 10V7.6a4.2 4.2 0 0 1 8.2-1.4"/><circle class="gf" cx="12" cy="14.3" r="1.35"/><path class="g" d="M12 15.6v1.7"/></svg><span class="mi-l">退出锁定</span></div>
+      <div id="menuAbout" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path class="g" d="M12 11.1v5.1"/><circle class="gf" cx="12" cy="7.9" r="1.1"/></svg><span class="mi-l">关于 NoteSync</span></div>
     </div>
     <div id="menuFavView" class="hidden">
-      <div id="menuFavBack" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg>返回</div>
+      <div id="menuFavBack" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg><span class="mi-l">返回</span></div>
       <div id="menuFavList"></div>
       <div id="menuFavEmpty" class="hidden">暂无收藏</div>
     </div>
     <div id="menuHistView" class="hidden">
-      <div id="menuHistBack" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg>返回</div>
+      <div id="menuHistBack" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg><span class="mi-l">返回</span></div>
       <div id="menuHistList"></div>
       <div id="menuHistEmpty" class="hidden">暂无历史版本</div>
-      <div id="menuHistSave" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path class="g" d="M12 5v14"/><path class="g" d="M5 12h14"/></svg>新增历史版本</div>
+      <div id="menuHistSave" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path class="g" d="M12 5v14"/><path class="g" d="M5 12h14"/></svg><span class="mi-l">新增历史版本</span></div>
     </div>
   </div>
 </div>
@@ -570,7 +572,7 @@ function markJumped() {
 }
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '8.0.1';
+const APP_VERSION = '8.0.2';
 const BUILD_DATE = '2026-09-10';
 
 const $ = s => document.querySelector(s);

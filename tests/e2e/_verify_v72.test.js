@@ -139,7 +139,15 @@ test('V72-1 双客户端竞态：B 落后版本 PUT 触发 409 → 冲突条 →
   });
 
   // B 继续打字 → 触发保存 → 首 PUT 带 baseV=bLocalVer → 被拦截 409 → 冲突条挂起
-  await pageB.waitForTimeout(1500); // 等自动保存/poll 落定，localVer 稳定
+  // v8.0.2 flake 修（T2 轮1 V72-1 漂移根因）：定值 1500ms 在并发 CPU 饿死下等不落（红线教训同款）
+  // → 条件化：先等「已同步」回位，再等 localVer 连续 4×300ms 稳定，负载再重也只是多等不会假早放行
+  await pageB.waitForFunction(() => document.getElementById('statustext').textContent.indexOf('已同步') >= 0, undefined, { timeout: 12000 });
+  await pageB.waitForFunction(() => {
+    const v = (typeof localVer !== 'undefined' ? localVer : -1);
+    window.__lvW = window.__lvW || { last: -2, same: 0 };
+    if (v === window.__lvW.last) window.__lvW.same++; else { window.__lvW.last = v; window.__lvW.same = 0; }
+    return window.__lvW.same >= 4;
+  }, undefined, { timeout: 12000, polling: 300 });
   bLocalVer = await pageB.evaluate(() => (typeof localVer !== 'undefined' ? localVer : -1));
   await pageB.evaluate(() => {
     const ed = document.getElementById('editor');
