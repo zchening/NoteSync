@@ -123,7 +123,7 @@ test('V63-11 server.js 新端点与 baseV 409', () => {
   assert.ok(/migrateHistoryKeys\(keyOld, keyNew\);/.test(src), 'cpRotate 必须调用迁移');
   // 历史置灰
   assert.ok(/function markHistBad\(row, pv, rs\)/.test(src), '应有置灰标识函数');
-  assert.ok(/\.hist-item\.hist-bad\{opacity:\.45\}/.test(src), '失效版本应有置灰样式');
+  assert.ok(/\.hist-item\.hist-bad\{opacity:\.5;border-style:dashed/.test(src), '失效版本应有置灰样式（v8.0.5 升格虚线胶囊：opacity .5+dashed）');
 });
 
 // ── #10 MCP Server ──

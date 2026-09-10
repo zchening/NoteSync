@@ -18,9 +18,9 @@ test('M1 桌面+移动双视口九行 svg.x 全等（±1px，v8.0.1 左列对齐
     await page.waitForFunction(() => {
       const l = document.getElementById('landing');
       return l && !l.classList.contains('hidden');
-    }, { timeout: 15000 });
+    }, undefined, { timeout: 15000 });
     await page.evaluate(() => document.getElementById('menuBtn').click()); // 根路径 landing 盖住页脚，绕 actionability 直接派发
-    await page.waitForFunction(() => !document.getElementById('menuMask').classList.contains('hidden'), { timeout: 3000 });
+    await page.waitForFunction(() => !document.getElementById('menuMask').classList.contains('hidden'), undefined, { timeout: 3000 });
     const r = await page.evaluate(() => {
       // 只量可见行：#menuFav（收藏笔记）未开笔记时 display:none 属既有设计，隐藏行 rect 全 0 会假报参差
       const rows = [...document.querySelectorAll('#menuMainView .menu-item')].filter(r => r.offsetParent !== null);
@@ -64,7 +64,7 @@ test('M2 解锁态收藏行注入重写后九行仍三维全等（v8.0.3 回归�
     return e && e.getAttribute('contenteditable') === 'true';
   }, undefined, { timeout: 15000 });
   await page.click('#menuBtn'); // 编辑器态页脚可点，真实点击路径
-  await page.waitForFunction(() => !document.getElementById('menuMask').classList.contains('hidden'), { timeout: 3000 });
+  await page.waitForFunction(() => !document.getElementById('menuMask').classList.contains('hidden'), undefined, { timeout: 3000 });
   const r = await page.evaluate(() => {
     const rows = [...document.querySelectorAll('#menuMainView .menu-item')].filter(x => x.offsetParent !== null);
     const svgs = rows.map(x => x.querySelector('svg').getBoundingClientRect());
@@ -103,10 +103,10 @@ test('M3 收藏二级页新形态全链生效（收藏动作→二级渲染）',
     return e && e.getAttribute('contenteditable') === 'true';
   }, undefined, { timeout: 15000 });
   await page.click('#menuBtn');
-  await page.waitForFunction(() => !document.getElementById('menuMask').classList.contains('hidden'), { timeout: 3000 });
+  await page.waitForFunction(() => !document.getElementById('menuMask').classList.contains('hidden'), undefined, { timeout: 3000 });
   await page.click('#menuFav'); // 收藏当前笔记（renderMenu 同步刷新）
   await page.click('#menuFavEntry');
-  await page.waitForFunction(() => !document.getElementById('menuFavView').classList.contains('hidden'), { timeout: 3000 });
+  await page.waitForFunction(() => !document.getElementById('menuFavView').classList.contains('hidden'), undefined, { timeout: 3000 });
   const r = await page.evaluate(() => {
     const row = document.querySelector('#menuFavList .fav-row');
     const kick = document.querySelector('#menuFavList .list-kicker');
@@ -123,5 +123,54 @@ test('M3 收藏二级页新形态全链生效（收藏动作→二级渲染）',
   assert.strictEqual(r.name, 'V804Fav', 'mono 名列文本=笔记名');
   assert.strictEqual(r.radius, '10px', '胶囊圆角与主菜单同族');
   assert.ok(r.kick && r.kick.includes('1'), '眉标计数跟渲染');
+  await page.close();
+});
+
+// M4（v8.0.5）：解锁→进历史二级→手动打点→行/眉标/展开态全链实证（历史二级页重设计回归钉）
+test('M4 历史二级页新形态全链生效（打点→列表→预览展开）', async () => {
+  const { browser, baseURL } = ctxS;
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  await page.goto(baseURL);
+  await page.waitForSelector('#landingInput', { timeout: 15000 });
+  await page.fill('#landingInput', 'V805Hist');
+  await page.click('#landingBtn');
+  await page.waitForSelector('#pw', { timeout: 10000 });
+  await page.fill('#pw', 'test-pass-123');
+  await page.click('#ok');
+  await page.waitForFunction(() => {
+    const e = document.getElementById('editor');
+    return e && e.getAttribute('contenteditable') === 'true';
+  }, undefined, { timeout: 15000 });
+  await page.click('#editor');
+  await page.keyboard.type('M4 打点前提内容'); // snapshotHistory 空正文守卫(!html)静默 return——须有内容再打点
+  await page.click('#menuBtn');
+  await page.waitForFunction(() => !document.getElementById('menuMask').classList.contains('hidden'), undefined, { timeout: 3000 });
+  await page.click('#menuHistEntry');
+  await page.waitForFunction(() => !document.getElementById('menuHistView').classList.contains('hidden'), undefined, { timeout: 3000 });
+  await page.click('#menuHistSave'); // 手动打点（loadHistList 自动刷新）
+  await page.waitForFunction(() => document.querySelectorAll('#menuHistList .hist-item').length >= 1, undefined, { timeout: 10000 });
+  const r1 = await page.evaluate(() => {
+    const row = document.querySelector('#menuHistList .hist-item');
+    const kick = document.querySelector('#menuHistList .list-kicker');
+    const cs = getComputedStyle(row);
+    return { radius: cs.borderRadius,
+      clock: !!(row.querySelector('svg.hist-clock') && row.querySelector('svg.hist-clock path.g')),
+      mono: /monospace/.test(getComputedStyle(row.querySelector('.hist-meta')).fontFamily),
+      kick: kick && kick.textContent };
+  });
+  assert.ok(r1.clock, '行首时钟列含金指针（缺=注入脱形）');
+  assert.strictEqual(r1.radius, '10px', '胶囊圆角同族');
+  assert.ok(r1.mono, 'mono 时间列');
+  assert.ok(r1.kick && r1.kick.indexOf('版本 · ') === 0, '眉标计数在位: ' + r1.kick);
+  await page.click('#menuHistList .hist-item .hist-btns button'); // 预览展开（异步：拉密文+本机解密）
+  await page.waitForFunction(() => {
+    const row = document.querySelector('#menuHistList .hist-item');
+    return row && row.classList.contains('hist-open') && !!row.querySelector('.hist-preview');
+  }, undefined, { timeout: 8000 });
+  const r2 = await page.evaluate(() => {
+    const row = document.querySelector('#menuHistList .hist-item');
+    return { open: row.classList.contains('hist-open'), pv: !!row.querySelector('.hist-preview') };
+  });
+  assert.ok(r2.open && r2.pv, '预览展开=行级 hist-open+内联构图');
   await page.close();
 });

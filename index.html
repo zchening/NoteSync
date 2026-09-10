@@ -214,14 +214,17 @@
   .list-kicker{display:flex;align-items:center;font:400 10.5px/1 ui-monospace,"SF Mono",Consolas,monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);padding:6px 4px 10px}
   .list-kicker::before{content:'';width:5px;height:5px;border-radius:50%;background:var(--accent);margin-right:8px;flex:none}
   /* v6.1：历史版本单行——「时间 · 手动 [预览][恢复]」（自动不标注），预览内联展开，恢复走正常保存 */
-  .hist-item{padding:8px 4px;border-bottom:1px solid var(--line);font-size:13px;color:var(--fg)}
-  .hist-meta{color:var(--muted);font-size:12px;letter-spacing:.02em}
-  .hist-preview{margin-top:6px;padding:8px 10px;background:var(--hover);border-radius:8px;font-size:12px;color:var(--muted);white-space:pre-wrap;word-break:break-all;max-height:120px;overflow-y:auto}
+  .hist-item{display:flex;flex-wrap:wrap;align-items:center;gap:10px;box-sizing:border-box;width:100%;padding:9px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:6px;min-height:42px;font-size:13px;color:var(--fg);transition:border-color .2s} /* v8.0.5 历史二级页重设计：与主菜单/收藏二级同族胶囊（旧裸文本+hairline 脱节=「low」同病根，v8.0.4 挂账兑现）；行首时钟列+mono 时间，预览内联展开成图 */
+  .hist-item .hist-line{flex:1;min-width:0}
+  .hist-clock{width:16px;height:16px;flex:none}
+  .hist-item.hist-open{border-color:color-mix(in srgb, var(--accent) 45%, var(--line))}
+  .hist-meta{flex:1;min-width:0;font:400 12.5px/1.5 ui-monospace,"SF Mono",Consolas,monospace;color:var(--muted);letter-spacing:.02em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap} /* v8.0.5 mono 时间=标识符感，与 fav-name 同源 */
+  .hist-preview{width:100%;margin-top:2px;padding:9px 12px;background:var(--hover);border-radius:10px;border-left:2px solid color-mix(in srgb, var(--accent) 55%, transparent);font-size:12.5px;line-height:1.7;color:var(--muted);white-space:pre-wrap;word-break:break-all;max-height:120px;overflow-y:auto}
   .hist-line{display:flex;align-items:center;justify-content:space-between;gap:8px}
   .hist-btns{display:flex;gap:6px;flex-shrink:0}
   .hist-btns button{min-height:32px;padding:4px 12px;font-size:12.5px;color:var(--fg);background:none;border:1px solid var(--line);border-radius:8px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
   /* v6.3：失效版本置灰（解不开 = 旧口令加密），按钮禁用，不再是静默失败 */
-  .hist-item.hist-bad{opacity:.45}
+  .hist-item.hist-bad{opacity:.5;border-style:dashed;border-color:var(--muted);border-color:color-mix(in srgb, var(--muted) 55%, var(--line))} /* 前置 fallback：老内核丢 color-mix 落 muted 而非 currentColor 浓描边 */ /* v8.0.5 失效态=虚线胶囊（不确定语义）+「· 不可用」后缀，替代单纯压暗 */
   .hist-item.hist-bad .hist-btns button{cursor:not-allowed;text-decoration:line-through}
   /* v6.2：历史/收藏列表独立滚动（52vh→50vh 随菜单盒瘦身微调）——条目多时不再撑爆 menuBox */
   #menuHistList,#menuFavList{max-height:min(50vh,400px);overflow-y:auto;-webkit-overflow-scrolling:touch}
@@ -242,6 +245,8 @@
   #diagContent{margin:0 0 14px;padding:12px;background:var(--hover);border-radius:10px;font:13px/1.6 ui-monospace,Consolas,monospace;color:var(--fg);white-space:pre-wrap;word-break:break-all;max-height:52vh;overflow-y:auto;text-align:left}
   #menuFavEmpty{display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;color:var(--muted);font-size:12.5px;padding:22px 0 16px} /* v8.0.4 空态：空心星+短句，从「报错感小字」升格为留白构图 */
   #menuFavEmpty svg{width:22px;height:22px;opacity:.55}
+  #menuHistEmpty{display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;color:var(--muted);font-size:12.5px;padding:22px 0 16px} /* v8.0.5 空态与收藏同构图：时钟轮廓+短句 */
+  #menuHistEmpty svg{width:22px;height:22px;opacity:.55}
   footer .dot{width:7px;height:7px;border-radius:50%;background:#C9C7BE;flex-shrink:0;transition:background .3s}
   footer .dot.on{background:#2FA866}
 
@@ -440,7 +445,7 @@
     <div id="menuHistView" class="hidden">
       <div id="menuHistBack" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg><span class="mi-l">返回</span></div>
       <div id="menuHistList"></div>
-      <div id="menuHistEmpty" class="hidden">暂无历史版本</div>
+      <div id="menuHistEmpty" class="hidden"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.2V12l3.4 2.2"/></svg><span>暂无历史版本</span></div>
       <div id="menuHistSave" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path class="g" d="M12 5v14"/><path class="g" d="M5 12h14"/></svg><span class="mi-l">新增历史版本</span></div>
     </div>
   </div>
@@ -579,7 +584,7 @@ function markJumped() {
 }
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '8.0.4';
+const APP_VERSION = '8.0.5';
 const BUILD_DATE = '2026-09-10';
 
 const $ = s => document.querySelector(s);
@@ -4948,6 +4953,7 @@ function writeFavs(a) { try { localStorage.setItem(FAVS_KEY, JSON.stringify(a.sl
 const STAR_OUT_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.8l2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4-3.9-3.8 5.4-.8z"/></svg>';
 const STAR_IN_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path class="gf" d="M12 3.8l2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4-3.9-3.8 5.4-.8z"/></svg>';
 const FAV_STAR_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" class="fav-star" aria-hidden="true"><path class="gf" d="M12 3.8l2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4-3.9-3.8 5.4-.8z"/></svg>';
+const HIST_CLOCK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="hist-clock" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path class="g" d="M12 7.2V12l3.4 2.2"/></svg>';
 const FAV_CHEV_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" class="fav-go" aria-hidden="true"><path d="M9.5 5.5 16 12l-6.5 6.5"/></svg>';
 function renderMenu() {
   syncThemeMenuItem(themeWantsDark); // v6.1：打开菜单即刷新日夜间项文案（applyTheme 已实时同步，这里双保险）
@@ -5250,9 +5256,15 @@ async function loadHistList() {
   } catch (e) {}
   document.getElementById('menuHistEmpty').classList.toggle('hidden', list.length > 0);
   histPreviewTs = null;
+  if (list.length) {
+    const kick = document.createElement('div'); kick.className = 'list-kicker';
+    kick.textContent = '版本 · ' + list.length + ' 个';
+    menuHistList.appendChild(kick);
+  }
   list.slice().reverse().forEach(item => { // 最新在上
     // v6.1：单行布局「时间 · 手动 [预览][恢复]」——自动不标注，v/KB 冗余信息删除（用户拍板）
     const row = document.createElement('div'); row.className = 'hist-item';
+    row.innerHTML = HIST_CLOCK_SVG; // v8.0.5 时钟列（金指针一点金，与主菜单 26px 同款形制）
     const line = document.createElement('div'); line.className = 'hist-line';
     const meta = document.createElement('span'); meta.className = 'hist-meta';
     meta.textContent = fmtSyncShort(item.ts) + (item.manual ? ' · 手动' : '');
@@ -5261,7 +5273,7 @@ async function loadHistList() {
     const rs = document.createElement('button'); rs.type = 'button'; rs.textContent = '恢复';
     pv.addEventListener('click', async () => {
       const old = row.querySelector('.hist-preview');
-      if (old) { old.remove(); if (histPreviewTs === item.ts) { histPreviewTs = null; return; } }
+      if (old) { old.remove(); row.classList.remove('hist-open'); if (histPreviewTs === item.ts) { histPreviewTs = null; return; } }
       let j2 = null;
       try { // v6.3：失败要分清——网络问题是「重试」，解不开是「版本已失效」，不能一律「预览失败」
         const r2 = await fetchRetry(NOTE_API + '/history/' + item.ts, { cache: 'no-store' }, 1);
@@ -5273,7 +5285,7 @@ async function loadHistList() {
       } catch (e) { markHistBad(row, pv, rs); toast('该版本不可用'); return; }
       const box = document.createElement('div'); box.className = 'hist-preview';
       box.textContent = html.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').slice(0, 300) || '（空）';
-      row.appendChild(box); histPreviewTs = item.ts;
+      row.appendChild(box); row.classList.add('hist-open'); histPreviewTs = item.ts;
     });
     rs.addEventListener('click', async () => {
       let j2 = null;

@@ -27,10 +27,36 @@ function sendFile(res, filePath, type) {
 }
 
 function startServer() {
+  const HIST = {}; // v8.0.5 桩内 history 存储（进程级，重启即清空）
   const server = http.createServer((req, res) => {
     const raw = req.url || '/';
     const p = raw.split('?')[0];
 
+    // v8.0.5：e2e 桩补 history 环——响应形与 server.js 对齐（list {ts,v,manual,size} / 单条 {ts,ct,iv} /
+    // PUT 追加与按 ts 覆写），M4 历史二级页全链实测依赖；其余 /api/* 行为原样返回 {} 不变。
+    if (p.startsWith('/api/note/') && p.includes('/history')) {
+      const hm = p.match(/^\/api\/note\/([^/]+)\/history(?:\/(\d+))?$/);
+      if (hm) {
+        let id; try { id = decodeURIComponent(hm[1]); } catch (e) { id = ''; }
+        const ring = (HIST[id] = HIST[id] || []);
+        res.setHeader('Content-Type', 'application/json');
+        if (req.method === 'GET') {
+          if (hm[2]) { const it = ring.find(x => String(x.ts) === hm[2]); res.end(it ? JSON.stringify({ ts: it.ts, ct: it.ct, iv: it.iv }) : '{}'); return; }
+          res.end(JSON.stringify({ list: ring.map((x, i) => ({ ts: x.ts, v: i + 1, manual: !!x.manual, size: (x.ct || '').length })) })); return;
+        }
+        if (req.method === 'PUT') {
+          let body = '';
+          req.on('data', c => { body += c; if (body.length > 2048 * 1024) req.destroy(); });
+          req.on('end', () => {
+            let b = {}; try { b = JSON.parse(body || '{}'); } catch (e) {}
+            if (hm[2]) { const it = ring.find(x => String(x.ts) === hm[2]); if (it) { it.ct = b.ct || it.ct; it.iv = b.iv || it.iv; } }
+            else ring.push({ ts: Date.now(), manual: !!b.manual, ct: b.ct || '', iv: b.iv || '' });
+            res.end('{"ok":1}');
+          });
+          return;
+        }
+      }
+    }
     // API 桩：任何 /api/* 都返回 {}
     if (p.startsWith('/api/')) {
       res.setHeader('Content-Type', 'application/json');
