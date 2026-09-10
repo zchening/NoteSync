@@ -6359,7 +6359,7 @@ if (noteId && (isNativeApp() || !CHIP_HOVER_OK)) {
     document.getElementById('landing').classList.remove('hidden');
     const li = document.getElementById('landingInput'), lb = document.getElementById('landingBtn');
     const warnEl = document.getElementById('landingWarn');
-    // v7.9.0：实时网址预览——旧「在网址后加笔记名即可」hint 退役。值经 sanitizeName 净化后必合法，
+    // v7.9.0：实时网址预览——旧版底部 URL 用法提示行（.hint）退役。值经 sanitizeName 净化后必合法，
     // 非空即显行、空值整行隐身（不闪现光杆域名）；域名段由 .dyn-domain 装载既有 IIFE 填 hostname。
     const urlEl = document.getElementById('landingUrlLine'), urlName = document.getElementById('landingUrlName');
     const syncUrlHint = () => {
