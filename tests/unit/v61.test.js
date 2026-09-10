@@ -94,7 +94,7 @@ test('V61-7 关于弹窗：菜单入口、qr-box 风格、网页/APP 版本行�
 test("V61-8 彩蛋：连点「关于NoteSync」标题 4 次弹出诊断模态", () => {
   const src = readSrc();
   assert.ok(src.includes('aboutTaps >= 4'), '应连点 4 次触发');
-  assert.ok(src.includes('setTimeout(() => { aboutTaps = 0; }, 800)'), '800ms 连击窗口');
+  assert.ok(src.includes('setTimeout(() => { aboutTaps = 0; }, 800)'), '800ms 连击窗口（计时常量非版本，8.0.1 pin sed 误伤回正）');
   assert.ok(/aboutMask\.classList\.add\('hidden'\);[\s\S]{0,8}openDiagModal\(\);/.test(src), '触发后应关关于弹窗并开诊断模态');
 });
 
@@ -158,10 +158,10 @@ test('V61-13 扫码提示分流：HTTPS/组件失败/无摄像头/权限拒绝 �
 // ── 14. 版本升格（v7.0 起断言跟随最新版）──
 test('V61-14 版本升格：APP_VERSION 7.0.1 / BUILD_DATE / gradle 701+7.0.1 / README 条目 ≤40 汉字', () => {
   const src = readSrc();
-  assert.ok(src.includes("const APP_VERSION = '8.0.0';"), 'APP_VERSION 应 8.0.0');
+  assert.ok(src.includes("const APP_VERSION = '8.0.1';"), 'APP_VERSION 应 8.0.1');
   assert.ok(src.includes("const BUILD_DATE = '2026-09-10';"), 'BUILD_DATE 应更新');
   const gradle = readRel('android/app/build.gradle');
-  assert.ok(gradle.includes('versionCode 800') && gradle.includes('versionName "8.0.0"'), 'gradle 应 800/8.0.0');
+  assert.ok(gradle.includes('versionCode 801') && gradle.includes('versionName "8.0.1"'), 'gradle 应 801/8.0.1');
   const readme = readRel('README.md');
   const row = (readme.match(/^\| v7\.0\.1 \|[^|]+\|([^|]+)\|/m) || [])[1] || '';
   const hz = (row.match(/[一-龥]/g) || []).length;

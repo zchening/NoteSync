@@ -69,11 +69,11 @@ function freshServer() {
 }
 
 // ═══════════ 源码断言 ═══════════
-test('V72-S1 版本三处一致：index 8.0.0 / gradle 800 / MCP serverInfo 8.0.0', () => {
-  assert.ok(SRC.includes("const APP_VERSION = '8.0.0';"), 'APP_VERSION 应 8.0.0');
+test('V72-S1 版本三处一致：index 8.0.1 / gradle 801 / MCP serverInfo 8.0.1', () => {
+  assert.ok(SRC.includes("const APP_VERSION = '8.0.1';"), 'APP_VERSION 应 8.0.1');
   const gradle = fs.readFileSync(path.join(ROOT, 'android', 'app', 'build.gradle'), 'utf8');
-  assert.ok(gradle.includes('versionCode 800') && gradle.includes('versionName "8.0.0"'), 'gradle 应 800/8.0.0');
-  assert.ok(MCP_SRC.includes("serverInfo: { name: 'notesync', version: '8.0.0' }"), 'MCP serverInfo 应 8.0.0');
+  assert.ok(gradle.includes('versionCode 801') && gradle.includes('versionName "8.0.1"'), 'gradle 应 801/8.0.1');
+  assert.ok(MCP_SRC.includes("serverInfo: { name: 'notesync', version: '8.0.1' }"), 'MCP serverInfo 应 8.0.1');
 });
 
 test('V72-S2 新工具注册齐全：TOOLS 含 search/export/import + description 含隐私提示', () => {

@@ -195,11 +195,11 @@
   #menuBtn svg{width:19px;height:19px;display:block}
   #menuBox{width:min(86vw,300px);text-align:left;padding:14px 16px} /* v7.0.1：上下再瘦（20→14px）配合按钮瘦身，小屏一屏放下 9 项 */
   /* v5.58：菜单项触控区全端加大（原 v5.57 只在 APP 端加大，用户要求三端一致） */
-  .menu-item{display:flex;align-items:center;justify-content:center;gap:8px;box-sizing:border-box;width:100%;padding:9px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:5px;cursor:pointer;color:var(--fg);font-size:15px;min-height:42px;line-height:1.4;touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:border-color .2s} /* v7.0.1：改 flex（行框与图标尺寸解耦）+瘦身（48→42px、margin 7→5px），图标可独立加大而按钮变矮；text-align:center 由 justify-content 接管 */
+  .menu-item{display:flex;align-items:center;justify-content:flex-start;gap:12px;box-sizing:border-box;width:100%;padding:9px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:5px;cursor:pointer;color:var(--fg);font-size:15px;min-height:42px;line-height:1.4;touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:border-color .2s} /* v7.0.1：改 flex（行框与图标尺寸解耦）+瘦身（48→42px、margin 7→5px），图标可独立加大而按钮变矮；text-align:center 由 justify-content 接管 */ /* v8.0.1：center→flex-start+gap12——字数长短不再让图标列锯齿（用户报「菜单乱」根因=整组居中），起线齐=编辑部列表规矩 */
   .menu-item:active{background:var(--hover)}
   /* v6.0：菜单前缀换 1.7px 细线 SVG（与顶栏同族）——Unicode 字形（⌂ ★ ▣ ◐…）本身比汉字小一圈，
      行高加再大字形也不会变大；20px SVG 与 15px 文字基线对齐才是真正的「加大」 */
-  .menu-item svg{width:26px;height:26px;flex:none} /* v7.0.1：22→26px（用户反馈仍偏小；flex 布局下 vertical-align/margin-right 退役，间距由 gap:8px 接管），线宽仍 1.9 */
+  .menu-item svg{width:26px;height:26px;flex:none} /* v7.0.1：22→26px（用户反馈仍偏小；flex 布局下 vertical-align/margin-right 退役，间距由 gap 接管（v8.0.1 现值 12px）），线宽仍 1.9 */
   /* v5.58：三端菜单与左下角布局统一——扫一扫/日夜间切换/退出锁定全平台进菜单（平台差异化机制退役），
      顶栏 themeBtn/lock 全平台移除（不再只在 APP 端隐藏）；菜单项与 ☰ 加大已在上方全局生效 */
   #themeBtn, #lock{display:none}
@@ -570,7 +570,7 @@ function markJumped() {
 }
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '8.0.0';
+const APP_VERSION = '8.0.1';
 const BUILD_DATE = '2026-09-10';
 
 const $ = s => document.querySelector(s);
