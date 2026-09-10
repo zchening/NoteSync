@@ -115,29 +115,29 @@ test('T2 决定性回归：SSE 关闭时仅靠 2s 轮询基线，B 仍自动同�
   assert.deepStrictEqual([...pageA.__errors, ...pageB.__errors], [], '两端不应有 pageerror');
 }));
 
-// T3（v8.0.7）：手动刷新=浏览器刷新体感——页脚=唯一结果反馈通道。
-// MutationObserver 记录全过程：按下必现「同步中…」→「已同步」落位，#uploadStatus 全程零 .show
-// （结果 toast 退役的实证就靠这条全程监听，瞬时态不再靠竞速抓现行）。
-test('T3 手动刷新：页脚 同步中…→已同步 两段式，全程零 toast、按钮停转', guard(async () => {
+// T3（v8.0.8）：手动刷新 = 字面 location.reload()（用户拍板「不要等同，要一模一样」）。
+// 跨文档哨兵 window.__preReload：reload 后是新文档，哨兵必然消失 → 证明真发生整页重建，
+// 而非原地改 DOM 的假动作。再验重载后凭 localStorage 密钥自动解锁（无需重填口令）+
+// boot→poll 原生把页脚重新落到「已同步」+ 结果零 toast（与浏览器刷新的静默重建一致）。
+test('T3 手动刷新：点刷新=整页 reload，重载后自动解锁+页脚重新落位「已同步」、零 toast', guard(async () => {
   const { browser, baseURL } = await withEnv(false);
   const ctx = await browser.newContext();
   const page = await openNote(ctx, baseURL);
   await page.waitForFunction(() => document.getElementById('statustext').textContent === '已同步', undefined, { timeout: 15000 });
-  await page.evaluate(() => {
-    window.__seen = []; window.__pillSeen = false;
-    const st = document.getElementById('statustext');
-    new MutationObserver(() => window.__seen.push(st.textContent)).observe(st, { childList: true, characterData: true, subtree: true });
-    const pill = document.getElementById('uploadStatus');
-    new MutationObserver(() => { if (pill.classList.contains('show')) window.__pillSeen = true; }).observe(pill, { attributes: true, attributeFilter: ['class'] });
-  });
+  await page.evaluate(() => { window.__preReload = 1; }); // 打「本页存活」哨兵
+  const nav = page.waitForNavigation({ waitUntil: 'load', timeout: 8000 }).catch(() => {}); // 先挂监听再点，避免竞态漏接
   await page.click('#refreshBtn');
-  await page.waitForFunction(() =>
-    window.__seen.includes('同步中…') && window.__seen.includes('已同步') &&
-    !document.getElementById('refreshBtn').classList.contains('spinning'),
-  undefined, { timeout: 10000 });
-  const r = await page.evaluate(() => ({ seen: window.__seen, pill: window.__pillSeen }));
-  const i = r.seen.indexOf('同步中…'); // 闸R2-P2：2s 常驻轮询可能在点击前已把「已同步」记进观察序列——只认「首个同步中…之后出现的已同步」，不比首个下标
-  assert.ok(i > -1 && r.seen.slice(i + 1).includes('已同步'), '页脚必须按下先「同步中…」后落位「已同步」（观察序列: ' + JSON.stringify(r.seen) + '）');
-  assert.strictEqual(r.pill, false, 'v8.0.7：手动刷新全程不得弹 #uploadStatus 结果胶囊');
+  await nav;
+  const gone = await page.evaluate(() => typeof window.__preReload === 'undefined');
+  assert.ok(gone, '点刷新必须触发整页 reload——新文档里 __preReload 哨兵应已消失（证明重建，非原地假动作）');
+  // 重载后凭 localStorage 密钥自动解锁：编辑器重新可写，无需再填口令
+  await page.waitForFunction(() => {
+    const ed = document.getElementById('editor');
+    return ed && ed.getAttribute('contenteditable') === 'true';
+  }, undefined, { timeout: 15000 });
+  // boot→poll 原生把页脚重新落到「已同步」
+  await page.waitForFunction(() => document.getElementById('statustext').textContent === '已同步', undefined, { timeout: 15000 });
+  const pill = await page.evaluate(() => document.getElementById('uploadStatus').classList.contains('show'));
+  assert.strictEqual(pill, false, 'v8.0.8：刷新成功不弹结果 toast（reload 后 boot 静默重建）');
   assert.deepStrictEqual([...page.__errors], [], '无 pageerror');
 }));

@@ -29,8 +29,8 @@ const pad = x => String(x).padStart(2, '0');
 const wall = at => { const d = new Date(at); return [d.getFullYear(), d.getMonth() + 1, d.getDate(), d.getHours(), d.getMinutes()]; };
 
 // ── A：版本号 ──
-test('V71-A 版本号 8.0.7 / BUILD_DATE 2026-09-11', () => {
-  assert.ok(SRC.includes("const APP_VERSION = '8.0.7';"), 'APP_VERSION 应 8.0.7');
+test('V71-A 版本号 8.0.8 / BUILD_DATE 2026-09-11', () => {
+  assert.ok(SRC.includes("const APP_VERSION = '8.0.8';"), 'APP_VERSION 应 8.0.8');
   assert.ok(SRC.includes("const BUILD_DATE = '2026-09-11';"), 'BUILD_DATE 应 2026-09-11');
 });
 

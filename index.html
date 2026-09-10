@@ -351,13 +351,9 @@
   #refreshBtn{position:absolute;right:10px;top:50%;transform:translateY(-50%);cursor:pointer;padding:10px 12px;min-height:44px;display:flex;align-items:center;background:none;border:0;color:var(--muted);letter-spacing:0;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
   #refreshBtn:active{opacity:.6}
   #refreshBtn svg{width:20px;height:20px;display:block}
-  #refreshBtn.spinning svg{animation:spin .8s linear infinite}
-  /* v7.8.1：刷新反馈方案 A——转圈期变 --accent 金，结束短暂切细线 ✓ 回灰（同 family 1.7px 描边，不引新颜色） */
-  #refreshBtn svg.ico-check{display:none}
-  #refreshBtn.working,#refreshBtn.done{color:var(--accent)}
-  #refreshBtn.done svg.ico-refresh{display:none}
-  #refreshBtn.done svg.ico-check{display:block}
-  @keyframes spin{to{transform:rotate(360deg)}}
+  /* v8.0.8（用户拍板「一模一样」）：刷新钮=字面 location.reload()，与 F5 同一实现路径。
+     按钮不再自演加载（v7.8.1~v8.0.7 的按钮状态机全退役，类名与图标串一并清除），
+     整页重建的加载反馈由浏览器自身承担（标签页转圈），页脚状态由 boot→poll 原生落位。 */
   .upload-status.show{opacity:1}
   #loading{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:5;color:var(--muted);font-size:13px;letter-spacing:.2em}
 </style>
@@ -472,7 +468,7 @@
 </div>
 <div id="editor" data-ph="开始输入，自动同步到所有设备…" contenteditable="true"></div>
 <input type="file" id="fileInput" accept="image/*" style="display:none">
-<footer id="foot"><span id="menuBtn" title="菜单" aria-label="菜单"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M4 6.8h16"/><path class="g" d="M4 12h16"/><path d="M4 17.2h16"/></svg></span><span class="dot" id="status"></span><span id="statustext">连接中…</span><span id="offlineBar" class="offlinebar hidden">· 最后同步：<span id="offlineTime"></span></span><button type="button" id="refreshBtn" title="刷新" aria-label="刷新"><svg class="ico-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.4-5.7"/><path class="g" d="M20.2 3.6v3.9h-3.9"/></svg><svg class="ico-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path class="g" stroke-width="2.1" d="m4.8 12.6 4.8 4.8 9.6-11"/></svg></button></footer>
+<footer id="foot"><span id="menuBtn" title="菜单" aria-label="菜单"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M4 6.8h16"/><path class="g" d="M4 12h16"/><path d="M4 17.2h16"/></svg></span><span class="dot" id="status"></span><span id="statustext">连接中…</span><span id="offlineBar" class="offlinebar hidden">· 最后同步：<span id="offlineTime"></span></span><button type="button" id="refreshBtn" title="刷新" aria-label="刷新"><svg class="ico-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.4-5.7"/><path class="g" d="M20.2 3.6v3.9h-3.9"/></svg></button></footer>
 <div class="upload-status" id="uploadStatus"></div>
 
 <div id="loading">加载中</div>
@@ -585,7 +581,7 @@ function markJumped() {
 }
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '8.0.7';
+const APP_VERSION = '8.0.8';
 const BUILD_DATE = '2026-09-11';
 
 const $ = s => document.querySelector(s);
@@ -686,7 +682,6 @@ function themeOverrideCss(dark) {
     footer .dot{background:${dot}!important}
     footer .dot.on{background:#2FA866!important}
     #refreshBtn{color:${p.muted}!important}
-    #refreshBtn.working,#refreshBtn.done{color:${accent}!important}
     .box{background:${p.box}!important;color:${p.fg}!important;border-color:${p.line}!important}
     .box h1{color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important}
     .box p,.box .qr-lock-warn{color:${p.muted}!important;-webkit-text-fill-color:${p.muted}!important}
@@ -776,7 +771,6 @@ const SHELL_CSS = [
   'footer .dot{background:#363841!important}',
   'footer .dot.on{background:#D05799!important}',
   '#refreshBtn{color:#676A75!important}',
-  '#refreshBtn.working,#refreshBtn.done{color:#708ED9!important}',
   '.box{background:#000000!important;color:#E3E3E5!important;border-color:#13151D!important}',
   '.box h1{color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important}',
   '.box p,.box .qr-lock-warn{color:#676A75!important;-webkit-text-fill-color:#676A75!important}',
@@ -3328,52 +3322,22 @@ function showOfflineBar(ts) {
   if (t) t.textContent = ts ? fmtSyncShort(ts) : '—'; // v5.50：无已知同步时刻不显示 1970 假时间
   if (bar) bar.classList.remove('hidden');
 }
-// v6.0：右下角刷新——手动拉一次最新。刻意复用 poll 的冲突判定：
-// 有未保存改动时 poll 会挂起远端并弹冲突卡，绝不静默覆盖本机输入。
-// v8.0.7（用户拍板「等同于刷浏览器」）：页脚=唯一结果反馈通道——点击即灰点「同步中…」
-// （不再一边转圈一边谎报「已同步」），结果由 poll 原生落位「已同步/待处理/同步中断」；
-// 结果 toast 退役（与页脚重复）。按钮仍走 金转圈→成功✓一闪→回灰（保底 800ms 不动）。
-// 2.5s 封顶仅在页脚仍是「同步中…」时代报「刷新失败」，晚到结果由 2 秒常驻轮询自然纠正
-// （替代 v7.8.1 的「晚到翻牌」专用状态机）。
+// v8.0.8（用户拍板「不要等同，要一模一样」）：刷新钮=字面 location.reload()——与 F5 同一条
+// 实现路径：浏览器标签页转圈、整页重建、boot→poll 原生落位页脚。v7.8.1~v8.0.7 的按钮自演
+// 状态机（自转圈、✓ 一闪、800ms 保底、2.5s 封顶、连点令牌）全退役——重载天生去抖，无需伪反馈。
+// 前置守卫保留：未解锁（重载只会回锁屏页，属自伤）；busy/在途写入（reload 会掐断在途 PUT，
+// 红线15 toast 守卫不动）。脏内容与在途保存的卸载兜底走既有 pagehide→flushDirtySave 链，
+// 密钥/草稿/缓存在 localStorage——重载后 loadStoredKey 自动解锁，与用户手按 F5 行为逐字节相同。
 const refreshBtnEl = document.getElementById('refreshBtn');
 if (refreshBtnEl) {
-  let rfbStepTimer = null, rfbDoneTimer = null, rfbCapTimer = null, rfbRun = 0; // v7.8.1：连点去抖+运行令牌——上一轮的补足/封顶/✓ 收尾计时不得跨轮串台
-  refreshBtnEl.addEventListener('click', async () => {
+  refreshBtnEl.addEventListener('click', () => {
     if (!cryptoKey) { showUploadStatus('请先解锁'); setTimeout(() => { if (uploadStatus.textContent === '请先解锁') hideUploadStatus(); }, 2000); return; }
-    hideUploadStatus(); // v7.5.1：点刷新先清掉可能卡住的临时提示（与浏览器刷新的观感对齐）
-    if (busy || inflightWrites > 0) { // v7.5.1：忙/在途写入窗口不再纯静默无反馈
+    if (busy || inflightWrites > 0) {
       showUploadStatus('正在保存中，稍候自动同步');
       setTimeout(() => { if (uploadStatus.textContent.indexOf('正在保存中') === 0) hideUploadStatus(); }, 1500);
       return;
     }
-    clearTimeout(rfbStepTimer); clearTimeout(rfbDoneTimer); clearTimeout(rfbCapTimer);
-    rfbStepTimer = rfbDoneTimer = rfbCapTimer = null;
-    const run = ++rfbRun;
-    refreshBtnEl.classList.remove('done');
-    const rfbT0 = Date.now();
-    refreshBtnEl.classList.add('spinning', 'working');
-    setStatus(false, '同步中…'); // v8.0.7 主修：刷新期间页脚不再谎报绿点「已同步」（poll 成功会自行翻绿）
-    const rfbSettle = forcedFail => { // 收尾只动按钮+代报封顶失败；成功文案绝不另写（poll 已落位）
-      const step = () => {
-        rfbStepTimer = null;
-        if (run !== rfbRun) return;
-        clearTimeout(rfbCapTimer); if (rfbCapTimer !== null) { rfbCapTimer = null; } // 封顶一次性：本轮已收尾不得再代报
-        refreshBtnEl.classList.remove('spinning', 'working');
-        if (forcedFail && statusText.textContent === '同步中…') setStatus(false, '刷新失败'); // 只有页脚仍无人落位才代报；常驻轮询 ≤2s 自然纠正
-        if (statusText.textContent === '已同步') { // ✓ 只给成功；冲突/失败/中途被锁一律回灰不装完成
-          refreshBtnEl.classList.add('done');
-          clearTimeout(rfbDoneTimer);
-          rfbDoneTimer = setTimeout(() => { rfbDoneTimer = null; refreshBtnEl.classList.remove('done'); }, 900);
-        }
-      };
-      const rfbRemain = 800 - (Date.now() - rfbT0);
-      if (rfbRemain > 0) rfbStepTimer = setTimeout(step, rfbRemain); else step();
-    };
-    poll().then(() => { if (run === rfbRun) rfbSettle(false); });
-    rfbCapTimer = setTimeout(() => { // UI 层 2.5s 封顶：poll 走 fetchRetry 1s+3s 退避，断网不死转圈
-      if (run !== rfbRun) return;
-      rfbSettle(true);
-    }, 2500);
+    location.reload();
   });
 }
 function hideOfflineBar() {

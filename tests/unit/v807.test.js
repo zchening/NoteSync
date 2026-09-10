@@ -1,8 +1,10 @@
 // v8.0.7 两处用户拍板改动守护——① 二级页返回钮左起笔（收藏+历史）与列表图标列同竖线；
-// ② 手动刷新=浏览器刷新体感：页脚=唯一结果反馈通道（按下即「同步中…」，结果由 poll 原生落位），
-//    结果 toast 与「晚到翻牌」状态机退役，2.5s 封顶仅在页脚仍无人落位时代报「刷新失败」。
-// H1 对齐覆盖规则与主菜单居中并存（禁外溢）；H2 刷新页角落位/代报/✓ 判据锚定补丁行；
-// H3 旧结果 toast/翻牌状态机禁现；H4 前置轻提示（红线15 守卫）保留。行为层由 v781 Y3/Y4 与 menu_align M5 覆盖。
+// ② 手动刷新（v8.0.8 终态，用户拍板「不要等同，要一模一样」）：刷新钮 = 字面
+//    location.reload()，与 F5 同一实现路径——按钮自演状态机（转圈/✓/800ms 保底/
+//    2.5s 封顶/连点令牌/页脚强写）全退役，加载反馈归浏览器标签页，页脚由 boot→poll 原生落位；
+//    仅保留未解锁与保存中两个前置守卫（reload 会掐断在途 PUT）。
+// H1 对齐覆盖规则与主菜单居中并存（禁外溢）；H2 reload 本体与守卫锚定补丁行；
+// H3 自演状态机全令牌禁现；H4 前置轻提示（红线15 守卫）保留。行为层由 v781 Z2-Z4 与 sync T3 覆盖。
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -18,20 +20,20 @@ test('H1 二级页视图级 flex-start 覆盖在位（含新增历史钮），�
   assert.ok(ov > base, '覆盖规则须与基规则同层级相邻落位（读序在基规则之后）');
 });
 
-test('H2 刷新：按下页脚「同步中…」，✓ 仅成功，封顶代报有前提守卫', () => {
-  assert.ok(SRC.includes("setStatus(false, '同步中…'); // v8.0.7 主修"), '按下即页脚「同步中…」（不再谎报绿点已同步）');
-  assert.ok(SRC.includes("if (statusText.textContent === '已同步') { // ✓ 只给成功"), '✓ 仅页脚「已同步」才亮——冲突/失败/被锁回灰');
-  assert.ok(SRC.includes("if (forcedFail && statusText.textContent === '同步中…') setStatus(false, '刷新失败');"), '封顶代报只时代报——poll 已落位（成功/失败/锁定）绝不抢写');
-  assert.ok(/rfbCapTimer = setTimeout\([\s\S]*?\}, 2500\);/.test(SRC), '2.5s 封顶保留：断网 fetchRetry 退避期不死转圈');
-  assert.ok(SRC.includes('clearTimeout(rfbCapTimer); if (rfbCapTimer !== null)'), '收尾后封顶一次性作废：不得二次代报/二次补 ✓');
+test('H2 刷新：按下同帧 location.reload()，守卫先行（锚定 v8.0.8 补丁行）', () => {
+  assert.ok(SRC.includes("refreshBtnEl.addEventListener('click', () => {"), '点击处理器为同步函数——不再有 poll 竞速/计时器编排');
+  assert.ok(/location\.reload\(\);[\s\S]{0,8}?\}\);/.test(SRC), 'reload 是守卫通过后的唯一动作（紧随其后即 handler 收尾，锚定补丁行防恒真）');
+  assert.ok(!SRC.includes("setStatus(false, '同步中…')"), 'v8.0.8：按钮绝不强写页脚——状态由 boot→poll 原生落位（推翻 v8.0.7 两段式）');
+  assert.ok(!SRC.includes('}, 2500);'), '2.5s 封顶随状态机退役（断网反馈归 boot/poll 原生路径）');
+  assert.ok(!SRC.includes('poll().then('), '按钮不再手动拉 poll——重载即整页重建');
 });
 
-test('H3 结果 toast 与晚到翻牌状态机全退役（与页脚重复=用户报障点）', () => {
-  assert.ok(!SRC.includes('rfbToastTimer'), '刷新结果 toast 计时器退役');
-  assert.ok(!SRC.includes('rfbState'), 'pending→settled→timeout→late 翻牌状态机退役（2s 常驻轮询接管晚到纠正）');
+test('H3 自演状态机全令牌禁现（转圈/✓/保底/封顶/令牌/toast 一揽子）', () => {
+  for (const dead of ['rfbToastTimer', 'rfbState', 'rfbStepTimer', 'rfbDoneTimer', 'rfbCapTimer', 'rfbRun', 'rfbSettle', 'rfbFinish', 'spinning', 'ico-check', '@keyframes spin']) {
+    assert.ok(!SRC.includes(dead), '退役串禁现：' + dead);
+  }
   assert.ok(!SRC.includes("'已是最新'"), '「已是最新」胶囊短句退役');
   assert.ok(!SRC.includes("'已同步更新'"), '「已同步更新」胶囊短句退役');
-  assert.ok(!SRC.includes("rfbFinish('刷新失败')"), '旧强制失败翻牌入口退役（代报判定已收进 rfbSettle）');
 });
 
 test('H4 前置轻提示保留：未解锁/保存中仍是 toast（非刷新结果，页脚另有其文案）', () => {

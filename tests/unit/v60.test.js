@@ -51,7 +51,7 @@ test('T2 离线条文案「· 最后同步：」+ 与状态文字同字号同色
 });
 
 // ── T3：右下角刷新按钮 ──
-test('T3 右下角刷新按钮：1.7px 细线 + 44px 触控 + 复用 poll 冲突判定', () => {
+test('T3 右下角刷新按钮：1.7px 细线 + 44px 触控 + 按下即 reload（v8.0.8）', () => {
   const src = readSrc();
   const footIdx = src.indexOf('<footer id="foot">');
   const btnIdx = src.indexOf('id="refreshBtn"');
@@ -59,11 +59,11 @@ test('T3 右下角刷新按钮：1.7px 细线 + 44px 触控 + 复用 poll 冲突
   assert.ok(src.includes('#refreshBtn{position:absolute;right:10px'), '应贴右下角');
   assert.ok(/#refreshBtn\{[^}]*min-height:44px/.test(src), '触控区应 44px');
   assert.ok(src.slice(btnIdx, btnIdx + 400).includes('stroke-width="1.7"'), '图标应是 1.7px 细线，与顶栏同族');
-  assert.ok(src.includes('#refreshBtn.spinning svg{animation:spin'), '刷新中应有旋转反馈');
-  assert.ok(src.includes("if (!cryptoKey) { showUploadStatus('请先解锁'); return; }"), '未解锁应明确提示，不静默');
+  assert.ok(!src.includes('#refreshBtn.spinning'), 'v8.0.8：按钮自演转圈退役（刷新=字面 reload，加载反馈归浏览器标签页）');
+  assert.ok(src.includes("if (!cryptoKey) { showUploadStatus('请先解锁');"), '未解锁应明确提示，不静默（v8.0.7 起带红线15 自清守卫）');
   assert.ok(src.includes('if (busy || inflightWrites > 0) {') && src.includes("showUploadStatus('正在保存中"), '保存/写入在途时不重复拉，且给轻提示不再纯静默（v7.5.1）');
   assert.ok(!src.includes('if (busy || inflightWrites > 0) return;'), '旧的忙/在途纯静默 return 应退役');
-  assert.ok(src.includes('poll().then(() => {'), '复用 poll——有未保存改动时走冲突卡，绝不静默覆盖（v7.8.1 起为 then+2.5s 封顶竞速，不再 try/await）');
+  assert.ok(src.includes('location.reload();'), 'v8.0.8（用户拍板「一模一样」）：刷新钮=字面 location.reload()，与 F5 同一实现路径');
 });
 
 // ── T4：菜单前缀 Unicode 字形 → 1.7px 细线 SVG ──

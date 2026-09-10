@@ -18,7 +18,7 @@ test('D1 一点金钩子齐备：基础板走变量，双对抗板同步锁色',
   assert.ok(SRC.includes('svg .gf,#landing .trust svg .gf{fill:${accent}!important'), 'mountThemeOverride .gf 锁');
   assert.ok(SRC.includes("'svg .g,#landing .trust svg .g{stroke:#708ED9!important}'"), '壳板 .g 蓝补偿（反色后恰落暖金）');
   assert.ok(SRC.includes("'svg .gf,#landing .trust svg .gf{fill:#708ED9!important"), '壳板 .gf 蓝补偿');
-  assert.ok(SRC.includes('<path class="g" stroke-width="2.1" d="m4.8 12.6 4.8 4.8 9.6-11"/>'), '刷新成功✓=path级金件2.1（v8.0.0拍板沿规范页R-2：反馈态+0.4；svg级1.7档由v781 Y2守，path级此钉防v781盲区回潮）');
+  assert.ok(!SRC.includes('d="m4.8 12.6 4.8 4.8 9.6-11"'), '刷新成功✓ path 金件随 v8.0.8 刷新钮改字面 reload 退役（禁回潮）');
   const gCount = (SRC.match(/class="g"/g) || []).length;
   const gfCount = (SRC.match(/class="gf"/g) || []).length;
   assert.ok(gCount >= 20 && gfCount >= 10, '金件覆盖面（实测 g=' + gCount + ' gf=' + gfCount + '）');
