@@ -50,4 +50,5 @@ node tests/e2e/_probe_<name>.js             # 各专项回归探针（退出码 
 |---|---|
 | 用法 / 部署架构 / 版本更新历史 | `README.md` |
 | 历史 bug 根因与核对要点（A-S 类） | `BUG_CHECKLIST.md` |
+| 版本 ↔ bug 速查（发布史，逐版一行） | `docs/VERSION_LOG.md` |
 | 回归探针清单与断言 | `tests/e2e/_probe_*.js` 头部注释 |
