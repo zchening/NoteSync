@@ -86,3 +86,42 @@ test('M2 解锁态收藏行注入重写后九行仍三维全等（v8.0.3 回归�
   assert.ok(r.hspread <= 1, '行高全等，实测 ' + r.hspread.toFixed(2));
   await page.close();
 });
+
+// M3（v8.0.4）：解锁→点「收藏笔记」→进「收藏夹」二级——金星列/mono名/右箭头/眉标/胶囊圆角全链实证（行族重设计回归钉）
+test('M3 收藏二级页新形态全链生效（收藏动作→二级渲染）', async () => {
+  const { browser, baseURL } = ctxS;
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  await page.goto(baseURL);
+  await page.waitForSelector('#landingInput', { timeout: 15000 });
+  await page.fill('#landingInput', 'V804Fav');
+  await page.click('#landingBtn');
+  await page.waitForSelector('#pw', { timeout: 10000 });
+  await page.fill('#pw', 'test-pass-123');
+  await page.click('#ok');
+  await page.waitForFunction(() => {
+    const e = document.getElementById('editor');
+    return e && e.getAttribute('contenteditable') === 'true';
+  }, undefined, { timeout: 15000 });
+  await page.click('#menuBtn');
+  await page.waitForFunction(() => !document.getElementById('menuMask').classList.contains('hidden'), { timeout: 3000 });
+  await page.click('#menuFav'); // 收藏当前笔记（renderMenu 同步刷新）
+  await page.click('#menuFavEntry');
+  await page.waitForFunction(() => !document.getElementById('menuFavView').classList.contains('hidden'), { timeout: 3000 });
+  const r = await page.evaluate(() => {
+    const row = document.querySelector('#menuFavList .fav-row');
+    const kick = document.querySelector('#menuFavList .list-kicker');
+    const cs = row && getComputedStyle(row);
+    return {
+      row: !!row, star: !!(row && row.querySelector('svg.fav-star path.gf')),
+      name: row && row.querySelector('.fav-name') && row.querySelector('.fav-name').textContent,
+      go: !!(row && row.querySelector('svg.fav-go')),
+      radius: cs && cs.borderRadius, minH: cs && cs.minHeight,
+      kick: kick && kick.textContent,
+    };
+  });
+  assert.ok(r.row && r.star && r.go, '收藏行=金星列+右箭头结构完整（缺=注入重写脱形）');
+  assert.strictEqual(r.name, 'V804Fav', 'mono 名列文本=笔记名');
+  assert.strictEqual(r.radius, '10px', '胶囊圆角与主菜单同族');
+  assert.ok(r.kick && r.kick.includes('1'), '眉标计数跟渲染');
+  await page.close();
+});

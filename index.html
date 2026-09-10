@@ -205,8 +205,14 @@
   /* v5.58：三端菜单与左下角布局统一——扫一扫/日夜间切换/退出锁定全平台进菜单（平台差异化机制退役），
      顶栏 themeBtn/lock 全平台移除（不再只在 APP 端隐藏）；菜单项与 ☰ 加大已在上方全局生效 */
   #themeBtn, #lock{display:none}
-  .fav-row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid var(--line);color:var(--fg);font-size:13px;cursor:pointer}
+  .fav-row{display:flex;align-items:center;gap:10px;box-sizing:border-box;width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:6px;min-height:42px;font-size:14px;color:var(--fg);cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:border-color .2s} /* v8.0.4 收藏二级页重设计：裸文本+hairline 列表与主菜单胶囊行族脱节=「low」根因；改同族胶囊+金星列+mono 名+右箭头。删除入口仍=笔记内取消收藏（v5.55 拍板不动） */
   .fav-row:active{background:var(--hover)}
+  @media (hover:hover){.fav-row:hover{border-color:color-mix(in srgb, var(--accent) 45%, var(--line))}}
+  .fav-star{width:18px;height:18px;flex:none}
+  .fav-name{flex:1;min-width:0;font:400 13.5px/1.5 ui-monospace,"SF Mono",Consolas,monospace;letter-spacing:.01em;color:var(--fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .fav-go{width:14px;height:14px;flex:none;color:var(--muted)}
+  .list-kicker{display:flex;align-items:center;font:400 10.5px/1 ui-monospace,"SF Mono",Consolas,monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);padding:6px 4px 10px}
+  .list-kicker::before{content:'';width:5px;height:5px;border-radius:50%;background:var(--accent);margin-right:8px;flex:none}
   /* v6.1：历史版本单行——「时间 · 手动 [预览][恢复]」（自动不标注），预览内联展开，恢复走正常保存 */
   .hist-item{padding:8px 4px;border-bottom:1px solid var(--line);font-size:13px;color:var(--fg)}
   .hist-meta{color:var(--muted);font-size:12px;letter-spacing:.02em}
@@ -234,7 +240,8 @@
   #cpNew,#cpNew2{margin-top:12px}
   /* v6.1：诊断模态——居中弹窗、主题前景色（日夜都可读），替代右下角黑底绿字浮层在日间不可读的问题 */
   #diagContent{margin:0 0 14px;padding:12px;background:var(--hover);border-radius:10px;font:13px/1.6 ui-monospace,Consolas,monospace;color:var(--fg);white-space:pre-wrap;word-break:break-all;max-height:52vh;overflow-y:auto;text-align:left}
-  #menuFavEmpty{text-align:center;color:var(--muted);font-size:12px;padding:8px 0}
+  #menuFavEmpty{display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;color:var(--muted);font-size:12.5px;padding:22px 0 16px} /* v8.0.4 空态：空心星+短句，从「报错感小字」升格为留白构图 */
+  #menuFavEmpty svg{width:22px;height:22px;opacity:.55}
   footer .dot{width:7px;height:7px;border-radius:50%;background:#C9C7BE;flex-shrink:0;transition:background .3s}
   footer .dot.on{background:#2FA866}
 
@@ -428,7 +435,7 @@
     <div id="menuFavView" class="hidden">
       <div id="menuFavBack" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg><span class="mi-l">返回</span></div>
       <div id="menuFavList"></div>
-      <div id="menuFavEmpty" class="hidden">暂无收藏</div>
+      <div id="menuFavEmpty" class="hidden"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.8l2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4-3.9-3.8 5.4-.8z"/></svg><span>暂无收藏</span></div>
     </div>
     <div id="menuHistView" class="hidden">
       <div id="menuHistBack" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg><span class="mi-l">返回</span></div>
@@ -572,7 +579,7 @@ function markJumped() {
 }
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '8.0.3';
+const APP_VERSION = '8.0.4';
 const BUILD_DATE = '2026-09-10';
 
 const $ = s => document.querySelector(s);
@@ -701,6 +708,7 @@ function themeOverrideCss(dark) {
     #landing .urlline .u-name{color:${accent}!important;-webkit-text-fill-color:${accent}!important}
     svg .g,#landing .trust svg .g{stroke:${accent}!important}
     svg .gf,#landing .trust svg .gf{fill:${accent}!important;stroke:none!important}
+    .list-kicker::before{background:${accent}!important}
     #landing input{background:${p.box}!important;color:${p.fg}!important;border-color:${p.line}!important;-webkit-text-fill-color:${p.fg}!important}
     #landing button:not(:disabled){background:${p.fg}!important;color:${p.bg}!important;-webkit-text-fill-color:${p.bg}!important}
     #loading{background:${p.bg}!important;color:${p.muted}!important;-webkit-text-fill-color:${p.muted}!important}
@@ -790,6 +798,7 @@ const SHELL_CSS = [
   '#landing .urlline .u-name{color:#708ED9!important;-webkit-text-fill-color:#708ED9!important}',
   'svg .g,#landing .trust svg .g{stroke:#708ED9!important}',
   'svg .gf,#landing .trust svg .gf{fill:#708ED9!important;stroke:none!important}',
+  '.list-kicker::before{background:#708ED9!important}',
   '#landing input{background:#000000!important;color:#E3E3E5!important;border-color:#13151D!important;-webkit-text-fill-color:#E3E3E5!important}',
   '#landing button:not(:disabled){background:#E3E3E5!important;color:#040407!important;-webkit-text-fill-color:#040407!important}',
   '#loading{background:#040407!important;color:#676A75!important;-webkit-text-fill-color:#676A75!important}',
@@ -4938,6 +4947,8 @@ function writeFavs(a) { try { localStorage.setItem(FAVS_KEY, JSON.stringify(a.sl
 // textContent 一赋值静态 SVG 就没了
 const STAR_OUT_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.8l2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4-3.9-3.8 5.4-.8z"/></svg>';
 const STAR_IN_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path class="gf" d="M12 3.8l2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4-3.9-3.8 5.4-.8z"/></svg>';
+const FAV_STAR_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" class="fav-star" aria-hidden="true"><path class="gf" d="M12 3.8l2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4-3.9-3.8 5.4-.8z"/></svg>';
+const FAV_CHEV_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" class="fav-go" aria-hidden="true"><path d="M9.5 5.5 16 12l-6.5 6.5"/></svg>';
 function renderMenu() {
   syncThemeMenuItem(themeWantsDark); // v6.1：打开菜单即刷新日夜间项文案（applyTheme 已实时同步，这里双保险）
   const favBtn = document.getElementById('menuFav');
@@ -4958,12 +4969,19 @@ function renderMenu() {
   list.innerHTML = '';
   const favs = readFavs();
   document.getElementById('menuFavEmpty').classList.toggle('hidden', favs.length > 0);
+  if (favs.length) {
+    const kick = document.createElement('div'); kick.className = 'list-kicker';
+    kick.textContent = '收藏 · ' + favs.length + ' 篇';
+    list.appendChild(kick);
+  }
   favs.forEach(name => {
     const row = document.createElement('div'); row.className = 'fav-row';
-    const label = document.createElement('span'); label.textContent = name;
-    // v5.55：行内 ✕ 删除按钮退役（用户拍板）——删除收藏的唯一入口 = 进入笔记后「☆ 取消收藏」
-    row.addEventListener('click', () => { menuMask.classList.add('hidden'); location.assign('/' + encodeURIComponent(name)); });
+    // v8.0.4：金星列+mono 名+右箭头（行族对齐主菜单胶囊）；行内 ✕ 删除按钮保持退役（v5.55 拍板）
+    row.innerHTML = FAV_STAR_SVG;
+    const label = document.createElement('span'); label.className = 'fav-name'; label.textContent = name;
     row.appendChild(label);
+    row.insertAdjacentHTML('beforeend', FAV_CHEV_SVG);
+    row.addEventListener('click', () => { menuMask.classList.add('hidden'); location.assign('/' + encodeURIComponent(name)); });
     list.appendChild(row);
   });
 }
