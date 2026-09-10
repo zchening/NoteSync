@@ -39,3 +39,31 @@ test('K1 focus 淡出/blur 淡回在 computed 层真实生效（动画级联闸�
   await page.waitForFunction(`${opExpr} >= 0.95`, { timeout: 2000 });
   await page.close();
 });
+
+// v8.0.0 用户报修守门：安卓「返回/收起键」收键盘常不触发 blur——旧逻辑淡出类永久卡住，
+// 「底部三个图标不见了」。修法=视口回弹兜底淡回（resizes-content 内核）。K2 全程不 blur。
+test('K2 键盘收起不收 blur：视口回弹 computed 层真实淡回（v8.0.0 根因回归）', async () => {
+  const { browser, baseURL } = ctxS;
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  await page.goto(baseURL);
+  await page.waitForFunction(() => {
+    const l = document.getElementById('landing');
+    return l && !l.classList.contains('hidden');
+  }, { timeout: 15000 });
+  await page.waitForFunction(`${opExpr} >= 0.99`, { timeout: 5000 });
+
+  await page.focus('#landingInput');
+  await page.waitForFunction(() => document.getElementById('landing').classList.contains('trust-away'), { timeout: 3000 });
+  await page.setViewportSize({ width: 390, height: 500 }); // 键盘弹起=视口压缩；focus 保持
+  await page.waitForFunction(() => document.activeElement && document.activeElement.id === 'landingInput', { timeout: 2000 });
+  await page.waitForFunction(`${opExpr} <= 0.05`, { timeout: 2000 });
+  assert.ok(true); // 键盘期：淡出且仍聚焦
+
+  await page.setViewportSize({ width: 390, height: 844 }); // 收起键盘=视口回弹，全程不 blur
+  await page.waitForFunction(() => !document.getElementById('landing').classList.contains('trust-away'), { timeout: 3000 })
+    .catch(() => { throw new assert.AssertionError({ message: '视口回弹后仍 trust-away——onResizeTrust 兜底失效（blur 不触发内核下用户报修 bug 复发）' }); });
+  await page.waitForFunction(`${opExpr} >= 0.95`, { timeout: 2000 });
+  const focused = await page.evaluate(() => document.activeElement && document.activeElement.id === 'landingInput');
+  assert.ok(focused, '前置守护：K2 必须始终未 blur（证明淡回来自视口兜底而非 blur 通道）');
+  await page.close();
+});

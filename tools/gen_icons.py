@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+# v8.0.0 金色分工（图标体系规范登记）：几何/比例沿用 v7.9.0 定稿不变；
+# 纸白 #F7F2E9 面固定专用金 #B7912C（仅 launcher/round/foreground/playstore/PWA/iOS PNG 资产），
+# 页面 UI 金走 --accent（浅 #8F7126/暗 #D4B068），16px favicon SVG 例外沿用 #8F7126。
 """v7.9.0 品牌 3A「双弧环 N」全套图标生成（用户拍板：A1 衬线 N + F2 16px 保环弃尖）
 - 暖纸白底 #F7F2E9 + 金色 #B7912C（沿用 v6.0 图标专用金，纸白上比 --accent 更醒目）
 - 几何 = index.html 内联 SVG 同族：双弧 r0.396/描边 0.048 + 直角箭头尖 + 衬线 N（serif_n 复用）

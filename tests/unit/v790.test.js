@@ -35,10 +35,10 @@ test('Z1 placeholder 变短、hint 退役换实时预览行、信任三图标就
 // ── Z2：锁色三板同步 ───────────────────────────────────────
 test('Z2 两套夜间对抗清单：.hint 消费者清零，.urlline/.trust 锁色齐（红线13）', () => {
   assert.strictEqual((SRC.match(/#landing \.hint/g) || []).length, 0, '#landing .hint 选择器应全退役（CSS 规则+两处锁色）');
-  assert.ok(SRC.includes('#landing .sub,#landing .urlline,#landing .trust{color:${p.muted}!important'), 'mountThemeOverride：预览/信任文字锁 muted');
-  assert.ok(SRC.includes('#landing .urlline .u-name,#landing .trust svg{color:${accent}!important'), 'mountThemeOverride：金色段+图标锁 accent');
-  assert.ok(SRC.includes("'#landing .sub,#landing .urlline,#landing .trust{color:#676A75!important"), '深色壳清单：muted 锁同步');
-  assert.ok(SRC.includes("'#landing .urlline .u-name,#landing .trust svg{color:#708ED9!important"), '深色壳清单：金色段换壳蓝（brand svg 同款）');
+  assert.ok(SRC.includes('#landing .sub,#landing .urlline,#landing .trust,#landing .trust svg{color:${p.muted}!important'), 'mountThemeOverride：预览/信任文字锁 muted');
+  assert.ok(SRC.includes('#landing .urlline .u-name{color:${accent}!important'), 'mountThemeOverride：金色段+图标锁 accent');
+  assert.ok(SRC.includes("'#landing .sub,#landing .urlline,#landing .trust,#landing .trust svg{color:#676A75!important"), '深色壳清单：muted 锁同步');
+  assert.ok(SRC.includes("'#landing .urlline .u-name{color:#708ED9!important"), '深色壳清单：金色段换壳蓝（brand svg 同款）');
   assert.ok(/#landing \.urlline\{[^}]*color:var\(--muted\)/.test(SRC), '日间规则本体走令牌（两板自动适配的根基）');
   assert.ok(/#landing>\*:nth-child\(8\)\{animation-delay:\.42s\}/.test(SRC), '新末子元素续上 0.06s 入场步进');
 });
@@ -72,17 +72,19 @@ test('Z3 净化后预览实时跟显；空值整行隐身；-_ 直通（校验�
   dom.window.close();
 });
 
-// ── Z4：v7.9.1 信任行贴底 + 键盘期淡出 + 「无需账号」换品牌环款 ──
-test('Z4 贴底锚点/淡出通道/套A环图标（旧禁止标记退役）', () => {
+// ── Z4：v7.9.1 贴底+淡出通道；v8.0.0 信任三图标随「一点金」体系重绘 + 键盘收起无 blur 淡回兜底 ──
+test('Z4 贴底锚点/淡出通道/视口兜底/v8.0.0 信任三图标（旧形退役）', () => {
   assert.ok(/#landing \.trust\{position:absolute;left:0;right:0;bottom:44px;bottom:calc\(44px \+ env\(safe-area-inset-bottom\)\)/.test(SRC), '贴底：44px 兜底老内核 + calc(env) 渐进，两行缺一不可');
   assert.ok(SRC.includes('#landing.trust-away .trust{opacity:0}'), '淡出通道类在位');
   assert.ok(SRC.includes('transition:opacity .25s;animation-fill-mode:backwards}'), 'fill-mode 必 backwards：rise 的 both 会动画级锁死 opacity=1 压过淡出（闸 R2/R3 双路命中 P0，真浏览器守门在 e2e trust_keyboard K1）');
   assert.ok(SRC.includes("li.addEventListener('focus', () => landingBox.classList.add('trust-away'));"), '聚焦键盘弹起 → 贴底行淡出（软键盘必盖贴底元素，实锤已拍板让位）');
   assert.ok(SRC.includes("li.addEventListener('blur', () => landingBox.classList.remove('trust-away'));"), '失焦 → 淡回');
+  assert.ok(SRC.includes("window.addEventListener('resize', onResizeTrust, { passive: true });"), 'v8.0.0：视口回弹兜底淡回在位（安卓收起键不 blur 的用户报修根因）');
   const trust = SRC.slice(SRC.indexOf('<div class="trust"'), SRC.indexOf('<div class="trust"') + 2400);
-  assert.ok(trust.includes('M20.3 7.2A9.6 9.6 0 0 1 7.2 20.3') && trust.includes('M3.7 16.8A9.6 9.6 0 0 1 16.8 3.7'), '无需账号=套A品牌双弧环（与 3A logo 同族弧段）');
-  assert.ok(trust.includes('circle cx="12" cy="10.4"') && trust.includes('M12 12.1v2.7'), '环心钥匙孔（圆+柄）');
+  assert.ok(trust.includes('M19.4 17.8A8.4 8.4 0 1 0 4.6 17.8'), '无需账号=v8.0.0 断环+金人头（断口延续环N语汇，套A双弧环退役）');
+  assert.ok(trust.includes('circle class="gf" cx="12" cy="9" r="3"'), '金人头（一点金 R-1 语义核心）');
   assert.ok(!trust.includes('<circle cx="12" cy="12" r="9"/><path d="M5 5l14 14"/>'), '旧「圆圈+斜线」禁止标记退役（廉价感）');
-  assert.ok(trust.includes('M12 3l7 3v6'), '盾牌（服务器只见密文）按拍板保持现状');
-  assert.ok(trust.includes('rect x="3" y="6" width="12" height="9"'), '双设备（扫码跨设备）按拍板保持现状');
+  assert.ok(!trust.includes('M20.3 7.2'), 'v7.9.1 套A双弧环旧形不留存');
+  assert.ok(trust.includes('M12 2.8 4.6 5.6') && trust.includes('class="g" d="m8.7 11.9'), '盾牌 v8.0.0 重锚：结构体+金勾（全套图标统一重绘已 supersede 旧拍板）');
+  assert.ok(trust.includes('rect x="2.5" y="4.5" width="13" height="9.6"') && trust.includes('M17.7 16.7h2.6'), '双设备 v8.0.0 重锚：显示器+手机，金听筒线');
 });

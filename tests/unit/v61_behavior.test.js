@@ -56,7 +56,7 @@ test('V61B-b 关于弹窗：菜单入口打开，版本行含「Version 7.1.1」
   assert.ok(!aboutMask.classList.contains('hidden'), '关于弹窗应打开');
   assert.ok(document.getElementById('menuMask').classList.contains('hidden'), '打开关于时菜单应关闭');
   assert.strictEqual(document.getElementById('aboutTitle').textContent, '关于NoteSync');
-  assert.ok(document.getElementById('aboutVer').textContent.includes('Version 7.9.0'), '版本行应含「Version 7.9.0」');
+  assert.ok(document.getElementById('aboutVer').textContent.includes('Version 8.0.0'), '版本行应含「Version 8.0.0」');
 });
 
 // ── c. 彩蛋：连点标题 4 次 → 诊断模态 ─────────────────────
@@ -73,7 +73,7 @@ test("V61B-c 彩蛋：800ms 内连点「关于NoteSync」4 次关关于弹 about
   assert.ok(!diagMask.classList.contains('hidden'), '诊断模态应打开');
   const txt = document.getElementById('diagContent').textContent;
   assert.ok(txt.length > 0, '#diagContent 应非空');
-  assert.ok(txt.includes('7.9.0'), '诊断信息应含 7.9.0 版本行');
+  assert.ok(txt.includes('8.0.0'), '诊断信息应含 8.0.0 版本行');
 });
 
 // ── d. 诊断自动关闭：editor 滚动 ──────────────────────────

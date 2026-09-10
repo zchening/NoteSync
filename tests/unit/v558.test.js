@@ -36,7 +36,7 @@ test('H2 offlineBar 在 footer 内 + 新文案 + 悬浮条 CSS 退役', () => {
   const src = readSrc();
   const footIdx = src.indexOf('<footer id="foot">');
   const barIdx = src.indexOf('id="offlineBar"');
-  assert.ok(footIdx > -1 && barIdx > footIdx && barIdx < footIdx + 300, 'offlineBar 应在 footer 标签内部');
+  assert.ok(footIdx > -1 && barIdx > footIdx && barIdx < footIdx + 400, 'offlineBar 应在 footer 标签内部（v8.0.0：☰ 改绘 svg 加长菜单钮，窗口 300→400）');
   assert.ok(src.includes('· 最后同步：'), '文案应为「· 最后同步：」（v6.0 起并入状态栏正文、去掉年份）');
   assert.ok(!src.includes('上次同步于'), '旧文案「上次同步于」应退役');
   assert.ok(!src.includes('.offlinebar:not(.hidden)+.upload-status'), '悬浮条错位规则应随悬浮条退役');
