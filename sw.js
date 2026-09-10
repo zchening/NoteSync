@@ -4,7 +4,7 @@
 // 发版后离线用户永远拿旧壳的隐患。
 const VER = (new URL(self.location.href).searchParams.get('v')) || 'x';
 const CACHE = 'notesync-' + VER;
-const ASSETS = ['/index.html', '/manifest.json', '/favicon.svg'];
+const ASSETS = ['/index.html', '/manifest.json', '/favicon.svg', '/icons/icon-192.png', '/icons/icon-512.png', '/apple-touch-icon.png']; // v7.9.0：+品牌图标三件（离线安装横幅/加桌面用）
 
 self.addEventListener('install', e => {
   self.skipWaiting();

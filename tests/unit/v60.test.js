@@ -63,7 +63,7 @@ test('T3 右下角刷新按钮：1.7px 细线 + 44px 触控 + 复用 poll 冲突
   assert.ok(src.includes("if (!cryptoKey) { showUploadStatus('请先解锁'); return; }"), '未解锁应明确提示，不静默');
   assert.ok(src.includes('if (busy || inflightWrites > 0) {') && src.includes("showUploadStatus('正在保存中"), '保存/写入在途时不重复拉，且给轻提示不再纯静默（v7.5.1）');
   assert.ok(!src.includes('if (busy || inflightWrites > 0) return;'), '旧的忙/在途纯静默 return 应退役');
-  assert.ok(src.includes('try { await poll(); }'), '复用 poll——有未保存改动时走冲突卡，绝不静默覆盖');
+  assert.ok(src.includes('poll().then(() => {'), '复用 poll——有未保存改动时走冲突卡，绝不静默覆盖（v7.8.1 起为 then+2.5s 封顶竞速，不再 try/await）');
 });
 
 // ── T4：菜单前缀 Unicode 字形 → 1.7px 细线 SVG ──

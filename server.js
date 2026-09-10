@@ -367,6 +367,16 @@ const server = http.createServer((req, res) => {
         return;
       }
     }
+    // v7.9.0：品牌图标 PNG 三件（iOS 加桌面 / PWA maskable）——精确文件名白名单，防 SPA 兜底把 PNG 当 HTML
+    const BRAND_PNG = { '/apple-touch-icon.png': APP_DIR, '/icons/icon-192.png': path.join(APP_DIR, 'icons'), '/icons/icon-512.png': path.join(APP_DIR, 'icons') };
+    if (BRAND_PNG[url]) {
+      const f = path.join(BRAND_PNG[url], url.split('/').pop());
+      if (fs.existsSync(f)) {
+        res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=604800' });
+        fs.createReadStream(f).pipe(res);
+        return;
+      }
+    }
     // v6.0：jsQR 纯 JS 解码库（扫码兜底）——桌面 Chrome/Edge 与 iOS Safari 无 BarcodeDetector 时动态加载。
     // 独立文件不内联进 index.html：127KB 只在真正扫码时才拉一次（immutable 缓存）。
     if (url === '/jsQR.js') {

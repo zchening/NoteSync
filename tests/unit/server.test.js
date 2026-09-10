@@ -91,8 +91,8 @@ test('Bug1 GET /api/note/<中文名>/stream 应返回 400 bad id', async () => {
   ac.abort(); // 立即断开，避免悬挂长连接
 });
 
-// --- Bug 4: manifest.json 仅含 favicon.svg（无 maskable PNG，v5.16 移除）---
-test('Bug4 GET /manifest.json 含 favicon.svg 的 maskable 条目、无 icon-maskable PNG', async () => {
+// --- v7.9.0（原 Bug4）：manifest 图标清单——favicon.svg maskable 条目保留 + icon-512 maskable PNG 上线 ---
+test('v7.9.0 GET /manifest.json：favicon.svg maskable 条目 + icon-512 maskable PNG', async () => {
   const res = await fetch(`${BASE}/manifest.json`);
   assert.strictEqual(res.status, 200);
   const m = await res.json();
@@ -101,8 +101,27 @@ test('Bug4 GET /manifest.json 含 favicon.svg 的 maskable 条目、无 icon-mas
     (i) => (i.src || '').includes('favicon.svg') && (i.purpose || '').includes('maskable')
   );
   assert.ok(faviconMaskable, 'manifest 缺少 favicon.svg 的 maskable 条目；icons=' + JSON.stringify(icons));
-  const png = icons.find((i) => (i.src || '').includes('icon-maskable'));
-  assert.ok(!png, 'manifest 不应再含 icon-maskable-*.png；icons=' + JSON.stringify(icons));
+  const png512 = icons.find(
+    (i) => (i.src || '').includes('icon-512.png') && (i.purpose || '').split(/\s+/).includes('maskable')
+  );
+  assert.ok(png512, 'v7.9.0 manifest 应含 icon-512.png 的 maskable 条目；icons=' + JSON.stringify(icons));
+  assert.ok(String(m.theme_color).toUpperCase() === '#FBFBF8', 'theme_color 应为纸白 #FBFBF8（蓝色遗留已清）');
+  assert.ok(String(m.background_color).toUpperCase() === '#FBFBF8', 'background_color 应为纸白 #FBFBF8');
+});
+
+// --- v7.9.0：品牌 PNG 三件静态路由（apple-touch / icons）+ 路径穿越防护 ---
+test('v7.9.0 品牌图标路由：200 + PNG 魔数；穿越路径不得命中白名单', async () => {
+  for (const u of ['/apple-touch-icon.png', '/icons/icon-192.png', '/icons/icon-512.png']) {
+    const res = await fetch(BASE + u);
+    assert.strictEqual(res.status, 200, u + ' 应 200');
+    assert.ok((res.headers.get('content-type') || '').includes('image/png'), u + ' 应为 image/png');
+    const buf = Buffer.from(await res.arrayBuffer());
+    assert.ok(buf.length > 1000, u + ' 应有实际内容');
+    assert.ok(buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47, u + ' 应为 PNG 魔数');
+  }
+  const trav = await fetch(`${BASE}/icons/not-in-whitelist.png`);
+  const ct = trav.headers.get('content-type') || '';
+  assert.ok(!ct.includes('image/'), '白名单外路径不得命中品牌静态路由（精确匹配，穿越面为零）');
 });
 
 // --- Bug 4: favicon.svg 透明金 logo（无黑色背景）---

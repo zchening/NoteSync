@@ -112,7 +112,8 @@ test('Bug3 禁用按钮存在有意样式规则（button:disabled）', () => {
   assert.ok(found, '应存在针对 button:disabled 的有意禁用样式规则');
 });
 
-// ── Bug 4：PWA 图标恢复为备案前透明金 logo（v5.16 修正 v5.15 误改黑底）──
+// ── Bug 4：图标底线守护——favicon 绝不黑色背景（备案前教训）；manifest 禁 icon-maskable-* 旧命名 ──
+// v7.9.0 更新：favicon 已是纸白底 3A 环 N（#F7F2E9 底合法），本组断言守护"黑底"与旧命名不回归。
 test('Bug4 manifest 仅引用透明 favicon.svg（purpose 含 maskable，无 maskable PNG）', () => {
   const manifestPath = path.resolve(__dirname, '..', '..', 'manifest.json');
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));

@@ -11,23 +11,23 @@ const { INDEX_PATH } = require('../helpers');
 function readSrc() { return fs.readFileSync(INDEX_PATH, 'utf8'); }
 function readRel(rel) { return fs.readFileSync(path.join(__dirname, '..', '..', rel), 'utf8'); } // 基准=仓库根
 
-// ── 1. App 图标 B 参数（用户拍板：N 太大且太瘦 → 44% / 5.6%）──
-test('V61-1 图标 B 参数：gen_icons.py 44%/5.6% + foreground 30%/5.0% + playstore 40%/4.8%', () => {
+// ── 1. App 图标参数显式化（v7.9.0 起为 3A 环 N render_ring；原 v6.1 纯 N 44%/5.6% 被取代）──
+test('V61-1 图标参数显式化：gen_icons.py render_ring 0.92/0.66 + 全套 PNG 在位', () => {
   const s = readRel('tools/gen_icons.py');
-  assert.ok(s.includes('render(size, 0.44, 0.056)'), 'launcher 应 44%/5.6%');
-  assert.ok(s.includes('render(size, 0.30, 0.050)'), 'adaptive foreground 应 30%/5.0%');
-  assert.ok(s.includes('render(512, 0.40, 0.048)'), 'Play Store 512 应 40%/4.8%');
-  assert.ok(!s.includes('0.52'), '旧 52% 参数应退役');
+  assert.ok(s.includes('render_ring(size, 0.92)'), 'launcher 应 0.92 scale（v7.9.0 3A）');
+  assert.ok(s.includes('render_ring(size, 0.66, bg=False)'), 'adaptive foreground 应 0.66 安全区+透明底');
+  assert.ok(s.includes('render_ring(512, 0.92)'), 'Play Store 512 全细节');
+  assert.ok(!s.includes('render(size, 0.44, 0.056)'), '旧 v6.1 纯 N 参数应随 3A 退役');
   // 全套 PNG 已重生成（launcher 至少 mdpi 48 存在）
   const png = path.join(__dirname, '..', '..', 'android', 'app', 'src', 'main', 'res', 'mipmap-mdpi', 'ic_launcher.png');
   assert.ok(fs.existsSync(png) && fs.statSync(png).size > 500, 'mdpi launcher PNG 应在位');
 });
 
-// ── 2. favicon 同步加粗 2.6→3.4（用户拍板）──
-test('V61-2 favicon.svg 线宽加粗到 3.4', () => {
+// ── 2. favicon 小尺寸加粗描边（v7.9.0 起为 F2 档 4.6；原 3.4 随旧箭头标退役）──
+test('V61-2 favicon.svg 小尺寸描边档', () => {
   const s = readRel('favicon.svg');
-  assert.ok(s.includes('stroke-width="3.4"'), 'favicon 应 3.4 线宽');
-  assert.ok(!s.includes('stroke-width="2.6"'), '旧 2.6 应退役');
+  assert.ok(s.includes('stroke-width="4.6"'), '16px 档应 4.6（F2 保环弃尖加粗）');
+  assert.ok(!s.includes('stroke-width="3.4"'), '旧箭头标 3.4 档应退役');
 });
 
 // ── 3. 口令弹窗：去图标 + 标题精简 + X 出口（方案 A + 用户拍板）──
@@ -158,10 +158,10 @@ test('V61-13 扫码提示分流：HTTPS/组件失败/无摄像头/权限拒绝 �
 // ── 14. 版本升格（v7.0 起断言跟随最新版）──
 test('V61-14 版本升格：APP_VERSION 7.0.1 / BUILD_DATE / gradle 701+7.0.1 / README 条目 ≤40 汉字', () => {
   const src = readSrc();
-  assert.ok(src.includes("const APP_VERSION = '7.8.0';"), 'APP_VERSION 应 7.8.0');
-  assert.ok(src.includes("const BUILD_DATE = '2026-09-09';"), 'BUILD_DATE 应更新');
+  assert.ok(src.includes("const APP_VERSION = '7.9.0';"), 'APP_VERSION 应 7.9.0');
+  assert.ok(src.includes("const BUILD_DATE = '2026-09-10';"), 'BUILD_DATE 应更新');
   const gradle = readRel('android/app/build.gradle');
-  assert.ok(gradle.includes('versionCode 780') && gradle.includes('versionName "7.8.0"'), 'gradle 应 780/7.8.0');
+  assert.ok(gradle.includes('versionCode 790') && gradle.includes('versionName "7.9.0"'), 'gradle 应 790/7.9.0');
   const readme = readRel('README.md');
   const row = (readme.match(/^\| v7\.0\.1 \|[^|]+\|([^|]+)\|/m) || [])[1] || '';
   const hz = (row.match(/[一-龥]/g) || []).length;

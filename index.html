@@ -18,7 +18,8 @@
 <meta name="apple-mobile-web-app-title" content="NoteSync">
 <meta name="description" content="NoteSync · 端到端加密的多设备同步笔记">
 <link rel="manifest" href="/manifest.json">
-<link rel="icon" href="/favicon.svg?v=5.14" type="image/svg+xml">
+<link rel="icon" href="/favicon.svg?v=7.9.0" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <title>NoteSync</title>
 <!-- v7.5.1：html2canvas 不再挂公共 CDN（jsdelivr 在大陆常不可达→手机「图片导出组件未加载」）。
      改为导出时从同源 /html2canvas.min.js 懒加载（见 loadHtml2Canvas），与 jsQR 同范式。 -->
@@ -285,6 +286,9 @@
   #landing>*:nth-child(3){animation-delay:.12s}
   #landing>*:nth-child(4){animation-delay:.18s}
   #landing>*:nth-child(5){animation-delay:.24s}
+  #landing>*:nth-child(6){animation-delay:.30s} /* v7.9.0：预览行/扫码/信任行续上 0.06s 步进 */
+  #landing>*:nth-child(7){animation-delay:.36s}
+  #landing>*:nth-child(8){animation-delay:.42s}
   #landing .logo{width:56px;height:56px;margin:0 0 22px;color:var(--accent)}
   #landing h1{font-family:var(--serif);font-size:34px;font-weight:500;margin:0 0 10px;letter-spacing:.05em}
   #landing .sub{color:var(--muted);font-size:13px;margin:0 0 44px;letter-spacing:.32em;padding-left:.32em}
@@ -300,7 +304,11 @@
   #landing #landingScan:active{opacity:.6}
   #landing #landingScan:hover{border-color:var(--accent);color:var(--accent)}
   #landing #landingScan svg{width:16px;height:16px;display:block}
-  #landing .hint{color:var(--muted);font-size:12px;margin:26px 0 0;line-height:1.7;letter-spacing:.05em;opacity:.8}
+  #landing .urlline{color:var(--muted);font-size:12.5px;margin:16px 0 0;line-height:1.7;letter-spacing:.03em;max-width:340px;word-break:break-all} /* v7.9.0：旧 URL hint 退役，改实时网址预览——名字段金色跟着输入变 */
+  #landing .urlline .u-name{color:var(--accent);font-weight:600;letter-spacing:.02em}
+  #landing .trust{display:flex;color:var(--muted);font-size:11.5px;letter-spacing:.05em;margin-top:40px} /* v7.9.0 闸R2：不用 flex gap（老内核丢 gap 三图标粘连），margin 兜底 */
+  #landing .trust>span{display:flex;flex-direction:column;align-items:center;gap:7px;margin:0 13px}
+  #landing .trust svg{width:17px;height:17px;color:var(--accent);display:block}
   @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
   /* v5.44：remCard 专用入场——to 帧保留 translate(-50%,-50%)，动画结束不丢居中偏移 */
   @keyframes remRise{from{opacity:0;transform:translate(-50%,-50%) translateY(14px)}to{opacity:1;transform:translate(-50%,-50%)}}
@@ -323,6 +331,11 @@
   #refreshBtn:active{opacity:.6}
   #refreshBtn svg{width:20px;height:20px;display:block}
   #refreshBtn.spinning svg{animation:spin .8s linear infinite}
+  /* v7.8.1：刷新反馈方案 A——转圈期变 --accent 金，结束短暂切细线 ✓ 回灰（同 family 1.7px 描边，不引新颜色） */
+  #refreshBtn svg.ico-check{display:none}
+  #refreshBtn.working,#refreshBtn.done{color:var(--accent)}
+  #refreshBtn.done svg.ico-refresh{display:none}
+  #refreshBtn.done svg.ico-check{display:block}
   @keyframes spin{to{transform:rotate(360deg)}}
   .upload-status.show{opacity:1}
   #loading{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:5;color:var(--muted);font-size:13px;letter-spacing:.2em}
@@ -330,26 +343,36 @@
 </head>
 <body>
 <div id="landing" class="hidden">
-  <svg class="logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M38.5 21.5A15 15 0 0 0 13 13.6"/>
-    <path d="M12.5 6.5v7.5H20"/>
-    <path d="M9.5 26.5A15 15 0 0 0 35 34.4"/>
-    <path d="M35.5 41.5V34H28"/>
-    <line x1="17.5" y1="24" x2="30.5" y2="24"/>
+  <svg class="logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+    <!-- v7.9.0 品牌 3A 全细节版（≥40px）：双弧环+直角尖+衬线 N（与通知标/桌面标 N 同族） -->
+    <g stroke="currentColor" stroke-width="2.3" stroke-linecap="round">
+      <path d="M40.5 14.5A19 19 0 0 1 14.5 40.5"/>
+      <path d="M7.5 33.5A19 19 0 0 1 33.5 7.5"/>
+    </g>
+    <g stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M14.5 35.5v5h-5"/>
+      <path d="M33.5 12.5v-5h5"/>
+    </g>
+    <path d="M18.72 16.96h2.2l6.16 11V16.96h2.2v14.08h-2.2l-6.16-11V31.04h-2.2Z" fill="currentColor"/>
   </svg>
   <h1>NoteSync</h1>
   <p class="sub">端到端加密 · 多设备同步</p>
   <div class="input-row">
-    <input id="landingInput" placeholder="笔记名（英文 / 数字 / _ / -）" maxlength="64" autocomplete="off">
+    <input id="landingInput" placeholder="笔记名（英文/数字）" maxlength="64" autocomplete="off">
     <button id="landingBtn" disabled>打开</button>
   </div>
   <p id="landingWarn" class="warn hidden">仅支持英文、数字、下划线和短横线</p>
+  <p id="landingUrlLine" class="urlline hidden">你的笔记网址为：&nbsp;<span class="dyn-domain"></span>/<span id="landingUrlName" class="u-name"></span></p>
   <div class="scan-row"><span id="landingScan" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8V4h4"/><path d="M16 4h4v4"/><path d="M20 16v4h-4"/><path d="M8 20H4v-4"/><path d="M7.5 12h9"/></svg>扫码打开笔记</span></div>
-  <p class="hint">在网址后加笔记名即可，如 <span class="dyn-domain"></span>/notes</p>
+  <div class="trust" aria-hidden="true">
+    <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg>服务器只见密文</span>
+    <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M5 5l14 14"/></svg>无需账号</span>
+    <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="12" height="9" rx="1.5"/><path d="M8 19h4"/><rect x="17" y="9" width="4.5" height="10" rx="1.5"/></svg>扫码跨设备</span>
+  </div>
 </div>
 <header>
   <span class="brand">
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M38.5 21.5A15 15 0 0 0 13 13.6"/><path d="M12.5 6.5v7.5H20"/><path d="M9.5 26.5A15 15 0 0 0 35 34.4"/><path d="M35.5 41.5V34H28"/><line x1="17.5" y1="24" x2="30.5" y2="24"/></svg>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="3.6" stroke-linecap="round"><path d="M40.5 14.5A19 19 0 0 1 14.5 40.5"/><path d="M7.5 33.5A19 19 0 0 1 33.5 7.5"/></g><path d="M18.72 16.96h2.2l6.16 11V16.96h2.2v14.08h-2.2l-6.16-11V31.04h-2.2Z" fill="currentColor"/></svg>
     <b>NoteSync</b>
     <span id="brandNote" class="hidden"></span>
   </span>
@@ -428,7 +451,7 @@
 </div>
 <div id="editor" data-ph="开始输入，自动同步到所有设备…" contenteditable="true"></div>
 <input type="file" id="fileInput" accept="image/*" style="display:none">
-<footer id="foot"><span id="menuBtn" title="菜单">☰</span><span class="dot" id="status"></span><span id="statustext">连接中…</span><span id="offlineBar" class="offlinebar hidden">· 最后同步：<span id="offlineTime"></span></span><button type="button" id="refreshBtn" title="刷新" aria-label="刷新"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg></button></footer>
+<footer id="foot"><span id="menuBtn" title="菜单">☰</span><span class="dot" id="status"></span><span id="statustext">连接中…</span><span id="offlineBar" class="offlinebar hidden">· 最后同步：<span id="offlineTime"></span></span><button type="button" id="refreshBtn" title="刷新" aria-label="刷新"><svg class="ico-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg><svg class="ico-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6.5 9.6 17 4 11.4"/></svg></button></footer>
 <div class="upload-status" id="uploadStatus"></div>
 
 <div id="loading">加载中</div>
@@ -541,8 +564,8 @@ function markJumped() {
 }
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '7.8.0';
-const BUILD_DATE = '2026-09-09';
+const APP_VERSION = '7.9.0';
+const BUILD_DATE = '2026-09-10';
 
 const $ = s => document.querySelector(s);
 const editor = $('#editor'), mask = $('#mask'), pw = $('#pw'), err = $('#err');
@@ -641,6 +664,8 @@ function themeOverrideCss(dark) {
     footer{background:${p.bg}!important;color:${p.muted}!important;border-color:${p.line}!important}
     footer .dot{background:${dot}!important}
     footer .dot.on{background:#2FA866!important}
+    #refreshBtn{color:${p.muted}!important}
+    #refreshBtn.working,#refreshBtn.done{color:${accent}!important}
     .box{background:${p.box}!important;color:${p.fg}!important;border-color:${p.line}!important}
     .box h1{color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important}
     .box p,.box .qr-lock-warn{color:${p.muted}!important;-webkit-text-fill-color:${p.muted}!important}
@@ -664,7 +689,8 @@ function themeOverrideCss(dark) {
     #editor u.rem-mark{color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important;text-decoration-color:${p.fg}!important}
     #landing{background:radial-gradient(ellipse 720px 480px at 50% 30%,${accentSoft},transparent),${p.bg}!important;color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important}
     #landing h1{color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important}
-    #landing .sub,#landing .hint{color:${p.muted}!important;-webkit-text-fill-color:${p.muted}!important}
+    #landing .sub,#landing .urlline,#landing .trust{color:${p.muted}!important;-webkit-text-fill-color:${p.muted}!important}
+    #landing .urlline .u-name,#landing .trust svg{color:${accent}!important;-webkit-text-fill-color:${accent}!important}
     #landing input{background:${p.box}!important;color:${p.fg}!important;border-color:${p.line}!important;-webkit-text-fill-color:${p.fg}!important}
     #landing button:not(:disabled){background:${p.fg}!important;color:${p.bg}!important;-webkit-text-fill-color:${p.bg}!important}
     #loading{background:${p.bg}!important;color:${p.muted}!important;-webkit-text-fill-color:${p.muted}!important}
@@ -725,6 +751,8 @@ const SHELL_CSS = [
   'footer{background:#040407!important;color:#676A75!important;border-color:#13151D!important}',
   'footer .dot{background:#363841!important}',
   'footer .dot.on{background:#D05799!important}',
+  '#refreshBtn{color:#676A75!important}',
+  '#refreshBtn.working,#refreshBtn.done{color:#708ED9!important}',
   '.box{background:#000000!important;color:#E3E3E5!important;border-color:#13151D!important}',
   '.box h1{color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important}',
   '.box p,.box .qr-lock-warn{color:#676A75!important;-webkit-text-fill-color:#676A75!important}',
@@ -748,7 +776,8 @@ const SHELL_CSS = [
   '#editor u.rem-mark{color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important;text-decoration-color:#E3E3E5!important}',
   '#landing{background:radial-gradient(ellipse 720px 480px at 50% 30%,rgba(112,142,217,.07),transparent),#040407!important;color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important}',
   '#landing h1{color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important}',
-  '#landing .sub,#landing .hint{color:#676A75!important;-webkit-text-fill-color:#676A75!important}',
+  '#landing .sub,#landing .urlline,#landing .trust{color:#676A75!important;-webkit-text-fill-color:#676A75!important}',
+  '#landing .urlline .u-name,#landing .trust svg{color:#708ED9!important;-webkit-text-fill-color:#708ED9!important}',
   '#landing input{background:#000000!important;color:#E3E3E5!important;border-color:#13151D!important;-webkit-text-fill-color:#E3E3E5!important}',
   '#landing button:not(:disabled){background:#E3E3E5!important;color:#040407!important;-webkit-text-fill-color:#040407!important}',
   '#loading{background:#040407!important;color:#676A75!important;-webkit-text-fill-color:#676A75!important}',
@@ -3276,6 +3305,7 @@ function showOfflineBar(ts) {
 // 有未保存改动时 poll 会挂起远端并弹冲突卡，绝不静默覆盖本机输入。
 const refreshBtnEl = document.getElementById('refreshBtn');
 if (refreshBtnEl) {
+  let rfbStepTimer = null, rfbDoneTimer = null, rfbCapTimer = null, rfbToastTimer = null, rfbRun = 0; // v7.8.1：连点去抖+运行令牌——上一轮的补足/封顶/✓/toast 收尾计时不得跨轮串台
   refreshBtnEl.addEventListener('click', async () => {
     if (!cryptoKey) { showUploadStatus('请先解锁'); setTimeout(() => { if (uploadStatus.textContent === '请先解锁') hideUploadStatus(); }, 2000); return; }
     hideUploadStatus(); // v7.5.1：点刷新先清掉可能卡住的临时提示（与浏览器刷新的观感对齐）
@@ -3284,8 +3314,57 @@ if (refreshBtnEl) {
       setTimeout(() => { if (uploadStatus.textContent.indexOf('正在保存中') === 0) hideUploadStatus(); }, 1500);
       return;
     }
-    refreshBtnEl.classList.add('spinning');
-    try { await poll(); } finally { setTimeout(() => refreshBtnEl.classList.remove('spinning'), 450); }
+    clearTimeout(rfbStepTimer); clearTimeout(rfbDoneTimer); clearTimeout(rfbCapTimer); clearTimeout(rfbToastTimer);
+    rfbStepTimer = rfbDoneTimer = rfbCapTimer = rfbToastTimer = null;
+    const run = ++rfbRun;
+    refreshBtnEl.classList.remove('done');
+    const prevHtml = lastHtml, rfbT0 = Date.now();
+    refreshBtnEl.classList.add('spinning', 'working');
+    // v7.8.1 方案A：保底转满 800ms（快网不足 1 秒无感知）+ UI 层 2.5s 封顶（poll 走 fetchRetry
+    // 1s+3s 退避，断网死等会转 4 秒圈）——到时先报失败，晚到的真实成功翻牌纠正（失败静默）。
+    let rfbState = 'pending'; // pending → settled | timeout →（晚到结果）late
+    const rfbFinish = forced => {
+      const step = () => {
+        rfbStepTimer = null;
+        refreshBtnEl.classList.remove('spinning', 'working');
+        const st = statusText.textContent;
+        let msg = forced || '';
+        if (!msg) {
+          if (lastHtml !== prevHtml) msg = '已同步更新';
+          else if (st === '已同步') msg = '已是最新';
+          else if (st === '远端有更新，待处理') msg = ''; // 冲突条已挂起，胶囊让位不叠加
+          else if (st === '已退出' || st === '已锁定') msg = ''; // v7.9.0 闸R2：800ms 窗口内被锁的竞态——poll 早退非真失败，让位不报
+          else msg = '刷新失败';
+        }
+        if (!msg) return;
+        if (msg !== '刷新失败') { // ✓ 只给成功结果；失败回灰不装完成
+          refreshBtnEl.classList.add('done');
+          rfbDoneTimer = setTimeout(() => { rfbDoneTimer = null; refreshBtnEl.classList.remove('done'); }, 900);
+        }
+        showUploadStatus(msg);
+        clearTimeout(rfbToastTimer); // v7.9.0 闸R2：上轮 toast 收尾计时不得早收本轮同文案胶囊
+        rfbToastTimer = setTimeout(() => { if (uploadStatus.textContent === msg) hideUploadStatus(); }, 2000); // 红线15：toast 必配「仍是它才清」守卫的自动隐藏
+      };
+      const rfbRemain = 800 - (Date.now() - rfbT0);
+      if (rfbRemain > 0) rfbStepTimer = setTimeout(step, rfbRemain); else step();
+    };
+    poll().then(() => {
+      if (run !== rfbRun) return;
+      if (rfbState === 'pending') { rfbState = 'settled'; rfbFinish(); }
+      else if (rfbState === 'timeout') {
+        rfbState = 'late';
+        if (statusText.textContent === '远端有更新，待处理') { // 封顶误报失败后冲突条才挂起：收胶囊让位条
+          if (uploadStatus.textContent === '刷新失败') hideUploadStatus();
+          return;
+        }
+        if (lastHtml !== prevHtml || statusText.textContent === '已同步') rfbFinish(); // 成功迟到翻牌；同样失败则静默
+      }
+    });
+    rfbCapTimer = setTimeout(() => {
+      if (run !== rfbRun || rfbState !== 'pending') return;
+      rfbState = 'timeout';
+      rfbFinish('刷新失败'); // 封顶时 poll 未返回：页脚还是旧「已同步」，不得误判为最新，强制失败待翻牌
+    }, 2500);
   });
 }
 function hideOfflineBar() {
@@ -6280,6 +6359,15 @@ if (noteId && (isNativeApp() || !CHIP_HOVER_OK)) {
     document.getElementById('landing').classList.remove('hidden');
     const li = document.getElementById('landingInput'), lb = document.getElementById('landingBtn');
     const warnEl = document.getElementById('landingWarn');
+    // v7.9.0：实时网址预览——旧「在网址后加笔记名即可」hint 退役。值经 sanitizeName 净化后必合法，
+    // 非空即显行、空值整行隐身（不闪现光杆域名）；域名段由 .dyn-domain 装载既有 IIFE 填 hostname。
+    const urlEl = document.getElementById('landingUrlLine'), urlName = document.getElementById('landingUrlName');
+    const syncUrlHint = () => {
+      if (!urlEl || !urlName) return;
+      const nm = li.value.trim();
+      if (nm) { urlName.textContent = nm; urlEl.classList.remove('hidden'); }
+      else urlEl.classList.add('hidden');
+    };
     const syncOpenBtn = () => { lb.disabled = li.value.trim().length === 0; };
     const sanitizeName = () => {
       // v5.19 恢复 _ 与 -（与后端 ID_RE 一致）；中文等其它字符仍被剔除
@@ -6291,10 +6379,12 @@ if (noteId && (isNativeApp() || !CHIP_HOVER_OK)) {
         warnEl.classList.add('hidden');
       }
       syncOpenBtn();
+      syncUrlHint();
     };
     li.addEventListener('input', sanitizeName);
     li.addEventListener('compositionend', sanitizeName);
     syncOpenBtn();
+    syncUrlHint();
     // v5.53：IME 兜底轮询——部分输入法（如百度个性短语）向输入框注入文本时
     // 不按标准流程派发 input/composition 事件，按钮状态会卡死在 disabled。
     // 250ms 对比 value，有变化就补跑 sanitizeName。仅首页显示期间运行，成本可忽略。
