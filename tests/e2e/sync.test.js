@@ -114,3 +114,30 @@ test('T2 决定性回归：SSE 关闭时仅靠 2s 轮询基线，B 仍自动同�
   assert.strictEqual(toast2, false, 'T2 同步后不应出现 #syncToast 提示浮层');
   assert.deepStrictEqual([...pageA.__errors, ...pageB.__errors], [], '两端不应有 pageerror');
 }));
+
+// T3（v8.0.7）：手动刷新=浏览器刷新体感——页脚=唯一结果反馈通道。
+// MutationObserver 记录全过程：按下必现「同步中…」→「已同步」落位，#uploadStatus 全程零 .show
+// （结果 toast 退役的实证就靠这条全程监听，瞬时态不再靠竞速抓现行）。
+test('T3 手动刷新：页脚 同步中…→已同步 两段式，全程零 toast、按钮停转', guard(async () => {
+  const { browser, baseURL } = await withEnv(false);
+  const ctx = await browser.newContext();
+  const page = await openNote(ctx, baseURL);
+  await page.waitForFunction(() => document.getElementById('statustext').textContent === '已同步', undefined, { timeout: 15000 });
+  await page.evaluate(() => {
+    window.__seen = []; window.__pillSeen = false;
+    const st = document.getElementById('statustext');
+    new MutationObserver(() => window.__seen.push(st.textContent)).observe(st, { childList: true, characterData: true, subtree: true });
+    const pill = document.getElementById('uploadStatus');
+    new MutationObserver(() => { if (pill.classList.contains('show')) window.__pillSeen = true; }).observe(pill, { attributes: true, attributeFilter: ['class'] });
+  });
+  await page.click('#refreshBtn');
+  await page.waitForFunction(() =>
+    window.__seen.includes('同步中…') && window.__seen.includes('已同步') &&
+    !document.getElementById('refreshBtn').classList.contains('spinning'),
+  undefined, { timeout: 10000 });
+  const r = await page.evaluate(() => ({ seen: window.__seen, pill: window.__pillSeen }));
+  const i = r.seen.indexOf('同步中…'); // 闸R2-P2：2s 常驻轮询可能在点击前已把「已同步」记进观察序列——只认「首个同步中…之后出现的已同步」，不比首个下标
+  assert.ok(i > -1 && r.seen.slice(i + 1).includes('已同步'), '页脚必须按下先「同步中…」后落位「已同步」（观察序列: ' + JSON.stringify(r.seen) + '）');
+  assert.strictEqual(r.pill, false, 'v8.0.7：手动刷新全程不得弹 #uploadStatus 结果胶囊');
+  assert.deepStrictEqual([...page.__errors], [], '无 pageerror');
+}));

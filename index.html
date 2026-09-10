@@ -205,6 +205,7 @@
   /* v5.58：三端菜单与左下角布局统一——扫一扫/日夜间切换/退出锁定全平台进菜单（平台差异化机制退役），
      顶栏 themeBtn/lock 全平台移除（不再只在 APP 端隐藏）；菜单项与 ☰ 加大已在上方全局生效 */
   #themeBtn, #lock{display:none}
+  #menuFavView .menu-item,#menuHistView .menu-item{justify-content:flex-start} /* v8.0.7：二级页内全部行（返回/新增历史版本）左起笔（用户报「收藏列表太靠左没和返回对齐」根因=主菜单「整组居中」的起笔悬空且随屏宽浮动；闸R1-P1 由枚 id 升视图级——同族行禁漏枚举，红线17 精神）——图标列与 .fav-row/.hist-item 图标列同一竖线（左 padding 同 12px）；主菜单九行居中不动（menu_align M1/M2 守护不受影响，M5 反证钉） */
   .fav-row{display:flex;align-items:center;gap:10px;box-sizing:border-box;width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:6px;min-height:42px;font-size:14px;color:var(--fg);cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:border-color .2s} /* v8.0.4 收藏二级页重设计：裸文本+hairline 列表与主菜单胶囊行族脱节=「low」根因；改同族胶囊+金星列+mono 名+右箭头。删除入口仍=笔记内取消收藏（v5.55 拍板不动） */
   .fav-row:active{background:var(--hover)}
   @media (hover:hover){.fav-row:hover{border-color:color-mix(in srgb, var(--accent) 45%, var(--line))}}
@@ -584,8 +585,8 @@ function markJumped() {
 }
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '8.0.6';
-const BUILD_DATE = '2026-09-10';
+const APP_VERSION = '8.0.7';
+const BUILD_DATE = '2026-09-11';
 
 const $ = s => document.querySelector(s);
 const editor = $('#editor'), mask = $('#mask'), pw = $('#pw'), err = $('#err');
@@ -3329,9 +3330,14 @@ function showOfflineBar(ts) {
 }
 // v6.0：右下角刷新——手动拉一次最新。刻意复用 poll 的冲突判定：
 // 有未保存改动时 poll 会挂起远端并弹冲突卡，绝不静默覆盖本机输入。
+// v8.0.7（用户拍板「等同于刷浏览器」）：页脚=唯一结果反馈通道——点击即灰点「同步中…」
+// （不再一边转圈一边谎报「已同步」），结果由 poll 原生落位「已同步/待处理/同步中断」；
+// 结果 toast 退役（与页脚重复）。按钮仍走 金转圈→成功✓一闪→回灰（保底 800ms 不动）。
+// 2.5s 封顶仅在页脚仍是「同步中…」时代报「刷新失败」，晚到结果由 2 秒常驻轮询自然纠正
+// （替代 v7.8.1 的「晚到翻牌」专用状态机）。
 const refreshBtnEl = document.getElementById('refreshBtn');
 if (refreshBtnEl) {
-  let rfbStepTimer = null, rfbDoneTimer = null, rfbCapTimer = null, rfbToastTimer = null, rfbRun = 0; // v7.8.1：连点去抖+运行令牌——上一轮的补足/封顶/✓/toast 收尾计时不得跨轮串台
+  let rfbStepTimer = null, rfbDoneTimer = null, rfbCapTimer = null, rfbRun = 0; // v7.8.1：连点去抖+运行令牌——上一轮的补足/封顶/✓ 收尾计时不得跨轮串台
   refreshBtnEl.addEventListener('click', async () => {
     if (!cryptoKey) { showUploadStatus('请先解锁'); setTimeout(() => { if (uploadStatus.textContent === '请先解锁') hideUploadStatus(); }, 2000); return; }
     hideUploadStatus(); // v7.5.1：点刷新先清掉可能卡住的临时提示（与浏览器刷新的观感对齐）
@@ -3340,56 +3346,33 @@ if (refreshBtnEl) {
       setTimeout(() => { if (uploadStatus.textContent.indexOf('正在保存中') === 0) hideUploadStatus(); }, 1500);
       return;
     }
-    clearTimeout(rfbStepTimer); clearTimeout(rfbDoneTimer); clearTimeout(rfbCapTimer); clearTimeout(rfbToastTimer);
-    rfbStepTimer = rfbDoneTimer = rfbCapTimer = rfbToastTimer = null;
+    clearTimeout(rfbStepTimer); clearTimeout(rfbDoneTimer); clearTimeout(rfbCapTimer);
+    rfbStepTimer = rfbDoneTimer = rfbCapTimer = null;
     const run = ++rfbRun;
     refreshBtnEl.classList.remove('done');
-    const prevHtml = lastHtml, rfbT0 = Date.now();
+    const rfbT0 = Date.now();
     refreshBtnEl.classList.add('spinning', 'working');
-    // v7.8.1 方案A：保底转满 800ms（快网不足 1 秒无感知）+ UI 层 2.5s 封顶（poll 走 fetchRetry
-    // 1s+3s 退避，断网死等会转 4 秒圈）——到时先报失败，晚到的真实成功翻牌纠正（失败静默）。
-    let rfbState = 'pending'; // pending → settled | timeout →（晚到结果）late
-    const rfbFinish = forced => {
+    setStatus(false, '同步中…'); // v8.0.7 主修：刷新期间页脚不再谎报绿点「已同步」（poll 成功会自行翻绿）
+    const rfbSettle = forcedFail => { // 收尾只动按钮+代报封顶失败；成功文案绝不另写（poll 已落位）
       const step = () => {
         rfbStepTimer = null;
+        if (run !== rfbRun) return;
+        clearTimeout(rfbCapTimer); if (rfbCapTimer !== null) { rfbCapTimer = null; } // 封顶一次性：本轮已收尾不得再代报
         refreshBtnEl.classList.remove('spinning', 'working');
-        const st = statusText.textContent;
-        let msg = forced || '';
-        if (!msg) {
-          if (lastHtml !== prevHtml) msg = '已同步更新';
-          else if (st === '已同步') msg = '已是最新';
-          else if (st === '远端有更新，待处理') msg = ''; // 冲突条已挂起，胶囊让位不叠加
-          else if (st === '已退出' || st === '已锁定') msg = ''; // v7.9.0 闸R2：800ms 窗口内被锁的竞态——poll 早退非真失败，让位不报
-          else msg = '刷新失败';
-        }
-        if (!msg) return;
-        if (msg !== '刷新失败') { // ✓ 只给成功结果；失败回灰不装完成
+        if (forcedFail && statusText.textContent === '同步中…') setStatus(false, '刷新失败'); // 只有页脚仍无人落位才代报；常驻轮询 ≤2s 自然纠正
+        if (statusText.textContent === '已同步') { // ✓ 只给成功；冲突/失败/中途被锁一律回灰不装完成
           refreshBtnEl.classList.add('done');
+          clearTimeout(rfbDoneTimer);
           rfbDoneTimer = setTimeout(() => { rfbDoneTimer = null; refreshBtnEl.classList.remove('done'); }, 900);
         }
-        showUploadStatus(msg);
-        clearTimeout(rfbToastTimer); // v7.9.0 闸R2：上轮 toast 收尾计时不得早收本轮同文案胶囊
-        rfbToastTimer = setTimeout(() => { if (uploadStatus.textContent === msg) hideUploadStatus(); }, 2000); // 红线15：toast 必配「仍是它才清」守卫的自动隐藏
       };
       const rfbRemain = 800 - (Date.now() - rfbT0);
       if (rfbRemain > 0) rfbStepTimer = setTimeout(step, rfbRemain); else step();
     };
-    poll().then(() => {
+    poll().then(() => { if (run === rfbRun) rfbSettle(false); });
+    rfbCapTimer = setTimeout(() => { // UI 层 2.5s 封顶：poll 走 fetchRetry 1s+3s 退避，断网不死转圈
       if (run !== rfbRun) return;
-      if (rfbState === 'pending') { rfbState = 'settled'; rfbFinish(); }
-      else if (rfbState === 'timeout') {
-        rfbState = 'late';
-        if (statusText.textContent === '远端有更新，待处理') { // 封顶误报失败后冲突条才挂起：收胶囊让位条
-          if (uploadStatus.textContent === '刷新失败') hideUploadStatus();
-          return;
-        }
-        if (lastHtml !== prevHtml || statusText.textContent === '已同步') rfbFinish(); // 成功迟到翻牌；同样失败则静默
-      }
-    });
-    rfbCapTimer = setTimeout(() => {
-      if (run !== rfbRun || rfbState !== 'pending') return;
-      rfbState = 'timeout';
-      rfbFinish('刷新失败'); // 封顶时 poll 未返回：页脚还是旧「已同步」，不得误判为最新，强制失败待翻牌
+      rfbSettle(true);
     }, 2500);
   });
 }

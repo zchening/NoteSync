@@ -174,3 +174,65 @@ test('M4 历史二级页新形态全链生效（打点→列表→预览展开�
   assert.ok(r2.open && r2.pv, '预览展开=行级 hist-open+内联构图');
   await page.close();
 });
+
+// M5（v8.0.7）：二级页返回钮左起笔——「返回」图标列与列表首行图标列同一竖线（用户报「列表太靠左没和返回对齐」几何回归钉）。
+// 主菜单九行「整组居中」由 M1/M2 守护，本钉锚视图级 `#menuFavView/#menuHistView .menu-item` 的 flex-start 覆盖（含返回钮与新增历史钮），两者必须并存。
+test('M5 二级页返回钮与列表图标列竖线全等（收藏+历史，v8.0.7）', async () => {
+  const { browser, baseURL } = ctxS;
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  await page.goto(baseURL);
+  await page.waitForSelector('#landingInput', { timeout: 15000 });
+  await page.fill('#landingInput', 'V807Align');
+  await page.click('#landingBtn');
+  await page.waitForSelector('#pw', { timeout: 10000 });
+  await page.fill('#pw', 'test-pass-123');
+  await page.click('#ok');
+  await page.waitForFunction(() => {
+    const e = document.getElementById('editor');
+    return e && e.getAttribute('contenteditable') === 'true';
+  }, undefined, { timeout: 15000 });
+  await page.click('#editor');
+  await page.keyboard.type('M5 对齐前提内容'); // snapshotHistory 空正文守卫（同 M4）——须有内容再打点
+  await page.click('#menuBtn');
+  await page.waitForFunction(() => !document.getElementById('menuMask').classList.contains('hidden'), undefined, { timeout: 3000 });
+  await page.click('#menuFav'); // 收藏当前笔记，让二级页出现至少一行
+  await page.click('#menuFavEntry');
+  await page.waitForFunction(() => !document.getElementById('menuFavView').classList.contains('hidden'), undefined, { timeout: 3000 });
+  const f = await page.evaluate(() => {
+    const back = document.getElementById('menuFavBack');
+    const row = document.querySelector('#menuFavList .fav-row');
+    return {
+      jc: getComputedStyle(back).justifyContent,
+      bx: back.querySelector('svg').getBoundingClientRect().left,
+      sx: row ? row.querySelector('svg.fav-star').getBoundingClientRect().left : -9999,
+      mainJC: getComputedStyle(document.querySelector('#menuMainView .menu-item')).justifyContent,
+    };
+  });
+  assert.strictEqual(f.jc, 'flex-start', '收藏二级页返回钮必须左起笔');
+  assert.strictEqual(f.mainJC, 'center', '主菜单九行仍整组居中（覆盖不得外溢）');
+  assert.ok(Math.abs(f.bx - f.sx) <= 1, '返回箭头列与列表图标列竖线全等，实测差=' + (f.bx - f.sx).toFixed(2) + 'px');
+  // 回主菜单 → 历史二级页同测
+  await page.evaluate(() => document.getElementById('menuFavBack').click());
+  await page.click('#menuHistEntry');
+  await page.waitForFunction(() => !document.getElementById('menuHistView').classList.contains('hidden'), undefined, { timeout: 3000 });
+  await page.click('#menuHistSave'); // 手动打点保证有行可量（M4 同款前提）
+  await page.waitForFunction(() => document.querySelectorAll('#menuHistList .hist-item').length >= 1, undefined, { timeout: 10000 });
+  const h = await page.evaluate(() => {
+    const back = document.getElementById('menuHistBack');
+    const row = document.querySelector('#menuHistList .hist-item');
+    const save = document.getElementById('menuHistSave'); // 闸R1-P1：视图级覆盖必须连「新增历史版本」同族行一起收编
+    return {
+      jc: getComputedStyle(back).justifyContent,
+      bx: back.querySelector('svg').getBoundingClientRect().left,
+      sx: row.querySelector('svg.hist-clock').getBoundingClientRect().left,
+      sjc: getComputedStyle(save).justifyContent,
+      savx: save.querySelector('svg').getBoundingClientRect().left,
+    };
+  });
+  assert.strictEqual(h.jc, 'flex-start', '历史二级页返回钮必须左起笔');
+  assert.strictEqual(h.sjc, 'flex-start', '「新增历史版本」钮同样左起笔（视图级覆盖禁漏同族行）');
+  assert.ok(Math.abs(h.bx - h.sx) <= 1, '历史返回箭头列与时钟列竖线全等，实测差=' + (h.bx - h.sx).toFixed(2) + 'px');
+  assert.ok(Math.abs(h.savx - h.sx) <= 1, '新增钮加号列与时钟列竖线全等，实测差=' + (h.savx - h.sx).toFixed(2) + 'px');
+  await page.close();
+});
+
