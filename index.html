@@ -306,8 +306,9 @@
   #landing #landingScan svg{width:16px;height:16px;display:block}
   #landing .urlline{color:var(--muted);font-size:12.5px;margin:16px 0 0;line-height:1.7;letter-spacing:.03em;max-width:340px;word-break:break-all} /* v7.9.0：旧 URL hint 退役，改实时网址预览——名字段金色跟着输入变 */
   #landing .urlline .u-name{color:var(--accent);font-weight:600;letter-spacing:.02em}
-  #landing .trust{display:flex;color:var(--muted);font-size:11.5px;letter-spacing:.05em;margin-top:40px} /* v7.9.0 闸R2：不用 flex gap（老内核丢 gap 三图标粘连），margin 兜底 */
-  #landing .trust>span{display:flex;flex-direction:column;align-items:center;gap:7px;margin:0 13px}
+  #landing .trust{position:absolute;left:0;right:0;bottom:44px;bottom:calc(44px + env(safe-area-inset-bottom));display:flex;justify-content:center;color:var(--muted);font-size:11.5px;letter-spacing:.05em;transition:opacity .25s;animation-fill-mode:backwards} /* v7.9.1：贴底(44px 兜底老内核+calc/env 渐进)。fill-mode 必 backwards：rise 的 both 会把 to 帧 opacity:1 动画级永久锁死，focus 淡出被压过（闸R2/R3 双路命中 P0，v5.44 remRise 教训的 opacity 镜像） */
+  #landing.trust-away .trust{opacity:0}
+  #landing .trust>span{display:flex;flex-direction:column;align-items:center;gap:7px;margin:0 13px} /* v7.9.0 闸R2：不用 flex gap 于 .trust 本身（老内核丢 gap 三图标粘连），margin 兜底 */
   #landing .trust svg{width:17px;height:17px;color:var(--accent);display:block}
   @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
   /* v5.44：remCard 专用入场——to 帧保留 translate(-50%,-50%)，动画结束不丢居中偏移 */
@@ -366,7 +367,7 @@
   <div class="scan-row"><span id="landingScan" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8V4h4"/><path d="M16 4h4v4"/><path d="M20 16v4h-4"/><path d="M8 20H4v-4"/><path d="M7.5 12h9"/></svg>扫码打开笔记</span></div>
   <div class="trust" aria-hidden="true">
     <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg>服务器只见密文</span>
-    <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M5 5l14 14"/></svg>无需账号</span>
+    <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20.3 7.2A9.6 9.6 0 0 1 7.2 20.3"/><path d="M3.7 16.8A9.6 9.6 0 0 1 16.8 3.7"/><circle cx="12" cy="10.4" r="1.7"/><path d="M12 12.1v2.7"/></svg>无需账号</span>
     <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="12" height="9" rx="1.5"/><path d="M8 19h4"/><rect x="17" y="9" width="4.5" height="10" rx="1.5"/></svg>扫码跨设备</span>
   </div>
 </div>
@@ -564,7 +565,7 @@ function markJumped() {
 }
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '7.9.0';
+const APP_VERSION = '7.9.1';
 const BUILD_DATE = '2026-09-10';
 
 const $ = s => document.querySelector(s);
@@ -6385,6 +6386,12 @@ if (noteId && (isNativeApp() || !CHIP_HOVER_OK)) {
     li.addEventListener('compositionend', sanitizeName);
     syncOpenBtn();
     syncUrlHint();
+    // v7.9.1：贴底信任行与软键盘的让位（闸R1勘误：iOS 键盘不抬升布局视口必盖；安卓 Chrome≥109 因 viewport 已声明
+    // interactive-widget=resizes-content 会压缩抬升，但国产内核参差不一）——聚焦即淡出、失焦淡回，
+    // 纯装饰行（aria-hidden）零交互损失，换全内核一致行为。
+    const landingBox = document.getElementById('landing');
+    li.addEventListener('focus', () => landingBox.classList.add('trust-away'));
+    li.addEventListener('blur', () => landingBox.classList.remove('trust-away'));
     // v5.53：IME 兜底轮询——部分输入法（如百度个性短语）向输入框注入文本时
     // 不按标准流程派发 input/composition 事件，按钮状态会卡死在 disabled。
     // 250ms 对比 value，有变化就补跑 sanitizeName。仅首页显示期间运行，成本可忽略。
