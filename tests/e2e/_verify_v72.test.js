@@ -1,7 +1,8 @@
 // NoteSync E2E v7.2.0（Playwright + 真实 Chromium）——C 层（全链路）审计：
 //   V72-1 双客户端竞态：B 落后版本 PUT 带 baseV → 服务端 409 拒写 → 冲突条 #remoteBar 挂起
 //         → 点「保留我的」采纳挂起 v 后重发 PUT 成功（绝不静默覆盖远端）。
-//   V72-2 全角数字/冒号归一：种入全角「９-１０ ２０：０４」→ 归一后 chip 准时弹出（症状1 根修）。
+//   V72-2 全角数字/冒号归一：种入全角「明日日期 全角时刻」（v8.0.6 起红线18动态未来，禁硬编码日期）
+//         → 归一后 chip 准时弹出（症状1 根修）。
 //   V72-3 PC hover 悬停：鼠标移到时间文字上 200ms → chip 弹出；移开 → chip 消失（hover 路 + matchMedia 闸）。
 //   V72-4 连续打字光标稳定：多行含自动链接行连续输入，光标块号不变（不跳行）；?diag 探针可读。
 // 基建：server_sync.js（真实内存存储 + SSE）。冲突 409 用 route 拦截模拟（双端同实例共享状态 +
@@ -185,10 +186,19 @@ test('V72-1 双客户端竞态：B 落后版本 PUT 触发 409 → 冲突条 →
 // ── V72-2：全角数字/冒号归一 → chip 弹出 ───────────────────────────────
 test('V72-2 全角数字/冒号归一：chip 准时弹出（症状1 根修）', guard(async () => {
   await openNote(page, 'V72Full', PASS);
-  // 全角数字 + 全角冒号，半角空格分隔（手机全角输入法常见形态）
-  const fw = '９-１０ ２０：０４ 站会';
+  // v8.0.6 随版修（红线18）：旧版硬编码「９-１０ ２０：０４」=发布日当晚 20:04 起 chip 永不弹、
+  // 单跑/并跑/HEAD 对照连红 4 次——墙钟过期非漂移。改动态「明日此刻+5min」。
+  // 闸 R2 P1 随修：短格式 M-D 一律按今年解析（collectTimeMatches 口径），12-31 跑时明日=来年第 1 天
+  // 会被解析成今年已过期→同族炸弹跨年复发。token 改带年份中文日期（reFullCn 形制），
+  // 全角数字+全角冒号+半角空格分隔的测试意图不变。
+  const nd = new Date(Date.now() + 24 * 3600e3 + 5 * 60e3);
+  assert.ok(nd.getDate() !== new Date().getDate(), 'V72-2 前提：动态日期须已跨日（未来时刻才有保证）');
+  const fwz = s => String(s).replace(/[0-9]/g, c => String.fromCharCode(c.charCodeAt(0) + 0xFEE0));
+  const token = fwz(nd.getFullYear() + '年' + (nd.getMonth() + 1) + '月' + nd.getDate() + '日'); // 跨年安全：年字面写死
+  const clock = fwz(nd.getHours()) + '：' + fwz(String(nd.getMinutes()).padStart(2, '0'));
+  const fw = token + ' ' + clock + ' 站会';
   await page.evaluate((h) => { document.getElementById('editor').innerHTML = '<div>' + h + '</div>'; }, fw);
-  await placeCaret(page, 3); // 落在「９-１０」时间串上
+  await placeCaret(page, token.length - 1); // 落「日」字前，恒在 reFullCn 命中段内（旧版为 4 字符 token 末位前）
   await page.waitForFunction(() => {
     const c = document.getElementById('timeChip');
     return !c.classList.contains('hidden') && c.textContent.indexOf('添加提醒') >= 0;
@@ -202,9 +212,10 @@ test('V72-2 全角数字/冒号归一：chip 准时弹出（症状1 根修）', 
   const parsed = await page.evaluate((s) => window.parseTimeMatches ? window.parseTimeMatches(s).map(m => ({ at: m.at, idx: m.index, len: m.length, exp: m.expired })) : null, fw);
   assert.ok(parsed && parsed.length >= 1, '归一后应解析出时间: ' + JSON.stringify(parsed));
   assert.ok(parsed[0].at > Date.now(), '应为未来时间: ' + JSON.stringify(parsed));
-  // 附加证据：纯全角空格（U+3000）分隔形态能否命中——设计上 U+3000 不归一，短格式分隔符非普通空格，预期不命中，仅记录
-  const fwsp = await page.evaluate((s) => window.parseTimeMatches ? window.parseTimeMatches(s).length : -1, '９-１０　２０：０４ 站会');
-  console.log('V72-2 全角空格(U+3000)分隔命中数=' + fwsp + '（设计口径：U+3000 为事项区分隔符，不归一）');
+  // 附加观察：U+3000 全角空格分隔形态——短格式按普通空格分隔不认 U+3000；但 v8.0.6 起本用例 token 带年份，
+  // reFullCn 的 \s* 会把 U+3000 吞进日期与时段之间（\s 含 U+3000）→ 可命中。仅记录不断言（观察口径）。
+  const fwsp = await page.evaluate((s) => window.parseTimeMatches ? window.parseTimeMatches(s).length : -1, token + '　' + clock + ' 站会');
+  console.log('V72-2 全角空格(U+3000)分隔命中数=' + fwsp + '（带年份形制下 reFullCn \\s* 可吞 U+3000，观察非断言）');
   assert.strictEqual(page.__errors.length, 0, '不应有页面错误: ' + page.__errors.join(' | '));
 }));
 

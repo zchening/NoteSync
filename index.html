@@ -584,7 +584,7 @@ function markJumped() {
 }
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '8.0.5';
+const APP_VERSION = '8.0.6';
 const BUILD_DATE = '2026-09-10';
 
 const $ = s => document.querySelector(s);
@@ -6312,9 +6312,12 @@ function startSync() {
 
 // 设备从后台切回前台时立即拉一次，避免回前台还要等下一拍；
 // I4：切到后台/关页前先把未保存内容尽力写出（手机上切走应用很常见，不能只等 800ms 定时器）
+// v8.0.6：切后台时顺手收回编辑器焦点——安卓「收起键盘」不触发 blur（editor 留焦），回前台会被系统
+// 把键盘原样弹回（用户报障「Home 再点开，键盘自己开了」）。dismissKeyboardForTouch 自带三重守卫：
+// 仅触屏（桌面零变化）、组字中不 blur（不吞拼音）、焦点确在编辑器才动（不碰口令框/提醒面板）。
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') poll();
-  else flushDirtySave();
+  else { flushDirtySave(); dismissKeyboardForTouch(); }
 });
 window.addEventListener('pagehide', flushDirtySave);
 // v7.3.1：离开笔记页（Android 返回键/手势回首页）前打"已跳转"标记——扫码/深链/收藏夹

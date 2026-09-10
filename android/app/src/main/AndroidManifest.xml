@@ -10,12 +10,15 @@
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="false">
 
+        <!-- v8.0.6：stateHidden=回前台强制隐藏软键盘（防「Home 再点开键盘自己弹回」；
+             只加 state 位不动 adjust 位——布局让位已由 viewport interactive-widget=resizes-content 接管） -->
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation"
             android:name=".MainActivity"
             android:label="@string/title_activity_main"
             android:theme="@style/AppTheme.NoActionBarLaunch"
             android:launchMode="singleTop"
+            android:windowSoftInputMode="stateHidden"
             android:exported="true">
 
             <intent-filter>
