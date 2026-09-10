@@ -12,7 +12,11 @@ test('A1 菜单行=定宽标签列+整组居中（v8.0.2 终形）', () => {
   assert.ok(SRC.includes('.menu-item .mi-l,#menuThemeLabel{width:112px;text-align:left}'), '.mi-l 定宽标签列（与 theme 标签单一真源）=图标列仍严格对齐的根基');
   assert.ok(/\.menu-item\{[^}]*min-height:42px/.test(SRC), '42px 行高不变（v7.0.1 纪律仍守）');
 });
+test('A3 renderMenu 注入行必须带 mi-l 定宽列（v8.0.3 收藏行错位回归钉）', () => {
+  assert.ok(SRC.includes("favBtn.innerHTML = (faved ? STAR_IN_SVG : STAR_OUT_SVG) + '<span class=\"mi-l\">'"), '收藏行 innerHTML 重写保留定宽标签列');
+  assert.ok(!SRC.includes("STAR_OUT_SVG) + (faved ? '取消收藏' : '收藏笔记');"), '旧裸文本拼接形态退役');
+});
 test('A2 居中必须配定宽标签列（无列居中=回潮到锯齿）', () => {
-  assert.strictEqual((SRC.match(/class="mi-l"/g) || []).length, 11, '11 行静态标签必须全包 mi-l（theme 行走 #menuThemeLabel）');
+  assert.strictEqual((SRC.match(/<\/svg><span class="mi-l">/g) || []).length, 11, '11 行静态标签必须全包 mi-l（锚 </svg><span> 静态形态，不误计 A3 注入串里的 mi-l）');
   assert.ok(SRC.includes('#menuThemeIcon{display:flex;align-items:center}'), 'theme 行图标 span flex 化防基线缝');
 });

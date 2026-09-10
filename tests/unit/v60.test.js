@@ -73,7 +73,7 @@ test('T4 菜单项细线 SVG 图标 + Unicode 字形前缀退役 + 收藏按钮�
   assert.ok(src.includes('.menu-item svg{width:26px;height:26px;flex:none}'), 'v7.0.1 菜单 SVG 应 26px（flex）');
   assert.ok(!src.includes('>⌂ ') && !src.includes('>▸ ') && !src.includes('>▣ ') && !src.includes('>◐ ') && !src.includes('>⎋ ') && !src.includes('>⌁ ') && !src.includes('>‹ '), 'Unicode 字形前缀应全部退役');
   assert.ok(!src.includes("'★ 收藏笔记'") && !src.includes("'☆ 取消收藏'"), '收藏按钮不再用纯文本（textContent 会清掉 SVG）');
-  assert.ok(src.includes("favBtn.innerHTML = (faved ? STAR_IN_SVG : STAR_OUT_SVG) + (faved ? '取消收藏' : '收藏笔记');"), '收藏按钮图标应随状态用 innerHTML 重写');
+  assert.ok(src.includes("favBtn.innerHTML = (faved ? STAR_IN_SVG : STAR_OUT_SVG) + '<span class=\"mi-l\">' + (faved ? '取消收藏' : '收藏笔记') + '</span>';"), '收藏按钮图标应随状态用 innerHTML 重写（v8.0.3 起标签带 mi-l 定宽列，结构细钉在 v801-A3）');
   assert.ok((src.match(/<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"/g) || []).length >= 12, 'v6.1 菜单全部条目图标（含返回/新增/关于）应升级为 1.9px 线宽');
 });
 
