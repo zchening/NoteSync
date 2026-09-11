@@ -150,6 +150,18 @@ const server = http.createServer((req, res) => {
   const url = req.url.split('?')[0];
   const ip = getClientIP(req);
 
+  // v8.0.9（§K1）：HEAD 与 GET 等效——此前所有路由只接 GET，监控探针/CDN 探活
+  // 打 HEAD 会落到末尾 404，被误判「服务挂了」。这里把方法改写进既有 GET 分支，
+  // 并吞掉 body 写入（HEAD 响应按规范只回状态行+头部，不依赖运行时隐式行为）。
+  // 闸R2-P1：/api/note/:id/stream 除外——SSE 分支只 write 从不 end，HEAD 归一化进来
+  // 会永久挂起还白占 sseActive 连接名额；该路由维持旧行为（落末尾 404，探活不该打流）。
+  if (req.method === 'HEAD' && !(url.startsWith('/api/note/') && url.endsWith('/stream'))) {
+    req.method = 'GET';
+    res.write = () => true;
+    const realEnd = res.end.bind(res);
+    res.end = (...args) => { const cb = args.find(a => typeof a === 'function'); realEnd(cb); };
+  }
+
   // --- API: SSE 流 ---
   if (req.method === 'GET' && url.startsWith('/api/note/') && url.endsWith('/stream')) {
     const id = decodeURIComponent(url.replace(/\/stream$/, '').replace(/^\/api\/note\//, ''));
@@ -415,6 +427,22 @@ const server = http.createServer((req, res) => {
         fs.createReadStream(f).pipe(res);
         return;
       }
+    }
+    // v8.0.9（§K2）：/.well-known/* 必须先于 SPA 兜底出结论——此前 assetlinks.json 被兜底
+    // 吞成整页 index.html（text/html），安卓 App Links 校验永远不过。v8.1.0 起仓库文件已是
+    // 真指纹 statement（release 签名证书 SHA-256，取自 v8.0.8 APK CERT.RSA），本部署上线即
+    // 校验通过、点笔记域链接直达 APK——Manifest autoVerify+MainActivity URL 转发同版落地，
+    // 真机回归项见发版闸。其余 /.well-known/* 一律 404 JSON，不再伪装 HTML。
+    if (url === '/.well-known/assetlinks.json') {
+      const f = path.join(APP_DIR, '.well-known', 'assetlinks.json');
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      if (fs.existsSync(f)) { fs.createReadStream(f).pipe(res); } else { res.end('[]'); }
+      return;
+    }
+    if (url.startsWith('/.well-known/')) {
+      res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end('{"error":"not found"}');
+      return;
     }
     // SPA：其他都返回 index.html（必须 no-cache 防止移动端浏览器缓存旧版）
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache, no-store, must-revalidate' });

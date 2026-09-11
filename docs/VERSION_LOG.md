@@ -4,6 +4,7 @@
 
 | 版本 | 涉及 bug 编号 |
 |------|---------------|
+| v8.1.0 | K1/K2（HEAD→GET 归一化吞 body + /.well-known 先于 SPA 兜底：assetlinks 真指纹 statement + Manifest autoVerify + App Links 冷/热启 URL 转发）+ 链接打开方式（挑版A：菜单「打开链接」二级页单选，默认系统浏览器走原生 ACTION_VIEW 绕 Capacitor 确认弹窗、应用内=子 WebView Activity 不碰主 WebView；localStorage 本机键；MainActivity 主文档拦截器加 note/biji 双域白名单堵外站污染离线缓存）+ 菜单「备份换机码」改名「扫码换机」+ 主菜单新增行 M2 九行→十行。守护 v809 路由 9 条 + v810 单测 14 条 + e2e L1-L4（几何零漂移/真点分流）。闸修随版：HEAD 排除 SSE 流路由、App Links/本站门双端 origin 归一（跨源锁屏）、mailto 同窗回退、协议门、裸 socket 吞 body 硬证。|
 | v5.58 | S1-S5（冲突卡加宽+文案定稿 + 离线条入状态栏 + 页脚菜单三端加大 + 菜单三端统一+网页扫码 + 盐根治三层，unit v558.test.js H1-H5 固化） |
 | v5.57 | R1-R9（通知点击不弹面板 + 下划线补重绘 + chip 裸文本/组字兜底 + 冲突草稿浮卡 + 口令框返回首页 + 自动解锁记最后笔记 + MainActivity 缓存引导 reload + APP 菜单收纳 + 扫一扫，unit v557.test.js G1-G10 固化） |
 | v5.56 | Q1-Q6（合并吞噬修冲突条 + 自动解锁补提醒恢复 + poll 同步 note.rem + 离线三级兜底+cacheInfo + 版本号双 bump/CI 注入 + APP 诊断入口，unit v556.test.js F1-F8 固化） |

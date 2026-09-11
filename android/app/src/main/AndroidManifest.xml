@@ -26,7 +26,25 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- v8.1.0 App Links（§K2 另一半）：点笔记域名链接直达 APK。
+                 assetlinks.json 已是真指纹 statement（release 证书 SHA-256）→ 本版部署即校验通过、
+                 直达生效——MainActivity 冷/热启 URL 转发（origin 归一防跨源锁屏）同版落地。
+                 真机回归：点 note/biji 域链接应开进 App 对应笔记。 -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="note.xuyinji.com.cn" />
+                <data android:scheme="https" android:host="biji.xuyinji.com.cn" />
+            </intent-filter>
+
         </activity>
+
+        <!-- v8.1.0 应用内打开链接的子 WebView 页（LinkOpenPlugin.openInApp 拉起，不导出） -->
+        <activity
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation"
+            android:name=".link.LinkViewActivity"
+            android:exported="false" />
 
         <!-- v5.51：通知触发接收器（AlarmManager setAlarmClock 唤醒） -->
         <receiver

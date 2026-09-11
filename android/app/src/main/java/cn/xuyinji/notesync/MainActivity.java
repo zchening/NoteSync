@@ -25,6 +25,7 @@ import java.net.URL;
 
 import cn.xuyinji.notesync.rem.RemPlugin;
 import cn.xuyinji.notesync.img.ImgClipPlugin;
+import cn.xuyinji.notesync.link.LinkOpenPlugin;
 
 public class MainActivity extends BridgeActivity {
 
@@ -42,6 +43,7 @@ public class MainActivity extends BridgeActivity {
         // v5.51：注册自定义提醒桥（Capacitor 7 也支持自动扫描，显式注册更稳）
         registerPlugin(RemPlugin.class);
         registerPlugin(ImgClipPlugin.class); // v7.7.0：图片写系统剪贴板原生桥
+        registerPlugin(LinkOpenPlugin.class); // v8.1.0：链接打开方式（外跳默认浏览器/应用内子 WebView）
         super.onCreate(savedInstanceState);
 
         // v5.53：返回键接 WebView 历史——Capacitor 不接管返回键，默认 finish 直接回桌面。
@@ -80,7 +82,12 @@ public class MainActivity extends BridgeActivity {
                 // 修法：联网时 native 自己 fetch 线上 HTML 并落盘；断网/失败时回本地缓存文件，
                 // 页面照常打开，JS 照常跑（localStorage origin 不变），离线阅读生效。
                 // 热更新不受影响：联网时永远先拿线上最新版。
-                if (request.isForMainFrame() && "GET".equalsIgnoreCase(request.getMethod())) {
+                // v8.1.0 同源白名单：主文档缓存链路只许笔记域走（note/biji 双域同库）。
+                // 无白名单时「应用内打开外站」的整页 GET 也会被 fetchMainDoc+saveMainDoc 当笔记主页缓存——
+                // 断网启动兜底页变成外站 HTML（离线 P0 级污染）。外站请求落 super 正常加载。
+                String host = request.getUrl().getHost();
+                boolean appHost = "note.xuyinji.com.cn".equals(host) || "biji.xuyinji.com.cn".equals(host);
+                if (appHost && request.isForMainFrame() && "GET".equalsIgnoreCase(request.getMethod())) {
                     interceptCount++;
                     try {
                         byte[] bytes = fetchMainDoc(request.getUrl().toString());
@@ -146,6 +153,45 @@ public class MainActivity extends BridgeActivity {
                 }
             }
         }
+
+        // v8.1.0 App Links（§K2 另一半）：assetlinks 校验通过后点笔记域链接直达 APK——intent 里的 URL
+        // 必须转发给 WebView，否则「开了 App 却落错页」（根页/上次笔记）。冷启沿用 v6.3 防竞速范式
+        // post 直载目标；热启（singleTop）走 onNewIntent。只认双域 https，其余不转发（钓鱼链接不进 App）。
+        // 闸R1-P1：转发前 origin 归一到 App 自身域（server.url=biji）——note 域链接若原样直载，
+        // WebView 换源后 localStorage 按 origin 隔离（密钥/缓存/草稿全另一套）=「直达即锁屏」，
+        // 老人用户比落浏览器更糟。path/query/fragment 原样保留，只换 scheme+authority。
+        Intent link = getIntent();
+        if (isAppLink(link)) {
+            final String target = appLinkTarget(link.getData().toString());
+            if (target != null && bridge != null && bridge.getWebView() != null) {
+                android.util.Log.d("NoteSync", "cold-start app link -> direct load: " + target);
+                bridge.getWebView().post(() -> {
+                    if (bridge.getWebView() != null) bridge.getWebView().loadUrl(target);
+                });
+            }
+        }
+    }
+
+    /** v8.1.0：App Links 目标 URL 的 host 归一到 getAppUrl() origin（闸R1-P1 跨源锁屏修） */
+    private String appLinkTarget(String url) {
+        try {
+            android.net.Uri base = android.net.Uri.parse(bridge.getAppUrl());
+            if (base.getHost() == null) return url; // 拿不到 origin 就原样放行（退化=旧行为）
+            return android.net.Uri.parse(url).buildUpon()
+                .scheme(base.getScheme()).authority(base.getAuthority())
+                .build().toString();
+        } catch (Exception e) {
+            return url;
+        }
+    }
+
+    /** v8.1.0：仅收笔记双域（note/biji.xuyinji.com.cn）的 https ACTION_VIEW 链接 */
+    private boolean isAppLink(Intent it) {
+        if (it == null || !Intent.ACTION_VIEW.equals(it.getAction())) return false;
+        android.net.Uri u = it.getData();
+        if (u == null || !"https".equals(u.getScheme())) return false;
+        String h = u.getHost();
+        return "note.xuyinji.com.cn".equals(h) || "biji.xuyinji.com.cn".equals(h);
     }
 
     /** v5.57：缓存引导 reload 只跑一次（防循环），进程重建后若仍无缓存允许再试 */
@@ -206,6 +252,11 @@ public class MainActivity extends BridgeActivity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
+        // v8.1.0 热启 App Links：singleTop 复用实例，新 intent 的 URL 直载 WebView（页内导航，
+        // 脏保存由既有 pagehide→flushDirtySave 链兜底）；origin 归一同冷启（闸R1-P1）
+        if (isAppLink(intent) && bridge != null && bridge.getWebView() != null) {
+            bridge.getWebView().loadUrl(appLinkTarget(intent.getData().toString()));
+        }
         // 通知点击 → 通过事件通知 JS。
         // App 被杀后冷启时 WebView 尚未就绪，先缓存，待 onResume 补发。
         if (intent != null && RemPlugin.ACTION_NOTIFY_CLICK.equals(intent.getAction())) {

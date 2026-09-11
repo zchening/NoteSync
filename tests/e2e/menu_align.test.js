@@ -10,7 +10,7 @@ let ctxS;
 before(async () => { ctxS = await setup(); });
 after(async () => { await teardown(ctxS.browser, ctxS.server); });
 
-test('M1 桌面+移动双视口九行 svg.x 全等（±1px，v8.0.1 左列对齐）', async () => {
+test('M1 桌面+移动双视口全行 svg.x 全等（±1px，v8.0.1 左列对齐；v8.1.0 起十行）', async () => {
   const { browser, baseURL } = ctxS;
   for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 }]) {
     const page = await browser.newPage({ viewport });
@@ -49,7 +49,7 @@ test('M1 桌面+移动双视口九行 svg.x 全等（±1px，v8.0.1 左列对齐
 
 // M2（v8.0.3）：解锁笔记态真点 ☰——收藏笔记行 display 复位且经 renderMenu 注入重写，
 // 是 M1(landing 态该列被隐藏过滤) 覆盖不到的真实盲区；三维全等守护注入路径的 mi-l 结构。
-test('M2 解锁态收藏行注入重写后九行仍三维全等（v8.0.3 回归钉）', async () => {
+test('M2 解锁态收藏行注入重写后十行仍三维全等（v8.0.3 回归钉；v8.1.0 九行→十行=新增「打开链接」行）', async () => {
   const { browser, baseURL } = ctxS;
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
   await page.goto(baseURL);
@@ -80,9 +80,9 @@ test('M2 解锁态收藏行注入重写后九行仍三维全等（v8.0.3 回归�
   });
   assert.ok(r.hasFav, '前置：解锁态收藏行必须可见（未到=环境/流程问题）');
   assert.ok(r.favLabel, '收藏行标签必须在 mi-l 内（此红=renderMenu 注入重写又脱定宽列）');
-  assert.strictEqual(r.labelsN, r.n, '九行全须有定宽标签列');
-  assert.strictEqual(r.n, 9, '解锁态主菜单 9 行全可见，实测 ' + r.n);
-  assert.ok(r.spread <= 1 && r.lspread <= 1, '九行两列 x 全等，实测 svg=' + r.spread.toFixed(2) + ' label=' + r.lspread.toFixed(2));
+  assert.strictEqual(r.labelsN, r.n, '十行全须有定宽标签列（v8.1.0 含打开链接行）');
+  assert.strictEqual(r.n, 10, '解锁态主菜单 10 行全可见（v8.1.0 含「打开链接」行），实测 ' + r.n);
+  assert.ok(r.spread <= 1 && r.lspread <= 1, '十行两列 x 全等，实测 svg=' + r.spread.toFixed(2) + ' label=' + r.lspread.toFixed(2));
   assert.ok(r.hspread <= 1, '行高全等，实测 ' + r.hspread.toFixed(2));
   await page.close();
 });
@@ -176,7 +176,7 @@ test('M4 历史二级页新形态全链生效（打点→列表→预览展开�
 });
 
 // M5（v8.0.7）：二级页返回钮左起笔——「返回」图标列与列表首行图标列同一竖线（用户报「列表太靠左没和返回对齐」几何回归钉）。
-// 主菜单九行「整组居中」由 M1/M2 守护，本钉锚视图级 `#menuFavView/#menuHistView .menu-item` 的 flex-start 覆盖（含返回钮与新增历史钮），两者必须并存。
+// 主菜单十行（v8.1.0 起）「整组居中」由 M1/M2 守护，本钉锚视图级 `#menuFavView/#menuHistView .menu-item` 的 flex-start 覆盖（含返回钮与新增历史钮），两者必须并存。
 test('M5 二级页返回钮与列表图标列竖线全等（收藏+历史，v8.0.7）', async () => {
   const { browser, baseURL } = ctxS;
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
@@ -209,7 +209,7 @@ test('M5 二级页返回钮与列表图标列竖线全等（收藏+历史，v8.0
     };
   });
   assert.strictEqual(f.jc, 'flex-start', '收藏二级页返回钮必须左起笔');
-  assert.strictEqual(f.mainJC, 'center', '主菜单九行仍整组居中（覆盖不得外溢）');
+  assert.strictEqual(f.mainJC, 'center', '主菜单十行仍整组居中（覆盖不得外溢）');
   assert.ok(Math.abs(f.bx - f.sx) <= 1, '返回箭头列与列表图标列竖线全等，实测差=' + (f.bx - f.sx).toFixed(2) + 'px');
   // 回主菜单 → 历史二级页同测
   await page.evaluate(() => document.getElementById('menuFavBack').click());

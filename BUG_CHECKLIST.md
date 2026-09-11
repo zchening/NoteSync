@@ -913,11 +913,12 @@
 
 ---
 
-## K. 服务端遗留缺陷（v5.26 排查中确诊，**未修复 / Open**）
+## K. 服务端遗留缺陷（v5.26 排查中确诊，v8.1.0 两条全修）
 
-> 这两条在排查小米相机扫码问题时一并确诊，但超出 v5.26（扫码中转）范围，**当时决定不修**。留此备忘，下次动 `server.js` 时顺手处理。诊断细节见 memory「NoteSync 已知缺陷」。
+> 这两条在排查小米相机扫码问题时一并确诊，但超出 v5.26（扫码中转）范围，**当时决定不修**。留此备忘，下次动 `server.js` 时顺手处理。诊断细节见 memory「NoteSync 已知缺陷」。**v8.1.0：K1/K2 全部修复上线。**
 
-### K1 | server.js 不处理 HEAD，全站 HEAD 请求返回 404 `🔴 OPEN`
+### K1 | server.js 不处理 HEAD，全站 HEAD 请求返回 404 `✅ FIXED v8.1.0`
+- **修复（v8.1.0）**: handler 顶部 HEAD→GET 方法归一化 + 吞 body 写入（`res.write` no-op、`res.end` 只走 cb），全路由 HEAD 与 GET 同头零 body；守护 tests/e2e/v809_k_routes.test.js K1-1~K1-4（真起 server 打真请求，GET 正文/POST 语义反证）。修法与建议不同：建议的逐分支加 `|| HEAD` 会漏分支，归一化一处收口
 - **版本**: 确诊于 v5.26 排查（缺陷早于 v5.19，一直存在，未修复）
 - **现象**: `curl -I https://note.xuyinji.com.cn/`（HEAD）返回 404，同 URL GET 返回 200。探线上路由若用 `curl -I` 会得到假 404，误判路由不存在
 - **根因**: `server.js:202` 静态分支只判 `req.method === 'GET'`；`server.js:249` 对所有非 GET 直接 `404 not found`。HEAD 落到最后兜底
@@ -925,10 +926,11 @@
 - **关联文件**: server.js → 静态文件分支 / healthz 分支
 - **影响面**: 预取、监控探针、部分国产浏览器/安全组件的探活走 HEAD 会拿到 404；对普通 GET 访问无影响
 - **核对要点**（修复后补）:
-  - [ ] `curl -I /`、`curl -I /bridge.html`、`curl -I /healthz` 均返回 200 且无 body
-  - [ ] 站点其余 GET 行为无回归
+  - [x] `curl -I /`、`curl -I /bridge.html`、`curl -I /healthz` 均返回 200 且无 body（v809 K1-1/K1-2 行为钉 + 本地 curl 冒烟）
+  - [x] 站点其余 GET 行为无回归（全量回归 e2e/unit 零红）
 
-### K2 | SPA 兜底吞掉 `/.well-known/assetlinks.json`，返回 index.html `🔴 OPEN`
+### K2 | SPA 兜底吞掉 `/.well-known/assetlinks.json`，返回 index.html `✅ FIXED v8.1.0`
+- **修复（v8.1.0）**: SPA 兜底前加 `/.well-known/` 分支——assetlinks.json 按 `application/json + no-store` 分发仓库真文件（含 release 签名指纹 `92:39:7D…5A:DE` 的 handle_all_urls 语句，指纹自 v8.0.8 Release APK 的 META-INF/CERT.RSA 经 openssl 提取）；其余 `/.well-known/*` 404 JSON。配套 APK 半边：Manifest autoVerify intent-filter（note/biji 双域）+ MainActivity 冷/热启 App Links URL 转发 WebView（否则开了 App 落错页）。守护 v809 K2-1~K2-3（JSON 可解析/404 JSON/SPA 反证）
 - **版本**: 确诊于 v5.26 排查（未修复）
 - **现象**: `GET /.well-known/assetlinks.json` 返回 200 但内容是 `text/html`（整个 index.html），而非 JSON。仓库与线上均无任何 assetlinks 处理（grep 零命中）
 - **根因**: `server.js` 静态兜底 `server.js:243-246` 对所有非 `/api/`、非特定静态文件的 GET 一律返回 index.html，`/.well-known/*` 也被吞进这条
@@ -936,8 +938,8 @@
 - **建议修复**: 在 SPA 兜底之前加 `/.well-known/` 分支——`assetlinks.json` 返回 `[]`（`application/json`，显式声明"无关联安卓应用"）或真实 statement；其余 `/.well-known/*` 返回 404 JSON。**（未实施）**
 - **关联文件**: server.js → 静态分支前新增 `/.well-known/` 路由
 - **核对要点**（修复后补）:
-  - [ ] `GET /.well-known/assetlinks.json` 返回 `application/json`，Content-Type 非 text/html
-  - [ ] 笔记 SPA 路由（`/noteId`）仍正常返回 index.html（不被新分支误伤）
+  - [x] `GET /.well-known/assetlinks.json` 返回 `application/json`，Content-Type 非 text/html（v809 K2-1）
+  - [x] 笔记 SPA 路由（`/noteId`）仍正常返回 index.html（不被新分支误伤）（v809 K2-3 反证）
 
 ---
 

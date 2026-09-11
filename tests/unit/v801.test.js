@@ -17,6 +17,6 @@ test('A3 renderMenu 注入行必须带 mi-l 定宽列（v8.0.3 收藏行错位�
   assert.ok(!SRC.includes("STAR_OUT_SVG) + (faved ? '取消收藏' : '收藏笔记');"), '旧裸文本拼接形态退役');
 });
 test('A2 居中必须配定宽标签列（无列居中=回潮到锯齿）', () => {
-  assert.strictEqual((SRC.match(/<\/svg><span class="mi-l">/g) || []).length, 11, '11 行静态标签必须全包 mi-l（锚 </svg><span> 静态形态，不误计 A3 注入串里的 mi-l）');
+  assert.strictEqual((SRC.match(/<\/svg><span class="mi-l">/g) || []).length, 15, '15 行静态标签必须全包 mi-l（v8.1.0 前=11，新增「打开链接」行+二级页返回/应用内/系统浏览器三行 +4；锚 </svg><span> 静态形态，不误计 A3 注入串里的 mi-l）');
   assert.ok(SRC.includes('#menuThemeIcon{display:flex;align-items:center}'), 'theme 行图标 span flex 化防基线缝');
 });

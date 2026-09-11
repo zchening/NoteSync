@@ -80,7 +80,7 @@ test('G7 菜单三件套 DOM + wiring', () => {
   assert.ok(!src.includes('id="menuScan"'), 'v7.7.0：☰ 菜单应不再有扫一扫项（入口迁顶栏与首页）');
   assert.ok(src.includes('id="scanBtn"') && src.includes("$('#scanBtn').addEventListener('click'"), '顶栏应有扫一扫按钮 DOM+wiring');
   assert.ok(src.includes('id="landingScan"') && src.includes("$('#landingScan').addEventListener('click'"), '首页应有扫码入口 DOM+wiring');
-  assert.ok(src.includes('id="menuBackup"') && src.includes("$('#menuBackup').addEventListener('click'"), '菜单应有备份换机码 DOM+wiring');
+  assert.ok(src.includes('id="menuBackup"') && src.includes("$('#menuBackup').addEventListener('click'"), '菜单应有扫码换机（v8.1.0 前名备份换机码）DOM+wiring');
   assert.ok(src.includes('async function doScanAndOpen('), '扫码流程应抽公共函数 doScanAndOpen');
   assert.ok(src.includes('await scanWithWebCamera()'), 'doScanAndOpen 应保留网页扫码层分支');
   assert.ok(src.includes('id="menuTheme"') && src.includes('id="menuLock"'), '菜单应有日夜间切换/退出锁定两项');
