@@ -597,7 +597,7 @@ function markJumped() {
 }
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '8.1.3';
+const APP_VERSION = '8.1.4';
 const BUILD_DATE = '2026-09-11';
 
 const $ = s => document.querySelector(s);
@@ -5389,21 +5389,54 @@ async function scanWithWebCamera() {
   box.className = 'box';
   box.setAttribute('style', 'text-align:center');
   const h = document.createElement('h1'); h.className = 'qr-title'; h.textContent = '扫一扫';
+  // v8.1.4：video 出帧前先藏，用深色圆角 stage + 金色取景框/扫描线/「正在开启相机…」占位顶位，
+  // 避免国产 WebView 在 getUserMedia 冷启动空窗期画默认播放三角（旧版观感差）。出帧即无缝显形。
+  const stage = document.createElement('div');
+  stage.setAttribute('style', 'position:relative;width:100%;height:44vh;min-height:150px;max-height:340px;background:radial-gradient(120% 90% at 50% 40%,#1a1a1d 0%,#0b0b0c 78%);border-radius:12px;overflow:hidden;box-shadow:inset 0 0 0 1px rgba(255,255,255,.04)');
   const video = document.createElement('video');
   video.setAttribute('playsinline', ''); video.muted = true; video.autoplay = true;
-  video.setAttribute('style', 'width:100%;max-height:46vh;background:#000;border-radius:12px;object-fit:cover');
+  video.setAttribute('style', 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;visibility:hidden');
+  // 取景框（四角 + 扫描线）常驻作对准指引，出帧后不撤；「正在开启相机…」占位出帧后移除
+  const reticle = document.createElement('div');
+  reticle.setAttribute('style', 'position:absolute;inset:0;pointer-events:none');
+  reticle.innerHTML =
+    '<span style="position:absolute;left:16px;top:16px;width:26px;height:26px;border:2px solid var(--accent);border-right:0;border-bottom:0;border-radius:6px 0 0 0;opacity:.9"></span>' +
+    '<span style="position:absolute;right:16px;top:16px;width:26px;height:26px;border:2px solid var(--accent);border-left:0;border-bottom:0;border-radius:0 6px 0 0;opacity:.9"></span>' +
+    '<span style="position:absolute;left:16px;bottom:16px;width:26px;height:26px;border:2px solid var(--accent);border-right:0;border-top:0;border-radius:0 0 0 6px;opacity:.9"></span>' +
+    '<span style="position:absolute;right:16px;bottom:16px;width:26px;height:26px;border:2px solid var(--accent);border-left:0;border-top:0;border-radius:0 0 6px 0;opacity:.9"></span>' +
+    '<span class="scan-line" style="position:absolute;left:16px;right:16px;top:16px;height:2px;border-radius:2px;background:linear-gradient(90deg,transparent,var(--accent) 18%,var(--accent) 82%,transparent);box-shadow:0 0 14px 2px var(--ring)"></span>';
+  const loading = document.createElement('div');
+  loading.setAttribute('style', 'position:absolute;left:0;right:0;bottom:26px;text-align:center;font-size:12.5px;letter-spacing:.14em;color:rgba(233,232,227,.62)');
+  loading.innerHTML = '正在开启相机<span style="letter-spacing:0"><i class="sd"></i><i class="sd sd2"></i><i class="sd sd3"></i></span>';
+  stage.appendChild(video); stage.appendChild(reticle); stage.appendChild(loading);
+  if (!document.getElementById('scanStageCss')) {
+    const css = document.createElement('style'); css.id = 'scanStageCss';
+    css.textContent = '@keyframes scanSweep{0%{top:16px;opacity:0}12%{opacity:1}88%{opacity:1}100%{top:calc(100% - 18px);opacity:0}}'
+      + '.scan-line{animation:scanSweep 2.1s cubic-bezier(.45,0,.55,1) infinite}'
+      + '.sd{display:inline-block;width:3px;height:3px;border-radius:50%;background:rgba(233,232,227,.5);margin:0 2px;vertical-align:middle;animation:scanDotBlink 1.4s infinite}'
+      + '.sd2{animation-delay:.2s}.sd3{animation-delay:.4s}'
+      + '@keyframes scanDotBlink{0%,60%,100%{opacity:.25}30%{opacity:1}}';
+    document.head.appendChild(css);
+  }
+  let scanRevealed = false;
+  const revealScan = () => { if (scanRevealed) return; scanRevealed = true; video.style.visibility = 'visible'; if (loading.parentNode) loading.remove(); };
+  video.addEventListener('loadedmetadata', revealScan);
+  video.addEventListener('loadeddata', revealScan);
+  video.addEventListener('canplay', revealScan);
+  video.addEventListener('playing', revealScan);
   const tip = document.createElement('p'); tip.textContent = '对准 PC 端「二维码配对」弹窗里的二维码';
   const cancel = document.createElement('button'); cancel.id = 'scanCancel'; cancel.textContent = '取 消';
-  box.appendChild(h); box.appendChild(video); box.appendChild(tip); box.appendChild(cancel);
+  box.appendChild(h); box.appendChild(stage); box.appendChild(tip); box.appendChild(cancel);
   overlay.appendChild(box);
   document.body.appendChild(overlay);
-  let stream = null, timer = null, done = false;
-  const cleanup = () => { done = true; if (timer) clearInterval(timer); if (stream) stream.getTracks().forEach(t => t.stop()); overlay.remove(); };
+  let stream = null, timer = null, done = false, scanRevealTimer = null;
+  const cleanup = () => { done = true; if (timer) clearInterval(timer); if (scanRevealTimer) clearTimeout(scanRevealTimer); if (stream) stream.getTracks().forEach(t => t.stop()); overlay.remove(); };
   cancel.addEventListener('click', cleanup);
   overlay.addEventListener('click', e => { if (e.target === overlay) cleanup(); });
   try {
     stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
     video.srcObject = stream;
+    scanRevealTimer = setTimeout(revealScan, 2500); // 兜底：某些 WebView 媒体事件不发→2.5s 强制显形（流已 attach，解码不受影响）
     try { await video.play(); } catch (e) {}
     const detector = useDetector ? new window.BarcodeDetector() : null;
     const cvs = useDetector ? null : document.createElement('canvas');

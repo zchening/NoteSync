@@ -87,14 +87,14 @@ test('内联 qrcode 库可为真实配对 URL 生成模块矩阵', () => {
 });
 
 // ── Q5：版本号 ──────────────────────────────
-test('APP_VERSION 为 8.1.3', () => {
+test('APP_VERSION 为 8.1.4', () => {
   const fs = require('fs');
   const src = fs.readFileSync(require('../helpers').INDEX_PATH, 'utf8');
-  assert.ok(src.includes("const APP_VERSION = '8.1.3';"), 'index.html 应声明 APP_VERSION = 8.1.3');
+  assert.ok(src.includes("const APP_VERSION = '8.1.4';"), 'index.html 应声明 APP_VERSION = 8.1.4');
 });
 
-// ── Q5c：v8.1.3 无 GMS 机型扫码回退链守护（锚补丁行，防回潮）──
-test('v8.1.3 doScanAndOpen：无 GMS/原生异常回退网页扫码层，旧静默 catch 退役', () => {
+// ── Q5c：v8.1.4 无 GMS 机型扫码回退链守护（锚补丁行，防回潮）──
+test('v8.1.4 doScanAndOpen：无 GMS/原生异常回退网页扫码层，旧静默 catch 退役', () => {
   const fs = require('fs');
   const src = fs.readFileSync(require('../helpers').INDEX_PATH, 'utf8');
   // 先探谷歌扫码模块可用性并按 available 判定（无 GMS → 不走原生取景框）
@@ -107,6 +107,26 @@ test('v8.1.3 doScanAndOpen：无 GMS/原生异常回退网页扫码层，旧静�
   assert.ok(src.includes("if (/permission denied|denied access to camera/i.test(msg))"), '权限拒应单独提示（匹配真实串 User denied access to camera）');
   // 防回潮：旧的「catch 里直接 return 吞掉所有原生异常」＝无 GMS 机型点了没反应的根因，必须消失
   assert.ok(!src.includes('/* 用户取消扫码/相机关闭等，静默 */'), '旧静默 catch 注释应已退役');
+});
+
+// ── Q5d：v8.1.4 扫码出帧前占位舞台守护（锚补丁行，防回潮播放三角）──
+test('v8.1.4 scanWithWebCamera：video 出帧前隐藏 + 常驻取景框 + 占位，旧裸 video 样式退役', () => {
+  const fs = require('fs');
+  const src = fs.readFileSync(require('../helpers').INDEX_PATH, 'utf8');
+  // video 初始隐藏（避免空窗期系统默认播放三角）
+  assert.ok(src.includes('object-fit:cover;visibility:hidden'), 'video 应初始 visibility:hidden');
+  // 占位舞台：金色取景框扫描线 keyframes（唯一名，非已退役 spin）+ 文案（锚代码唯一串，注释里是「…」不命中）
+  assert.ok(src.includes('scanSweep') && src.includes('scanStageCss'), '应注入 scanSweep 扫描线动画与一次性 stage 样式');
+  assert.ok(src.includes('正在开启相机<span'), '出帧前应显示「正在开启相机…」占位');
+  // 出帧后显形：多事件 + 幂等 + 定时兜底（防某些 WebView 事件不发导致永久黑屏）
+  assert.ok(src.includes("video.addEventListener('loadedmetadata', revealScan)"), 'loadedmetadata 应触发显形');
+  assert.ok(src.includes("video.addEventListener('playing', revealScan)"), 'playing 应触发显形');
+  assert.ok(src.includes('if (scanRevealed) return'), 'revealScan 应幂等');
+  assert.ok(src.includes('setTimeout(revealScan, 2500)'), '应有 2.5s 定时兜底强制显形');
+  // 取景框常驻（reveal 只移除 loading，不移除 reticle）
+  assert.ok(src.includes('if (loading.parentNode) loading.remove()') && !src.includes('reticle.remove()'), '出帧后取景框应常驻，仅移除占位文案');
+  // 防回潮：旧的裸 video 内联样式（会闪默认播放三角）必须消失
+  assert.ok(!src.includes('width:100%;max-height:46vh;background:#000;border-radius:12px;object-fit:cover'), '旧裸 video 样式应已退役');
 });
 
 // ── Q5b：v5.48 键盘视口策略（Chrome 安卓菜单栏被顶飞修复）──

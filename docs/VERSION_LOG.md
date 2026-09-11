@@ -4,6 +4,7 @@
 
 | 版本 | 涉及 bug 编号 |
 |------|---------------|
+| v8.1.4 | 扫一扫/扫码打开笔记出帧前闪系统默认播放三角（国产 WebView 在 `scanWithWebCamera` 先摆空 `<video>` 再 `await getUserMedia` 的空窗期画占位海报）。修=video 初始 `visibility:hidden` 包进深色圆角 stage，叠金色取景框四角 + `scanSweep` 金扫描线 +「正在开启相机…」占位；`loadedmetadata`/`playing` 出帧后显形并移除占位。守护 qr_pairing Q5d（stage/隐藏 video/占位/出帧显形，锚补丁行）+ 版本 pin 全量 sed 同步 + www 壳字节一致。三bump 8.1.4/814，纯网页零重建 |
 | v8.1.3 | 无 GMS 机型（如未装谷歌服务的小米 Note11 Pro+）点「扫一扫/扫码打开笔记」静默无反应：根因=原生 `bs.scan()` 走谷歌 play-services-code-scanner，无 GMS 拉不起取景框，`doScanAndOpen` 在 `catch(e){return}` 里静默吞异常。修=先 `bs.isGoogleBarcodeScannerModuleAvailable()` 探可用性，不可用/原生异常统一回退自写网页扫码层 `scanWithWebCamera`（getUserMedia+jsQR，免 GMS 零重建）；仅 `scan canceled.` 保持静默、权限拒单独提示。守护 qr_pairing（扫码回退链）+ 三bump 8.1.3/813，纯网页零重建 |
 | v8.1.2 | 用户改文案：link-hint 改「笔记里的网址默认打开方式，仅对本机生效。」（旧句误提手机号=tel: 拨号不走本设置）；三bump 8.1.2/812，纯网页零重建 |
 | v8.1.1 | 用户点名同族不一致（仅打开链接行有箭头）拍板方案二：主菜单行尖角退役（正向钉翻禁现钉、死码不留）、「打开链接」⇄「扫码换机」换位（行序钉）。纯网页改动 APK 直连线上零重建 |
