@@ -4,6 +4,7 @@
 
 | 版本 | 涉及 bug 编号 |
 |------|---------------|
+| v8.1.2 | 用户改文案：link-hint 改「笔记里的网址默认打开方式，仅对本机生效。」（旧句误提手机号=tel: 拨号不走本设置）；三bump 8.1.2/812，纯网页零重建 |
 | v8.1.1 | 用户点名同族不一致（仅打开链接行有箭头）拍板方案二：主菜单行尖角退役（正向钉翻禁现钉、死码不留）、「打开链接」⇄「扫码换机」换位（行序钉）。纯网页改动 APK 直连线上零重建 |
 | v8.1.0 | K1/K2（HEAD→GET 归一化吞 body + /.well-known 先于 SPA 兜底：assetlinks 真指纹 statement + Manifest autoVerify + App Links 冷/热启 URL 转发）+ 链接打开方式（挑版A：菜单「打开链接」二级页单选，默认系统浏览器走原生 ACTION_VIEW 绕 Capacitor 确认弹窗、应用内=子 WebView Activity 不碰主 WebView；localStorage 本机键；MainActivity 主文档拦截器加 note/biji 双域白名单堵外站污染离线缓存）+ 菜单「备份换机码」改名「扫码换机」+ 主菜单新增行 M2 九行→十行。守护 v809 路由 9 条 + v810 单测 14 条 + e2e L1-L4（几何零漂移/真点分流）。闸修随版：HEAD 排除 SSE 流路由、App Links/本站门双端 origin 归一（跨源锁屏）、mailto 同窗回退、协议门、裸 socket 吞 body 硬证。|
 | v5.58 | S1-S5（冲突卡加宽+文案定稿 + 离线条入状态栏 + 页脚菜单三端加大 + 菜单三端统一+网页扫码 + 盐根治三层，unit v558.test.js H1-H5 固化） |
