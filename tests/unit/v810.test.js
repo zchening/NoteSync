@@ -1,5 +1,5 @@
 // v8.1.0 链接打开方式（挑版A）+ 扫码换机改名——jsdom 行为守护 + 静态锚点
-// A 静态：改名两处用户可见串、linkrow/二级页 DOM、CSS 新规则、renderMenu 同族枚举、mousedown 走分流函数
+// A 静态：改名两处用户可见串、打开链接行 DOM（v8.1.1 起 linkrow/尖角为禁现钉）+行序钉、二级页 CSS 规则、renderMenu 同族枚举、mousedown 走分流函数
 // B 行为：openNoteLink 五路分流（APK browser/inapp/旧桥回退、Web browser/inapp）
 // C 行为：菜单二级页进出 + localStorage 本机键 + 金勾 sel 同步 + renderMenu 复位
 const test = require('node:test');
@@ -74,14 +74,14 @@ test('A1 改名「扫码换机」两处用户可见串落位', () => {
   assert.ok(SRC.includes("h.textContent = '扫码换机'"), '弹窗标题已改');
   assert.ok(!SRC.includes('<span class="mi-l">备份换机码</span>'), '旧菜单文案不得残留用户可见位');
 });
-test('A2 「打开链接」行 DOM：linkrow+尖角 chev 类+mousedown 走 openNoteLink', () => {
-  assert.ok(SRC.includes('id="menuLink" class="menu-item linkrow"'), '主菜单新行 DOM（linkrow 类为对齐守护锚）');
-  assert.ok(SRC.includes('class="chev"'), '尖角独立类——绝对定位不挤居中组（对齐铁律）');
+test('A2 「打开链接」行 DOM（v8.1.1 方案二：无箭头语言，尖角/linkrow 禁现）+ mousedown 走 openNoteLink', () => {
+  assert.ok(SRC.includes('id="menuLink" class="menu-item" role="button"'), '主菜单行 DOM（普通 menu-item，无派生类）');
+  assert.ok(!SRC.includes('class="chev"') && !SRC.includes('.linkrow'), '尖角类与 linkrow 全文件禁现（v8.1.1 退役，含注释）');
+  assert.ok(SRC.indexOf('id="menuLink"') < SRC.indexOf('id="menuBackup"'), '行序（v8.1.1 拍板）：打开链接在扫码换机之前');
   assert.ok(SRC.includes('openNoteLink(a.href);'), 'mousedown 分支已切分流函数');
   assert.ok(SRC.includes('function openNoteLink(href)'), '分流函数在位');
 });
-test('A3 CSS 新规则：chev 绝对定位钉右缘/二级页左起笔/金勾 visibility 占位', () => {
-  assert.ok(SRC.includes('.linkrow .chev{position:absolute;right:12px'), '尖角绝对定位规则');
+test('A3 CSS：二级页左起笔/金勾 visibility 占位（v8.1.1 起尖角定位规则退役）', () => {
   assert.ok(SRC.includes('#menuLinkView .menu-item{justify-content:flex-start}'), '二级页同族左起笔（红线17 枚举）');
   assert.ok(SRC.includes('.link-opt .tick{margin-left:auto;width:16px;height:16px;color:var(--accent);visibility:hidden}'), '金勾 visibility 占位（禁 display:none——切换漂移）');
   assert.ok(SRC.includes('.link-opt.sel .tick{visibility:visible}'), '选中显勾');

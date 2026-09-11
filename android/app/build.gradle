@@ -8,8 +8,8 @@ android {
         applicationId "cn.xuyinji.notesync"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 810 // v8.1.0（发版必随 APP_VERSION 双 bump；CI 另从 tag 自动注入兜底——v5.55 APK 自报 5.54 的教训）
-        versionName "8.1.0" // v8.1.0
+        versionCode 811 // v8.1.1（发版必随 APP_VERSION 双 bump；CI 另从 tag 自动注入兜底——v5.55 APK 自报 5.54 的教训）
+        versionName "8.1.1" // v8.1.1
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
