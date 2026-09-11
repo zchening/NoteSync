@@ -597,7 +597,7 @@ function markJumped() {
 }
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '8.1.2';
+const APP_VERSION = '8.1.3';
 const BUILD_DATE = '2026-09-11';
 
 const $ = s => document.querySelector(s);
@@ -5462,7 +5462,18 @@ async function doScanAndOpen() {
   const cap = window.Capacitor;
   const bs = (cap && cap.Plugins && cap.Plugins.BarcodeScanner) || null;
   let raw = '';
-  if (bs && typeof bs.scan === 'function') {
+  // v8.1.3：原生 bs.scan() 走谷歌 play-services-code-scanner，无 GMS 机型（如未装谷歌服务的小米）
+  // 拉不起取景框 → 旧代码在 catch 里直接 return 静默失败＝「点了没反应」。改为：先探谷歌扫码
+  // 模块可用性，不可用/原生异常统一回落自写网页扫码层（scanWithWebCamera，不依赖谷歌）；
+  // 仅「用户主动取消取景框」保持静默（同旧行为），相机权限拒绝单独提示。
+  let useNative = bs && typeof bs.scan === 'function';
+  if (useNative && typeof bs.isGoogleBarcodeScannerModuleAvailable === 'function') {
+    try {
+      const av = await bs.isGoogleBarcodeScannerModuleAvailable();
+      if (!(av && av.available)) useNative = false; // 无 GMS / 模块不可用 → 走网页扫码层
+    } catch (e) { useNative = false; } // 探测本身失败（无 GMS 时常见）→ 走网页扫码层
+  }
+  if (useNative) {
     try {
       if (typeof bs.requestPermissions === 'function') {
         try {
@@ -5472,9 +5483,14 @@ async function doScanAndOpen() {
       }
       const ret = await bs.scan();
       raw = (ret && ret.barcodes && ret.barcodes[0] && (ret.barcodes[0].rawValue || ret.barcodes[0].displayValue)) || '';
-    } catch (e) { return; /* 用户取消扫码/相机关闭等，静默 */ }
+    } catch (e) {
+      const msg = String((e && (e.message || e)) || '');
+      if (/cancel/i.test(msg)) return; // 用户主动取消取景框：静默
+      if (/permission denied|denied access to camera/i.test(msg)) { scanFeedback('相机权限被拒绝'); return; }
+      raw = (await scanWithWebCamera()) || ''; // 其他原生异常：回落自写网页扫码层，不再静默
+    }
   } else {
-    raw = (await scanWithWebCamera()) || ''; // v5.58：网页端走自写扫码层
+    raw = (await scanWithWebCamera()) || ''; // v5.58：网页端 / 无 GMS 走自写扫码层
   }
   if (!raw) return;
   if (raw.indexOf(BACKUP_PREFIX) === 0) { await applyBackupBundle(raw); return; } // v7.7.0 换机备份码

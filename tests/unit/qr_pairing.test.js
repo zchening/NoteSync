@@ -87,10 +87,26 @@ test('内联 qrcode 库可为真实配对 URL 生成模块矩阵', () => {
 });
 
 // ── Q5：版本号 ──────────────────────────────
-test('APP_VERSION 为 8.1.2', () => {
+test('APP_VERSION 为 8.1.3', () => {
   const fs = require('fs');
   const src = fs.readFileSync(require('../helpers').INDEX_PATH, 'utf8');
-  assert.ok(src.includes("const APP_VERSION = '8.1.2';"), 'index.html 应声明 APP_VERSION = 8.1.2');
+  assert.ok(src.includes("const APP_VERSION = '8.1.3';"), 'index.html 应声明 APP_VERSION = 8.1.3');
+});
+
+// ── Q5c：v8.1.3 无 GMS 机型扫码回退链守护（锚补丁行，防回潮）──
+test('v8.1.3 doScanAndOpen：无 GMS/原生异常回退网页扫码层，旧静默 catch 退役', () => {
+  const fs = require('fs');
+  const src = fs.readFileSync(require('../helpers').INDEX_PATH, 'utf8');
+  // 先探谷歌扫码模块可用性并按 available 判定（无 GMS → 不走原生取景框）
+  assert.ok(src.includes('isGoogleBarcodeScannerModuleAvailable'), '应先探 bs.isGoogleBarcodeScannerModuleAvailable 可用性');
+  assert.ok(src.includes('av.available'), '应按 available 字段判定可用性');
+  // 回退到自写网页扫码层（免 GMS）：无 GMS 分支 + 原生异常 catch 分支，共 ≥2 处
+  assert.ok((src.match(/await scanWithWebCamera\(\)/g) || []).length >= 2, '应有≥2处回退到 scanWithWebCamera');
+  // 用户主动取消仍静默；相机权限被拒单独提示（不再一律静默）
+  assert.ok(src.includes('if (/cancel/i.test(msg)) return;'), '用户取消应显式保持静默 return');
+  assert.ok(src.includes("if (/permission denied|denied access to camera/i.test(msg))"), '权限拒应单独提示（匹配真实串 User denied access to camera）');
+  // 防回潮：旧的「catch 里直接 return 吞掉所有原生异常」＝无 GMS 机型点了没反应的根因，必须消失
+  assert.ok(!src.includes('/* 用户取消扫码/相机关闭等，静默 */'), '旧静默 catch 注释应已退役');
 });
 
 // ── Q5b：v5.48 键盘视口策略（Chrome 安卓菜单栏被顶飞修复）──
