@@ -175,6 +175,34 @@
      移动端整体收紧 */
   @media (max-width:560px){ header{gap:6px;padding:12px 12px} header .brand b{display:none} header button{width:27px;height:27px} header button svg{width:16px;height:16px} }
 
+  /* ── v8.2.0 彩蛋区：标题栏徽章 / 节日雨 / 数字粒子 / 复古皮肤覆膜 ──────────
+     徽章与问候卡全部吃主题变量（自动跟随日/夜与皮肤调色板的 --accent-soft/--ring/--box-bg），
+     不新增颜色字面量；浮层一律 pointer-events:none，绝不打断输入。 */
+  #nsBadge{display:none;align-items:center;gap:6px;max-width:34vw;flex:none;font-size:12px;color:var(--fg);background:var(--accent-soft);border:1px solid var(--ring);border-radius:999px;padding:3px 10px 3px 8px;letter-spacing:.03em;white-space:nowrap;overflow:hidden;pointer-events:none}
+  #nsBadge.show{display:inline-flex;animation:nsBadgePop .45s cubic-bezier(.2,.7,.3,1) both}
+  #nsBadge .ns-be{font-style:normal;font-size:13px;flex:none}
+  #nsBadge .ns-bt{font-style:normal;overflow:hidden;text-overflow:ellipsis}
+  @keyframes nsBadgePop{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
+  #nsRain{position:fixed;inset:0;z-index:57;pointer-events:none;overflow:hidden}
+  #nsRain.hidden{display:none}
+  #nsRain i{position:absolute;top:-9%;font-style:normal;will-change:transform;animation:nsFall linear forwards}
+  @keyframes nsFall{0%{transform:translateY(0) rotate(0);opacity:0}7%{opacity:1}100%{transform:translateY(118vh) rotate(var(--nsr,40deg));opacity:.92}}
+  #nsGreet{position:fixed;left:50%;bottom:64px;transform:translateX(-50%) translateY(14px);z-index:58;display:flex;align-items:center;gap:10px;padding:12px 20px;font-size:14px;letter-spacing:.03em;color:var(--fg);background:var(--box-bg);border:1px solid var(--line);border-top:3px solid var(--accent);border-radius:16px;box-shadow:0 16px 44px rgba(20,20,18,.16);white-space:nowrap;max-width:92vw;overflow:hidden;text-overflow:ellipsis;opacity:0;pointer-events:none;transition:opacity .45s,transform .45s cubic-bezier(.2,.7,.3,1)}
+  #nsGreet.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  #nsGreet .ns-ge{font-size:18px}
+  .ns-burst{position:fixed;z-index:58;pointer-events:none}
+  .ns-burst i{position:absolute;left:0;top:0;font-style:normal;font-size:16px;animation:nsBurstUp .95s ease-out forwards}
+  @keyframes nsBurstUp{0%{transform:translate(0,0) scale(.6);opacity:0}15%{opacity:1}100%{transform:translate(var(--nx,8px),var(--ny,-38px)) scale(1.15) rotate(var(--nr,12deg));opacity:0}}
+  /* 复古皮肤覆膜层：扫描线/稿纸导引，低透明非交互，日夜两档。
+     ≤560px 徽章只留 emoji（手机头部按钮多，文字让位） */
+  #skinFx{position:fixed;inset:0;z-index:3;pointer-events:none}
+  #skinFx.scan{background:repeating-linear-gradient(to bottom,rgba(6,14,8,.20) 0 1px,transparent 1px 3px)}
+  #skinFx.scan.light{background:repeating-linear-gradient(to bottom,rgba(20,60,30,.05) 0 1px,transparent 1px 3px)}
+  #skinFx.paper{background:repeating-linear-gradient(to bottom,transparent 0 28px,rgba(176,58,46,.05) 28px 29px)}
+  #skinFx.paper.night{background:repeating-linear-gradient(to bottom,transparent 0 28px,rgba(197,105,92,.07) 28px 29px)}
+  header .brand svg{transition:transform .25s ease-out}
+  @media (max-width:560px){ #nsBadge{max-width:none;padding:3px 7px} #nsBadge .ns-bt{display:none} }
+
   /* ── 编辑器 ─────────────────────────── */
   #editor{flex:1;width:100%;max-width:720px;margin:0 auto;border:0;outline:0;resize:none;padding:40px 28px 120px;background:transparent;color:var(--fg);font:inherit;font-size:17px;overflow-x:hidden;overflow-y:auto;word-wrap:break-word;overflow-wrap:anywhere;word-break:break-all;white-space:pre-wrap;-webkit-user-select:text;user-select:text;line-height:1.9}
   #editor:empty:before{content:attr(data-ph);color:var(--muted);opacity:.75;pointer-events:none}
@@ -400,6 +428,7 @@
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="3.6" stroke-linecap="round"><path d="M40.5 14.5A19 19 0 0 1 14.5 40.5"/><path d="M7.5 33.5A19 19 0 0 1 33.5 7.5"/></g><path d="M18.72 16.96h2.2l6.16 11V16.96h2.2v14.08h-2.2l-6.16-11V31.04h-2.2Z" fill="currentColor"/></svg>
     <b>NoteSync</b>
     <span id="brandNote" class="hidden"></span>
+    <span id="nsBadge" aria-hidden="true"><i class="ns-be"></i><i class="ns-bt"></i></span>
   </span>
   <span class="sp"></span>
   <button type="button" id="themeBtn" title="切换夜间模式"></button>
@@ -419,6 +448,8 @@
   <div id="remCardAck" role="button" tabindex="0">知道了</div>
 </div>
 <div id="timeChip" class="hidden"></div>
+<div id="nsRain" class="hidden" aria-hidden="true"></div>
+<div id="nsGreet" aria-hidden="true"></div>
 <div class="mask hidden" id="remMask">
   <div class="box qr-box" id="remPanel">
     <div class="modal-head">
@@ -596,9 +627,26 @@ function markJumped() {
   try { sessionStorage.setItem(NOTE_JUMPED_KEY, String(Date.now())); } catch (e) {}
 }
 
-// --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '8.1.8';
+// --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
+const APP_VERSION = '8.2.0';
 const BUILD_DATE = '2026-09-12';
+// ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
+//    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
+let nsSkin = 0;
+const NS_SKIN_PALETTES = {
+  1: { // A 终端绿：夜间=荧光屏，日间=电传公文
+    night: { bg:'#0B120C', fg:'#8FE3A0', muted:'#3F7A50', line:'#1C3522', box:'#0F1910',
+             accent:'#3CFF7D', soft:'rgba(60,255,125,.08)', dot:'#2C5B38', caret:'#3CFF7D' },
+    day:   { bg:'#F7F8F2', fg:'#1E5F2D', muted:'#86A68C', line:'#DDE6DA', box:'#FFFFFF',
+             accent:'#14612C', soft:'rgba(20,97,44,.07)', dot:'#A8C4AE', caret:'#14612C' }
+  },
+  2: { // B 打字机纸：日间=稿纸，夜间=暗房
+    day:   { bg:'#F4EFE2', fg:'#33301F', muted:'#9A9177', line:'#DCD3BA', box:'#FBF8EE',
+             accent:'#B03A2E', soft:'rgba(176,58,46,.06)', dot:'#C4B99A', caret:'#B03A2E' },
+    night: { bg:'#221D16', fg:'#CFC5B2', muted:'#8A7F6B', line:'#3B342A', box:'#2A241B',
+             accent:'#C5695C', soft:'rgba(197,105,92,.08)', dot:'#5C5245', caret:'#C5695C' }
+  }
+};
 
 const $ = s => document.querySelector(s);
 const editor = $('#editor'), mask = $('#mask'), pw = $('#pw'), err = $('#err');
@@ -680,11 +728,17 @@ function shouldBeDark() {
 // 生成 !important 覆盖样式：用于对抗"CSS 注入型"夜间模式（浏览器往页面塞一段自己的深色 CSS）。
 // 注意：对"合成器层像素反色"（QQ X5 的 filter: invert）此路不通 —— 那种在渲染层，CSS 够不着。
 function themeOverrideCss(dark) {
+  if (nsSkin) return nsSkinOverrideCss(dark); // v8.2.0：皮肤激活时输出皮肤调色板（同规则结构）
   const p = dark ? THEME_PALETTE.dark : THEME_PALETTE.light;
   const accent = dark ? '#D4B068' : '#8F7126';
   const accentSoft = dark ? 'rgba(212,176,104,.08)' : 'rgba(143,113,38,.07)';
   const dot = dark ? '#7A786F' : '#C9C7BE';
   const warn = '#C0453E';
+  return themeCssCore(p, accent, accentSoft, dot, warn, '');
+}
+// v8.2.0：锁色规则模板抽薄——主主题与复古皮肤共用一套（皮肤天然进三份反注入锁色名单），
+// extra 供皮肤追加字体等专属规则。对既有输出逐字节等价。
+function themeCssCore(p, accent, accentSoft, dot, warn, extra) {
   return `
     body{background:${p.bg}!important;color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important}
     #editor{background:transparent!important;color:${p.fg}!important;-webkit-text-fill-color:${p.fg}!important}
@@ -732,8 +786,17 @@ function themeOverrideCss(dark) {
     #versionToast{background:${p.bg}!important;color:${p.fg}!important;border-color:${p.line}!important;-webkit-text-fill-color:${p.fg}!important}
     .upload-status{background:${p.fg}!important;color:${p.bg}!important;-webkit-text-fill-color:${p.bg}!important}
     .qr-warn,.box .err,#landing .warn{color:${warn}!important;-webkit-text-fill-color:${warn}!important}
-    #qrCanvas{background:#fff!important;border-color:${p.line}!important}
+    #qrCanvas{background:#fff!important;border-color:${p.line}!important}${extra ? '\n    ' + extra : ''}
   `;
+}
+// 皮肤覆盖样式：主题锁色模板 + 等宽字体/字标专属规则。dark 语义由 applyTheme 传入（内部态）。
+function nsSkinOverrideCss(dark) {
+  const s = NS_SKIN_PALETTES[nsSkin][dark ? 'night' : 'day'];
+  return themeCssCore(s, s.accent, s.soft, s.dot, '#C0453E',
+    'body{font-family:"Cascadia Mono",Consolas,"Courier New","SimSun",monospace!important}'
+    + 'header .brand b{letter-spacing:.14em!important}'
+    + '#versionToast{letter-spacing:.08em!important}'
+    + '#editor{caret-color:' + s.caret + '!important}');
 }
 // 把覆盖样式挂到 documentElement 的最后一个子节点（</body> 之后）。
 // 同优先级下 DOM 顺序后者胜 —— 浏览器注入的夜间 CSS 通常在 head 或 body 内，
@@ -843,6 +906,16 @@ function unmountShellOverride() {
 }
 // v6.1：菜单日夜间项随主题语义翻转——日间显示「夜间模式」（点它去夜间），夜间显示「日间模式」
 // 用户拍板文案反转；图标同语义（复用 ICON_SUN/ICON_MOON，与顶栏旧按钮一致的目标态语义）
+// v8.2.0 皮肤覆膜层（扫描线/稿纸导引线）同步：非色彩、低透明、日夜两档，档位唯一来源=body.dark
+// 内部态。必须经 applyTheme 每次调用（themeBtn/60s 自动/系统 mq 三条路径全收口，闸 R1/R2/R3 三路
+// 同中 P1：只在换肤瞬间算档会让环内切日夜后覆膜停旧档）。出环即移除。
+function nsSkinFxSync() {
+  let fx = document.getElementById('skinFx');
+  if (!nsSkin) { if (fx) fx.remove(); return; }
+  if (!fx) { fx = document.createElement('div'); fx.id = 'skinFx'; document.body.appendChild(fx); }
+  const dark = document.body.classList.contains('dark');
+  fx.className = nsSkin === 1 ? (dark ? 'scan' : 'scan light') : (dark ? 'paper night' : 'paper');
+}
 function syncThemeMenuItem(dark) {
   const ic = document.getElementById('menuThemeIcon'), lb = document.getElementById('menuThemeLabel');
   if (ic) ic.innerHTML = dark ? ICON_SUN : ICON_MOON;
@@ -850,8 +923,10 @@ function syncThemeMenuItem(dark) {
 }
 function applyTheme(dark) {
   syncThemeMenuItem(dark);       // v6.1：菜单「日夜间」项文案/图标随语义翻转（日间显「夜间模式」）
-  const shell = darkShellActive();          // 反色环境（小米/QQ + 系统深色，或手动开关）
-  const internalDark = dark || shell;       // 借壳日间：内部也是夜间（骗对手放行）
+  // v8.2.0：皮肤环内绝不借壳——invert 滤镜会把皮肤色翻成认不出的样子；检测到强制反色环境
+  //（浅色检测型对手会把浅色皮肤反掉）时，皮肤直接走夜间变体自保，语义/环态不受影响。
+  const shell = nsSkin ? false : darkShellActive();
+  const internalDark = dark || shell || (nsSkin && darkShellActive());
   document.body.classList.toggle('dark', internalDark);
   themeBtn.innerHTML = dark ? ICON_SUN : ICON_MOON;   // 图标/语义按用户意图
   const htmlEl = document.documentElement;
@@ -879,13 +954,14 @@ function applyTheme(dark) {
     tcMeta.setAttribute('name', 'theme-color');
     document.head.appendChild(tcMeta);
   }
-  tcMeta.setAttribute('content', (internalDark ? THEME_PALETTE.dark : THEME_PALETTE.light).bg);
+  tcMeta.setAttribute('content', (nsSkin ? NS_SKIN_PALETTES[nsSkin][internalDark ? 'night' : 'day'].bg : (internalDark ? THEME_PALETTE.dark : THEME_PALETTE.light).bg));
   mountThemeOverride(internalDark);
   if (shell && !dark) {
     mountShellOverride();    // 借壳日间：预反色日间板 + invert 滤镜，压轴生效
   } else {
     unmountShellOverride();  // 用户语义夜间 / 非借壳日间：无滤镜
   }
+  nsSkinFxSync(); // v8.2.0 闸 P1-1：环内日夜任何翻转（按钮/自动/mq）覆膜层跟随，档位唯一来源=内部态
 }
 // 页面加载时按时间自动设置初始模式
 // themeWantsDark = 用户语义（想要日间还是夜间）。借壳日间时 body 内部也是 dark，
@@ -1241,26 +1317,41 @@ function fmtRetry(sec) { const m = Math.ceil(sec / 60); return m + ' 分钟'; }
 function showUploadStatus(text) { uploadStatus.textContent = text; uploadStatus.classList.add('show'); }
 function hideUploadStatus() { uploadStatus.classList.remove('show'); }
 
-// --- 版本号彩蛋：连点标题栏 logo 7 次浮出气泡；?about 常显；加载即 console 日志 ---
-(function setupVersionBadge() {
+// ── v8.2.0 复古皮肤三态环：连点标题栏 logo 7 次沿「默认→终端绿→打字机纸→默认」前进一格，
+//    切换瞬间在原版本气泡位（#versionToast 位置与样式废物利用）弹 1.5s 标签。环内点日/夜
+//    只换皮肤的日夜配色、不出环；刷新即回默认（版本气泡旧彩蛋退役，版本号关于页可查）。
+(function setupSkinRing() {
   const brandIcon = document.querySelector('header .brand svg');
-  let tapCount = 0, tapTimer = null, toastEl = null;
-  function showVersionToast(sticky) {
+  const brandB = document.querySelector('header .brand b');
+  let tapCount = 0, tapTimer = null, toastEl = null, toastTimer = null;
+  const WORDS = ['NoteSync', 'NOTE-SYNC.EXE', 'N O T E S Y N C'];
+  const LABELS = ['已恢复默认', '复古 · 终端绿', '复古 · 打字机纸'];
+  function say(t) {
     if (!toastEl) { toastEl = document.createElement('div'); toastEl.id = 'versionToast'; document.body.appendChild(toastEl); }
-    toastEl.textContent = 'NoteSync V' + APP_VERSION + ' · 构建 ' + BUILD_DATE;
+    toastEl.textContent = t;
     toastEl.classList.add('show');
-    clearTimeout(toastEl._hide);
-    if (!sticky) toastEl._hide = setTimeout(() => toastEl.classList.remove('show'), 3000);
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove('show'), 1500);
   }
+  window.nsSetSkin = function (n) { // 顶层暴露：单测/e2e 直驱
+    nsSkin = ((n % 3) + 3) % 3;
+    document.body.classList.toggle('skin-a', nsSkin === 1);
+    document.body.classList.toggle('skin-b', nsSkin === 2);
+    if (brandB) brandB.textContent = WORDS[nsSkin];
+    try { applyTheme(themeWantsDark); } catch (e) {} // 皮肤变体随当前日夜语义；底层语义不变
+  };
   if (brandIcon) {
     brandIcon.addEventListener('click', () => {
       tapCount++;
       clearTimeout(tapTimer);
       tapTimer = setTimeout(() => { tapCount = 0; }, 2000);
-      if (tapCount >= 7) { tapCount = 0; clearTimeout(tapTimer); showVersionToast(); }
+      if (tapCount >= 7) {
+        tapCount = 0; clearTimeout(tapTimer);
+        window.nsSetSkin(nsSkin + 1);
+        say(LABELS[nsSkin]);
+      }
     });
   }
-  if (location.search.indexOf('about') !== -1) showVersionToast(true);
   console.log('%cNoteSync v' + APP_VERSION + ' · 构建 ' + BUILD_DATE, 'color:#c0392b;font-weight:bold');
 })();
 
@@ -2412,6 +2503,7 @@ async function applyUnlocked(key, note) {
   startSync();
   tryShowInstallBar(); // v5.35：解锁后再弹安装引导，不在落地页打扰
   consumeBackupImportMsg(); // v7.7.0：首页扫备份码跳转解锁后的一次性成功提示
+  try { nsFestWelcome(); } catch (e) {} // v8.2.0：节日雨——每次打开 App 那一刻放一轮（非节日静默）
 }
 
 async function unlock(pass) {
@@ -2440,6 +2532,7 @@ async function unlock(pass) {
             mask.classList.add('hidden');
             editor.contentEditable = true;
             startSync();
+            try { nsFestWelcome(); } catch (e3) {} // v8.2.0：离线解锁也是「打开 App」，节日雨同等触发
             return;
           }
         } catch (e2) { err.textContent = '口令与本地缓存不符'; return; }
@@ -4154,6 +4247,183 @@ if (CHIP_HOVER_OK) {
     if (chipFromHover) hideTimeChip();
   });
 }
+// ══ v8.2.0 彩蛋段：节日/深夜徽章 · 节日粒子雨 · 数字梗粒子 · logo 盯鼠标 ══════════
+// 铁律：一切效果都是编辑器外的浮层，自生自灭，绝不触正文 DOM/笔记数据/提醒逻辑。
+// 节日表由农历双库交叉验证直出公历日期（2024-2060），过期自然静默，免运行时农历换算。
+const NS_FEST = '20240118lb,0209cx,0210cj,0224yx,0610dy,0810qx,0917zq,1011cy|20250107lb,0128cx,0129cj,0212yx,0531dy,0829qx,1006zq,1029cy|20260126lb,0216cx,0217cj,0303yx,0619dy,0819qx,0925zq,1018cy|20270115lb,0205cx,0206cj,0220yx,0609dy,0808qx,0915zq,1008cy|20280104lb,0125cx,0126cj,0209yx,0528dy,0826qx,1003zq,1026cy|20290122lb,0212cx,0213cj,0227yx,0616dy,0816qx,0922zq,1016cy|20300111lb,0202cx,0203cj,0217yx,0605dy,0805qx,0912zq,1005cy|20310101lb,0122cx,0123cj,0206yx,0624dy,0824qx,1001zq,1024cy|20320120lb,0210cx,0211cj,0225yx,0612dy,0812qx,0919zq,1012cy|20330108lb,0130cx,0131cj,0214yx,0601dy,0801qx,0908zq,1001cy|20340127lb,0218cx,0219cj,0305yx,0620dy,0820qx,0927zq,1020cy|20350116lb,0207cx,0208cj,0222yx,0610dy,0810qx,0916zq,1009cy|20360105lb,0127cx,0128cj,0211yx,0530dy,0828qx,1004zq,1027cy|20370123lb,0214cx,0215cj,0301yx,0618dy,0817qx,0924zq,1017cy|20380112lb,0203cx,0204cj,0218yx,0607dy,0807qx,0913zq,1007cy|20390102lb,0123cx,0124cj,0207yx,0527dy,0826qx,1002zq,1026cy|20400121lb,0211cx,0212cj,0226yx,0614dy,0814qx,0920zq,1014cy|20410110lb,0131cx,0201cj,0215yx,0603dy,0803qx,0910zq,1003cy,1230lb|20420121cx,0122cj,0205yx,0622dy,0822qx,0928zq,1022cy|20430118lb,0209cx,0210cj,0224yx,0611dy,0811qx,0917zq,1011cy|20440107lb,0129cx,0130cj,0213yx,0531dy,0731qx,1005zq,1029cy|20450125lb,0216cx,0217cj,0303yx,0619dy,0819qx,0925zq,1018cy|20460114lb,0205cx,0206cj,0220yx,0608dy,0808qx,0915zq,1008cy|20470103lb,0125cx,0126cj,0209yx,0529dy,0827qx,1004zq,1027cy|20480122lb,0213cx,0214cj,0228yx,0615dy,0816qx,0922zq,1016cy|20490111lb,0201cx,0202cj,0216yx,0604dy,0805qx,0911zq,1005cy|20500101lb,0122cx,0123cj,0206yx,0623dy,0823qx,0930zq,1024cy|20510120lb,0210cx,0211cj,0225yx,0613dy,0812qx,0919zq,1013cy|20520109lb,0131cx,0201cj,0215yx,0601dy,0801qx,0907zq,1030cy|20530127lb,0218cx,0219cj,0305yx,0620dy,0820qx,0926zq,1020cy|20540116lb,0207cx,0208cj,0222yx,0610dy,0810qx,0916zq,1009cy|20550105lb,0127cx,0128cj,0211yx,0530dy,0829qx,1005zq,1028cy|20560124lb,0214cx,0215cj,0229yx,0617dy,0817qx,0924zq,1017cy|20570112lb,0203cx,0204cj,0218yx,0606dy,0806qx,0913zq,1007cy|20580102lb,0123cx,0124cj,0207yx,0625dy,0825qx,1002zq,1025cy|20590121lb,0211cx,0212cj,0226yx,0614dy,0814qx,0921zq,1014cy|20600111lb,0201cx,0202cj,0216yx,0603dy,0802qx,0909zq,1002cy,1230lb';
+const NS_FEST_META = {
+  nj: { em:'🎆', tx:'新年好，记下今年的第一笔', rain:['🎆'] },
+  cx: { em:'🧨', tx:'除夕夜，岁末归档愉快', rain:['🧨'] },
+  cj: { em:'🧧', tx:'过年好！', rain:['🎆','🧧','🏮'] },
+  yx: { em:'🏮', tx:'元宵安康，别忘了吃汤圆', rain:['🏮'] },
+  dy: { em:'🐉', tx:'端午安康', rain:['🐉','🍙'] },
+  qx: { em:'✨', tx:'今宵胜却人间无数', rain:['✨','🪶'] },
+  zq: { em:'🌕', tx:'但愿人长久', rain:['🌕'] },
+  cy: { em:'🍂', tx:'重阳安康', rain:['🍂'] },
+  lb: { em:'🥣', tx:'先喝粥，再记笔记', rain:['🥣'] },
+  night: { em:'🌙', tx:'夜深了，写完这条就睡', rain:[] }
+};
+const NS_FEST_ROWS = {}; // 'yyyyMMdd' -> 节日 key（春节初二/初三运行时按 cj+1/+2 判，不入表）
+const NS_CJ_BY_YEAR = {};
+(function parseNsFest() {
+  for (const seg of NS_FEST.split('|')) {
+    const y = seg.slice(0, 4);
+    for (const it of seg.slice(4).split(',')) {
+      const ds = y + it.slice(0, 4), k = it.slice(4);
+      NS_FEST_ROWS[ds] = k;
+      if (k === 'cj') NS_CJ_BY_YEAR[y] = ds;
+    }
+  }
+})();
+// 公历日期 → 节日 key（无则 null）。元旦硬规则 0101；春节档=初一到初三。
+// 叠加规则：查表优先于元旦特判——腊八恰落公历 1-1（如 2031/2050）时显腊八文案。
+function nsFestAt(date) {
+  const md = String(date.getMonth() + 1).padStart(2, '0') + String(date.getDate()).padStart(2, '0');
+  const ds = date.getFullYear() + md;
+  const k = NS_FEST_ROWS[ds];
+  if (k) return k;
+  if (md === '0101') return 'nj';
+  const cj = NS_CJ_BY_YEAR[date.getFullYear()];
+  if (cj) {
+    const cjMs = Date.UTC(+cj.slice(0, 4), +cj.slice(4, 6) - 1, +cj.slice(6, 8));
+    const nowMs = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+    const diff = Math.round((nowMs - cjMs) / 86400000);
+    if (diff === 1 || diff === 2) return 'cj';
+  }
+  return null;
+}
+// 徽章状态机：深夜(22:00-06:00)优先于节日——大过年的深夜也先劝睡；条件离开自动消失，无 ×。
+function nsBadgeAt(date) {
+  const h = date.getHours();
+  if (h >= 22 || h < 6) return NS_FEST_META.night;
+  const f = nsFestAt(date);
+  return f ? NS_FEST_META[f] : null;
+}
+function updateNsBadge() {
+  const el = document.getElementById('nsBadge');
+  if (!el) return;
+  const b = nsBadgeAt(new Date());
+  const ns = b ? (b.em + b.tx) : '';
+  if (ns === (el.getAttribute('data-ns') || '')) return; // 同内容不重播 pop 动画
+  el.setAttribute('data-ns', ns);
+  if (!b) { el.classList.remove('show'); return; }
+  el.querySelector('.ns-be').textContent = b.em;
+  el.querySelector('.ns-bt').textContent = b.tx;
+  el.classList.remove('show'); void el.offsetWidth; // 重启动画（同款 chip pop 手法）
+  el.classList.add('show');
+}
+updateNsBadge();
+setInterval(updateNsBadge, 60000);
+// 节日雨：解锁进编辑器那一刻放一轮（每次打开都放，无已播标记）；雨层浮在内容上 6 秒自清。
+let nsWelcomed = false;
+function nsRainStart(key, ms) {
+  const meta = NS_FEST_META[key];
+  if (!meta || !meta.rain.length) return;
+  const dur = ms || 6000;
+  const layer = document.getElementById('nsRain');
+  if (!layer) return;
+  layer.innerHTML = '';
+  layer.classList.remove('hidden');
+  for (let i = 0; i < 30; i++) {
+    const s = document.createElement('i');
+    s.textContent = meta.rain[i % meta.rain.length];
+    s.style.left = (2 + Math.random() * 94) + '%';
+    s.style.fontSize = (15 + Math.random() * 17) + 'px';
+    s.style.animationDuration = (2.6 + Math.random() * 2.2) + 's';
+    s.style.animationDelay = (Math.random() * Math.min(2.4, dur / 2500)) + 's';
+    s.style.setProperty('--nsr', (Math.random() * 90 - 45) + 'deg');
+    layer.appendChild(s);
+  }
+  const g = document.getElementById('nsGreet');
+  if (g) g.innerHTML = '<span class="ns-ge">' + meta.em + '</span><span>' + meta.tx + '</span>';
+  setTimeout(() => { if (g) g.classList.add('show'); }, Math.min(900, dur / 4));
+  setTimeout(() => {
+    layer.classList.add('hidden');
+    layer.innerHTML = '';
+    if (g) g.classList.remove('show');
+  }, dur);
+}
+function nsFestWelcome() { // applyUnlocked/离线解锁两处钩子调用；本会话只放一次
+  if (nsWelcomed) return;
+  nsWelcomed = true;
+  const f = nsFestAt(new Date());
+  if (f && NS_FEST_META[f] && NS_FEST_META[f].rain.length) { try { nsRainStart(f); } catch (e) {} }
+}
+// ── 数字梗粒子：刚敲出整串 666/520/1314/233（前一位非数字）时从光标处冒一次 emoji，
+//    只判定不改动正文；连打更长数字串（6666/5201314）因前位是数字自然静默。──
+const NS_DIGITS = [['1314', '🎆'], ['666', '🔥'], ['520', '💕'], ['233', '😂']];
+function nsDigitHit(s) {
+  for (let i = 0; i < NS_DIGITS.length; i++) {
+    const p = NS_DIGITS[i][0];
+    if (s.length >= p.length && s.slice(-p.length) === p) {
+      if (/[0-9]/.test(s.charAt(s.length - p.length - 1))) return null;
+      return NS_DIGITS[i][1];
+    }
+  }
+  return null;
+}
+function nsBurst(x, y, emoji) {
+  const wrap = document.createElement('div');
+  wrap.className = 'ns-burst';
+  wrap.style.left = x + 'px';
+  wrap.style.top = y + 'px';
+  for (let i = 0; i < 5; i++) {
+    const s = document.createElement('i');
+    s.textContent = emoji;
+    s.style.setProperty('--nx', (Math.random() * 70 - 35) + 'px');
+    s.style.setProperty('--ny', (-30 - Math.random() * 40) + 'px');
+    s.style.setProperty('--nr', (Math.random() * 60 - 30) + 'deg');
+    s.style.animationDelay = (i * 0.03) + 's';
+    wrap.appendChild(s);
+  }
+  document.body.appendChild(wrap);
+  setTimeout(() => { try { wrap.remove(); } catch (e) {} }, 1300);
+}
+let nsDigitArmed = false; // v8.2.0 闸 R1 P1：跳变触发——梗在尾部持续存在时（如「房233」后任意续打），
+// 每次击键都「命中」但只在 非命中→命中 的转换瞬间爆发一次；尾部脱离梗形即重新上膛。
+editor.addEventListener('input', (e) => {
+  if (!(typeof InputEvent !== 'undefined' && e instanceof InputEvent)) return; // 程序化 input 不算打字
+  if (typeof isComposing !== 'undefined' && isComposing) return;               // IME 组字期不判定
+  try {
+    // tail 一律取 editor.textContent 末尾——主 input 监听器会同步重建正文 DOM，此时实时
+    // selection 的 startContainer 可能已脱文档、pre.textContent 变空（真机实测 burst 不触发）。
+    // textContent 在重建后仍可靠；光标在文中部插入不会把梗数带到末尾，判定面不扩。
+    const tail = (editor.textContent || '').slice(-8);
+    const emo = nsDigitHit(tail);
+    if (!emo) { nsDigitArmed = false; return; }
+    if (nsDigitArmed) return; // 已在梗态——持续敲同一尾串不重复爆发
+    nsDigitArmed = true;
+    // 光标矩形仅用于把粒子定到指尖；selection 失效或矩形全零则退到编辑器下缘。
+    let x = null, y = null;
+    const sel = document.getSelection && document.getSelection();
+    if (sel && sel.rangeCount) {
+      const r = sel.getRangeAt(0);
+      if (editor.contains(r.startContainer)) {
+        const rects = r.getClientRects ? Array.prototype.filter.call(r.getClientRects(), rr => rr.width || rr.height) : [];
+        const rr = rects[rects.length - 1] || (r.getBoundingClientRect && r.getBoundingClientRect());
+        if (rr && (rr.left || rr.top || rr.width || rr.height)) { x = rr.left; y = rr.bottom; }
+      }
+    }
+    if (x === null) { const eb = editor.getBoundingClientRect(); x = eb.left + eb.width / 2; y = eb.bottom - 120; } // 无光标矩形：编辑器下缘兜底
+    nsBurst(x, Math.max(56, y - 6), emo);
+  } catch (err) {}
+});
+// ── logo 盯鼠标（桌面门控）：17px 徽标加「眼睛」会糊品牌标，改为整体向光标微平移的
+//    「注视感」——幅度 ±1.6px、rAF 节流、CSS .25s 缓动；触屏设备完全不启用。──
+if (CHIP_HOVER_OK) (function setupLogoGaze() {
+  const svg = document.querySelector('header .brand svg');
+  if (!svg) return;
+  let queued = 0, dx = 0, dy = 0;
+  document.addEventListener('mousemove', (e) => {
+    dx = Math.max(-1.6, Math.min(1.6, (e.clientX - innerWidth / 2) / innerWidth * 3.2));
+    dy = Math.max(-1.2, Math.min(1.2, (e.clientY - 40) / innerHeight * 2.4));
+    if (queued) return;
+    queued = requestAnimationFrame(() => {
+      queued = 0;
+      try { svg.style.transform = 'translate(' + dx.toFixed(2) + 'px,' + dy.toFixed(2) + 'px)'; } catch (e2) {}
+    });
+  }, { passive: true });
+})();
 async function chipActivate(e) { // v6.3：async——要 await addReminder 的结果才决定弹成功卡还是收起
   if (e.button !== undefined && e.button !== 0) return;
   e.preventDefault();
