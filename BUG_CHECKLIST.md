@@ -1083,21 +1083,22 @@
 - **关联文件**: index.html → linkifyEditor()/unwrapStrayU()/unwrapMark()/buildLinkSafe()/remMatchesFor()/normDecorHtml()/normPlaceholderHtml()
 - **测试**: unit v818.test.js C3（源码静态钉，含「禁对有内容的裸 u 用有损 unwrapMark」反钉）+ C4（留事项改时间热态内不当场删）+ e2e v818.test.js V818-3（真机验拆净/无嵌套/rem-mark 恰一条/img 存活/文字零丢）；v71 V71-B3 手打 `<u>` 断言随版翻转
 
-## M. APK 原生层（v5.51 新增分类，Capacitor 7 + 自写 Kotlin RemPlugin）
 ### L12 | v8.2.0 彩蛋段新功能核对点（非 bug）
-- **版本**: v8.2.0（五件彩蛋：皮肤三态环/节日+深夜徽章/节日雨/数字粒子/logo 盯鼠标）
+- **版本**: v8.2.0 上线彩蛋，v8.2.1 修反馈——现四件在线：皮肤三态环/节日+深夜徽章（含移动端文案）/节日雨/数字粒子；logo 盯鼠标 v8.2.1 用户令删（禁现钉 A9）
 - **核对要点**（改动碰到彩蛋段/applyTheme/themeOverrideCss/主 input 监听器时逐项过）：
   - [ ] 皮肤不持久化：applyTheme/换肤路径不得新增 storage 写（v820 A8 钉）；刷新必须回默认皮肤
   - [ ] 皮肤×借壳：NS_SKIN 激活时 shell 必为 false（滤镜会反花皮肤色）；强制反色环境皮肤走夜版（A7 钉）
   - [ ] themeCssCore 模板改动后主主题（非皮肤）输出必须与既有锁色逐字节等价（A10 钉）
-  - [ ] 数字粒子 tail 取 editor.textContent 末尾——禁止改回「实时 selection 前缀」（主监听先跑重建 DOM，光标容器会脱文档，v820 真机实锤）
+  - [ ] 数字粒子判定=文档捕获阶段 + nsCaretPrefix 三态（string 光标前缀/含合法空串；null 元素位不爆不碰 armed；false 才落全文尾兜底）——禁改回 editor 冒泡监听、克隆 Range 取文本（Range 无 textContent）、`e.target!==editor` 严过滤（块 div 才是 target）三坑均为真机实锤（A13/A14+E5 钉）
   - [ ] 覆膜层 #skinFx 档位唯一由 applyTheme 尾部 nsSkinFxSync 驱动（themeBtn/60s 自动/系统 mq 三路收口，闸 P1-1：换肤瞬间单算档会令环内切日夜后停旧档，A11 钉）
   - [ ] 数字粒子必须走 nsDigitArmed 跳变触发（非态→态才爆，闸 P1-2：状态判定会让尾部持续成梗时每次击键连爆，A12 钉）
   - [ ] nsFestWelcome 挂点恰 2 处（A9 硬计数钉，加第 3 处必同版改钉）
   - [ ] 彩蛋浮层全部 pointer-events:none 且不进编辑器 DOM；#nsBadge/#nsGreet 全用主题变量（三板口径：静态板 var() 跟随 body.dark；动态板仅既有 #versionToast——徽章/问候卡与 hintbar 同口径不入 SHELL/动态板，借壳滤镜自动翻）
+  - [ ] 移动端 #nsBadge 必须出文案（限宽省略号方案，E6 钉 390px 可见+header 零溢出）；禁加回 display:none
   - [ ] #versionToast 被换肤标签复用：CSS 钉（theme.test V-背景实底）不得退役
 
 
+## M. APK 原生层（v5.51 新增分类，Capacitor 7 + 自写 Kotlin RemPlugin）
 ### M1 | Capacitor 工程生成与本地 assets 复制链路
 - **版本**: v5.51（APK 落地首次）
 - **要点与核对**:

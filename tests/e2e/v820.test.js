@@ -161,3 +161,74 @@ test('E4 徽章自动评估：与页面加载时刻的深夜/节日判定逐一�
     assert.deepStrictEqual(page.__errors || [], [], '徽章评估不得抛页面错误');
   } finally { await ctx.close(); }
 }));
+
+// ── E5 v8.2.1：光标前判定——文中打字与「数字紧邻（3点666）」不再被吞（v8.2.0 两处误杀实锤回归）──
+test('E5 文中光标处敲 666 与 「下午3点」尾敲 666 均触发一次爆发', guard(async () => {
+  const { ctx, page } = await openDesktopEditor('V821Caret');
+  try {
+    await page.click('#editor');
+    await page.keyboard.type('明天下午3点接橙子');
+    await page.waitForFunction(() => !document.querySelector('.ns-burst'), null, { timeout: 6000 });
+    // 句尾紧贴数字「子」前非数字 → 基线；重点复现 v8.2.0 误杀场景：文本以数字收尾再敲 666
+    await page.evaluate(() => { const ed = document.getElementById('editor'); ed.textContent = ''; ed.focus(); });
+    await page.keyboard.type('开会15');
+    await page.waitForFunction(() => !document.querySelector('.ns-burst'), null, { timeout: 6000 });
+    await page.keyboard.type('666'); // 「15」后紧跟 666：v8.2.0 前位数字规则吞，v8.2.1 必爆
+    await page.waitForFunction(() => document.querySelector('.ns-burst i')?.textContent === '🔥', null, { timeout: 4000 });
+    assert.ok(true);
+    // 文中打字：光标移回「开会15|666」的 15 与 6 之间敲一个 6 —— 光标前缀 '开会16'? 简化：
+    // 重开一句，光标定位句中再敲 666，验证判定面是光标前而非全文尾
+    await page.evaluate(() => {
+      const ed = document.getElementById('editor'); ed.textContent = ''; ed.focus();
+    });
+    await page.keyboard.type('AB尾部');
+    // 把光标挪到「AB」后（句中），敲 666——全文尾是「尾部」非数字，v8.2.0 不爆；光标前缀成串，v8.2.1 爆
+    await page.evaluate(() => {
+      const ed = document.getElementById('editor');
+      const tn = ed.firstChild;
+      const r = document.createRange(); r.setStart(tn, 2); r.collapse(true);
+      const s = document.getSelection(); s.removeAllRanges(); s.addRange(r);
+    });
+    await page.waitForFunction(() => !document.querySelector('.ns-burst'), null, { timeout: 6000 });
+    await page.keyboard.type('666');
+    await page.waitForFunction(() => document.querySelector('.ns-burst i')?.textContent === '🔥', null, { timeout: 4000 });
+    const txt = await page.evaluate(() => document.getElementById('editor').textContent);
+    assert.ok(txt.includes('AB666尾部'), '文中插入生效且正文零污染: ' + txt);
+  } finally { await ctx.close(); }
+}));
+
+// ── E6 v8.2.1：移动端（390px）深夜徽章必须显示文案（省略号截断），且顶栏不横向溢出 ──
+test('E6 移动端徽章出文案，header 不溢出', guard(async () => {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 780 }, hasTouch: true, isMobile: true });
+  await ctx.addInitScript(() => {
+    // 固定深夜钟点（23:30），徽章=深夜态，与真实运行时刻解耦
+    const RealDate = Date;
+    // eslint-disable-next-line no-global-assign
+    Date = class extends RealDate {
+      constructor(...a) { if (a.length === 0) { super(2026, 8, 12, 23, 30, 0); } else { super(...a); } }
+      static now() { return new RealDate(2026, 8, 12, 23, 30, 0).getTime(); }
+    };
+  });
+  try {
+    const page = await ctx.newPage();
+    await page.goto(baseURL, { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('#landingInput');
+    await page.fill('#landingInput', 'V821Mobile');
+    await page.click('#landingBtn');
+    await page.waitForFunction((enc) => location.pathname.endsWith(enc), encodeURIComponent('V821Mobile'), { timeout: 10000 });
+    await page.fill('#pw', 'test-pass-123');
+    await page.click('#ok');
+    await page.waitForFunction(() => document.getElementById('editor').contentEditable === 'true', { timeout: 10000 });
+    await page.waitForFunction(() => {
+      const el = document.getElementById('nsBadge');
+      return el && el.classList.contains('show') && el.querySelector('.ns-be').textContent === '🌙';
+    }, null, { timeout: 6000 });
+    const bt = page.locator('#nsBadge .ns-bt');
+    assert.strictEqual(await bt.textContent(), '夜深了，写完这条就睡', '移动端徽章文案必须在 DOM');
+    const bb = await bt.boundingBox();
+    assert.ok(bb && bb.width > 12 && bb.height > 8, '移动端徽章文案必须真实渲染（非 display:none 零盒）');
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    assert.ok(overflow <= 1, '390px 下徽章入链不得让顶栏横向溢出（超出 ' + overflow + 'px）');
+    assert.deepStrictEqual(page.__errors || [], [], '无页面 JS 报错');
+  } finally { await ctx.close(); }
+}));

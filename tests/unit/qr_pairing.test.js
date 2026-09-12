@@ -87,10 +87,10 @@ test('内联 qrcode 库可为真实配对 URL 生成模块矩阵', () => {
 });
 
 // ── Q5：版本号 ──────────────────────────────
-test('APP_VERSION 为 8.2.0', () => {
+test('APP_VERSION 为 8.2.1', () => {
   const fs = require('fs');
   const src = fs.readFileSync(require('../helpers').INDEX_PATH, 'utf8');
-  assert.ok(src.includes("const APP_VERSION = '8.2.0';"), 'index.html 应声明 APP_VERSION = 8.2.0');
+  assert.ok(src.includes("const APP_VERSION = '8.2.1';"), 'index.html 应声明 APP_VERSION = 8.2.1');
 });
 
 // ── Q5c：v8.1.4 无 GMS 机型扫码回退链守护（锚补丁行，防回潮）──

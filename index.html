@@ -181,7 +181,7 @@
   #nsBadge{display:none;align-items:center;gap:6px;max-width:34vw;flex:none;font-size:12px;color:var(--fg);background:var(--accent-soft);border:1px solid var(--ring);border-radius:999px;padding:3px 10px 3px 8px;letter-spacing:.03em;white-space:nowrap;overflow:hidden;pointer-events:none}
   #nsBadge.show{display:inline-flex;animation:nsBadgePop .45s cubic-bezier(.2,.7,.3,1) both}
   #nsBadge .ns-be{font-style:normal;font-size:13px;flex:none}
-  #nsBadge .ns-bt{font-style:normal;overflow:hidden;text-overflow:ellipsis}
+  #nsBadge .ns-bt{font-style:normal;display:inline-block;min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
   @keyframes nsBadgePop{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
   #nsRain{position:fixed;inset:0;z-index:57;pointer-events:none;overflow:hidden}
   #nsRain.hidden{display:none}
@@ -193,15 +193,15 @@
   .ns-burst{position:fixed;z-index:58;pointer-events:none}
   .ns-burst i{position:absolute;left:0;top:0;font-style:normal;font-size:16px;animation:nsBurstUp .95s ease-out forwards}
   @keyframes nsBurstUp{0%{transform:translate(0,0) scale(.6);opacity:0}15%{opacity:1}100%{transform:translate(var(--nx,8px),var(--ny,-38px)) scale(1.15) rotate(var(--nr,12deg));opacity:0}}
-  /* 复古皮肤覆膜层：扫描线/稿纸导引，低透明非交互，日夜两档。
-     ≤560px 徽章只留 emoji（手机头部按钮多，文字让位） */
+  /* 复古皮肤覆膜层：扫描线/稿纸导引，低透明非交互，日夜两档。 */
   #skinFx{position:fixed;inset:0;z-index:3;pointer-events:none}
   #skinFx.scan{background:repeating-linear-gradient(to bottom,rgba(6,14,8,.20) 0 1px,transparent 1px 3px)}
   #skinFx.scan.light{background:repeating-linear-gradient(to bottom,rgba(20,60,30,.05) 0 1px,transparent 1px 3px)}
   #skinFx.paper{background:repeating-linear-gradient(to bottom,transparent 0 28px,rgba(176,58,46,.05) 28px 29px)}
   #skinFx.paper.night{background:repeating-linear-gradient(to bottom,transparent 0 28px,rgba(197,105,92,.07) 28px 29px)}
-  header .brand svg{transition:transform .25s ease-out}
-  @media (max-width:560px){ #nsBadge{max-width:none;padding:3px 7px} #nsBadge .ns-bt{display:none} }
+  /* v8.2.1：移动端徽章也显示文案（用户拍板）——限宽省略号，空间不足时徽章先截断、按钮不挤出屏
+     （brand 链收缩行为 v7.3.3 既有，徽章 flex-shrink:1 + min-width:0 进同一让位链） */
+  @media (max-width:560px){ #nsBadge{max-width:min(44vw,190px);padding:3px 9px 3px 7px;flex-shrink:1;min-width:0} }
 
   /* ── 编辑器 ─────────────────────────── */
   #editor{flex:1;width:100%;max-width:720px;margin:0 auto;border:0;outline:0;resize:none;padding:40px 28px 120px;background:transparent;color:var(--fg);font:inherit;font-size:17px;overflow-x:hidden;overflow-y:auto;word-wrap:break-word;overflow-wrap:anywhere;word-break:break-all;white-space:pre-wrap;-webkit-user-select:text;user-select:text;line-height:1.9}
@@ -628,8 +628,8 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '8.2.0';
-const BUILD_DATE = '2026-09-12';
+const APP_VERSION = '8.2.1';
+const BUILD_DATE = '2026-09-13';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
 let nsSkin = 0;
@@ -4247,7 +4247,7 @@ if (CHIP_HOVER_OK) {
     if (chipFromHover) hideTimeChip();
   });
 }
-// ══ v8.2.0 彩蛋段：节日/深夜徽章 · 节日粒子雨 · 数字梗粒子 · logo 盯鼠标 ══════════
+// ══ v8.2.0 彩蛋段：节日/深夜徽章 · 节日粒子雨 · 数字梗粒子（logo 盯鼠标一件经 v8.2.1 用户令删）══
 // 铁律：一切效果都是编辑器外的浮层，自生自灭，绝不触正文 DOM/笔记数据/提醒逻辑。
 // 节日表由农历双库交叉验证直出公历日期（2024-2060），过期自然静默，免运行时农历换算。
 const NS_FEST = '20240118lb,0209cx,0210cj,0224yx,0610dy,0810qx,0917zq,1011cy|20250107lb,0128cx,0129cj,0212yx,0531dy,0829qx,1006zq,1029cy|20260126lb,0216cx,0217cj,0303yx,0619dy,0819qx,0925zq,1018cy|20270115lb,0205cx,0206cj,0220yx,0609dy,0808qx,0915zq,1008cy|20280104lb,0125cx,0126cj,0209yx,0528dy,0826qx,1003zq,1026cy|20290122lb,0212cx,0213cj,0227yx,0616dy,0816qx,0922zq,1016cy|20300111lb,0202cx,0203cj,0217yx,0605dy,0805qx,0912zq,1005cy|20310101lb,0122cx,0123cj,0206yx,0624dy,0824qx,1001zq,1024cy|20320120lb,0210cx,0211cj,0225yx,0612dy,0812qx,0919zq,1012cy|20330108lb,0130cx,0131cj,0214yx,0601dy,0801qx,0908zq,1001cy|20340127lb,0218cx,0219cj,0305yx,0620dy,0820qx,0927zq,1020cy|20350116lb,0207cx,0208cj,0222yx,0610dy,0810qx,0916zq,1009cy|20360105lb,0127cx,0128cj,0211yx,0530dy,0828qx,1004zq,1027cy|20370123lb,0214cx,0215cj,0301yx,0618dy,0817qx,0924zq,1017cy|20380112lb,0203cx,0204cj,0218yx,0607dy,0807qx,0913zq,1007cy|20390102lb,0123cx,0124cj,0207yx,0527dy,0826qx,1002zq,1026cy|20400121lb,0211cx,0212cj,0226yx,0614dy,0814qx,0920zq,1014cy|20410110lb,0131cx,0201cj,0215yx,0603dy,0803qx,0910zq,1003cy,1230lb|20420121cx,0122cj,0205yx,0622dy,0822qx,0928zq,1022cy|20430118lb,0209cx,0210cj,0224yx,0611dy,0811qx,0917zq,1011cy|20440107lb,0129cx,0130cj,0213yx,0531dy,0731qx,1005zq,1029cy|20450125lb,0216cx,0217cj,0303yx,0619dy,0819qx,0925zq,1018cy|20460114lb,0205cx,0206cj,0220yx,0608dy,0808qx,0915zq,1008cy|20470103lb,0125cx,0126cj,0209yx,0529dy,0827qx,1004zq,1027cy|20480122lb,0213cx,0214cj,0228yx,0615dy,0816qx,0922zq,1016cy|20490111lb,0201cx,0202cj,0216yx,0604dy,0805qx,0911zq,1005cy|20500101lb,0122cx,0123cj,0206yx,0623dy,0823qx,0930zq,1024cy|20510120lb,0210cx,0211cj,0225yx,0613dy,0812qx,0919zq,1013cy|20520109lb,0131cx,0201cj,0215yx,0601dy,0801qx,0907zq,1030cy|20530127lb,0218cx,0219cj,0305yx,0620dy,0820qx,0926zq,1020cy|20540116lb,0207cx,0208cj,0222yx,0610dy,0810qx,0916zq,1009cy|20550105lb,0127cx,0128cj,0211yx,0530dy,0829qx,1005zq,1028cy|20560124lb,0214cx,0215cj,0229yx,0617dy,0817qx,0924zq,1017cy|20570112lb,0203cx,0204cj,0218yx,0606dy,0806qx,0913zq,1007cy|20580102lb,0123cx,0124cj,0207yx,0625dy,0825qx,1002zq,1025cy|20590121lb,0211cx,0212cj,0226yx,0614dy,0814qx,0921zq,1014cy|20600111lb,0201cx,0202cj,0216yx,0603dy,0802qx,0909zq,1002cy,1230lb';
@@ -4349,18 +4349,41 @@ function nsFestWelcome() { // applyUnlocked/离线解锁两处钩子调用；本
   const f = nsFestAt(new Date());
   if (f && NS_FEST_META[f] && NS_FEST_META[f].rain.length) { try { nsRainStart(f); } catch (e) {} }
 }
-// ── 数字梗粒子：刚敲出整串 666/520/1314/233（前一位非数字）时从光标处冒一次 emoji，
-//    只判定不改动正文；连打更长数字串（6666/5201314）因前位是数字自然静默。──
+// ── 数字梗粒子（v8.2.1 重做）：光标前「刚成串」666/520/1314/233 时从光标处冒一次 emoji。──
+// 判定面=光标前文本（文档捕获阶段读实时 selection——editor 冒泡监听会晚于主 input 监听器的
+// 正文重建，光标容器脱文档致实时前缀恒空，v8.2.0 退化为整段尾部判定，用户实锤「文中打字/
+// 前邻数字（3点666）」被吞）。「前一位非数字」旧规则已删（正是 3点666 误杀源头）；同梗连打
+// （6666 每敲一个 6 尾都成串）由 nsDigitArmed 跳变防连爆。只判定不改动正文。
 const NS_DIGITS = [['1314', '🎆'], ['666', '🔥'], ['520', '💕'], ['233', '😂']];
-function nsDigitHit(s) {
+function nsDigitHit(s) { // s = 光标前文本末尾若干字符；纯尾匹配（长梗优先）
   for (let i = 0; i < NS_DIGITS.length; i++) {
     const p = NS_DIGITS[i][0];
-    if (s.length >= p.length && s.slice(-p.length) === p) {
-      if (/[0-9]/.test(s.charAt(s.length - p.length - 1))) return null;
-      return NS_DIGITS[i][1];
-    }
+    if (s.length >= p.length && s.slice(-p.length) === p) return NS_DIGITS[i][1];
   }
   return null;
+}
+// 光标前缀（末尾 ≤8 字符）：自写 TreeWalker 按文档序累积文本到 (container,offset)。
+// 不用克隆 Range 取文本（Range 无 textContent 属性，v8.2.1 探针期实锤）。三态返回：
+//   string  文本节点命中——前缀（含合法空串：光标在文本头，此刻就是「无梗」，不许落兜底）
+//   null    元素位容器（块首/空 div）——无文本前缀可言：不爆且不碰 armed（闸 R1/R2：
+//           旧版落全文尾兜底会在文末成串时误爆一次）
+//   false   容器不在编辑器文本流（selection 意外）——监听器走全文尾兜底（=v8.2.0 行为）
+function nsCaretPrefix(container, offset) {
+  try {
+    if (typeof document.createTreeWalker !== 'function') return false;
+    if (container.nodeType === 3) {
+      const walker = document.createTreeWalker(editor, 4 /* SHOW_TEXT */);
+      let node, acc = '';
+      while ((node = walker.nextNode())) {
+        if (node === container) return (acc + (node.data || '').slice(0, offset)).slice(-8);
+        acc += node.data || '';
+        if (acc.length > 64) acc = acc.slice(-40);
+      }
+      return false;
+    }
+    if (container.nodeType === 1) return editor.contains(container) ? null : false;
+  } catch (e) {}
+  return false;
 }
 function nsBurst(x, y, emoji) {
   const wrap = document.createElement('div');
@@ -4379,51 +4402,38 @@ function nsBurst(x, y, emoji) {
   document.body.appendChild(wrap);
   setTimeout(() => { try { wrap.remove(); } catch (e) {} }, 1300);
 }
-let nsDigitArmed = false; // v8.2.0 闸 R1 P1：跳变触发——梗在尾部持续存在时（如「房233」后任意续打），
-// 每次击键都「命中」但只在 非命中→命中 的转换瞬间爆发一次；尾部脱离梗形即重新上膛。
-editor.addEventListener('input', (e) => {
+let nsDigitArmed = false; // 跳变触发——光标前持续成梗时（6666 每键都命中）只在 非梗→梗 转换
+// 瞬间爆发一次；光标前脱离梗形即重新上膛。
+document.addEventListener('input', (e) => {
+  if (e.target !== editor && !(editor.contains && editor.contains(e.target))) return; // 只管编辑器内的输入（块 div 是 target，v8.2.1 探针实锤）
   if (!(typeof InputEvent !== 'undefined' && e instanceof InputEvent)) return; // 程序化 input 不算打字
   if (typeof isComposing !== 'undefined' && isComposing) return;               // IME 组字期不判定
   try {
-    // tail 一律取 editor.textContent 末尾——主 input 监听器会同步重建正文 DOM，此时实时
-    // selection 的 startContainer 可能已脱文档、pre.textContent 变空（真机实测 burst 不触发）。
-    // textContent 在重建后仍可靠；光标在文中部插入不会把梗数带到末尾，判定面不扩。
-    const tail = (editor.textContent || '').slice(-8);
-    const emo = nsDigitHit(tail);
-    if (!emo) { nsDigitArmed = false; return; }
-    if (nsDigitArmed) return; // 已在梗态——持续敲同一尾串不重复爆发
-    nsDigitArmed = true;
-    // 光标矩形仅用于把粒子定到指尖；selection 失效或矩形全零则退到编辑器下缘。
-    let x = null, y = null;
+    let tail = null, caretRect = null;
     const sel = document.getSelection && document.getSelection();
     if (sel && sel.rangeCount) {
       const r = sel.getRangeAt(0);
       if (editor.contains(r.startContainer)) {
+        if (!r.collapsed) return; // 选区覆盖打字：无「光标前缀」语义，不判不碰 armed（闸复验：防兜底同梗二爆）
+        const p = nsCaretPrefix(r.startContainer, r.startOffset);
+        if (p === null) return; // 元素位光标：不爆也不解上膛（等下一键光标进文本流再判）
+        tail = (p === false) ? (editor.textContent || '').slice(-8) : p; // false=selection 意外 → 全文尾兜底
         const rects = r.getClientRects ? Array.prototype.filter.call(r.getClientRects(), rr => rr.width || rr.height) : [];
         const rr = rects[rects.length - 1] || (r.getBoundingClientRect && r.getBoundingClientRect());
-        if (rr && (rr.left || rr.top || rr.width || rr.height)) { x = rr.left; y = rr.bottom; }
+        if (rr && (rr.left || rr.top || rr.width || rr.height)) caretRect = rr;
       }
     }
-    if (x === null) { const eb = editor.getBoundingClientRect(); x = eb.left + eb.width / 2; y = eb.bottom - 120; } // 无光标矩形：编辑器下缘兜底
+    if (tail === null) tail = (editor.textContent || '').slice(-8); // 无折叠光标（选区/未落编辑器）：兜底
+    const emo = nsDigitHit(tail);
+    if (!emo) { nsDigitArmed = false; return; }
+    if (nsDigitArmed) return; // 已在梗态——连打不重复爆发
+    nsDigitArmed = true;
+    let x, y;
+    if (caretRect) { x = caretRect.left; y = caretRect.bottom; }
+    else { const eb = editor.getBoundingClientRect(); x = eb.left + eb.width / 2; y = eb.bottom - 120; }
     nsBurst(x, Math.max(56, y - 6), emo);
   } catch (err) {}
-});
-// ── logo 盯鼠标（桌面门控）：17px 徽标加「眼睛」会糊品牌标，改为整体向光标微平移的
-//    「注视感」——幅度 ±1.6px、rAF 节流、CSS .25s 缓动；触屏设备完全不启用。──
-if (CHIP_HOVER_OK) (function setupLogoGaze() {
-  const svg = document.querySelector('header .brand svg');
-  if (!svg) return;
-  let queued = 0, dx = 0, dy = 0;
-  document.addEventListener('mousemove', (e) => {
-    dx = Math.max(-1.6, Math.min(1.6, (e.clientX - innerWidth / 2) / innerWidth * 3.2));
-    dy = Math.max(-1.2, Math.min(1.2, (e.clientY - 40) / innerHeight * 2.4));
-    if (queued) return;
-    queued = requestAnimationFrame(() => {
-      queued = 0;
-      try { svg.style.transform = 'translate(' + dx.toFixed(2) + 'px,' + dy.toFixed(2) + 'px)'; } catch (e2) {}
-    });
-  }, { passive: true });
-})();
+}, true);
 async function chipActivate(e) { // v6.3：async——要 await addReminder 的结果才决定弹成功卡还是收起
   if (e.button !== undefined && e.button !== 0) return;
   e.preventDefault();

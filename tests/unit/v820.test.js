@@ -79,8 +79,9 @@ test('A3 updateNsBadge 写 DOM：show 类 + data-ns 去重', t => {
   }
 });
 
-// ── A4 数字梗判定：命中/防连打/串内不命中 ──
-test('A4 nsDigitHit：四梗命中；6666/5201314/1233/20233 静默；串首可命中', t => {
+// ── A4 数字梗判定（v8.2.1 语义）：纯尾匹配长梗优先；「前一位非数字」规则已删（3点666 误杀源头），
+//    连打防重复由监听层 armed 跳变负责（A12 钉）──
+test('A4 nsDigitHit：四梗命中；数字前缀/连打尾匹配均命中（armed 层防重爆）；无梗静默', t => {
   const app = fresh(); t.after(() => app.dom.window.close());
   const w = app.window;
   assert.strictEqual(w.nsDigitHit('真厉害666'), '🔥');
@@ -88,11 +89,10 @@ test('A4 nsDigitHit：四梗命中；6666/5201314/1233/20233 静默；串首可�
   assert.strictEqual(w.nsDigitHit('爱你一生一世1314'), '🎆');
   assert.strictEqual(w.nsDigitHit('哈哈233'), '😂');
   assert.strictEqual(w.nsDigitHit('666'), '🔥', '串首（前面没有字符）应命中');
-  assert.strictEqual(w.nsDigitHit('6666'), null, '连打第四位 6 不再触发');
-  assert.strictEqual(w.nsDigitHit('5201314'), null, '长数字串内不触发');
-  assert.strictEqual(w.nsDigitHit('1233'), null);
-  assert.strictEqual(w.nsDigitHit('20233'), null);
-  assert.strictEqual(w.nsDigitHit('2333'), null);
+  assert.strictEqual(w.nsDigitHit('下午3666'), '🔥', 'v8.2.1：数字前缀不再吞梗（用户实锤「3点666」）');
+  assert.strictEqual(w.nsDigitHit('6666'), '🔥', '尾匹配命中=语义真；连打不重爆由 armed 挡（A12）');
+  assert.strictEqual(w.nsDigitHit('5201314'), '🎆', '长梗优先');
+  assert.strictEqual(w.nsDigitHit('2333'), null, '尾 333 非梗');
   assert.strictEqual(w.nsDigitHit('今天记一笔'), null, '无数字完全静默');
 });
 
@@ -183,12 +183,26 @@ test('A9 源码字面量钉：旧彩蛋无残留、钩子恰2处、浮层/字体
   segs.forEach((s, i) => assert.strictEqual(s.slice(0, 4), String(2024 + i), '年份连续'));
   assert.ok(SRC.includes('<div id="nsRain" class="hidden"'), '雨浮层在位');
   assert.ok(SRC.includes('<span id="nsBadge"'), '徽章槽位在位');
-  assert.ok(SRC.includes('if (CHIP_HOVER_OK) (function setupLogoGaze'), '盯鼠标桌面门控在位（触屏零启用）');
   assert.ok(SRC.includes("e instanceof InputEvent"), '数字粒子只认真实打字事件');
-  // 用户拍板不做的候选（手速冒火/里程碑纸屑/控制台便利贴）禁现钉
-  for (const dead of ['confetti', 'nsWpm', 'nsMilestone', 'nsConsoleArt']) {
-    assert.ok(!SRC.includes(dead), '已否决候选功能禁现：' + dead);
+  // 用户拍板不做的候选（手速冒火/里程碑纸屑/控制台便利贴）与已删彩蛋（logo 盯鼠标）禁现钉
+  for (const dead of ['confetti', 'nsWpm', 'nsMilestone', 'nsConsoleArt', 'setupLogoGaze']) {
+    assert.ok(!SRC.includes(dead), '已否决/已删除功能禁现：' + dead);
   }
+});
+
+// ── A13 v8.2.1 结构钉：数字粒子=文档捕获阶段+光标前缀判定；移动端徽章出文案；标签回拍板文案 ──
+test('A13 v8.2.1：捕获监听+nsCaretPrefix 光标前缀、capture true、≤560 无文案隐藏规则、已恢复默认精确', () => {
+  assert.ok(SRC.includes("document.addEventListener('input', (e) => {"), '数字粒子应为 document 级监听');
+  assert.ok(SRC.includes('function nsCaretPrefix(container, offset)'), '判定面=自写 TreeWalker 光标前缀（克隆 Range.textContent 在 Chromium 真机返回空串，探针实锤弃用）');
+  assert.ok(SRC.includes('const p = nsCaretPrefix(r.startContainer, r.startOffset);'), '监听器接光标前缀函数（三态返回）');
+  assert.ok(SRC.includes('if (p === null) return;'), '元素位光标：不爆且不碰 armed');
+  assert.ok(SRC.includes('if (!r.collapsed) return;'), '选区覆盖打字：不判状态不碰 armed（复验 P2 收口）');
+  assert.ok(SRC.includes('if (e.target !== editor && !(editor.contains && editor.contains(e.target))) return;'), 'document 级监听须按编辑器子树过滤（块 div 才是 input target，v8.2.1 探针实锤）');
+  assert.match(SRC, /\}, true\);\s*\nasync function chipActivate/, '监听必须以捕获阶段挂载（true）且紧邻彩蛋段尾');
+  assert.ok(!SRC.includes('#nsBadge .ns-bt{display:none}'), 'v8.2.1：移动端不得再隐藏徽章文案（用户拍板）');
+  assert.ok(SRC.includes("@media (max-width:560px){ #nsBadge{max-width:min(44vw,190px)"), '移动端徽章应为限宽省略号方案');
+  assert.ok(SRC.includes("const LABELS = ['已恢复默认', '复古 · 终端绿', '复古 · 打字机纸'];"), '标签文案=拍板口径（无日夜尾巴）');
+  assert.ok(!SRC.includes('header .brand svg{transition'), '盯鼠标遗留 transition 应删净');
 });
 
 // ── A10 主主题输出逐字节回归：模板抽取后 themeOverrideCss(false/true) 与 v8.1.8 等价 ──
@@ -250,4 +264,25 @@ test('A12 持续梗态连续击键只爆发一次；脱离梗形再入才二次�
     if (Date.now() - t0 > 4000) assert.fail('爆发簇未在 1.3s+ 余量内自清');
     await new Promise(r => setTimeout(r, 60));
   }
+});
+
+// ── A14 v8.2.1 行为钉：nsCaretPrefix 三态 + 非编辑器 input 不误吃 + 元素位不爆 ──
+test('A14 三态前缀与输入源过滤：文本命中前缀/元素位 null/圈外 false；landingInput 打字零爆发', t => {
+  const app = fresh(); t.after(() => app.dom.window.close());
+  const w = app.window;
+  const ed = w.document.getElementById('editor');
+  ed.innerHTML = '';
+  const tn = w.document.createTextNode('AB666尾部');
+  ed.appendChild(tn);
+  assert.strictEqual(w.nsCaretPrefix(tn, 5), 'AB666', '文本节点：命中返回光标前缀');
+  assert.strictEqual(w.nsCaretPrefix(tn, 0), '', '光标在文本头：合法空前缀（不许落兜底）');
+  assert.strictEqual(w.nsCaretPrefix(ed, 1), null, '元素位容器：null（不爆不解上膛）');
+  const foreign = w.document.createElement('span'); // 编辑器外节点
+  assert.strictEqual(w.nsCaretPrefix(foreign, 0), false, '不在编辑器文本流：false（走兜底）');
+  // 非编辑器 input 反证：editor 尾成串 + 对 landingInput 派发 InputEvent → 必须零爆发
+  const li = w.document.getElementById('landingInput');
+  ed.textContent = '收尾是233';
+  const before = w.document.querySelectorAll('.ns-burst').length;
+  li.dispatchEvent(new w.InputEvent('input', { bubbles: true, inputType: 'insertText' }));
+  assert.strictEqual(w.document.querySelectorAll('.ns-burst').length, before, '非编辑器输入不得被彩蛋误吃');
 });
