@@ -597,7 +597,7 @@ function markJumped() {
 }
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '8.1.5';
+const APP_VERSION = '8.1.6';
 const BUILD_DATE = '2026-09-12';
 
 const $ = s => document.querySelector(s);
@@ -3511,7 +3511,7 @@ $('#remoteKeep').addEventListener('click', async () => {
   // 万一挂起期内存列表曾被远端 rem 整表替换过（旧缺陷路径），草稿是找回本机改动的最后防线。
   if (draft && draft.length) {
     const seen = new Set(reminders.map(r => r.at));
-    for (const d of draft) if (!seen.has(d.at)) reminders.push({ at: d.at, text: d.text || '', fired: !!d.fired });
+    for (const d of draft) if (!seen.has(d.at)) reminders.push({ at: d.at, text: d.text || '', fired: !!d.fired, src: typeof d.src === 'string' ? d.src : '' }); // v8.1.6：出处指纹随草稿一并恢复
     reminders = normalizeRemList({ list: reminders });
     renderRemBtn(); scheduleReminders(); syncRemindersToNative(); scheduleRemMarkRefresh();
   }
@@ -3549,7 +3549,7 @@ $('#remoteTake').addEventListener('click', async () => {
     const draft = takeReminderDraft();
     if (draft && draft.length) {
       const seen = new Set(reminders.map(r => r.at));
-      for (const d of draft) if (!seen.has(d.at)) reminders.push({ at: d.at, text: d.text || '', fired: !!d.fired });
+      for (const d of draft) if (!seen.has(d.at)) reminders.push({ at: d.at, text: d.text || '', fired: !!d.fired, src: typeof d.src === 'string' ? d.src : '' }); // v8.1.6：出处指纹随草稿一并恢复（与 remoteKeep 路同源）
       renderRemBtn(); scheduleReminders(); syncRemindersToNative(); scheduleRemMarkRefresh();
       persistReminders(2).catch(() => {});
     }
@@ -3625,6 +3625,10 @@ let reminders = [], remCipher = null, remTimer = null, remPanelOpen = false;
 // 离线设备回网防救尸；对账时顺带清过期）+ 本会话见过的 at（懒基线一半，另一半=当前 lastHtml 解析）
 const remTombstones = new Map();
 const remSeenSession = new Set();
+// v8.1.6：出处指纹「见过」登记（与 remSeenSession 同族、同样会话级）——记录本会话内在正文里
+// 确凿出现过的原始时间串。相对说法跨天算不出存量 at，lastHtml 又在 saveLocal 里先于对账被推进，
+// 只靠「上一版基线正文」会漏判；开局/合并时按当前正文核验后登记，删除路径才稳。
+const remSeenSrc = new Set();
 function remTombstoneLive(at) {
   const t = remTombstones.get(at);
   if (!t) return false;
@@ -3996,7 +4000,9 @@ function showChipForMatch(m, text) {
   // v5.46：未添加的过期时间不浮 chip（零打扰）；「过去时间不能设提醒」硬规则不变
   if (m.expired) { hideTimeChip(); return false; }
   const item = itemAfterMatch(text, m);
-  chipData = { at: m.at, item: item };
+  // v8.1.6：出处指纹 = 命中的原始时间串（相对说法按当天解析会漂移，绝对 at 比对跨天必失配，
+  // 联动删除因此永远落在「从未见过」保护分支后→幽灵提醒照推）。判活/判见过改按原文比对。
+  chipData = { at: m.at, item: item, src: remSanitize(text.slice(m.index, m.index + m.length)) };
   chipDeleteAt = null;
   // v5.45 定案文案顺序不变（时间在前、「添加提醒」在后）；v7.8.0（用户拍板方案 C）排版改三行小卡：
   // 时间＋相对日 / 事项（单行省略号，截断代价归事项）/ 主按钮。旧胶囊 nowrap+92vw 在窄屏会把
@@ -4116,14 +4122,14 @@ async function chipActivate(e) { // v6.3：async——要 await addReminder 的�
   if (e.button !== undefined && e.button !== 0) return;
   e.preventDefault();
   if (!chipData) return;
-  const at = chipData.at, item = chipData.item;
+  const at = chipData.at, item = chipData.item, src = chipData.src; // v8.1.6：src 一并取出（下一行 chipData 置 null）
   chipData = null; // 先消费：pointerdown/touchstart/mousedown 三连触发只生效一次
   chipFeedbackUntil = Date.now() + 3000; // v5.45：两行确认卡停留 3 秒
   chipDeleteAt = at; // v5.47：确认卡带「删除」，误添加可立即反悔
   askRemPermission();
   // v6.3：等结果再决定弹什么——失败（超上限/已过期）时 addReminder 自己已提示，
   // 这里必须收起 chip，否则「✅ 提醒已添加」与「提醒最多 10 条」同屏打架（用户实测 P1）
-  const ok = await addReminder(at, item);
+  const ok = await addReminder(at, item, src);
   if (!ok) { chipDeleteAt = null; hideTimeChip(); return; }
   // v5.45：确认反馈改两行卡片（用户拍板）——第一行「✅ 提醒已添加」+「删除」，第二行「时间　事项」
   timeChip.classList.add('feedback');
@@ -4165,7 +4171,7 @@ function normalizeRemList(obj) {
   const now = Date.now();
   const all = list
     .filter(r => r && typeof r.at === 'number')
-    .map(r => ({ at: r.at, text: typeof r.text === 'string' ? r.text : '', fired: !!r.fired }))
+    .map(r => ({ at: r.at, text: typeof r.text === 'string' ? r.text : '', fired: !!r.fired, src: typeof r.src === 'string' ? r.src : '' })) // v8.1.6：src 随归一化透传（旧数据无 src = 空串 → 走原时间戳比对）
     .sort((a, b) => a.at - b.at);
   const future = all.filter(r => r.at > now).slice(0, REM_MAX);
   const done = all.filter(r => r.at <= now).slice(-REM_DONE_MAX);
@@ -4224,6 +4230,9 @@ async function loadReminder(note, key) {
   scheduleReminders();
   syncRemindersToNative(); // v5.51：解锁后把密文解密得到的提醒列表同步到原生层排程
   ensureExactAlarmPermission(); // v5.55：APK 精确闹钟权限自检（只引导一次）
+  remSeenSrc.clear(); // v8.1.6（闸审 R2）：整表重载 = 会话指纹登记一并作废，防跨笔记污染
+  backfillRemSrcFromBody(); // v8.1.6：升级前的存量条目补指纹（正文里唯一同事项时间匹配才补）
+  seedRemSrcBaseline(); // v8.1.6：正文已就位 → 登记有据可查的出处指纹（重开即删的主路径证据）
 }
 // v6.3：任何 at<=now 且未标 fired 的条目一律补记——它要么已被原生闹钟推送过通知，
 // 要么因晚到超过 60s 被静默丢弃，两种情况下语义都是「这次提醒已经过去了」，
@@ -4283,9 +4292,11 @@ async function restoreReminderDraft() {
     localStorage.removeItem(REM_DRAFT_KEY);
     if (!list || !list.length) return;
     const seen = new Set(reminders.map(r => r.at));
-    for (const d of list) if (d && typeof d.at === 'number' && !seen.has(d.at)) reminders.push({ at: d.at, text: d.text || '', fired: !!d.fired });
+    for (const d of list) if (d && typeof d.at === 'number' && !seen.has(d.at)) reminders.push({ at: d.at, text: d.text || '', fired: !!d.fired, src: typeof d.src === 'string' ? d.src : '' }); // v8.1.6：出处指纹随草稿恢复
     reminders = normalizeRemList({ list: reminders });
     renderRemBtn(); scheduleReminders(); syncRemindersToNative(); scheduleRemMarkRefresh();
+    backfillRemSrcFromBody(); // v8.1.6：老草稿条目无指纹时按正文补一次
+    seedRemSrcBaseline(); // v8.1.6：草稿恢复出的条目同样登记有据可查的出处指纹
     setStatus(false, '已恢复未提交的提醒');
   } catch (e) { try { localStorage.removeItem(REM_DRAFT_KEY); } catch (e2) {} }
 }
@@ -4419,15 +4430,16 @@ async function mergeRemoteReminders(note, key) {
   const seen = new Set();
   for (const r of remote) {
     if (remTombstoneLive(r.at)) continue; // v7.4.0：本会话已确认从正文删除的条目，10min 内不随远端 rem 复活（离线回网防救尸）
-    merged.push({ at: r.at, text: r.text || '', fired: !!r.fired, _local: false }); seen.add(r.at);
+    merged.push({ at: r.at, text: r.text || '', fired: !!r.fired, src: typeof r.src === 'string' ? r.src : '', _local: false }); seen.add(r.at); // v8.1.6：出处指纹随条目跨端携带
   }
   for (const l of reminders) {
     if (seen.has(l.at)) {
       const m = merged.find(x => x.at === l.at);
       if (l.fired) m.fired = true; // 任一端已发 → 已发
       m.text = l.text || m.text; // P2-d（对抗审核三轮）：同刻条目以本机文案为准（用户同刻重设=更新文案，不被远端覆盖）
+      if (l.src) m.src = l.src; // v8.1.6：同刻条目本机出处指纹优先（与 P2-d 同口径）
     } else {
-      merged.push({ at: l.at, text: l.text || '', fired: !!l.fired, _local: true }); seen.add(l.at);
+      merged.push({ at: l.at, text: l.text || '', fired: !!l.fired, src: typeof l.src === 'string' ? l.src : '', _local: true }); seen.add(l.at);
     }
   }
   const now = Date.now();
@@ -4453,10 +4465,14 @@ async function mergeRemoteReminders(note, key) {
   scheduleReminders();
   syncRemindersToNative();
   scheduleRemMarkRefresh();
+  backfillRemSrcFromBody(); // v8.1.6：远端可能带回升级前无指纹的条目，先补再登记
+  seedRemSrcBaseline(); // v8.1.6：合并进来的条目同样按当前正文核验出处指纹
 }
 // v6.3：返回布尔——chipActivate 必须据此决定「弹成功卡还是弹失败提示」。
 // 此前 chip 不等 addReminder 结果就无条件弹「✅ 提醒已添加」，与下方「最多 10 条」同屏打架。
-async function addReminder(at, text) {
+// v8.1.6：第三参 src = 出处指纹（正文里命中的原始时间串，如「明天下午3点」/面板回写的「2026-9-20 10:00」）。
+// 空串 = 无指纹 → 对账退回 v7.4.0 的纯时间戳比对，旧调用方与旧数据行为不变。
+async function addReminder(at, text, src) {
   if (!cryptoKey || typeof at !== 'number') return false;
   if (at <= Date.now()) { // 兜底闸门：任何入口的过去时间一律不设（chip/面板已各自拦，这里防漏网）
     showUploadStatus('已过去的时间不能设提醒');
@@ -4470,10 +4486,13 @@ async function addReminder(at, text) {
     setTimeout(() => { if (uploadStatus.textContent.indexOf('提醒最多') === 0) hideUploadStatus(); }, 2600);
     return false;
   }
+  let srcNew = typeof src === 'string' ? src : '';
   if (reminders.some(r => r.at === at)) {
+    const prev = reminders.find(r => r.at === at);
+    if (!srcNew && prev && typeof prev.src === 'string') srcNew = prev.src; // 同刻重设未带指纹 → 沿用旧的，绝不洗掉
     reminders = reminders.filter(r => r.at !== at); // 同刻再设 = 更新文案，不产生重复
   }
-  reminders.push({ at: at, text: text || '', fired: false });
+  reminders.push({ at: at, text: text || '', fired: false, src: srcNew });
   reminders.sort((a, b) => a.at - b.at);
   scheduleRemMarkRefresh(); // v5.45：新增提醒后正文时间文本包上下划线
   try { await persistReminders(); } catch (e) { setStatus(false, '保存失败'); return false; }
@@ -4493,6 +4512,19 @@ async function removeReminder(at) {
 // 回写未落、merge 进来的他端条目一律不可删（与 mergeRemoteReminders「保留本机独有」对齐）。
 // 改时间（审核 P0 修正）：正文出现「新时间串 + 相同事项文本」→ 更新 at 而非删除，不丢提醒。
 // 铁律闸：pendingRemoteNote 挂起期绝不对账（拍板「使用云端」回滚正文时防误删失联）。
+// v8.1.6（用户实测「正文删了还照推」根因修正）：三条判据全建立在「按当天重算出的时间戳」上，
+// 而相对说法（明天/后天/周X/裸时刻/中文数字时刻）的解析结果随「今天是哪天」漂移——隔一天或
+// 重启一次，存量 at 就再也算不出来，①②形同虚设、③恒不成立，只能停在「从未见过→绝不删」的
+// 保护分支上，幽灵条目留在列表里到点照推（v8.1.5 起模糊时间形态大扩展，命中面显著放大）。
+// 修法=条目带出处指纹 src（创建时命中的原始时间串）：判活加一条与日期无关的原文通道
+// （src 原文仍在正文 → 提醒仍被正文要着，顺带治掉「正文没动却被逐日滚动改时间 + 误弹提醒时间已更新」），
+// ③也加原文通道（src 曾在本会话正文里确凿出现，或作为独立时间匹配出现在上一版基线正文 → 认定见过，允许删；
+// 只靠基线正文不够——lastHtml 在 saveLocal 里先于对账被推进，故另设会话级登记 remSeenSrc）。
+// 两条通道的比对口径都是「正文解析出的时间匹配原文集合」（全词命中，非裸 indexOf）：v8.1.5 起
+// 裸时刻（「3点」「15:00」）可成短指纹，裸子串会在无关句子里巧合命中，既误续命（永不删）又误放行删。
+// 另在提醒列表落定处（loadReminder/mergeRemoteReminders/restoreReminderDraft）对无指纹的存量条目按
+// 「正文里唯一的同事项时间匹配」回填一次指纹，让升级前建的历史提醒也享受同一联动。
+// 无 src 且补不出的旧数据/旧调用一律退回 v7.4.0 原时间戳比对，判删比原先更保守、绝不新增误删面。
 function htmlToRemText(html) {
   try {
     const doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
@@ -4504,6 +4536,62 @@ function htmlToRemText(html) {
 // v7.7.0：对账统一净化入口——剥零宽断行符（不改语义字符，允许变长：解析与切片同源同串，
 // 偏移自洽）再过 normFullWidth（等宽归一，全角数字/冒号/横杠/斜杠→半角）
 function remSanitize(s) { return normFullWidth(String(s || '').replace(/\u200B/g, '')); }
+// v8.1.6：出处指纹的「见过」证据之一——上一版落库正文里的时间匹配原文集合（poll/autoMerge 挂点传的是
+// editor.innerHTML，此时 lastHtml 才是真正的上一版；saveLocal 挂点两者相同，属双保险而非主证据）。
+function srcLiteralSet(text) {
+  const out = new Set();
+  const s = String(text || '');
+  try { for (const m of parseTimeMatchesLong(s)) out.add(s.slice(m.index, m.index + m.length)); } catch (e) {}
+  return out;
+}
+// v8.1.6：存量（升级前）条目无指纹时的回填——正文里存在「事项文本逐字相同 + at 相差 ≤2 天」的**唯一**
+// 时间匹配才补，补不出来就维持 v7.4.0 原行为。让老提醒同样获得「删正文即删提醒」的能力（用户实测的
+// 那条幽灵多半正属此类），且只在内存里补，随下一次提醒落库自然自愈，不额外发 PUT。
+function backfillRemSrcFromBody() {
+  try {
+    if (!reminders.some(r => r && !r.src)) return;
+    const s = htmlToRemText((editor && editor.innerHTML) || lastHtml || '');
+    if (!s) return;
+    const ms = parseTimeMatchesLong(s);
+    if (!ms.length) return;
+    const now = Date.now();
+    // 闸复验 P1（必修）：一条时间匹配只准发给一条条目。旧写法多条同事项历史条目会共用同一指纹，
+    // 删一次正文即连坐全删——把「绝不新增误删面」直接推翻。按条目 at 升序处理（reminders 恒升序，
+    // 离匹配时刻近的先取），已消费的匹配下标记进 usedCand，未占用候选里恰好 1 个才补。
+    const usedCand = new Set();
+    const itemLit = m => {
+      let t = s.slice(m.index + m.length).trim().replace(/^[·\s\u3000]+/, '');
+      return t.length > 20 ? t.slice(0, 20) + '…' : t;
+    };
+    for (const r of reminders) {
+      if (!r || r.src || !r.text || r.at <= now) continue;
+      const rt = remSanitize(r.text);
+      const cand = [];
+      for (let i = 0; i < ms.length; i++) {
+        if (usedCand.has(i)) continue;
+        const m = ms[i];
+        if (Math.abs(m.at - r.at) > 2 * 86400e3) continue;
+        if (remSanitize(itemLit(m)) !== rt) continue;
+        cand.push(i);
+      }
+      if (cand.length === 1) {
+        usedCand.add(cand[0]);
+        r.src = s.slice(ms[cand[0]].index, ms[cand[0]].index + ms[cand[0]].length);
+      }
+    }
+  } catch (e) {}
+}
+// v8.1.6：把「当前正文里确凿存在原文出处」的条目指纹登记为「见过」（会话级，与 remSeenSession 同族）。
+// 调用点=提醒列表落定处（loadReminder 尾 / mergeRemoteReminders 尾）+ 对账内命中 src 在正文时随手登记。
+// lastHtml 在 saveLocal 里先于对账被推进，只靠它当基线会漏掉「开局正文有、随后被删」这条主路径。
+function seedRemSrcBaseline() {
+  try {
+    const html = (editor && editor.innerHTML) || lastHtml || '';
+    if (!html) return;
+    const live = srcLiteralSet(htmlToRemText(html)); // 全词命中，不做裸子串（短串巧合既会误续命也会误放行删）
+    for (const r of reminders) if (r && typeof r.src === 'string' && r.src && live.has(r.src)) remSeenSrc.add(r.src);
+  } catch (e) {}
+}
 async function reconcileRemindersFromBody(bodyText) {
   if (!cryptoKey || !reminders.length) return;
   if (pendingRemoteNote) return; // 挂起期绝不对账（审核 P0 修正）
@@ -4514,19 +4602,32 @@ async function reconcileRemindersFromBody(bodyText) {
   const liveAt = new Set(matches.map(m => m.at));
   for (const m of matches) remSeenSession.add(m.at);
   const seenBase = new Set(remSeenSession);
-  try { parseTimeMatchesLong(htmlToRemText(lastHtml)).forEach(m => seenBase.add(m.at)); } catch (e) {} // v7.4.0（B 层 P1）：与 bodyText 同源抽取（htmlToRemText 按块换行），超 4000 长文分段不失效；旧写法剥标签成空格=单段超限→基线全空→长文误删
+  let prevSrcs = null; // v8.1.6：基线正文的时间匹配原文集合（全词命中，不做裸子串）
+  try { // v7.4.0（B 层 P1）：与 bodyText 同源抽取（htmlToRemText 按块换行），超 4000 长文分段不失效；旧写法剥标签成空格=单段超限→基线全空→长文误删
+    const prevText = htmlToRemText(lastHtml);
+    parseTimeMatchesLong(prevText).forEach(m => seenBase.add(m.at));
+    prevSrcs = srcLiteralSet(prevText);
+  } catch (e) {}
+  const liveSrcs = new Set(matches.map(m => (bodyText || '').slice(m.index, m.index + m.length))); // v8.1.6：同源 matches 派生，零额外解析
   // 正文中「列表里没有的未来时间串」（改时间判定候选源，循环前一次算清，itemAfterMatch 同口径）
   const itemOf = m => {
     let s = (bodyText || '').slice(m.index + m.length).trim().replace(/^[·\s\u3000]+/, '');
     return s.length > 20 ? s.slice(0, 20) + '…' : s;
   };
   const newAts = matches.filter(m => m.at > now && !reminders.some(x => x.at === m.at))
-                        .map(m => ({ at: m.at, item: itemOf(m) }));
+                        .map(m => ({ at: m.at, item: itemOf(m), src: (bodyText || '').slice(m.index, m.index + m.length) })); // v8.1.6：src 取自净化后同源正文，改时间滚动时指纹随新串更新
   const usedNew = new Set();
   let changed = false;
   for (const r of Array.from(reminders)) {
     if (r.at <= now) continue; // 过期条目不参与联动（保留画删除线）
-    if (liveAt.has(r.at)) continue; // 仍在正文
+    // v8.1.6：判活加原文通道——创建时命中的时间串原文还以**独立时间匹配**的形态躺在正文里，
+    // 就是「正文还在要这条提醒」，与今天是哪天无关（相对说法跨天必然算不出存量 at，旧写法在此会误判失联）。
+    // 用全词命中集合而非 indexOf：v8.1.5 起裸时刻（「3点」「15:00」）可成短指纹，裸子串会在无关句子里巧合命中。
+    // src 仍在 → 直接续命，也不进下面的改时间分支（治「正文没动却被逐日滚到明天」）。
+    const srcOld = typeof r.src === 'string' ? r.src : '';
+    const srcAlive = !!srcOld && liveSrcs.has(srcOld); // v8.1.6：原文通道（与日期无关）
+    if (srcAlive) remSeenSrc.add(srcOld); // 本会话见过，登记后即便随后被删也可联动删
+    if (liveAt.has(r.at) || srcAlive) continue; // 仍在正文
     // 改时间：正文出现「新时间串 + 相同事项文本」→ 更新 at 而非删除，绝不静默丢提醒（审核 P0 修正）
     // v7.7.0（对抗审）：n.item 出自净化后 bodyText，r.text 是创建时原始串——比对侧同过 remSanitize（幂等）防口径裂缝
     const rt = remSanitize(r.text || '');
@@ -4535,7 +4636,7 @@ async function reconcileRemindersFromBody(bodyText) {
     if (m2) {
       usedNew.add(m2.at);
       reminders = reminders.filter(x => x.at !== r.at);
-      reminders.push({ at: m2.at, text: r.text || '', fired: false });
+      reminders.push({ at: m2.at, text: r.text || '', fired: false, src: m2.src || srcOld }); // v8.1.6：指纹随新串走，拿不到才沿用旧的
       reminders.sort((a, b) => a.at - b.at);
       remTombstones.delete(r.at); // 改时间不是删除，清旧 tombstone
       changed = true;
@@ -4543,7 +4644,11 @@ async function reconcileRemindersFromBody(bodyText) {
       continue;
     }
     // 删除三条件
-    if (!seenBase.has(r.at)) continue; // ③从未见过 → 绝不删（他端 merge 新条目/面板刚加未回写）
+    // v8.1.6：③「见过」加原文通道——指纹曾在本会话正文里确凿出现（remSeenSrc）或作为独立时间匹配
+    // 出现在上一版基线正文（prevSrcs）即认定见过。相对说法跨天算不出存量 at（seenBase 只有今天重算出的
+    // 新 at），旧写法在此恒不成立 → 幽灵条目永不删、到点照推。
+    const srcSeen = !!srcOld && (remSeenSrc.has(srcOld) || !!(prevSrcs && prevSrcs.has(srcOld))); // 无指纹（旧数据/旧调用）恒 false → 保持 v7.4.0 原保护面
+    if (!seenBase.has(r.at) && !srcSeen) continue; // ③从未见过 → 绝不删（他端 merge 新条目/面板刚加未回写）
     const exact = fmtRemInsert(r.at);
     const flat = (bodyText || '').replace(/[\s\u3000]+/g, ' ');
     if (flat.indexOf(exact) !== -1) continue; // ②精确串仍在正文（改到一半）→ 不删
@@ -4778,7 +4883,8 @@ function renderRemPanel() {
     const text = item.value.trim();
     askRemPermission();
     // v6.3：只在实际添加成功时收面板+回写正文——失败（上限/过去时间）addReminder 已提示
-    addReminder(at, text).then(ok => {
+    // v8.1.6：src 取 insertRemLine 即将写回的绝对时间串（同源同串），联动删除按原文比对不再依赖时间戳跨天命中
+    addReminder(at, text, fmtRemInsert(at)).then(ok => {
       if (!ok) return;
       toggleRemPanel(false);
       insertRemLine(at, text); // v5.45：面板添加的提醒回写正文光标处（时间　事项）

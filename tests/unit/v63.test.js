@@ -35,7 +35,7 @@ test('V63-2 pushShort 顺延明年退役：已过短格式一律标 expired', ()
 test('V63-3 chipActivate 改 async 并按结果决定反馈', () => {
   const src = readSrc();
   assert.ok(src.includes('async function chipActivate(e)'), 'chipActivate 应为 async');
-  assert.ok(/const ok = await addReminder\(at, item\);/.test(src), '必须 await addReminder');
+  assert.ok(/const ok = await addReminder\(at, item, src\);/.test(src), '必须 await addReminder（v8.1.6 起第三参带出处指纹）');
   assert.ok(/if \(!ok\) \{ chipDeleteAt = null; hideTimeChip\(\); return; \}/.test(src), '失败必须收 chip，不得弹「✅ 提醒已添加」');
 });
 
@@ -44,7 +44,7 @@ test('V63-4 addReminder 三道闸门：过去拒绝/未来计数/返回布尔', 
   const src = readSrc();
   assert.ok(/已过去的时间不能设提醒/.test(src), '过去时间应有明确拒绝提示');
   assert.ok(/reminders\.filter\(r => r\.at > Date\.now\(\)\)\.length >= REM_MAX/.test(src), '上限只统计未过期条目（过期条目不占额）');
-  assert.ok(/push\(\{ at: at, text: text \|\| '', fired: false \}\)/.test(src), '新增条目应带 fired:false');
+  assert.ok(/push\(\{ at: at, text: text \|\| '', fired: false, src: srcNew \}\)/.test(src), "新增条目应带 fired:false（v8.1.6 起另带出处指纹 srcNew）");
 });
 
 // ── #2/#3 normalizeRemList：未来 slice + fired 条目 FIFO 保留 ──
@@ -67,7 +67,7 @@ test('V63-6 fired 标记与整段删除线链路完整', () => {
   assert.ok(/remDones\.forEach/.test(src), 'linkify 先拆阶段应处理 s.rem-done');
   assert.ok(/#editor s\.rem-done\{text-decoration:line-through/.test(src), '删除线样式（用户指定写法）');
   // 面板路径：失败不回写正文
-  assert.ok(/addReminder\(at, text\)\.then\(ok => \{/.test(src), '面板添加必须按结果决定是否回写正文');
+  assert.ok(/addReminder\(at, text, fmtRemInsert\(at\)\)\.then\(ok => \{/.test(src), '面板添加必须按结果决定是否回写正文（v8.1.6 起 src 与写回正文行同串）');
 });
 
 // ── #5 Android 冷启动直达目标笔记 ──

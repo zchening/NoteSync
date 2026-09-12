@@ -1056,6 +1056,19 @@
 - **关联文件**: index.html → maybeShowTimeChip()/buildChipDeleteBtn()/chipDeleteActivate()/itemAfterMatch()/renderRemPanel()/insertRemLine()/showRemCard()/CSS 三板
 - **测试**: timechip TC14/TC15、theme v5.47 断言组、e2e V547-1~5
 
+### L10 | 正文→提醒删除联动对「相对时间」失效（v8.1.6 出处指纹修 + 三条残余挂账）
+- **版本**: v8.1.6（用户实测：正文里那句时间+事项早删了，提醒还在列表里、到点照推）
+- **根因**: v7.4.0 的三条判据（①at 不在正文解析结果 ②fmtRemInsert 绝对串不在正文 ③该 at「曾被见过」）全建立在**按当天重算的时间戳**上；相对说法（明天/后天/周X/裸时刻/中文数字时刻）解析值随「今天是哪天」漂移，跨一天或重启一次就再也算不出存量 at → ③恒不成立，只能停在「从未见过→绝不删」保护分支。v8.1.5 把模糊形态扩到裸周X/星期/礼拜/中文数字后命中面骤增，症状变成高发。附带第二症状：正文那句原样留着时每天打开都被「改时间」分支滚到次日并误弹「提醒时间已更新」。
+- **修法**: 条目带出处指纹 `src`（创建时命中的原始时间串；面板/MCP 取即将写回正文的绝对串，逐字同串）→ 判活加原文通道（src 仍是正文里独立时间匹配 → 续命且不进改时间分支）；判删③加原文通道（会话登记 `remSeenSrc` 或上一版基线正文的独立匹配）；比对口径一律 `srcLiteralSet` 全词命中，**禁**裸 `indexOf`（短指纹「3点/15:00」会双向失真：误续命 + 击穿③误放行删）；`normalizeRemList`/两处草稿/远端合并/MCP `normRemList` 与备份恢复全链透传 src；`loadReminder` 尾 `remSeenSrc.clear()`（防跨笔记污染）→ `backfillRemSrcFromBody()`（存量无指纹条目按「正文唯一同事项、Δat≤2 天、一条匹配只发给一条条目」回填）→ `seedRemSrcBaseline()`。
+- **要点与核对**:
+  - [ ] 无 src 且补不出的旧条目：`srcSeen` 恒 false，退回 v7.4.0 行为（宁可留，绝不新增误删面）——v816 A4 钉
+  - [ ] 过期条目仍在联动之前 `continue`（v6.3 已推送画删除线的条目不得被联动清）——v816 A1/代码行 4564 附近
+  - [ ] 挂起期（pendingRemoteNote）绝不对账的铁律闸仍在最前；tombstone 仍写/仍清/10min 防复活不变
+  - [ ] 成功路径零新增播报：chip 仍只弹「✅ 提醒已添加」两行卡 3s 自收，联动删除仍是一条「已从正文移除提醒：×」toast（v7.4.0 既有）
+  - [ ] 已知残余（挂账，未修）：① 用户把相对串「改到一半」时恰好触发自动保存（800ms 防抖）→ 该串不再是独立匹配、条目可能被联动删（与 v7.4.0 绝对串同族缺陷，判删②只认 fmtRemInsert 精确串兜底）；② 同一时间串在正文出现多处，删其中一处仍判「仍在正文」续命（保守向，不丢提醒）；③ 混用期仍跑 8.1.5 的端点一次提醒（含到点标 fired）会整表 PUT 无 src，新端 poll 整表替换即被洗——各端刷新到 8.1.6 后自愈，新添加条目立即恢复联动
+- **关联文件**: index.html → reconcileRemindersFromBody()/srcLiteralSet()/backfillRemSrcFromBody()/seedRemSrcBaseline()/normalizeRemList()/addReminder()/chipActivate()/showChipForMatch()/loadReminder()/mergeRemoteReminders()；tools/notesync-mcp-server.js → normRemList()/toolRemind()/note_import 恢复
+- **测试**: unit v816.test.js A1-A12（反证：v8.1.5 源码下 A1/A3/A5-A8/A10-A12 共 9 红，A3 红在主症状断言）、v740 P5/P6/P10/P11 不回归、v63 V63-3/4/6 与 e2e V732-S4 字面量 pin 随版
+
 ## M. APK 原生层（v5.51 新增分类，Capacitor 7 + 自写 Kotlin RemPlugin）
 ### M1 | Capacitor 工程生成与本地 assets 复制链路
 - **版本**: v5.51（APK 落地首次）

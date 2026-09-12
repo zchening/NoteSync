@@ -74,8 +74,8 @@ test('V732-S3 bug c：linkifyEditor 入口 isComposing 守卫 + blur/composition
 });
 
 test('V732-S4 需求 d：doAdd 成功路径接线 + placeCaretAfterReminderLine 插空块落光标', () => {
-  assert.ok(/addReminder\(at, text\)\.then\(ok => \{[\s\S]{0,80}toggleRemPanel\(false\);[\s\S]{0,80}insertRemLine\(at, text\)/.test(SRC),
-    '面板 doAdd 成功路径应「收面板 → insertRemLine 回写正文」');
+  assert.ok(/addReminder\(at, text[^\n]*?\.then\(ok => \{[\s\S]{0,80}toggleRemPanel\(false\);[\s\S]{0,80}insertRemLine\(at, text\)/.test(SRC),
+    '面板 doAdd 成功路径应「收面板 → insertRemLine 回写正文」（v8.1.6 起 addReminder 带第三参出处指纹）');
   assert.ok(/function insertRemLine\(at, item\) \{[\s\S]{0,500}insertNodeAtCaret\(document\.createTextNode\(text\)\);[\s\S]{0,200}placeCaretAfterReminderLine\(\);/.test(SRC),
     'insertRemLine 末尾应调用 placeCaretAfterReminderLine（需求 d 光标自动换行）');
   assert.ok(/function placeCaretAfterReminderLine\(\) \{[\s\S]{0,600}nb\.appendChild\(document\.createElement\('br'\)\);[\s\S]{0,200}placeCaretInBlock\(nb\)/.test(SRC),

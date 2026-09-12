@@ -568,7 +568,7 @@ function normRemList(list) {
   const now = Date.now();
   const all = list
     .filter(r => r && typeof r.at === 'number')
-    .map(r => ({ at: r.at, text: typeof r.text === 'string' ? r.text : '', fired: !!r.fired }))
+    .map(r => ({ at: r.at, text: typeof r.text === 'string' ? r.text : '', fired: !!r.fired, src: typeof r.src === 'string' ? r.src : '' })) // v8.1.6：与 web 同构透传出处指纹，防 MCP 重写列表把联动依据洗掉
     .sort((a, b) => a.at - b.at);
   const future = all.filter(r => r.at > now).slice(0, REM_MAX); // 与 web 同构：异常超限时留最近 REM_MAX 条（验收路三 P07b）
   const done = all.filter(r => r.at <= now).slice(-REM_DONE_MAX);
@@ -636,7 +636,7 @@ async function toolRemind(args) {
     const future = list.filter(r => r.at > now);
     if (!dup && future.length >= REM_MAX) throw new Error('提醒最多 ' + REM_MAX + ' 条（当前未来提醒 ' + future.length + ' 条），先取消一些吧');
     const next = normRemList(list.filter(r => r.at !== at));
-    next.push({ at, text, fired: false });
+    next.push({ at, text, fired: false, src: fmtRemLine(at) }); // v8.1.6：指纹=即将追加的正文行时间串前缀（与 web 面板 addReminder 同构）
     next.sort((a, b) => a.at - b.at);
     const line = fmtRemLine(at) + (text ? '　' + text : ''); // 全角空格 U+3000，与 web fmtRemInsert+'　'+item 逐字一致
     const nextHtml = html + '<div>' + escapeHtml(line) + '</div>';
@@ -977,7 +977,7 @@ async function toolImport(args) {
           const pre = await apiGet(p.target).catch(() => ({}));
           const saltB64 = (pre && pre.salt) || crypto.randomBytes(16).toString('base64');
           const k = getKeyFor(p.target, saltB64);
-          const list = normRemList(m.rem.list.map(r => ({ at: r.at, text: r.text || '', fired: !!r.fired })));
+          const list = normRemList(m.rem.list.map(r => ({ at: r.at, text: r.text || '', fired: !!r.fired, src: typeof r.src === 'string' ? r.src : '' }))); // v8.1.6：恢复备份必须带出处指纹，否则整表洗掉联动依据
           const enc = encryptText(JSON.stringify({ list }), k);
           remCipher = JSON.stringify({ ct: enc.ct, iv: enc.iv });
         }
@@ -1234,7 +1234,7 @@ function handleLine(line) {
     rpcResult(id, {
       protocolVersion: '2024-11-05',
       capabilities: { tools: {} },
-      serverInfo: { name: 'notesync', version: '8.1.5' },
+      serverInfo: { name: 'notesync', version: '8.1.6' },
     });
     return;
   }
