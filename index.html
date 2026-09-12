@@ -199,9 +199,9 @@
   #skinFx.scan.light{background:repeating-linear-gradient(to bottom,rgba(20,60,30,.05) 0 1px,transparent 1px 3px)}
   #skinFx.paper{background:repeating-linear-gradient(to bottom,transparent 0 28px,rgba(176,58,46,.05) 28px 29px)}
   #skinFx.paper.night{background:repeating-linear-gradient(to bottom,transparent 0 28px,rgba(197,105,92,.07) 28px 29px)}
-  /* v8.2.2（用户终拍）：移动端顶栏图标本就满员（App 端实显 7 枚），徽章只留领头 emoji（🌙/🧧/🏮…），
-     全文交「打开时 5 秒问候气泡」；桌面 header 胶囊带全文不变。 */
-  @media (max-width:560px){ #nsBadge{padding:4px 8px} #nsBadge .ns-bt{display:none} }
+  /* v8.2.3（用户反馈）：移动端 emoji 外那圈胶囊显脏——脱掉皮（无底色/边框/内边距/间隙），
+     只留裸 emoji 与笔记名同字级随行；桌面带文案的胶囊保留（无容器会像正文误入）。 */
+  @media (max-width:560px){ #nsBadge{padding:0;border:0;background:none;gap:0} #nsBadge .ns-bt{display:none} }
 
   /* ── 编辑器 ─────────────────────────── */
   #editor{flex:1;width:100%;max-width:720px;margin:0 auto;border:0;outline:0;resize:none;padding:40px 28px 120px;background:transparent;color:var(--fg);font:inherit;font-size:17px;overflow-x:hidden;overflow-y:auto;word-wrap:break-word;overflow-wrap:anywhere;word-break:break-all;white-space:pre-wrap;-webkit-user-select:text;user-select:text;line-height:1.9}
@@ -628,7 +628,7 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '8.2.2';
+const APP_VERSION = '8.2.3';
 const BUILD_DATE = '2026-09-13';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。

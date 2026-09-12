@@ -70,10 +70,10 @@ function freshServer() {
 
 // ═══════════ 源码断言 ═══════════
 test('V72-S1 版本三处一致：index 8.1.8 / gradle 818 / MCP serverInfo 8.1.8', () => {
-  assert.ok(SRC.includes("const APP_VERSION = '8.2.2';"), 'APP_VERSION 应 8.2.2');
+  assert.ok(SRC.includes("const APP_VERSION = '8.2.3';"), 'APP_VERSION 应 8.2.3');
   const gradle = fs.readFileSync(path.join(ROOT, 'android', 'app', 'build.gradle'), 'utf8');
-  assert.ok(gradle.includes('versionCode 822') && gradle.includes('versionName "8.2.2"'), 'gradle 应 822/8.2.2');
-  assert.ok(MCP_SRC.includes("serverInfo: { name: 'notesync', version: '8.2.2' }"), 'MCP serverInfo 应 8.2.2');
+  assert.ok(gradle.includes('versionCode 823') && gradle.includes('versionName "8.2.3"'), 'gradle 应 823/8.2.3');
+  assert.ok(MCP_SRC.includes("serverInfo: { name: 'notesync', version: '8.2.3' }"), 'MCP serverInfo 应 8.2.3');
 });
 
 test('V72-S2 新工具注册齐全：TOOLS 含 search/export/import + description 含隐私提示', () => {

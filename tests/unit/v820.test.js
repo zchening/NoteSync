@@ -200,7 +200,8 @@ test('A13 v8.2.2：捕获监听+nsCaretPrefix、capture true、≤560 emoji-only
   assert.ok(SRC.includes('if (e.target !== editor && !(editor.contains && editor.contains(e.target))) return;'), 'document 级监听须按编辑器子树过滤（块 div 才是 input target，v8.2.1 探针实锤）');
   assert.match(SRC, /\}, true\);\s*\nasync function chipActivate/, '监听必须以捕获阶段挂载（true）且紧邻彩蛋段尾');
   assert.ok(SRC.includes('#nsBadge .ns-bt{display:none}'), 'v8.2.2 终拍：≤560 移动端徽章只显领头 emoji，文案退役交 5 秒气泡');
-  assert.ok(SRC.includes("@media (max-width:560px){ #nsBadge{padding:4px 8px} #nsBadge .ns-bt{display:none} }"), '移动端规则=emoji-only 小胶囊（新字面量钉）');
+  assert.ok(SRC.includes("@media (max-width:560px){ #nsBadge{padding:0;border:0;background:none;gap:0} #nsBadge .ns-bt{display:none} }"), 'v8.2.3 移动端=脱胶囊皮裸 emoji（用户反馈胶囊不好看）');
+  assert.ok(!SRC.includes('#nsBadge{padding:4px 8px}'), 'v8.2.2 胶囊形态已退役禁残留');
   assert.ok(SRC.includes("const LABELS = ['已恢复默认', '复古 · 终端绿', '复古 · 打字机纸'];"), '标签文案=拍板口径（无日夜尾巴）');
   assert.ok(!SRC.includes('header .brand svg{transition'), '盯鼠标遗留 transition 应删净');
   // v8.2.2 闸 R1 P2：气泡门必须与 CSS ≤560 同视口谓词——用设备判据 CHIP_HOVER_OK 挡会漏「窄窗桌面」（文案收起又不出气泡=全文丢失）
