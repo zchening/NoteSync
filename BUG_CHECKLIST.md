@@ -1094,7 +1094,7 @@
   - [ ] 数字粒子必须走 nsDigitArmed 跳变触发（非态→态才爆，闸 P1-2：状态判定会让尾部持续成梗时每次击键连爆，A12 钉）
   - [ ] nsFestWelcome 挂点恰 2 处（A9 硬计数钉，加第 3 处必同版改钉）
   - [ ] 彩蛋浮层全部 pointer-events:none 且不进编辑器 DOM；#nsBadge/#nsGreet 全用主题变量（三板口径：静态板 var() 跟随 body.dark；动态板仅既有 #versionToast——徽章/问候卡与 hintbar 同口径不入 SHELL/动态板，借壳滤镜自动翻）
-  - [ ] 移动端 #nsBadge 必须出文案（限宽省略号方案，E6 钉 390px 可见+header 零溢出）；禁加回 display:none
+  - [ ] 移动端（≤560 视口）徽章=emoji-only 小胶囊（文案 CSS 收起仍在 DOM），全文交「打开时 5 秒问候气泡」——气泡门必须用与 CSS 同源的视口谓词 nsNarrowViewport（禁设备判据 CHIP_HOVER_OK，否则窄窗桌面文案收起又不出气泡=全文两头空，闸 R1 P2）；有雨走 nsRainStart（卡文案 greetSrc 与徽章 nsBadgeAt 同源、深夜优先🌙），无雨且窄窗出 nsShowGreet；禁再往顶栏塞文案（顶栏图标满员，v8.2.1 省略号方案被用户否）；E6/A15/A13 钉
   - [ ] #versionToast 被换肤标签复用：CSS 钉（theme.test V-背景实底）不得退役
 
 

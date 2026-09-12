@@ -190,8 +190,8 @@ test('A9 源码字面量钉：旧彩蛋无残留、钩子恰2处、浮层/字体
   }
 });
 
-// ── A13 v8.2.1 结构钉：数字粒子=文档捕获阶段+光标前缀判定；移动端徽章出文案；标签回拍板文案 ──
-test('A13 v8.2.1：捕获监听+nsCaretPrefix 光标前缀、capture true、≤560 无文案隐藏规则、已恢复默认精确', () => {
+// ── A13 v8.2.2 结构钉：数字粒子=文档捕获+光标前缀；移动端 emoji-only；气泡门=视口同谓词非设备判据 ──
+test('A13 v8.2.2：捕获监听+nsCaretPrefix、capture true、≤560 emoji-only、气泡=nsNarrowViewport 视口门', () => {
   assert.ok(SRC.includes("document.addEventListener('input', (e) => {"), '数字粒子应为 document 级监听');
   assert.ok(SRC.includes('function nsCaretPrefix(container, offset)'), '判定面=自写 TreeWalker 光标前缀（克隆 Range.textContent 在 Chromium 真机返回空串，探针实锤弃用）');
   assert.ok(SRC.includes('const p = nsCaretPrefix(r.startContainer, r.startOffset);'), '监听器接光标前缀函数（三态返回）');
@@ -199,10 +199,16 @@ test('A13 v8.2.1：捕获监听+nsCaretPrefix 光标前缀、capture true、≤5
   assert.ok(SRC.includes('if (!r.collapsed) return;'), '选区覆盖打字：不判状态不碰 armed（复验 P2 收口）');
   assert.ok(SRC.includes('if (e.target !== editor && !(editor.contains && editor.contains(e.target))) return;'), 'document 级监听须按编辑器子树过滤（块 div 才是 input target，v8.2.1 探针实锤）');
   assert.match(SRC, /\}, true\);\s*\nasync function chipActivate/, '监听必须以捕获阶段挂载（true）且紧邻彩蛋段尾');
-  assert.ok(!SRC.includes('#nsBadge .ns-bt{display:none}'), 'v8.2.1：移动端不得再隐藏徽章文案（用户拍板）');
-  assert.ok(SRC.includes("@media (max-width:560px){ #nsBadge{max-width:min(44vw,190px)"), '移动端徽章应为限宽省略号方案');
+  assert.ok(SRC.includes('#nsBadge .ns-bt{display:none}'), 'v8.2.2 终拍：≤560 移动端徽章只显领头 emoji，文案退役交 5 秒气泡');
+  assert.ok(SRC.includes("@media (max-width:560px){ #nsBadge{padding:4px 8px} #nsBadge .ns-bt{display:none} }"), '移动端规则=emoji-only 小胶囊（新字面量钉）');
   assert.ok(SRC.includes("const LABELS = ['已恢复默认', '复古 · 终端绿', '复古 · 打字机纸'];"), '标签文案=拍板口径（无日夜尾巴）');
   assert.ok(!SRC.includes('header .brand svg{transition'), '盯鼠标遗留 transition 应删净');
+  // v8.2.2 闸 R1 P2：气泡门必须与 CSS ≤560 同视口谓词——用设备判据 CHIP_HOVER_OK 挡会漏「窄窗桌面」（文案收起又不出气泡=全文丢失）
+  assert.ok(SRC.includes("window.matchMedia('(max-width: 560px)').matches"), '气泡门=视口谓词 nsNarrowViewport（非设备判据）');
+  assert.ok(SRC.includes('else if (b && nsNarrowViewport())'), '无雨分支经视口门出气泡');
+  assert.ok(!SRC.includes('else if (!CHIP_HOVER_OK)'), '禁再用设备判据 CHIP_HOVER_OK 挡气泡（窄窗桌面会两头空）');
+  assert.ok(SRC.includes('const show = greetSrc || meta;'), '雨卡文案与标题栏徽章同源（深夜+节日=🌙，雨仍走节日 meta）');
+  assert.ok(SRC.includes('nsRainStart(f, 6000, b);'), 'nsFestWelcome 把徽章态传入雨卡');
 });
 
 // ── A10 主主题输出逐字节回归：模板抽取后 themeOverrideCss(false/true) 与 v8.1.8 等价 ──
@@ -285,4 +291,19 @@ test('A14 三态前缀与输入源过滤：文本命中前缀/元素位 null/圈
   const before = w.document.querySelectorAll('.ns-burst').length;
   li.dispatchEvent(new w.InputEvent('input', { bubbles: true, inputType: 'insertText' }));
   assert.strictEqual(w.document.querySelectorAll('.ns-burst').length, before, '非编辑器输入不得被彩蛋误吃');
+});
+
+// ── A15 v8.2.2：独立问候气泡出现→按时自收（真条件轮询） ──
+test('A15 nsShowGreet 气泡按时长出现并自收', async t => {
+  const app = fresh(); t.after(() => app.dom.window.close());
+  const w = app.window;
+  const g = w.document.getElementById('nsGreet');
+  w.nsShowGreet('🌙', '夜深了，写完这条就睡', 200);
+  assert.ok(g.classList.contains('show'), '气泡应挂 show');
+  assert.ok(g.textContent.includes('夜深了'), '气泡含全文文案');
+  const t0 = Date.now();
+  while (g.classList.contains('show')) {
+    if (Date.now() - t0 > 3000) assert.fail('气泡未在指定时长后自收');
+    await new Promise(r => setTimeout(r, 40));
+  }
 });

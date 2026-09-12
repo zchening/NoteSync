@@ -199,9 +199,9 @@
   #skinFx.scan.light{background:repeating-linear-gradient(to bottom,rgba(20,60,30,.05) 0 1px,transparent 1px 3px)}
   #skinFx.paper{background:repeating-linear-gradient(to bottom,transparent 0 28px,rgba(176,58,46,.05) 28px 29px)}
   #skinFx.paper.night{background:repeating-linear-gradient(to bottom,transparent 0 28px,rgba(197,105,92,.07) 28px 29px)}
-  /* v8.2.1：移动端徽章也显示文案（用户拍板）——限宽省略号，空间不足时徽章先截断、按钮不挤出屏
-     （brand 链收缩行为 v7.3.3 既有，徽章 flex-shrink:1 + min-width:0 进同一让位链） */
-  @media (max-width:560px){ #nsBadge{max-width:min(44vw,190px);padding:3px 9px 3px 7px;flex-shrink:1;min-width:0} }
+  /* v8.2.2（用户终拍）：移动端顶栏图标本就满员（App 端实显 7 枚），徽章只留领头 emoji（🌙/🧧/🏮…），
+     全文交「打开时 5 秒问候气泡」；桌面 header 胶囊带全文不变。 */
+  @media (max-width:560px){ #nsBadge{padding:4px 8px} #nsBadge .ns-bt{display:none} }
 
   /* ── 编辑器 ─────────────────────────── */
   #editor{flex:1;width:100%;max-width:720px;margin:0 auto;border:0;outline:0;resize:none;padding:40px 28px 120px;background:transparent;color:var(--fg);font:inherit;font-size:17px;overflow-x:hidden;overflow-y:auto;word-wrap:break-word;overflow-wrap:anywhere;word-break:break-all;white-space:pre-wrap;-webkit-user-select:text;user-select:text;line-height:1.9}
@@ -628,7 +628,7 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '8.2.1';
+const APP_VERSION = '8.2.2';
 const BUILD_DATE = '2026-09-13';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
@@ -4316,7 +4316,7 @@ updateNsBadge();
 setInterval(updateNsBadge, 60000);
 // 节日雨：解锁进编辑器那一刻放一轮（每次打开都放，无已播标记）；雨层浮在内容上 6 秒自清。
 let nsWelcomed = false;
-function nsRainStart(key, ms) {
+function nsRainStart(key, ms, greetSrc) {
   const meta = NS_FEST_META[key];
   if (!meta || !meta.rain.length) return;
   const dur = ms || 6000;
@@ -4335,19 +4335,39 @@ function nsRainStart(key, ms) {
     layer.appendChild(s);
   }
   const g = document.getElementById('nsGreet');
-  if (g) g.innerHTML = '<span class="ns-ge">' + meta.em + '</span><span>' + meta.tx + '</span>';
+  if (g) {
+    const show = greetSrc || meta; // v8.2.2 闸：卡文案与标题栏徽章同源（深夜+节日=🌙 先劝睡），雨仍走节日 meta
+    g.innerHTML = '<span class="ns-ge">' + show.em + '</span><span>' + show.tx + '</span>';
+  }
   setTimeout(() => { if (g) g.classList.add('show'); }, Math.min(900, dur / 4));
+  setTimeout(() => { if (g) g.classList.remove('show'); }, Math.min(5000, dur)); // v8.2.2：问候文案层 5 秒（短时长自收缩）
   setTimeout(() => {
     layer.classList.add('hidden');
     layer.innerHTML = '';
-    if (g) g.classList.remove('show');
-  }, dur);
+  }, dur); // 雨仍按自身时长自然落完
+}
+// 独立问候气泡（不依赖雨）：窄窗下 header 只剩 emoji，全文用 5 秒气泡补位。
+// 与 nsRainStart 的卡共用 #nsGreet——互斥由 nsFestWelcome 单次分支保证（有雨不再走这里）。
+function nsShowGreet(em, tx, ms) {
+  const g = document.getElementById('nsGreet');
+  if (!g) return;
+  g.innerHTML = '<span class="ns-ge">' + em + '</span><span>' + tx + '</span>';
+  g.classList.add('show');
+  setTimeout(() => g.classList.remove('show'), ms || 5000);
+}
+// 「窄窗」判定必须与 CSS ≤560 同谓词——设备判据（hover/pointer）与视口宽正交，用它挡气泡
+// 会漏「窄窗桌面」：文案被 CSS 收起却不出气泡=全文彻底丢失（闸 R1 P2，触屏平板反向同理）。
+function nsNarrowViewport() {
+  try { return !!(window.matchMedia && window.matchMedia('(max-width: 560px)').matches); } catch (e) { return false; }
 }
 function nsFestWelcome() { // applyUnlocked/离线解锁两处钩子调用；本会话只放一次
   if (nsWelcomed) return;
   nsWelcomed = true;
+  const b = nsBadgeAt(new Date()); // 气泡/卡文案唯一来源=徽章状态机（深夜🌙 > 节日）
   const f = nsFestAt(new Date());
-  if (f && NS_FEST_META[f] && NS_FEST_META[f].rain.length) { try { nsRainStart(f); } catch (e) {} }
+  const hasRain = f && NS_FEST_META[f] && NS_FEST_META[f].rain.length;
+  if (hasRain) { try { nsRainStart(f, 6000, b); } catch (e) {} }
+  else if (b && nsNarrowViewport()) { try { nsShowGreet(b.em, b.tx, 5000); } catch (e) {} } // 宽窗桌面有常驻胶囊，静默
 }
 // ── 数字梗粒子（v8.2.1 重做）：光标前「刚成串」666/520/1314/233 时从光标处冒一次 emoji。──
 // 判定面=光标前文本（文档捕获阶段读实时 selection——editor 冒泡监听会晚于主 input 监听器的

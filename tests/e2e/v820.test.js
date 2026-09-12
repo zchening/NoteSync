@@ -197,13 +197,12 @@ test('E5 文中光标处敲 666 与 「下午3点」尾敲 666 均触发一次�
   } finally { await ctx.close(); }
 }));
 
-// ── E6 v8.2.1：移动端（390px）深夜徽章必须显示文案（省略号截断），且顶栏不横向溢出 ──
-test('E6 移动端徽章出文案，header 不溢出', guard(async () => {
+// ── E6 v8.2.2：移动端（390px）深夜=header 只挂 emoji 小胶囊 + 解锁出 5 秒全文气泡，顶栏零溢出 ──
+test('E6 移动端 emoji-only 徽章 + 深夜 5 秒问候气泡，header 不溢出', guard(async () => {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 780 }, hasTouch: true, isMobile: true });
   await ctx.addInitScript(() => {
-    // 固定深夜钟点（23:30），徽章=深夜态，与真实运行时刻解耦
+    // 固定深夜钟点（23:30），深夜态与真实运行时刻解耦；2026-09-12 非节日 → 走「无雨→气泡」分支
     const RealDate = Date;
-    // eslint-disable-next-line no-global-assign
     Date = class extends RealDate {
       constructor(...a) { if (a.length === 0) { super(2026, 8, 12, 23, 30, 0); } else { super(...a); } }
       static now() { return new RealDate(2026, 8, 12, 23, 30, 0).getTime(); }
@@ -213,22 +212,34 @@ test('E6 移动端徽章出文案，header 不溢出', guard(async () => {
     const page = await ctx.newPage();
     await page.goto(baseURL, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('#landingInput');
-    await page.fill('#landingInput', 'V821Mobile');
+    await page.fill('#landingInput', 'V822Mobile');
     await page.click('#landingBtn');
-    await page.waitForFunction((enc) => location.pathname.endsWith(enc), encodeURIComponent('V821Mobile'), { timeout: 10000 });
+    await page.waitForFunction((enc) => location.pathname.endsWith(enc), encodeURIComponent('V822Mobile'), { timeout: 10000 });
     await page.fill('#pw', 'test-pass-123');
     await page.click('#ok');
     await page.waitForFunction(() => document.getElementById('editor').contentEditable === 'true', { timeout: 10000 });
+    // ⓪ 气泡门是视口谓词（非设备判据）：390px 必命中 max-width:560 —— 先断言，避免慢机 5 秒 TTL 被后续步骤吃空
+    assert.strictEqual(await page.evaluate(() => window.nsNarrowViewport()), true, '窄窗门必须命中（视口谓词，与 CSS 同源）');
+    // ① 解锁瞬间的 5 秒深夜气泡：出现→含全文→按时自收（置前，防漂移）
+    await page.waitForFunction(() => {
+      const g = document.getElementById('nsGreet');
+      return g && g.classList.contains('show') && g.textContent.includes('夜深了');
+    }, null, { timeout: 5000 });
+    // ② header：emoji 胶囊挂上，文案在 DOM 但被 CSS 收起（只显领头 emoji）
     await page.waitForFunction(() => {
       const el = document.getElementById('nsBadge');
       return el && el.classList.contains('show') && el.querySelector('.ns-be').textContent === '🌙';
     }, null, { timeout: 6000 });
-    const bt = page.locator('#nsBadge .ns-bt');
-    assert.strictEqual(await bt.textContent(), '夜深了，写完这条就睡', '移动端徽章文案必须在 DOM');
-    const bb = await bt.boundingBox();
-    assert.ok(bb && bb.width > 12 && bb.height > 8, '移动端徽章文案必须真实渲染（非 display:none 零盒）');
+    assert.strictEqual(await page.evaluate(() => getComputedStyle(document.querySelector('#nsBadge .ns-bt')).display), 'none',
+      '移动端文案必须 CSS 收起（emoji-only 终拍）');
+    assert.strictEqual(await page.evaluate(() => document.querySelector('#nsBadge .ns-bt').textContent), '夜深了，写完这条就睡',
+      '文案仍在 DOM（供桌面/读屏复用），只藏显示');
+    const beBox = await page.locator('#nsBadge .ns-be').boundingBox();
+    assert.ok(beBox && beBox.width > 8, 'emoji 必须真实渲染');
+    await page.waitForFunction(() => !document.getElementById('nsGreet').classList.contains('show'), null, { timeout: 9000 });
+    // ③ 顶栏零横向溢出（emoji-only 小胶囊入链不挤压顶栏图标）
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-    assert.ok(overflow <= 1, '390px 下徽章入链不得让顶栏横向溢出（超出 ' + overflow + 'px）');
+    assert.ok(overflow <= 1, '390px 下 header 不得横向溢出（超出 ' + overflow + 'px）');
     assert.deepStrictEqual(page.__errors || [], [], '无页面 JS 报错');
   } finally { await ctx.close(); }
 }));
