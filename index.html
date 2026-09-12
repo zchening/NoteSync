@@ -597,7 +597,7 @@ function markJumped() {
 }
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '8.1.6';
+const APP_VERSION = '8.1.7';
 const BUILD_DATE = '2026-09-12';
 
 const $ = s => document.querySelector(s);
@@ -3629,6 +3629,7 @@ const remSeenSession = new Set();
 // 确凿出现过的原始时间串。相对说法跨天算不出存量 at，lastHtml 又在 saveLocal 里先于对账被推进，
 // 只靠「上一版基线正文」会漏判；开局/合并时按当前正文核验后登记，删除路径才稳。
 const remSeenSrc = new Set();
+let remReconcileRetryTimer = null; // v8.1.7：打字热态跳过删除后的单次延迟重试句柄（清挂再挂，不叠加）
 function remTombstoneLive(at) {
   const t = remTombstones.get(at);
   if (!t) return false;
@@ -4231,6 +4232,7 @@ async function loadReminder(note, key) {
   syncRemindersToNative(); // v5.51：解锁后把密文解密得到的提醒列表同步到原生层排程
   ensureExactAlarmPermission(); // v5.55：APK 精确闹钟权限自检（只引导一次）
   remSeenSrc.clear(); // v8.1.6（闸审 R2）：整表重载 = 会话指纹登记一并作废，防跨笔记污染
+  clearTimeout(remReconcileRetryTimer); remReconcileRetryTimer = null; // v8.1.7（闸审 P2）：作废待发重试，防「新列表 × 旧正文」窄竞态
   backfillRemSrcFromBody(); // v8.1.6：升级前的存量条目补指纹（正文里唯一同事项时间匹配才补）
   seedRemSrcBaseline(); // v8.1.6：正文已就位 → 登记有据可查的出处指纹（重开即删的主路径证据）
 }
@@ -4618,6 +4620,10 @@ async function reconcileRemindersFromBody(bodyText) {
                         .map(m => ({ at: m.at, item: itemOf(m), src: (bodyText || '').slice(m.index, m.index + m.length) })); // v8.1.6：src 取自净化后同源正文，改时间滚动时指纹随新串更新
   const usedNew = new Set();
   let changed = false;
+  // v8.1.7：编辑热态（末次真实击键 2.2s 内，覆盖 800ms 保存防抖 + 落库回执 + 50ms 对账延迟）
+  const REM_EDIT_GRACE_MS = 2200;
+  const editHot = Date.now() - lastTypeAt < REM_EDIT_GRACE_MS;
+  let editHotSkipped = false;
   for (const r of Array.from(reminders)) {
     if (r.at <= now) continue; // 过期条目不参与联动（保留画删除线）
     // v8.1.6：判活加原文通道——创建时命中的时间串原文还以**独立时间匹配**的形态躺在正文里，
@@ -4644,6 +4650,11 @@ async function reconcileRemindersFromBody(bodyText) {
       continue;
     }
     // 删除三条件
+    // v8.1.7（用户拍板堵 v8.1.6 挂账残余①）：末次真实击键 2.2 秒内正文仍是打字中间态——半截时间串
+    // （「明天下午3点」删到只剩「明天下午3」）不再是独立时间匹配，会被误判成「原文已从正文消失」而删掉提醒。
+    // 本轮只跳过「删除」这一支（保留判定与改时间分支照常生效，两者都非破坏性），并挂一次延迟重试，
+    // 待用户手停下由重试轮完成联动，不要求用户再敲一次键。
+    if (editHot) { editHotSkipped = true; continue; }
     // v8.1.6：③「见过」加原文通道——指纹曾在本会话正文里确凿出现（remSeenSrc）或作为独立时间匹配
     // 出现在上一版基线正文（prevSrcs）即认定见过。相对说法跨天算不出存量 at（seenBase 只有今天重算出的
     // 新 at），旧写法在此恒不成立 → 幽灵条目永不删、到点照推。
@@ -4660,6 +4671,15 @@ async function reconcileRemindersFromBody(bodyText) {
   if (changed) {
     renderRemBtn(); scheduleReminders(); syncRemindersToNative(); scheduleRemMarkRefresh();
     try { await persistReminders(2); } catch (e) {}
+  }
+  // v8.1.7：本轮因「正在打字」跳过的删除，等手停下补一轮对账（用编辑器当前正文，不依赖用户再敲键）。
+  // 只允许一个待发重试；重试轮里若仍在打字会再挂一次，直到落定。前置闸（无密钥/挂起期/空列表）在函数首行天然挡住。
+  if (editHotSkipped) {
+    clearTimeout(remReconcileRetryTimer);
+    remReconcileRetryTimer = setTimeout(() => {
+      remReconcileRetryTimer = null;
+      try { reconcileRemindersFromBody(htmlToRemText(editor.innerHTML)).catch(() => {}); } catch (e) {}
+    }, REM_EDIT_GRACE_MS + 300);
   }
 }
 function scheduleReminders() {

@@ -194,7 +194,7 @@ test('P7 源码形态：A1 草稿先行 / A2 挂起守卫 / A3 bodyChanged / B �
   assert.ok(src.includes('if (isPlaceholderEqual(editor.innerHTML, lastHtml)) return; // v7.4.0'), 'flushDirtySave 应占位豁免');
   // 对账闸门 + 四个挂点
   assert.ok(src.includes('if (pendingRemoteNote) return; // 挂起期绝不对账'), '对账必须有挂起期闸门（审核 P0 修正）');
-  assert.ok((src.match(/reconcileRemindersFromBody\(htmlToRemText\(/g) || []).length === 5, '对账挂点应 5 处（saveLocal/poll/remoteTake/autoMergeSave/409 自动采纳）');
+  assert.ok((src.match(/reconcileRemindersFromBody\(htmlToRemText\(/g) || []).length === 6, '对账挂点应 6 处（saveLocal/poll/remoteTake/autoMergeSave/409 自动采纳/v8.1.7 热态跳删后的延迟重试）');
   assert.ok(src.includes('function parseTimeMatchesLong(text)'), '长文分段解析应存在（B 层 P1 修复）');
   assert.ok((src.match(/parseTimeMatchesLong\(/g) || []).length >= 3, 'reconcile 两处解析点（bodyText/lastHtml 基线）都应换长文版');
   assert.ok(src.includes('if (remTombstoneLive(r.at)) continue;'), 'mergeRemoteReminders 应 tombstone 过滤（防救尸）');
