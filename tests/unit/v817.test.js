@@ -116,7 +116,7 @@ test('B2 热态不挡「改时间」：同事项换时间串仍当场更新 at �
 
 // ── B3：源码形态守护（锚定补丁行，防守卫被挪到删除之后而失效）──
 test('B3 源码守护：热态守卫位于删除三条件之前 + 单发重试句柄', () => {
-  const iGuard = SRC.indexOf('if (editHot) { editHotSkipped = true; continue; }');
+  const iGuard = SRC.indexOf('if (editHot && (!srcOld || srcPrefixLingers(srcOld, bodyText) || itemStillInBody)) { editHotSkipped = true; continue; }');
   const iDelete = SRC.indexOf('const srcSeen = !!srcOld &&');
   assert.ok(iGuard > 0, '应有热态守卫行');
   assert.ok(iDelete > 0, '删除三条件行应在（v8.1.6 既有）');

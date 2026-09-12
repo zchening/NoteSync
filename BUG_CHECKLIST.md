@@ -1067,8 +1067,21 @@
   - [ ] 成功路径零新增播报：chip 仍只弹「✅ 提醒已添加」两行卡 3s 自收，联动删除仍是一条「已从正文移除提醒：×」toast（v7.4.0 既有）
   - [ ] ✅ FIXED v8.1.7（原残余①）：用户把时间串「改到一半」（如「明天下午3点」删到只剩「明天下午3」）时恰好撞上 800ms 自动保存 → 半截串不再是独立时间匹配，会被判成原文已消失而联动误删提醒。修=删除判定前加打字热态守卫：距末次真实击键（复用 v7.2.0 的 `lastTypeAt`，只认真实 InputEvent、程序化 input 不刷）< 2.2s 时本轮 `continue` **只跳过删除这一支**，保留判定与改时间分支照常即时生效（两者非破坏性）；同时挂单发延迟重试（`remReconcileRetryTimer` 先 clear 再挂，grace+300ms 后用编辑器当前正文补一轮对账），用户停手即自动完成联动删除、无需再敲一次键。守卫必须位于「删除三条件」之前（v817 B3 位置钉），挪到后面等于没挡
   - [ ] 已知残余（v8.1.7 后剩二条，未修）：① 同一时间串在正文出现多处，删其中一处仍判「仍在正文」续命（保守向，只多留不误删；两处都删即正常联动）；② 混用期仍跑旧版（≤8.1.5）的设备任何一次提醒写入（含到点标 fired）会整表 PUT 无 src，新端 poll 整表替换即被洗——各端刷新到新版后自愈，新添加条目立即恢复联动
+  - [ ] ✅ v8.1.8 改进：热态守卫从「一律跳删除+2.5s 重试」收窄为只挡「疑似半截改写」（`srcPrefixLingers`），整句干净删除当场联动（消用户报障②「要好几秒」）；本机删 chip 主路径补 `remPrevSrcs`（saveLocal 留存的落库前正文指纹）兜底进 `prevSrcs`，让相对漂移/未登记到 `remSeenSrc` 的存量条目也被 ③ 放行删除（收用户报障①「列表还在」）。v818 C1/C2 钉
 - **关联文件**: index.html → reconcileRemindersFromBody()/srcLiteralSet()/backfillRemSrcFromBody()/seedRemSrcBaseline()/normalizeRemList()/addReminder()/chipActivate()/showChipForMatch()/loadReminder()/mergeRemoteReminders()/remReconcileRetryTimer；tools/notesync-mcp-server.js → normRemList()/toolRemind()/note_import 恢复
 - **测试**: unit v816.test.js A1-A12（反证：v8.1.5 源码下 A1/A3/A5-A8/A10-A12 共 9 红，A3 红在主症状断言）、unit v817.test.js B1-B3（反证：v8.1.6 源码下 B1 红在「热态内不得删除」、B3 红在缺守卫行）、v740 P5/P6/P10/P11 不回归、v63 V63-3/4/6 与 e2e V732-S4 字面量 pin 随版
+
+### L11 | 加提醒后日期下叠两条下划线（v8.1.8 修）
+- **版本**: v8.1.8（用户实测：正文输入带日期的文字「自带下划线」，给该日期加提醒成功后日期下变两条下划线）
+- **根因**: contenteditable 的「active formatting 延续」——光标紧邻已有下划线（时间被包成 `u.rem-mark`）后继续打字，Blink 把新敲的字塞进克隆出来的裸 `<u>`（无 class），先看到「自带下划线」。`linkifyEditor` 重建只 `querySelectorAll('u.rem-mark')` 拆自家标记、不碰裸 `<u>`，于是把时间重新包成的新 `u.rem-mark` 又套在这层裸 `<u>` 里 → 双层下划线。本 App 无手动下划线功能（用户拍板），Ctrl+U/粘贴下划线均非需求。
+- **修法**: `linkifyEditor` 与 `u.rem-mark` 同轮再取 `querySelectorAll('u:not(.rem-mark)')` 收集克隆裸 `<u>`（早退闸纳入 `strayU.length`），用【保节点】的 `unwrapStrayU` 把子节点原样上移拆回（**不能**沿用 `unwrapMark`——其非空分支把元素子节点压成 `textContent`，克隆裸 u 里的 `<img>`/用户 `<s>`/手动 `<a>` 会被销毁，评审 R3 探针实锤；`unwrapStrayU` 另带 `parentNode` 判空兜 `<u><u>` 嵌套）；`normDecorHtml`/`normPlaceholderHtml` 把任意 `<u>` 视作非语义装饰噪声拍平，避免术后假脏多存一版。因视 `<u>` 为噪声，同步放开 `v71 V71-B3` 把「手打 `<u>` 与素文等价」的断言。
+- **要点与核对**:
+  - [x] 重建后 `#editor u:not(.rem-mark)` 数量应为 0、`u u` 嵌套为 0、正文文字零丢失——e2e V818-3 真机钉
+  - [x] 恰重建出 1 条 `u.rem-mark`（防把标记一并拆光仍假绿）——V818-3 `remMarks===1`
+  - [x] 克隆裸 `<u>` 内 `<img>` 经 `unwrapStrayU` 保节点存活（不被压成 textContent 丢图）——V818-3 注图 `imgs===1`；用户 `<s>`/手动 `<a>` 同理不误伤
+  - [ ] `u.rem-mark` 既有拆包（v5.45）与主题反色样式不动
+- **关联文件**: index.html → linkifyEditor()/unwrapStrayU()/unwrapMark()/buildLinkSafe()/remMatchesFor()/normDecorHtml()/normPlaceholderHtml()
+- **测试**: unit v818.test.js C3（源码静态钉，含「禁对有内容的裸 u 用有损 unwrapMark」反钉）+ C4（留事项改时间热态内不当场删）+ e2e v818.test.js V818-3（真机验拆净/无嵌套/rem-mark 恰一条/img 存活/文字零丢）；v71 V71-B3 手打 `<u>` 断言随版翻转
 
 ## M. APK 原生层（v5.51 新增分类，Capacitor 7 + 自写 Kotlin RemPlugin）
 ### M1 | Capacitor 工程生成与本地 assets 复制链路

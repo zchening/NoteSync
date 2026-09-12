@@ -29,8 +29,8 @@ const pad = x => String(x).padStart(2, '0');
 const wall = at => { const d = new Date(at); return [d.getFullYear(), d.getMonth() + 1, d.getDate(), d.getHours(), d.getMinutes()]; };
 
 // ── A：版本号 ──
-test('V71-A 版本号 8.1.7 / BUILD_DATE 2026-09-12', () => {
-  assert.ok(SRC.includes("const APP_VERSION = '8.1.7';"), 'APP_VERSION 应 8.1.7');
+test('V71-A 版本号 8.1.8 / BUILD_DATE 2026-09-12', () => {
+  assert.ok(SRC.includes("const APP_VERSION = '8.1.8';"), 'APP_VERSION 应 8.1.8');
   assert.ok(SRC.includes("const BUILD_DATE = '2026-09-12';"), 'BUILD_DATE 应 2026-09-12');
 });
 
@@ -76,7 +76,8 @@ test('V71-B3 isDecorativelyEqual 行为：打标等价 / 用户格式不等价 /
     // 用户格式：绝不等价
     assert.strictEqual(ide('<div><b>1</b></div>', '<div>1</div>'), false, '用户 <b> 不等价');
     assert.strictEqual(ide('<div><s>1</s></div>', '<div>1</div>'), false, '用户手打 <s> 不等价（rem-done 才剥）');
-    assert.strictEqual(ide('<div><u>1</u></div>', '<div>1</div>'), false, '用户手打 <u> 不等价（rem-mark 才剥）');
+    // 用户手打 <u>：v8.1.8 起本 App 无手动下划线（用户拍板），任意 <u> 视作 rem-mark/打字延续克隆噪声 → 等价
+    assert.strictEqual(ide('<div><u>1</u></div>', '<div>1</div>'), true, '<u> 现视作装饰噪声拍平（无手动下划线）');
     assert.strictEqual(ide('<div><span style="font-weight:bold">1</span></div>', '<div>1</div>'), false, '带样式 span 不等价');
     assert.strictEqual(ide('<div>12</div>', '<div>13</div>'), false, '文本差异不等价');
     assert.strictEqual(ide('<div>1</div><div>2</div>', '<div>12</div>'), false, '块结构差异不等价');

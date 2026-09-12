@@ -69,11 +69,11 @@ function freshServer() {
 }
 
 // ═══════════ 源码断言 ═══════════
-test('V72-S1 版本三处一致：index 8.1.7 / gradle 817 / MCP serverInfo 8.1.7', () => {
-  assert.ok(SRC.includes("const APP_VERSION = '8.1.7';"), 'APP_VERSION 应 8.1.7');
+test('V72-S1 版本三处一致：index 8.1.8 / gradle 818 / MCP serverInfo 8.1.8', () => {
+  assert.ok(SRC.includes("const APP_VERSION = '8.1.8';"), 'APP_VERSION 应 8.1.8');
   const gradle = fs.readFileSync(path.join(ROOT, 'android', 'app', 'build.gradle'), 'utf8');
-  assert.ok(gradle.includes('versionCode 817') && gradle.includes('versionName "8.1.7"'), 'gradle 应 817/8.1.7');
-  assert.ok(MCP_SRC.includes("serverInfo: { name: 'notesync', version: '8.1.7' }"), 'MCP serverInfo 应 8.1.7');
+  assert.ok(gradle.includes('versionCode 818') && gradle.includes('versionName "8.1.8"'), 'gradle 应 818/8.1.8');
+  assert.ok(MCP_SRC.includes("serverInfo: { name: 'notesync', version: '8.1.8' }"), 'MCP serverInfo 应 8.1.8');
 });
 
 test('V72-S2 新工具注册齐全：TOOLS 含 search/export/import + description 含隐私提示', () => {
@@ -439,8 +439,9 @@ test('V72-I11 preview/apply 对不安全 zip 条目名拒绝（zip slip 复用 r
 test('V72-W1 症状2：web PUT 带 baseV + 409 挂起（handleWriteConflict 存在且不自动重试）', () => {
   assert.ok(SRC.includes('handleWriteConflict'), '应有 handleWriteConflict');
   // v7.3.0（HB3）：baseV 用 localVer（SSE 已知版本不得抬高——静默覆盖他端内容），409 仍走挂起不自动重试。
-  // apiPut 行尾注释较长，baseV→409 实际间距 856 字符，{0,600} 不足放宽 {0,1200}。
-  assert.ok(/function saveLocal[\s\S]{0,2000}baseV: localVer[\s\S]{0,1200}status === 409[\s\S]{0,200}handleWriteConflict/.test(SRC), 'saveLocal 的 apiPut 应带 baseV=localVer 并在 409 走挂起');
+  // apiPut 行尾注释较长，baseV→409 实际间距 ~1380 字符（v8.1.8 在成功路径增 remPrevSrcs 兜底 3 行注释后
+  // 由 856→~1380），窗口相应 {0,1200}→{0,1600}；断言意图不变：apiPut 带 baseV=localVer 且 409 走挂起。
+  assert.ok(/function saveLocal[\s\S]{0,2000}baseV: localVer[\s\S]{0,1600}status === 409[\s\S]{0,200}handleWriteConflict/.test(SRC), 'saveLocal 的 apiPut 应带 baseV=localVer 并在 409 走挂起');
   assert.ok(/persistReminders[\s\S]{0,3000}baseV: localVer/.test(SRC), 'persistReminders 应带 baseV=localVer');
 });
 test('V72-W2 症状4：poll 远端三级分类（严格相等静默/装饰等价静默/真实变更走原路径）', () => {

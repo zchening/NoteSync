@@ -597,7 +597,7 @@ function markJumped() {
 }
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '8.1.7';
+const APP_VERSION = '8.1.8';
 const BUILD_DATE = '2026-09-12';
 
 const $ = s => document.querySelector(s);
@@ -2750,6 +2750,27 @@ function unwrapMark(el, stripZwsp) {
   while (el.firstChild) el.parentNode.insertBefore(el.firstChild, el);
   el.remove();
 }
+// v8.1.8：拆浏览器克隆裸 <u> 专用——与 unwrapMark 的唯一区别是【保节点】：unwrapMark 非空分支把元素
+// 子节点压成 textContent（自家 rem-mark/链接/删除线只裹纯文本，历史无碍），但打字延续克隆的裸 <u> 可能裹
+// <img>/用户手打 <s>/手动 <a>（评审 R3 探针实锤：沿用 unwrapMark 会销毁图与格式）→ 这里把子节点原样上移。
+// 空壳补 <br> 的判块塌缩逻辑与 unwrapMark 一致；el 若已被外层拆走则 parentNode 为空（<u><u> 嵌套），直接跳过。
+function unwrapStrayU(el) {
+  if (!el.parentNode) return;
+  if (!el.firstChild) {
+    const parent = el.parentNode;
+    let hasContent = false;
+    for (const c of parent.childNodes) {
+      if (c === el) continue;
+      if (c.nodeType === 3) { if (c.nodeValue.replace(/\u200B/g, '').trim() !== '') { hasContent = true; break; } }
+      else if (c.tagName !== 'BR') { hasContent = true; break; }
+    }
+    if (!hasContent) parent.insertBefore(document.createElement('br'), el);
+    el.remove();
+    return;
+  }
+  while (el.firstChild) el.parentNode.insertBefore(el.firstChild, el); // 文本/img/s/a/br 一律原样上移，不压成 textContent
+  el.remove();
+}
 function linkifyEditor(opts) {
   const keepSelection = opts ? opts.keepSelection !== false : true;
   if (isLinkifying) return;
@@ -2773,6 +2794,11 @@ function linkifyEditor(opts) {
     const autoLinks = Array.from(editor.querySelectorAll('a[data-url="1"]'));
     const straySpans = Array.from(editor.querySelectorAll('span'));
     const remMarks = Array.from(editor.querySelectorAll('u.rem-mark')); // v5.45：提醒标记也要先拆后建
+    // v8.1.8（用户拍板③「加提醒后日期下两条下划线」）：本 App 无手动下划线功能（用户确认），任何非 rem-mark
+    // 的 <u> 都是 contenteditable 打字延续的克隆（紧邻已有下划线后新敲的字被塞进裸 <u>，先「自带下划线」），
+    // 旧重建只拆自家 u.rem-mark、不拆这层裸 <u>，于是新 rem-mark 又套进裸 <u> → 双层下划线。与链接/rem-mark
+    // 同轮拆回纯文本再重建即可（重建按提醒列表重新决定是否包 u.rem-mark，一并消除「自带下划线」残留）。
+    const strayU = Array.from(editor.querySelectorAll('u:not(.rem-mark)'));
     const remDones = Array.from(editor.querySelectorAll('s.rem-done')); // v6.3：已推送删除线同轮重建（只认自家 class，不动用户手打的 <s>）
     // v5.45：列表里有提醒且正文存在可标记时间时不得早退（否则新增/拆标记都刷不出来）
     // v5.46：只看仍有效的（未过期且未确认）——过期时间不再产标记，纯过期文本走早退省一轮拆建
@@ -2786,7 +2812,7 @@ function linkifyEditor(opts) {
 
     // 早退：无自动链接可拆解、无杂散 span、无提醒标记要刷新、也无任何可链接文本 → 不碰 DOM（避免污染原生撤销栈）。
     // 普通纯文本输入走此分支；粘贴/输入本身已产生合法块结构，无需 ensureBlockWrapped/normalize。
-    if (autoLinks.length === 0 && straySpans.length === 0 && remMarks.length === 0 && remDones.length === 0 && !hasRemText && !hasLinkableText(editor, urlTest, phoneTest, longWordTest)) {
+    if (autoLinks.length === 0 && straySpans.length === 0 && remMarks.length === 0 && strayU.length === 0 && remDones.length === 0 && !hasRemText && !hasLinkableText(editor, urlTest, phoneTest, longWordTest)) {
       return;
     }
 
@@ -2816,6 +2842,9 @@ function linkifyEditor(opts) {
     // 1.5) v5.45：提醒标记 <u.rem-mark> 同样拆回纯文本，与链接同一轮重建——
     //      删提醒→下划线消失、到点→标记回归普通正文，都靠整轮重算
     remMarks.forEach(u => unwrapMark(u, false));
+    // v8.1.8：紧跟 remMarks 拆打字延续克隆裸 <u>，用【保节点】的 unwrapStrayU（裸 u 可能裹 img/用户 <s>/手动
+    // <a>，压 textContent 会毁内容）；重建阶段再按提醒列表决定是否包 u.rem-mark，消除「自带+双层下划线」。
+    strayU.forEach(u => unwrapStrayU(u));
     // 1.6) v6.3：已推送删除线同样拆回纯文本，与链接/下划线同一轮重建
     remDones.forEach(s => unwrapMark(s, false));
     // 2) 把浏览器在块合并/格式保留时自动插入的纯 <span> 包装层拍平（应用本身从不创建 span，
@@ -3539,6 +3568,7 @@ $('#remoteTake').addEventListener('click', async () => {
     const html = await decryptText(note.ct, note.iv, cryptoKey);
     lastHtml = html; localVer = note.v || localVer;
     editor.innerHTML = html;
+    remPrevSrcs = null; // v8.1.8（闸审 P2）：整段换正文（走不到 loadReminder 清理时）丢弃本机旧正文指纹兜底，防陈旧证据对新正文首轮对账多删
     clearDraft();
     ensureBlockWrapped(); try { linkifyEditor(); } catch (e) {} ensureCaret();
     if ((note.rem || null) !== remCipher) { try { await loadReminder(note, cryptoKey); scheduleRemMarkRefresh(); } catch (e) {} } // v5.57：同 poll，补下划线重绘
@@ -3630,6 +3660,11 @@ const remSeenSession = new Set();
 // 只靠「上一版基线正文」会漏判；开局/合并时按当前正文核验后登记，删除路径才稳。
 const remSeenSrc = new Set();
 let remReconcileRetryTimer = null; // v8.1.7：打字热态跳过删除后的单次延迟重试句柄（清挂再挂，不叠加）
+// v8.1.8（用户报障①「删了正文列表却还在」）：saveLocal 里 lastHtml 在对账之前就被推进成删除后正文，
+// 本机删 chip 主路径（挂点①）上 reconcile 现算的 prevSrcs 与当前正文同源，失去「上一版」证据力；
+// 唯一残留证据是会话级 remSeenSrc，遇到相对漂移 + 未登记到的条目就被判删③永久挡住。此处显式留存
+// 「上一次落库前正文」的时间匹配原文指纹集合，供删除路径作 prevSrcs 兜底，用完即清（单发不过夜）。
+let remPrevSrcs = null;
 function remTombstoneLive(at) {
   const t = remTombstones.get(at);
   if (!t) return false;
@@ -4232,6 +4267,7 @@ async function loadReminder(note, key) {
   syncRemindersToNative(); // v5.51：解锁后把密文解密得到的提醒列表同步到原生层排程
   ensureExactAlarmPermission(); // v5.55：APK 精确闹钟权限自检（只引导一次）
   remSeenSrc.clear(); // v8.1.6（闸审 R2）：整表重载 = 会话指纹登记一并作废，防跨笔记污染
+  remPrevSrcs = null; // v8.1.8（闸审 R2/R3 P1）：saveLocal 留存的「上一版正文指纹」兜底同样随重载作废，防 A 笔记陈旧指纹漏进 B 首轮对账误删合法提醒（与 remSeenSrc 同族、同位清理）
   clearTimeout(remReconcileRetryTimer); remReconcileRetryTimer = null; // v8.1.7（闸审 P2）：作废待发重试，防「新列表 × 旧正文」窄竞态
   backfillRemSrcFromBody(); // v8.1.6：升级前的存量条目补指纹（正文里唯一同事项时间匹配才补）
   seedRemSrcBaseline(); // v8.1.6：正文已就位 → 登记有据可查的出处指纹（重开即删的主路径证据）
@@ -4546,6 +4582,19 @@ function srcLiteralSet(text) {
   try { for (const m of parseTimeMatchesLong(s)) out.add(s.slice(m.index, m.index + m.length)); } catch (e) {}
   return out;
 }
+// v8.1.8：热态内区分「疑似半截改写」与「整句干净删除」。srcOld 的任一 ≥2 字真前缀仍作为
+// 子串出现在当前正文里（如「明天下午3点」被删到只剩「明天下午3」）→ 用户大概率还在往下敲/删，
+// 本轮跳过删除并挂延迟重试（沿用 v8.1.7 防误删）；原文指纹连同前缀一并消失 → 视为放弃该提醒，
+// 热态内也立即联动删除，不再让整句干净删除白等 2.5s（用户报障「要好几秒才消失」）。
+// 用子串前缀而非全词命中：这里只需「还在不在改这段」的粗判，误判方向偏保守（多等一轮重试），
+// 不会新增误删面。
+function srcPrefixLingers(srcOld, bodyText) {
+  if (!srcOld || srcOld.length < 2 || !bodyText) return false;
+  for (let len = 2; len <= srcOld.length; len++) {
+    if (bodyText.indexOf(srcOld.slice(0, len)) !== -1) return true;
+  }
+  return false;
+}
 // v8.1.6：存量（升级前）条目无指纹时的回填——正文里存在「事项文本逐字相同 + at 相差 ≤2 天」的**唯一**
 // 时间匹配才补，补不出来就维持 v7.4.0 原行为。让老提醒同样获得「删正文即删提醒」的能力（用户实测的
 // 那条幽灵多半正属此类），且只在内存里补，随下一次提醒落库自然自愈，不额外发 PUT。
@@ -4610,6 +4659,14 @@ async function reconcileRemindersFromBody(bodyText) {
     parseTimeMatchesLong(prevText).forEach(m => seenBase.add(m.at));
     prevSrcs = srcLiteralSet(prevText);
   } catch (e) {}
+  // v8.1.8：本机删 chip 主路径（挂点①）上 lastHtml 已被 saveLocal 推进成删除后正文，上面的 prevSrcs 与
+  // 当前同源而失去「上一版」证据力。并入 saveLocal 留存的「落库前正文」指纹集合兜底，让相对漂移/未登记到
+  // remSeenSrc 的存量条目也能被 ③ 放行联动删除（用户报障①）。只作 prevSrcs（见过证据），不进 seenBase。
+  if (remPrevSrcs) {
+    if (!prevSrcs) prevSrcs = new Set();
+    remPrevSrcs.forEach(s => prevSrcs.add(s));
+    remPrevSrcs = null; // 单发即用即清，不作过夜证据
+  }
   const liveSrcs = new Set(matches.map(m => (bodyText || '').slice(m.index, m.index + m.length))); // v8.1.6：同源 matches 派生，零额外解析
   // 正文中「列表里没有的未来时间串」（改时间判定候选源，循环前一次算清，itemAfterMatch 同口径）
   const itemOf = m => {
@@ -4652,9 +4709,14 @@ async function reconcileRemindersFromBody(bodyText) {
     // 删除三条件
     // v8.1.7（用户拍板堵 v8.1.6 挂账残余①）：末次真实击键 2.2 秒内正文仍是打字中间态——半截时间串
     // （「明天下午3点」删到只剩「明天下午3」）不再是独立时间匹配，会被误判成「原文已从正文消失」而删掉提醒。
-    // 本轮只跳过「删除」这一支（保留判定与改时间分支照常生效，两者都非破坏性），并挂一次延迟重试，
-    // 待用户手停下由重试轮完成联动，不要求用户再敲一次键。
-    if (editHot) { editHotSkipped = true; continue; }
+    // v8.1.8（用户报障②「删了要好几秒才消失」）：守卫收窄到「整句干净删除」才当场联动——时间指纹连同其
+    // ≥2 字真前缀、以及该提醒的事项文本都从正文消失，才判定用户放弃了这条提醒（热态内也当场删、不再等 2.5s）。
+    // 只要时间前缀仍在、或事项文本仍在（典型「删旧时间留事项、准备敲新时间」的改时间中间态），沿用 v8.1.7
+    // 保守面：本轮跳删除 + 挂延迟重试，等改时间分支或事项也删净后再定夺，避免误删正在改的提醒。无指纹旧数据
+    // 无从判前缀残留，保持保守面照跳。
+    const rtKey = rt.replace(/\u2026$/, ''); // 与上面改时间分支同口径：chip 截断事项存成带「…」尾缀的切片，整串永不等于正文，须先剥 …
+    const itemStillInBody = !!rtKey && bodyText.indexOf(rtKey) !== -1;
+    if (editHot && (!srcOld || srcPrefixLingers(srcOld, bodyText) || itemStillInBody)) { editHotSkipped = true; continue; }
     // v8.1.6：③「见过」加原文通道——指纹曾在本会话正文里确凿出现（remSeenSrc）或作为独立时间匹配
     // 出现在上一版基线正文（prevSrcs）即认定见过。相对说法跨天算不出存量 at（seenBase 只有今天重算出的
     // 新 at），旧写法在此恒不成立 → 幽灵条目永不删、到点照推。
@@ -5828,6 +5890,9 @@ async function saveLocal(force) {
     const prevHtml = lastHtml; // v6.0：自动快照存「保存前的上一版」——正文被覆盖/误删时还有得救
     const r = await apiPut({ ct: enc.ct, iv: enc.iv, salt: currentSaltB64(), baseV: localVer }); // v5.58：空盐兜底；v7.2.0：baseV 乐观并发（症状2根修：版本落后服务端 409 拒写，不再静默覆盖）；v7.3.0（HB3）：baseV 用 localVer，SSE 已知版本不抬高
     localVer = r.v; lastHtml = html;
+    // v8.1.8：留存「本次落库前正文」的时间匹配原文指纹，供随后的删除路径（挂点①）作 prevSrcs 兜底——
+    // 此刻 lastHtml 已推进成删除后正文，reconcile 从 lastHtml 现算的 prevSrcs 与当前同源、失去上一版证据力。
+    try { remPrevSrcs = prevHtml ? srcLiteralSet(htmlToRemText(prevHtml)) : null; } catch (e) { remPrevSrcs = null; }
     if (prevHtml && prevHtml !== html) snapshotHistory(prevHtml, false); // fire-and-forget，失败静默
     saveRetryCount = 0;
     keepMineArmed = false; // P0-2：保存成功 = 「保留我的」拍板意图已兑现，清除待收口的二次 409 标记
@@ -6070,7 +6135,7 @@ function normDecorHtml(html) {
       if (child.nodeType !== 1) continue;
       const tag = child.tagName;
       if (tag === 'A' && child.getAttribute('data-url') === '1') { out += walk(child); continue; }
-      if (tag === 'U' && child.classList.contains('rem-mark')) { out += walk(child); continue; }
+      if (tag === 'U') { out += walk(child); continue; } // v8.1.8：本 App 无手动下划线（用户拍板），任何 <u>（rem-mark 或打字延续克隆）都是非语义装饰，一律拍平（旧口径只拆 rem-mark，克隆 u 会被判真实差异 → 术后假脏多存一版）
       if (tag === 'S' && child.classList.contains('rem-done')) { out += walk(child); continue; }
       if (tag === 'SPAN' && isCloneNoiseSpan(child)) { out += walk(child); continue; } // v7.7.0：克隆噪声 span 同裸 span 拍平
       const lt = tag.toLowerCase();
@@ -6115,7 +6180,7 @@ function normPlaceholderHtml(html) {
       return kids.length === 0 || kids.every(n =>
         n.nodeType === 3 ? !(n.nodeValue || '').replace(/\u200B/g, '').trim() : isEmptyShell(n));
     }
-    const shell = (el.tagName === 'U' && el.classList.contains('rem-mark')) ||
+    const shell = (el.tagName === 'U') || // v8.1.8：本 App 无手动下划线，任意 <u>（rem-mark 或打字延续克隆）都可能是空壳
                   (el.tagName === 'A' && el.getAttribute('data-url') === '1') ||
                   (el.tagName === 'S' && el.classList.contains('rem-done'));
     // v7.5.0（修6）：textContent 判空前剥 ZWSP——\u200B 不是 Unicode 空白，.trim() 剥不掉，
@@ -6368,6 +6433,7 @@ async function applyRemoteBody(note, html) {
       }
     }
     lastHtml = html;
+    remPrevSrcs = null; // v8.1.8（闸审 P2）：整段应用远端正文时丢弃本机旧正文指纹兜底，防陈旧证据对新正文首轮对账多删
     // 远端内容覆盖：直接替换 innerHTML。原生撤销栈已被"自建撤销栈"取代，
     // 不再需要 contentEditable toggle——实测它切回可编辑态会清空整个原生撤销栈，
     // 反而让 Ctrl+Z 彻底失效（Bug A 的另一种诱因）。
