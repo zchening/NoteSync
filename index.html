@@ -597,8 +597,8 @@ function markJumped() {
 }
 
 // --- 版本号（彩蛋查看：连点标题栏 logo 7 次 / 地址栏加 ?about）---
-const APP_VERSION = '8.1.4';
-const BUILD_DATE = '2026-09-11';
+const APP_VERSION = '8.1.5';
+const BUILD_DATE = '2026-09-12';
 
 const $ = s => document.querySelector(s);
 const editor = $('#editor'), mask = $('#mask'), pw = $('#pw'), err = $('#err');
@@ -3742,18 +3742,49 @@ function collectTimeMatches(text, nowArg) {
 
 // ── v7.1.0 相对时间解析（纯函数，now 可注入供测试；tools/notesync-mcp-server.js parseAt 同口径对齐）──
 // 三段式：[日期段]? [\s]* [时段词]? [\s]* [时刻]，整段一个 match（index/length 覆盖全串）。
-// 日期段（省略=今天）：今天/明天/后天/大后天 | 这周X/下周X（周首日=周一，dayIdx=(getDay()+6)%7；
-//   周日当天说「这周五」=字面过去 → expired 灰态）| 本月N日/这个月N日/本月N号/这个月N号（N 超当月天数→不命中）|
-//   下个月N号/下月N号（12月→次年1月跨年由 new Date 原生进位）。明确不收：本周X/星期X/礼拜X。
+// 日期段（省略=今天）：今天/明天/后天/大后天 | 裸周X/这周X/下周X（周/星期/礼拜 三同义词 + 可选「个」，
+//   周首日=周一，dayIdx=(getDay()+6)%7；裸周X/这周X=本周该天，字面过去→expired 灰态；下周X=+7）
+//   | 本月N日/这个月N日/本月N号/这个月N号（N 超当月天数→不命中）|
+//   下个月N号/下月N号（12月→次年1月跨年由 new Date 原生进位）。刻意不收：上/本 + 周/星期/礼拜 X（防「上/本周五 18:00」被裸「周五」误抢）。
 // 时段词（省略=24h 原值；仅对「X点…」形态换算，冒号 hh:mm 一律直用）：
 //   凌晨 h12→0；早上/上午 原值；中午 h1-5→h+12；下午/傍晚 h1-11→h+12；
 //   晚上/夜里 h1-5→次日同刻（日期+1）、h6-11→h+12、h12→次日00:xx（日期+1）。
-// 时刻形态：hh:mm（hh 0-23 可 1-2 位，mm 两位）| H点 | H点半 | H点M分 | H点M。
+// 时刻形态：hh:mm（hh 0-23 可 1-2 位，mm 两位）| H点(钟) | H点(钟)半 | H点(钟)M分 | H点(钟)M；H/M 支持中文数字（一~十二含「两」、分十~五十九）。
 // 边界防护：hh:mm 左邻 (?<!\d)；整个时刻 token 右邻 (?!\d)；点形态 H 左邻 (?<!第)(?<!\d)(?<![年月日号:])
 // （裸时刻组，堵「第3点」「123:45」「2026年9月8日18点」被抢）；显式日期段分支无此限制（日期段已限定语境）。
 // 事项区防护：匹配起点之前存在全角空格 U+3000 → 跳过（面板回写「YYYY-M-D H:MM　事项」格式，事项区不二次命中）。
 // 过期口径与数字组一致：at <= now+30000 → expired:true 仍返回（chip 灰态「已过期」无添加入口）。
 // 日期一律 new Date(y, mo, d, h, mi) 原生进位，禁止手工钳制月/年。
+// v8.1.5：中文数字→阿拉伯（时 一~十二含「两」、分 一~五十九），非法返回 NaN 由调用方判不命中。
+function cnNum(s) {
+  if (s === undefined || s === null) return NaN;
+  s = String(s);
+  if (/^\d+$/.test(s)) return +s;
+  const U = { '零': 0, '一': 1, '二': 2, '两': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9 };
+  if (s === '十') return 10;
+  let mm = s.match(/^([1-9]|[一二两三四五六七八九])?十([一二三四五六七八九])?$/);
+  if (mm) {
+    const t = mm[1] ? U[mm[1]] : 1; const o = mm[2] ? U[mm[2]] : 0;
+    return t * 10 + o;
+  }
+  if (s.length === 1 && U[s] !== undefined) return U[s];
+  return NaN;
+}
+// v8.1.5 周几片段（捕获 g=前缀/词/字）：可选前缀 这/下（本/上刻意不收）+ 可选「个」+ 周/星期/礼拜 + 周几字。
+const WD_CH = '[一二三四五六日天]';
+const WD_W = '(周|星期|礼拜)';
+const WD_SEG = '(?:(这|下)?\\s?(?:个\\s?)?' + WD_W + '\\s?(' + WD_CH + '))';
+// 刻意不解析的「上/本 + 周/星期/礼拜 + X」（含插空格/「个」变体）：放交替最前占位，dm[0] 以 上/本 开头则整段跳过。
+const WD_UP = '(?:[上本]\\s?(?:个\\s?)?(?:周|星期|礼拜)\\s?[一二三四五六日天])';
+const WD_UP_RE = new RegExp('^' + WD_UP);
+// 分支B 幽灵防护：裸时刻若紧跟「上/本周X」不得单独命中。
+const UNSUP_WD_LB = '(?<![上本]\\s?(?:个\\s?)?(?:周|星期|礼拜)\\s?[一二三四五六日天])';
+// v8.1.5 时刻片段（捕获：1=冒号时 2=冒号分 3=时 4=点钟M分 5=点钟M裸 6=钟半 7=点M分 8=点M裸 9=半）。含中文数字、点钟。
+const HOUR = '(\\d{1,2}|二十[一二三]?|十[一二三四五六七八九]?|[一二两三四五六七八九])';
+const MIN = '(\\d{1,2}|(?:[一二三四五]?十[一二三四五六七八九]?)|[一二三四五六七八九])';
+const MH = '(?:(?:' + MIN + ')分|' + MIN + '|(半))?'; // 分/裸分/半，整体可选（3 个捕获）
+const TIME_SEG = '(?:(\\d{1,2}):(\\d{2})|' + HOUR + '点(?:钟' + MH + '|' + MH + ')?)';
+const reTimeSeg = new RegExp('^' + TIME_SEG);
 function collectRelTimeMatches(text, now) {
   if (!text || typeof text !== 'string') return [];
   text = normFullWidth(text); // v7.2.0：与数字组同一入口归一（幂等；collectTimeMatches 已归一时重跑无害）
@@ -3763,24 +3794,22 @@ function collectRelTimeMatches(text, now) {
   const WD = '一二三四五六日天';
   const reRel = new RegExp(
     // 分支 A：显式日期段 + [\s]* + 时段词? + [\s]* + 时刻
-    '(?:大后天|后天|明天|今天|这周[一二三四五六日天]|下周[一二三四五六日天]|(?:这个月|本月)\\d{1,2}[日号]|(?:下个月|下月)\\d{1,2}[日号])' +
+    '(?:大后天|后天|明天|今天|' + WD_UP + '|' + WD_SEG + '|(?:这个月|本月)\\d{1,2}[日号]|(?:下个月|下月)\\d{1,2}[日号])' +
     '[\\s]*(?:凌晨|早上|上午|中午|下午|傍晚|晚上|夜里)?[\\s]*' +
-    '(?:\\d{1,2}:\\d{2}|\\d{1,2}点(?:\\d{1,2}分|\\d{1,2}|半)?)(?!\\d)' +
+    TIME_SEG + '(?!\\d)' +
     '|' +
-    // 分支 B：裸时刻（左邻排除 第/数字/年月日号:，以及不收的「周X/本周X/星期X/礼拜X」残留——
-    // 否则「本周五 18:00」整段不命中后，裸「 18:00」会被捡走产生错误提醒）。
+    // 分支 B：裸时刻（左邻排除 第/数字/年月日号:，以及**仍不支持**的「上周X/上星期X/上礼拜X」残留——
+    // 否则裸「 18:00」会被捡走产生错误提醒。这周/下周/裸周X 已归分支 A 正常命中，不再在此拦截）。
     // v7.2.0（B 层审计 P1）：时段词前的 [\s]* 改 [^\S\u3000]*（不含全角空格）——若吞 U+3000，
     // 匹配起点会落在事项区分隔符上，slice(0,start) 防护查不到它，「事项　9:30」的裸时刻被
     // 二次命中（幽灵提醒）。分支 A 保留 [\s]*：日期段已锁定语境，「明天　9:30」全角分隔须继续命中。
-    '(?<!第)(?<!\\d)(?<![年月日号:])' +
-    '(?<!周[一二三四五六日天]\\s?)(?<!本\\s?周[一二三四五六日天]\\s?)(?<!星期[一二三四五六日天]\\s?)(?<!礼拜[一二三四五六日天]\\s?)' +
-    '(?:凌晨|早上|上午|中午|下午|傍晚|晚上|夜里)?[^\\S\\u3000]*' +
-    '(?:\\d{1,2}:\\d{2}|\\d{1,2}点(?:\\d{1,2}分|\\d{1,2}|半)?)(?!\\d)',
+    '(?<!第)(?<!\\d)(?<![年月日号:])' + UNSUP_WD_LB +
+    '(?:凌晨|早上|上午|中午|下午|傍晚|晚上|夜里)?[^\\S\\u3000]*(?<![零一二两三四五六七八九十])' +
+    TIME_SEG + '(?!\\d)',
     'g'
   );
-  const reDateSeg = /^(大后天|后天|明天|今天|这周([一二三四五六日天])|下周([一二三四五六日天])|(?:这个月|本月)(\d{1,2})[日号]|(?:下个月|下月)(\d{1,2})[日号])/;
+  const reDateSeg = new RegExp('^(大后天|后天|明天|今天|' + WD_UP + '|' + WD_SEG + '|(?:这个月|本月)(\\d{1,2})[日号]|(?:下个月|下月)(\\d{1,2})[日号])');
   const rePartSeg = /^(凌晨|早上|上午|中午|下午|傍晚|晚上|夜里)/;
-  const reTimeSeg = /^(?:(\d{1,2}):(\d{2})|(\d{1,2})点(?:(\d{1,2})分|(\d{1,2})|(半))?)/;
   let m;
   while ((m = reRel.exec(text)) !== null) {
     const start = m.index, len = m[0].length;
@@ -3797,10 +3826,12 @@ function collectRelTimeMatches(text, now) {
     if (!tm) continue; // 主正则保证可达，防御性跳过
     let H, Mi, extraDay = 0;
     if (tm[1] !== undefined) {
-      H = +tm[1]; Mi = +tm[2]; // 冒号形态直用，时段词不参与换算
+      H = +tm[1]; Mi = +tm[2]; // 冒号形态直用（阿拉伯），时段词不参与换算
     } else {
-      H = +tm[3];
-      Mi = tm[6] ? 30 : (tm[4] !== undefined ? +tm[4] : (tm[5] !== undefined ? +tm[5] : 0));
+      H = cnNum(tm[3]); // 支持中文数字「三点/两点/十二点」
+      const minCap = tm[4] !== undefined ? tm[4] : (tm[5] !== undefined ? tm[5] : (tm[7] !== undefined ? tm[7] : (tm[8] !== undefined ? tm[8] : undefined)));
+      Mi = (tm[6] !== undefined || tm[9] !== undefined) ? 30 : (minCap !== undefined ? cnNum(minCap) : 0);
+      if (Number.isNaN(H) || Number.isNaN(Mi)) continue; // 中文数字非法组合整段不命中
       if (part === '晚上' || part === '夜里') {
         if (H >= 1 && H <= 5) extraDay = 1; // 晚上1-5点 = 次日凌晨
         else if (H >= 6 && H <= 11) H += 12;
@@ -3817,20 +3848,21 @@ function collectRelTimeMatches(text, now) {
     const y0 = n.getFullYear(), mo0 = n.getMonth(), d0 = n.getDate();
     let MO = mo0, D = d0;
     if (dm) {
+      if (WD_UP_RE.test(dm[0])) continue; // 上/本 + 周/星期/礼拜 X：刻意不解析（不影响「本月N日」）
       if (dm[1] === '今天') { /* D = d0 */ }
       else if (dm[1] === '明天') D = d0 + 1;
       else if (dm[1] === '后天') D = d0 + 2;
       else if (dm[1] === '大后天') D = d0 + 3;
-      else if (dm[2] !== undefined || dm[3] !== undefined) {
-        // 这周X/下周X：周首日=周一，dayIdx=(getDay()+6)%7 体系（周一=0，周日=6）
-        const idx = WD.indexOf(dm[2] || dm[3]);
+      else if (dm[3] !== undefined) {
+        // 周几（裸/这/本/下 + 周/星期/礼拜 + 可选「个」）：周首日=周一，dayIdx=(getDay()+6)%7 体系（周一=0，周日=6）
+        const idx = WD.indexOf(dm[4]);
         if (idx < 0) continue;
         const dayIdx = idx <= 5 ? idx : 6; // 日/天 → 6（周一=0 体系，周日=本周第7天）
-        D = d0 - ((n.getDay() + 6) % 7) + dayIdx + (dm[1].charAt(0) === '下' ? 7 : 0);
+        D = d0 - ((n.getDay() + 6) % 7) + dayIdx + (dm[2] === '下' ? 7 : 0);
       } else {
-        const N = +(dm[4] || dm[5]);
+        const N = +(dm[5] || dm[6]);
         if (N < 1 || N > 31) continue;
-        if (dm[4] !== undefined) {
+        if (dm[5] !== undefined) {
           if (N > new Date(y0, mo0 + 1, 0).getDate()) continue; // 超当月天数（如9月31日）→ 不命中
           D = N;
         } else {

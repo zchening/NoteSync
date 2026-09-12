@@ -995,14 +995,35 @@ async function toolImport(args) {
   return { ok: true, applied, skipped };
 }
 
-const REL_RE = /^(大后天|明天|后天|今天|这周[一二三四五六日天]|下周[一二三四五六日天]|(?:这个月|本月)(\d{1,2})[日号]|(?:下个月|下月)(\d{1,2})[日号])?\s*(凌晨|早上|上午|中午|下午|傍晚|晚上|夜里)?\s*(?:(?<!\d)(\d{1,2}):(\d{2})(?!\d)|(?<!\d)(?<!第)(\d{1,2})点(?:(\d{1,2})分?|(半))?(?!\d))$/;
+// v8.1.5：中文数字→阿拉伯（与 web 端 cnNum 逐字同表），非法返回 NaN。
+function cnNumMcp(s) {
+  if (s === undefined || s === null) return NaN;
+  s = String(s);
+  if (/^\d+$/.test(s)) return +s;
+  const U = { '零': 0, '一': 1, '二': 2, '两': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9 };
+  if (s === '十') return 10;
+  const mm = s.match(/^([1-9]|[一二两三四五六七八九])?十([一二三四五六七八九])?$/);
+  if (mm) return (mm[1] ? U[mm[1]] : 1) * 10 + (mm[2] ? U[mm[2]] : 0);
+  if (s.length === 1 && U[s] !== undefined) return U[s];
+  return NaN;
+}
+// v8.1.5 时刻片段（与 web 端 HOUR/MIN/MH/TIME_SEG 同构，含中文数字、点钟）。
+const HOUR_M = '(\\d{1,2}|二十[一二三]?|十[一二三四五六七八九]?|[一二两三四五六七八九])';
+const MIN_M = '(\\d{1,2}|(?:[一二三四五]?十[一二三四五六七八九]?)|[一二三四五六七八九])';
+const MH_M = '(?:(?:' + MIN_M + ')分|' + MIN_M + '|(半))?'; // 分/裸分/半，整体可选（3 捕获）
+// 整串锚定：g1=日期段整体 g2=周几字 g3=本月N g4=下月N g5=时段词 g6:冒号时 g7:冒号分 g8=点时 g9/g10/g11=点钟(分/裸/半) g12/g13/g14=点(分/裸/半)
+const REL_RE = new RegExp(
+  '^((?:大后天|后天|明天|今天|(?:这|下)?\\s?(?:个\\s?)?(?:周|星期|礼拜)\\s?([一二三四五六日天])|(?:这个月|本月)(\\d{1,2})[日号]|(?:下个月|下月)(\\d{1,2})[日号]))?' +
+  '\\s*(凌晨|早上|上午|中午|下午|傍晚|晚上|夜里)?\\s*' +
+  '(?:(\\d{1,2}):(\\d{2})|' + HOUR_M + '点(?:钟' + MH_M + '|' + MH_M + ')?)$'
+);
 const REL_WD = { '一': 0, '二': 1, '三': 2, '四': 3, '五': 4, '六': 5, '日': 6, '天': 6 }; // 周首日=周一
 // 带年份完整中文日期（与 web 端 reFullCn 同构）：绝对年份不滚动，hh:mm 直用，锚定整串
 const REL_FULLCN_RE = /^(\d{4})年(\d{1,2})月(\d{1,2})日\s*(\d{1,2}):(\d{2})$/;
 // 兜底守门（与 web 端边界防护同构）：串含相对时间/时刻 token 却未整体命中 REL_RE
 // = 形似时间但被防护拒绝（10:301 / 3点2019 / 本周五 18:00 / 会议纪要　明天10点 …），
 // 一律 null，绝不放进 Date.parse（V8 会把 10:301 之类误解析成 1970 年怪值）。
-const REL_GATE_RE = /年|月|\d{1,2}:\d{1,2}|\d{1,2}点|今天|明天|后天|这周|下周|本周|星期|礼拜/;
+const REL_GATE_RE = /年|月|\d{1,2}:\d{1,2}|[0-9一二两三四五六七八九十]{1,3}点|今天|明天|后天|大后天|周[一二三四五六日天]|星期[一二三四五六日天]|礼拜[一二三四五六日天]|这周|下周|本周|星期|礼拜/;
 // v7.2.0：全角→半角归一（与 web 端 normFullWidth 逐字同表）——手机全角输入法打出的
 // 「９-１０ ２０：０４」此前一个分支都不命中直接 null。等宽替换不改变长度，索引口径不受影响。
 function normFullWidthMcp(s) {
@@ -1039,12 +1060,14 @@ function parseAt(s, now = Date.now()) {
     else if (seg === '明天') targetD = d + 1;
     else if (seg === '后天') targetD = d + 2;
     else if (seg === '大后天') targetD = d + 3;
-    else if (seg && seg.length === 3 && (seg[0] === '这' || seg[0] === '下')) {
-      // 这周X/下周X：dayIdx=(getDay()+6)%7（周一=0..周日=6），本周一+dayIdx(X)天，下周再+7
-      targetD = d - ((base.getDay() + 6) % 7) + REL_WD[seg[2]] + (seg[0] === '下' ? 7 : 0);
+    else if (m[2] !== undefined) {
+      // 周几（裸/这/下 + 周/星期/礼拜 + 可选「个」）：dayIdx=(getDay()+6)%7（周一=0..周日=6），下周再+7
+      const wd = REL_WD[m[2]];
+      if (wd === undefined) return null;
+      targetD = d - ((base.getDay() + 6) % 7) + wd + (seg.charAt(0) === '下' ? 7 : 0);
     } else if (seg) {
-      const n = +(m[2] || m[3]);
-      if (seg[0] === '下') { // 下(个)月N日/号：new Date 原生滚动跨年（12月→次年1月），与 web 端 reRel 同收 [日号]
+      const n = +(m[3] || m[4]);
+      if (seg.charAt(0) === '下') { // 下(个)月N日/号：new Date 原生滚动跨年（12月→次年1月），与 web 端 reRel 同收 [日号]
         if (!(n >= 1 && n <= new Date(y, mo + 2, 0).getDate())) return null;
         monthShift = 1;
       } else { // (这个)月N日/号：超当月天数→null
@@ -1053,13 +1076,16 @@ function parseAt(s, now = Date.now()) {
       targetD = n;
     }
     let h, mi;
-    if (m[5] !== undefined) { // hh:mm 一律直用（时段词不生效）
-      h = +m[5]; mi = +m[6];
+    if (m[6] !== undefined) { // hh:mm 一律直用（阿拉伯，时段词不生效）
+      h = +m[6]; mi = +m[7];
       if (!(h <= 23 && mi <= 59)) return null;
-    } else { // H点[半|M分|M]
-      h = +m[7]; mi = m[8] !== undefined ? +m[8] : (m[9] !== undefined ? 30 : 0); // 半=30分
-      if (!(h <= 23 && mi <= 59)) return null;
-      const p = m[4];
+    } else { // H点(钟)[半|M分|M]，H/M 支持中文数字
+      h = cnNumMcp(m[8]);
+      const minCap = m[9] !== undefined ? m[9] : (m[10] !== undefined ? m[10] : (m[12] !== undefined ? m[12] : (m[13] !== undefined ? m[13] : undefined)));
+      mi = (m[11] !== undefined || m[14] !== undefined) ? 30 : (minCap !== undefined ? cnNumMcp(minCap) : 0);
+      if (Number.isNaN(h) || Number.isNaN(mi)) return null;
+      if (!(h <= 23 && mi <= 59)) return null; // 原始时/分越界（如「25点」）拒绝；晚上 h+24 是转换后才发生，不受此拦
+      const p = m[5];
       if (p === '凌晨') { if (h === 12) h = 0; } // 凌晨12点=当天00:xx
       else if (p === '早上' || p === '上午') { /* 原值 */ }
       else if (p === '中午') { if (h >= 1 && h <= 5) h += 12; }
@@ -1144,7 +1170,7 @@ const TOOLS = [
       properties: {
         name: { type: 'string' },
         op: { type: 'string', enum: ['add', 'list', 'cancel', 'clear'], description: 'add=设提醒（默认）/ list=列出 / cancel=取消一条 / clear=清理过期' },
-        at: { type: ['string', 'number'], description: 'add：提醒时刻，支持 "YYYY-MM-DDTHH:MM" 或 YYYY-M-D H:MM（本地时区，分钟级，不带秒与时区）；中文相对时间 [今天/明天/后天/大后天|这周X/下周X|本月N日(号)/下个月N号]? [凌晨/早上/上午/中午/下午/傍晚/晚上/夜里]? [hh:mm 或 H点/H点半/H点M分/H点M]，如「明天早上9点」「这周五18:30」「下个月1号 18:50」「晚上12点半」。cancel：数字时间戳或可解析的时间串（建议先 op=list 取精确值）' },
+        at: { type: ['string', 'number'], description: 'add：提醒时刻，支持 "YYYY-MM-DDTHH:MM" 或 YYYY-M-D H:MM（本地时区，分钟级，不带秒与时区）；中文相对时间 [今天/明天/后天/大后天 | 裸周X/这周X/下周X（周/星期/礼拜 + 可选「个」；上/本 不支持）| 本月N日(号)/下个月N号]? [凌晨/早上/上午/中午/下午/傍晚/晚上/夜里]? [hh:mm 或 H点/H点钟/H点半/H点M分/H点M，数字可中文]，如「明天早上9点」「周日下午4点钟」「下周三9点半」「这周五18:30」「下午三点半」「下个月1号 18:50」「晚上12点半」。cancel：数字时间戳或可解析的时间串（建议先 op=list 取精确值）' },
         text: { type: 'string', description: '提醒事项（≤20 字，可空；仅 add 用）' },
       },
     },
@@ -1208,7 +1234,7 @@ function handleLine(line) {
     rpcResult(id, {
       protocolVersion: '2024-11-05',
       capabilities: { tools: {} },
-      serverInfo: { name: 'notesync', version: '8.1.4' },
+      serverInfo: { name: 'notesync', version: '8.1.5' },
     });
     return;
   }
