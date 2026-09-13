@@ -193,12 +193,12 @@ test('A9 源码字面量钉：旧彩蛋无残留、钩子恰2处、浮层/字体
 // ── A13 v8.2.2 结构钉：数字粒子=文档捕获+光标前缀；移动端 emoji-only；气泡门=视口同谓词非设备判据 ──
 test('A13 v8.2.2：捕获监听+nsCaretPrefix、capture true、≤560 emoji-only、气泡=nsNarrowViewport 视口门', () => {
   assert.ok(SRC.includes("document.addEventListener('input', (e) => {"), '数字粒子应为 document 级监听');
-  assert.ok(SRC.includes('function nsCaretPrefix(container, offset)'), '判定面=自写 TreeWalker 光标前缀（克隆 Range.textContent 在 Chromium 真机返回空串，探针实锤弃用）');
-  assert.ok(SRC.includes('const p = nsCaretPrefix(r.startContainer, r.startOffset);'), '监听器接光标前缀函数（三态返回）');
+  assert.ok(SRC.includes('function nsCaretPrefix(container, offset, n)'), '判定面=自写 TreeWalker 光标前缀（克隆 Range.textContent 在 Chromium 真机返回空串，探针实锤弃用；v8.3.0 加 n=取尾长度）');
+  assert.ok(SRC.includes('const p = nsCaretPrefix(r.startContainer, r.startOffset, 12);'), '监听器接光标前缀函数（三态返回；12 位供 notesync 烟花共用）');
   assert.ok(SRC.includes('if (p === null) return;'), '元素位光标：不爆且不碰 armed');
   assert.ok(SRC.includes('if (!r.collapsed) return;'), '选区覆盖打字：不判状态不碰 armed（复验 P2 收口）');
   assert.ok(SRC.includes('if (e.target !== editor && !(editor.contains && editor.contains(e.target))) return;'), 'document 级监听须按编辑器子树过滤（块 div 才是 input target，v8.2.1 探针实锤）');
-  assert.match(SRC, /\}, true\);\s*\nasync function chipActivate/, '监听必须以捕获阶段挂载（true）且紧邻彩蛋段尾');
+  assert.match(SRC, /\}, true\);\s*\/\/ ══ v8\.3\.0 彩蛋段二/, '监听必须以捕获阶段挂载（true）；v8.3.0 起其后紧接彩蛋段二');
   assert.ok(SRC.includes('#nsBadge .ns-bt{display:none}'), 'v8.2.2 终拍：≤560 移动端徽章只显领头 emoji，文案退役交 5 秒气泡');
   assert.ok(SRC.includes("@media (max-width:560px){ #nsBadge{padding:0;border:0;background:none;gap:0} #nsBadge .ns-bt{display:none} }"), 'v8.2.3 移动端=脱胶囊皮裸 emoji（用户反馈胶囊不好看）');
   assert.ok(!SRC.includes('#nsBadge{padding:4px 8px}'), 'v8.2.2 胶囊形态已退役禁残留');

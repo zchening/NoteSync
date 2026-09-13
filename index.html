@@ -203,6 +203,26 @@
      只留裸 emoji 与笔记名同字级随行；桌面带文案的胶囊保留（无容器会像正文误入）。 */
   @media (max-width:560px){ #nsBadge{padding:0;border:0;background:none;gap:0} #nsBadge .ns-bt{display:none} }
 
+  /* ── v8.3.0 彩蛋区二：禅模式 / notesync 烟花 / 彩蛋图鉴 ──────────────────
+     沿用 v8.2.0 铁律：浮层一律 pointer-events:none，只吃主题变量（--accent/--line/--muted/
+     --hover/--fg），不新增颜色字面量，绝不触碰正文 DOM 与笔记数据。 */
+  header,footer{transition:opacity 1.5s ease} /* 禅模式淡出/淡入（两者无 display 切换，常驻过渡无副作用） */
+  body.zen header,body.zen footer{opacity:.2}
+  #zenTip{position:fixed;left:50%;top:44%;transform:translate(-50%,-50%);z-index:4;pointer-events:none;opacity:0;transition:opacity 1.6s ease;font-size:14px;letter-spacing:.18em;color:var(--muted);white-space:nowrap;max-width:88vw;overflow:hidden;text-overflow:ellipsis}
+  body.zen #zenTip{opacity:1}
+  .ns-fw{position:fixed;z-index:58;pointer-events:none}
+  .ns-fw i{position:absolute;left:0;top:0;width:5px;height:5px;border-radius:50%;background:var(--accent);animation:nsFwOut 1.2s cubic-bezier(.12,.68,.35,1) forwards}
+  @keyframes nsFwOut{0%{transform:translate(0,0) scale(.35);opacity:0}10%{opacity:1}100%{transform:translate(var(--fx,0px),var(--fy,0px)) scale(.45);opacity:0}}
+  .egg-row{display:flex;align-items:center;gap:10px;box-sizing:border-box;width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;margin-bottom:6px;min-height:42px;font-size:14px;color:var(--fg);cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:border-color .2s}
+  .egg-row:active{background:var(--hover)}
+  .egg-row.locked{color:var(--muted);border-style:dashed;cursor:default}
+  .egg-name{width:96px;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .egg-hint{flex:1;min-width:0;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .egg-go{width:14px;height:14px;flex:none;color:var(--accent)}
+  .egg-row.locked .egg-go{display:none}
+  #eggList{max-height:52vh;overflow-y:auto}
+  .egg-count{font:400 10.5px/1 ui-monospace,"SF Mono",Consolas,monospace;letter-spacing:.14em;color:var(--muted);text-align:right;padding:2px 4px 10px}
+
   /* ── 编辑器 ─────────────────────────── */
   #editor{flex:1;width:100%;max-width:720px;margin:0 auto;border:0;outline:0;resize:none;padding:40px 28px 120px;background:transparent;color:var(--fg);font:inherit;font-size:17px;overflow-x:hidden;overflow-y:auto;word-wrap:break-word;overflow-wrap:anywhere;word-break:break-all;white-space:pre-wrap;-webkit-user-select:text;user-select:text;line-height:1.9}
   #editor:empty:before{content:attr(data-ph);color:var(--muted);opacity:.75;pointer-events:none}
@@ -293,6 +313,7 @@
      浮卡 pointer-events:auto 会物理挡掉 menuHome「返回首页」的点击（v7.3.0 后冲突弹条
      场景多，用户实测"点了没反应"）；菜单是模态独占交互，关闭后浮层恢复可见，铁律不受影响 */
   #menuMask{z-index:90}
+  #eggMask{z-index:90}
   .mask.hidden{display:none!important}
   .box{background:var(--box-bg);border:1px solid var(--line);border-radius:18px;padding:34px 30px 28px;width:min(90vw,380px);box-shadow:0 24px 70px rgba(20,20,18,.16);transition:background .3s;animation:rise .5s cubic-bezier(.2,.7,.3,1) both}
   /* v6.1：.box .mark 退役——口令弹窗去图标后全站无 mark 使用者（用户拍板方案 A） */
@@ -450,6 +471,7 @@
 <div id="timeChip" class="hidden"></div>
 <div id="nsRain" class="hidden" aria-hidden="true"></div>
 <div id="nsGreet" aria-hidden="true"></div>
+<div id="zenTip" aria-hidden="true">空白页，是最好用的地方</div>
 <div class="mask hidden" id="remMask">
   <div class="box qr-box" id="remPanel">
     <div class="modal-head">
@@ -581,6 +603,19 @@
   </div>
 </div>
 
+<div class="mask hidden" id="eggMask">
+  <div class="box qr-box">
+    <div class="modal-head">
+      <h1 class="qr-title">彩蛋图鉴</h1>
+      <div id="eggX" class="box-x" role="button" tabindex="0" title="关闭" aria-label="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12"/><path d="M18 6L6 18"/></svg></div>
+    </div>
+    <div id="eggList"></div>
+    <div class="egg-count" id="eggCount"></div>
+    <p class="link-hint">点已发现的彩蛋可立刻再玩一次；带 ??? 的还没被你撞见。</p>
+    <button id="eggClose">关 闭</button>
+  </div>
+</div>
+
 <script>
 /* qrcode-generator v1.4.4 (c) Kazuhiko Arase — MIT License
    https://github.com/kazuhikoarase/qrcode-generator
@@ -628,7 +663,7 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '8.2.3';
+const APP_VERSION = '8.3.0';
 const BUILD_DATE = '2026-09-13';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
@@ -1335,6 +1370,7 @@ function hideUploadStatus() { uploadStatus.classList.remove('show'); }
   }
   window.nsSetSkin = function (n) { // 顶层暴露：单测/e2e 直驱
     nsSkin = ((n % 3) + 3) % 3;
+    if (nsSkin !== 0) nsEggUnlock('skin'); // v8.3.0：进复古皮肤环即记入图鉴（0=默认态不算发现）
     document.body.classList.toggle('skin-a', nsSkin === 1);
     document.body.classList.toggle('skin-b', nsSkin === 2);
     if (brandB) brandB.textContent = WORDS[nsSkin];
@@ -2504,6 +2540,7 @@ async function applyUnlocked(key, note) {
   tryShowInstallBar(); // v5.35：解锁后再弹安装引导，不在落地页打扰
   consumeBackupImportMsg(); // v7.7.0：首页扫备份码跳转解锁后的一次性成功提示
   try { nsFestWelcome(); } catch (e) {} // v8.2.0：节日雨——每次打开 App 那一刻放一轮（非节日静默）
+  try { nsZenArm(); } catch (e) {} // v8.3.0：解锁即起算禅模式发呆窗（空白笔记静置 30 秒）
 }
 
 async function unlock(pass) {
@@ -4292,6 +4329,17 @@ function nsFestAt(date) {
   }
   return null;
 }
+// ── 图鉴进度：localStorage 只存「已发现」位图，不存任何笔记内容 ──
+// 必须声明在徽章状态机之前：顶层 updateNsBadge() 是第一个埋点消费方（v8.3.0 闸 R1）。
+const NS_EGG_KEY = 'notesync_eggs';
+const NS_EGG_TOTAL = 8; // 与 NS_EGG_LIST 同长；新增条目必同版改此数（单测硬钉）
+function nsEggMap() {
+  try { const o = JSON.parse(localStorage.getItem(NS_EGG_KEY) || '{}'); return (o && typeof o === 'object') ? o : {}; } catch (e) { return {}; }
+}
+function nsEggHas(id) { return !!nsEggMap()[id]; }
+function nsEggUnlock(id) {
+  try { const o = nsEggMap(); if (o[id]) return; o[id] = 1; localStorage.setItem(NS_EGG_KEY, JSON.stringify(o)); } catch (e) {}
+}
 // 徽章状态机：深夜(22:00-06:00)优先于节日——大过年的深夜也先劝睡；条件离开自动消失，无 ×。
 function nsBadgeAt(date) {
   const h = date.getHours();
@@ -4307,6 +4355,7 @@ function updateNsBadge() {
   if (ns === (el.getAttribute('data-ns') || '')) return; // 同内容不重播 pop 动画
   el.setAttribute('data-ns', ns);
   if (!b) { el.classList.remove('show'); return; }
+  nsEggUnlock('badge'); // v8.3.0：徽章真的挂出来才记入图鉴
   el.querySelector('.ns-be').textContent = b.em;
   el.querySelector('.ns-bt').textContent = b.tx;
   el.classList.remove('show'); void el.offsetWidth; // 重启动画（同款 chip pop 手法）
@@ -4319,6 +4368,7 @@ let nsWelcomed = false;
 function nsRainStart(key, ms, greetSrc) {
   const meta = NS_FEST_META[key];
   if (!meta || !meta.rain.length) return;
+  nsEggUnlock('rain'); // v8.3.0：真起雨才记入图鉴（无雨的深夜态不算）
   const dur = ms || 6000;
   const layer = document.getElementById('nsRain');
   if (!layer) return;
@@ -4382,20 +4432,20 @@ function nsDigitHit(s) { // s = 光标前文本末尾若干字符；纯尾匹配
   }
   return null;
 }
-// 光标前缀（末尾 ≤8 字符）：自写 TreeWalker 按文档序累积文本到 (container,offset)。
+// 光标前缀（末尾 n 字符，默认 8；v8.3.0 烟花共用需 12）：自写 TreeWalker 按文档序累积文本到 (container,offset)。
 // 不用克隆 Range 取文本（Range 无 textContent 属性，v8.2.1 探针期实锤）。三态返回：
 //   string  文本节点命中——前缀（含合法空串：光标在文本头，此刻就是「无梗」，不许落兜底）
 //   null    元素位容器（块首/空 div）——无文本前缀可言：不爆且不碰 armed（闸 R1/R2：
 //           旧版落全文尾兜底会在文末成串时误爆一次）
 //   false   容器不在编辑器文本流（selection 意外）——监听器走全文尾兜底（=v8.2.0 行为）
-function nsCaretPrefix(container, offset) {
+function nsCaretPrefix(container, offset, n) { // v8.3.0：n=取尾字符数（默认 8；烟花判 notesync 需 12）
   try {
     if (typeof document.createTreeWalker !== 'function') return false;
     if (container.nodeType === 3) {
       const walker = document.createTreeWalker(editor, 4 /* SHOW_TEXT */);
       let node, acc = '';
       while ((node = walker.nextNode())) {
-        if (node === container) return (acc + (node.data || '').slice(0, offset)).slice(-8);
+        if (node === container) return (acc + (node.data || '').slice(0, offset)).slice(-(n || 8));
         acc += node.data || '';
         if (acc.length > 64) acc = acc.slice(-40);
       }
@@ -4406,6 +4456,7 @@ function nsCaretPrefix(container, offset) {
   return false;
 }
 function nsBurst(x, y, emoji) {
+  nsEggUnlock('num'); // v8.3.0：数字梗粒子爆发即记入图鉴
   const wrap = document.createElement('div');
   wrap.className = 'ns-burst';
   wrap.style.left = x + 'px';
@@ -4426,6 +4477,8 @@ let nsDigitArmed = false; // 跳变触发——光标前持续成梗时（6666 �
 // 瞬间爆发一次；光标前脱离梗形即重新上膛。
 document.addEventListener('input', (e) => {
   if (e.target !== editor && !(editor.contains && editor.contains(e.target))) return; // 只管编辑器内的输入（块 div 是 target，v8.2.1 探针实锤）
+  nsZenExit(); // v8.3.0：任意真实输入即退出禅模式（输入源过滤在前，口令框/落地页打字不惊动）
+  nsZenArm();  // 并重新起算 30 秒发呆窗
   if (!(typeof InputEvent !== 'undefined' && e instanceof InputEvent)) return; // 程序化 input 不算打字
   if (typeof isComposing !== 'undefined' && isComposing) return;               // IME 组字期不判定
   try {
@@ -4435,15 +4488,25 @@ document.addEventListener('input', (e) => {
       const r = sel.getRangeAt(0);
       if (editor.contains(r.startContainer)) {
         if (!r.collapsed) return; // 选区覆盖打字：无「光标前缀」语义，不判不碰 armed（闸复验：防兜底同梗二爆）
-        const p = nsCaretPrefix(r.startContainer, r.startOffset);
+        const p = nsCaretPrefix(r.startContainer, r.startOffset, 12); // v8.3.0：取 12（数字梗尾匹配够用，烟花需 8+ 富余）
         if (p === null) return; // 元素位光标：不爆也不解上膛（等下一键光标进文本流再判）
-        tail = (p === false) ? (editor.textContent || '').slice(-8) : p; // false=selection 意外 → 全文尾兜底
+        tail = (p === false) ? (editor.textContent || '').slice(-12) : p; // false=selection 意外 → 全文尾兜底
         const rects = r.getClientRects ? Array.prototype.filter.call(r.getClientRects(), rr => rr.width || rr.height) : [];
         const rr = rects[rects.length - 1] || (r.getBoundingClientRect && r.getBoundingClientRect());
         if (rr && (rr.left || rr.top || rr.width || rr.height)) caretRect = rr;
       }
     }
-    if (tail === null) tail = (editor.textContent || '').slice(-8); // 无折叠光标（选区/未落编辑器）：兜底
+    if (tail === null) tail = (editor.textContent || '').slice(-12); // 无折叠光标（选区/未落编辑器）：兜底
+    // v8.3.0 烟花：与数字梗共用同一尾判定，独立 armed 跳变（两梗互不干扰）
+    if (nsFwHit(tail)) {
+      if (!nsFwArmed) {
+        nsFwArmed = true;
+        let fx, fy;
+        if (caretRect) { fx = caretRect.left; fy = caretRect.bottom; }
+        else { const eb = editor.getBoundingClientRect(); fx = eb.left + eb.width / 2; fy = eb.bottom - 120; }
+        nsFirework(fx, Math.max(56, fy - 6));
+      }
+    } else nsFwArmed = false;
     const emo = nsDigitHit(tail);
     if (!emo) { nsDigitArmed = false; return; }
     if (nsDigitArmed) return; // 已在梗态——连打不重复爆发
@@ -4454,6 +4517,175 @@ document.addEventListener('input', (e) => {
     nsBurst(x, Math.max(56, y - 6), emo);
   } catch (err) {}
 }, true);
+
+// ══ v8.3.0 彩蛋段二：彩蛋图鉴 / notesync 烟花 / 禅模式 / 打字机音 ══════════
+// 沿用 v8.2.0 铁律：效果只发生在编辑器外的浮层或 body class 上，绝不触碰正文 DOM、
+// 笔记数据与提醒链路；入口一律 try/catch 兜底，失败即静默；配色只吃主题变量。
+// ── 图鉴进度键与 nsEggMap/Has/Unlock 已上移至「徽章状态机」之前（闸 R1 实锤：顶层
+//    updateNsBadge() 埋点早于键声明，TDZ 抛错被 try/catch 静默吞掉→深夜开机当次会话徽章永不入图鉴）──
+// ── 烟花：金色点阵爆开（吃 --accent，不引新色）──
+const NS_FW_WORD = 'notesync';
+let nsFwArmed = false; // 与数字梗同款跳变机：持续成词连打只放一次
+function nsFirework(x, y) {
+  const wrap = document.createElement('div');
+  wrap.className = 'ns-fw';
+  wrap.style.left = x + 'px';
+  wrap.style.top = y + 'px';
+  const N = 20;
+  for (let i = 0; i < N; i++) {
+    const s = document.createElement('i');
+    const a = (Math.PI * 2 * i) / N + (Math.random() * 0.3 - 0.15);
+    const r = 44 + Math.random() * 56;
+    s.style.setProperty('--fx', (Math.cos(a) * r).toFixed(1) + 'px');
+    s.style.setProperty('--fy', (Math.sin(a) * r - 16).toFixed(1) + 'px');
+    const sz = 3 + Math.random() * 5;
+    s.style.width = sz.toFixed(1) + 'px';
+    s.style.height = sz.toFixed(1) + 'px';
+    s.style.animationDelay = (Math.random() * 0.12).toFixed(2) + 's';
+    wrap.appendChild(s);
+  }
+  document.body.appendChild(wrap);
+  nsEggUnlock('fw');
+  setTimeout(() => { try { wrap.remove(); } catch (e) {} }, 1500);
+}
+function nsFwHit(tail) { // 纯尾匹配（大小写不敏感）；只判定不改正文
+  const s = (tail || '').toLowerCase();
+  return s.length >= NS_FW_WORD.length && s.slice(-NS_FW_WORD.length) === NS_FW_WORD;
+}
+// ── 禅模式：空白笔记静置 30 秒 → 顶栏页脚淡出 + 一行提示；任意输入即退 ──
+let zenTimer = null, zenOn = false;
+function nsZenEmpty() { try { return !(editor.textContent || '').trim(); } catch (e) { return false; } }
+function nsZenEnter() {
+  if (zenOn || !cryptoKey || !nsZenEmpty()) return;
+  zenOn = true;
+  document.body.classList.add('zen');
+  nsEggUnlock('zen');
+}
+function nsZenExit() {
+  try { clearTimeout(zenTimer); } catch (e) {} // 退出必清待触发的窗（防关页/退出后悬空回调）
+  if (!zenOn) return;
+  zenOn = false;
+  document.body.classList.remove('zen');
+}
+function nsZenArm(ms) { // 每次真实输入重置；ms 可注入（测试走短延时，生产 30s）
+  try { clearTimeout(zenTimer); } catch (e) {}
+  if (!cryptoKey) return; // 未解锁（无密钥）不计时：落地页/口令框不算发呆
+  zenTimer = setTimeout(() => { try { nsZenEnter(); } catch (e) {} }, ms || 30000);
+}
+function nsZenToggle() { if (zenOn) { nsZenExit(); return; } zenOn = false; nsZenEnter(); }
+document.addEventListener('visibilitychange', () => { // 切后台不计时（手机锁屏不该算发呆），回前台重新起算
+  try { if (document.hidden) clearTimeout(zenTimer); else nsZenArm(); } catch (e) {}
+});
+// ── 打字机音：只在复古皮肤环内发声，出环或静音即停（WebAudio 合成，零素材）──
+let tyMuted = false;
+try { tyMuted = localStorage.getItem('notesync_tymute') === '1'; } catch (e) {}
+let tyNoise = null, tyNoiseCtx = null, tyLast = 0;
+function nsTyMuteSet(v) { tyMuted = !!v; try { localStorage.setItem('notesync_tymute', tyMuted ? '1' : '0'); } catch (e) {} }
+function nsTyToggle() { nsTyMuteSet(!tyMuted); return !tyMuted; }
+function nsTyNoiseBuf(ctx) { // 50ms 白噪声（带自然衰减）缓存复用，避免每键生成；缓存绑定 ctx（重建即失效重生成，闸 R2：跨 ctx buffer 抛错会被 catch 吞成永久消音）
+  if (tyNoise && tyNoiseCtx === ctx) return tyNoise;
+  const n = Math.max(1, Math.floor(ctx.sampleRate * 0.05));
+  const b = ctx.createBuffer(1, n, ctx.sampleRate);
+  const d = b.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+  tyNoise = b; tyNoiseCtx = ctx;
+  return b;
+}
+function nsTypeSound(kind, force) {
+  if (!force && (nsSkin === 0 || tyMuted)) return; // 皮肤外/已静音：零开销早退；force=图鉴点播示例音，明确意图绕开门（仍走 ctx running 检查）
+  try {
+    unlockRemAudio();
+    const ctx = remAudioCtx;
+    if (!ctx || ctx.state !== 'running') return; // 未解锁（无手势）或已关闭：静默
+    const now = Date.now();
+    if (kind !== 'enter' && now - tyLast < 24) return; // 节流：高速连打不糊成一片（回车是节奏点，永不被吞）
+    tyLast = now;
+    const t0 = ctx.currentTime + 0.005;
+    const src = ctx.createBufferSource();
+    src.buffer = nsTyNoiseBuf(ctx);
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = kind === 'space' ? 1100 : 1900;
+    bp.Q.value = 1.1;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(kind === 'enter' ? 0.12 : 0.16, t0 + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.05);
+    src.connect(bp); bp.connect(g); g.connect(ctx.destination);
+    src.start(t0); src.stop(t0 + 0.06);
+    if (kind === 'enter') { // 回车=打字机回车铃（回车必须有回响，否则不像打字机）
+      const o = ctx.createOscillator(), g2 = ctx.createGain();
+      o.type = 'sine'; o.frequency.value = 1560;
+      g2.gain.setValueAtTime(0.0001, t0);
+      g2.gain.exponentialRampToValueAtTime(0.1, t0 + 0.01);
+      g2.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.3);
+      o.connect(g2); g2.connect(ctx.destination);
+      o.start(t0); o.stop(t0 + 0.32);
+    }
+    nsEggUnlock('type');
+  } catch (e) {}
+}
+document.addEventListener('keydown', (e) => {
+  if (nsSkin === 0 || tyMuted) return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.repeat) return; // 长按自动重复不是新击键：不过滤会以 24ms 顶格连响（闸 R2）
+  if (typeof isComposing !== 'undefined' && isComposing) return; // IME 组字期不发声
+  const t = e.target;
+  if (t !== editor && !(editor.contains && editor.contains(t))) return; // 只认编辑器内击键
+  if (e.key === 'Enter') nsTypeSound('enter');
+  else if (e.key === ' ') nsTypeSound('space');
+  else if (e.key && e.key.length === 1) nsTypeSound('key');
+});
+// ── 图鉴：?eggs 打开；已发现可点行「再玩一次」，未发现显示 ??? ──
+const NS_EGG_LIST = [
+  { id: 'skin', name: '复古皮肤', hint: '连点左上角 logo 七次', replay: () => window.nsSetSkin(nsSkin + 1) },
+  { id: 'rain', name: '节日雨', hint: '过节那天打开笔记', replay: () => nsRainStart(nsFestAt(new Date()) || 'nj', 4000, nsBadgeAt(new Date())) },
+  { id: 'badge', name: '节日徽章', hint: '节日或深夜自己冒出来', replay: null },
+  { id: 'num', name: '数字梗粒子', hint: '打一串 666 / 520', replay: () => { const b = editor.getBoundingClientRect(); nsBurst(b.left + b.width / 2, Math.max(56, b.bottom - 120), '🔥'); } },
+  { id: 'fw', name: 'Notesync 烟花', hint: '在笔记里敲出 notesync', replay: () => nsFirework(window.innerWidth / 2, window.innerHeight / 2) },
+  { id: 'zen', name: '禅模式', hint: '空白笔记发呆三十秒', replay: () => nsZenToggle() },
+  { id: 'type', name: '打字机音', hint: '复古皮肤里敲键盘', replay: () => nsTypeSound('enter', true) },
+  { id: 'diag', name: '诊断面板', hint: '关于弹窗标题连点四次', replay: () => { try { openDiagModal(); } catch (e) {} } }
+];
+function nsEggRender() {
+  const list = document.getElementById('eggList');
+  if (!list) return;
+  const map = nsEggMap();
+  list.textContent = '';
+  let got = 0;
+  NS_EGG_LIST.forEach(it => {
+    const on = !!map[it.id];
+    if (on) got++;
+    const row = document.createElement('div');
+    row.className = 'egg-row' + (on ? '' : ' locked');
+    row.setAttribute('data-egg', it.id);
+    const n = document.createElement('span'); n.className = 'egg-name'; n.textContent = on ? it.name : '???';
+    const h = document.createElement('span'); h.className = 'egg-hint'; h.textContent = on ? it.hint : '还没被发现';
+    row.appendChild(n); row.appendChild(h);
+    if (on && it.replay) {
+      const g = document.createElement('span'); g.className = 'egg-go';
+      g.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+      row.appendChild(g);
+      row.setAttribute('role', 'button'); row.setAttribute('tabindex', '0');
+      row.addEventListener('click', () => { try { it.replay(); } catch (e) {} });
+    }
+    list.appendChild(row);
+  });
+  const c = document.getElementById('eggCount');
+  if (c) c.textContent = got + ' / ' + NS_EGG_LIST.length + ' FOUND';
+}
+function nsEggOpen() { try { nsEggRender(); const m = document.getElementById('eggMask'); if (m) m.classList.remove('hidden'); } catch (e) {} }
+function nsEggClose() { try { document.getElementById('eggMask').classList.add('hidden'); } catch (e) {} if (CHIP_HOVER_OK) { try { editor.focus(); ensureCaret(); } catch (e) {} } } // 红线10：关闭回编辑器归还焦点（桌面失焦光标不绘制）
+(function setupEggPanel() {
+  const x = document.getElementById('eggX'), c = document.getElementById('eggClose'), m = document.getElementById('eggMask');
+  if (x) x.addEventListener('click', nsEggClose);
+  if (c) c.addEventListener('click', nsEggClose);
+  if (m) m.addEventListener('click', (e) => { if (e.target === m) nsEggClose(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && m && !m.classList.contains('hidden')) nsEggClose();
+  });
+  if (location.search.indexOf('eggs') !== -1) nsEggOpen(); // ?eggs 直开（与 ?diag 同套路）
+})();
 async function chipActivate(e) { // v6.3：async——要 await addReminder 的结果才决定弹成功卡还是收起
   if (e.button !== undefined && e.button !== 0) return;
   e.preventDefault();
@@ -5589,6 +5821,7 @@ $('#aboutTitle').addEventListener('click', () => {
 aboutMask.addEventListener('click', e => { if (e.target === aboutMask) { aboutMask.classList.add('hidden'); if (CHIP_HOVER_OK) { try { editor.focus(); ensureCaret(); } catch (e) {} } } });
 // 诊断模态：居中弹窗 + 主题前景色（修复右下角黑底浮层日间不可读）+ 复制按钮 + 自动关闭
 function openDiagModal() {
+  nsEggUnlock('diag'); // v8.3.0：图鉴埋点（无论走连点彩蛋还是图鉴 replay 都记）
   const pre = $('#diagContent');
   try { pre.textContent = window.collectDiagLines().join('\n'); }
   catch (e) { pre.textContent = '诊断信息生成失败: ' + (e && e.message || e); }
