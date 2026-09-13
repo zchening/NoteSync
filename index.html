@@ -203,13 +203,9 @@
      只留裸 emoji 与笔记名同字级随行；桌面带文案的胶囊保留（无容器会像正文误入）。 */
   @media (max-width:560px){ #nsBadge{padding:0;border:0;background:none;gap:0} #nsBadge .ns-bt{display:none} }
 
-  /* ── v8.3.0 彩蛋区二：禅模式 / notesync 烟花 / 彩蛋图鉴 ──────────────────
+  /* ── v8.3.0 彩蛋区二：notesync 烟花 / 彩蛋图鉴（v8.3.1 禅模式按用户令整体退役）──────
      沿用 v8.2.0 铁律：浮层一律 pointer-events:none，只吃主题变量（--accent/--line/--muted/
      --hover/--fg），不新增颜色字面量，绝不触碰正文 DOM 与笔记数据。 */
-  header,footer{transition:opacity 1.5s ease} /* 禅模式淡出/淡入（两者无 display 切换，常驻过渡无副作用） */
-  body.zen header,body.zen footer{opacity:.2}
-  #zenTip{position:fixed;left:50%;top:44%;transform:translate(-50%,-50%);z-index:4;pointer-events:none;opacity:0;transition:opacity 1.6s ease;font-size:14px;letter-spacing:.18em;color:var(--muted);white-space:nowrap;max-width:88vw;overflow:hidden;text-overflow:ellipsis}
-  body.zen #zenTip{opacity:1}
   .ns-fw{position:fixed;z-index:58;pointer-events:none}
   .ns-fw i{position:absolute;left:0;top:0;width:5px;height:5px;border-radius:50%;background:var(--accent);animation:nsFwOut 1.2s cubic-bezier(.12,.68,.35,1) forwards}
   @keyframes nsFwOut{0%{transform:translate(0,0) scale(.35);opacity:0}10%{opacity:1}100%{transform:translate(var(--fx,0px),var(--fy,0px)) scale(.45);opacity:0}}
@@ -471,7 +467,6 @@
 <div id="timeChip" class="hidden"></div>
 <div id="nsRain" class="hidden" aria-hidden="true"></div>
 <div id="nsGreet" aria-hidden="true"></div>
-<div id="zenTip" aria-hidden="true">空白页，是最好用的地方</div>
 <div class="mask hidden" id="remMask">
   <div class="box qr-box" id="remPanel">
     <div class="modal-head">
@@ -663,7 +658,7 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '8.3.0';
+const APP_VERSION = '8.3.1';
 const BUILD_DATE = '2026-09-13';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
@@ -2540,7 +2535,6 @@ async function applyUnlocked(key, note) {
   tryShowInstallBar(); // v5.35：解锁后再弹安装引导，不在落地页打扰
   consumeBackupImportMsg(); // v7.7.0：首页扫备份码跳转解锁后的一次性成功提示
   try { nsFestWelcome(); } catch (e) {} // v8.2.0：节日雨——每次打开 App 那一刻放一轮（非节日静默）
-  try { nsZenArm(); } catch (e) {} // v8.3.0：解锁即起算禅模式发呆窗（空白笔记静置 30 秒）
 }
 
 async function unlock(pass) {
@@ -4332,7 +4326,7 @@ function nsFestAt(date) {
 // ── 图鉴进度：localStorage 只存「已发现」位图，不存任何笔记内容 ──
 // 必须声明在徽章状态机之前：顶层 updateNsBadge() 是第一个埋点消费方（v8.3.0 闸 R1）。
 const NS_EGG_KEY = 'notesync_eggs';
-const NS_EGG_TOTAL = 8; // 与 NS_EGG_LIST 同长；新增条目必同版改此数（单测硬钉）
+const NS_EGG_TOTAL = 7; // 与 NS_EGG_LIST 同长；新增条目必同版改此数（单测硬钉）；v8.3.1 禅模式退役 8→7
 function nsEggMap() {
   try { const o = JSON.parse(localStorage.getItem(NS_EGG_KEY) || '{}'); return (o && typeof o === 'object') ? o : {}; } catch (e) { return {}; }
 }
@@ -4477,8 +4471,6 @@ let nsDigitArmed = false; // 跳变触发——光标前持续成梗时（6666 �
 // 瞬间爆发一次；光标前脱离梗形即重新上膛。
 document.addEventListener('input', (e) => {
   if (e.target !== editor && !(editor.contains && editor.contains(e.target))) return; // 只管编辑器内的输入（块 div 是 target，v8.2.1 探针实锤）
-  nsZenExit(); // v8.3.0：任意真实输入即退出禅模式（输入源过滤在前，口令框/落地页打字不惊动）
-  nsZenArm();  // 并重新起算 30 秒发呆窗
   if (!(typeof InputEvent !== 'undefined' && e instanceof InputEvent)) return; // 程序化 input 不算打字
   if (typeof isComposing !== 'undefined' && isComposing) return;               // IME 组字期不判定
   try {
@@ -4518,7 +4510,7 @@ document.addEventListener('input', (e) => {
   } catch (err) {}
 }, true);
 
-// ══ v8.3.0 彩蛋段二：彩蛋图鉴 / notesync 烟花 / 禅模式 / 打字机音 ══════════
+// ══ v8.3.0 彩蛋段二：彩蛋图鉴 / notesync 烟花 / 打字机音（v8.3.1 禅模式退役）══════
 // 沿用 v8.2.0 铁律：效果只发生在编辑器外的浮层或 body class 上，绝不触碰正文 DOM、
 // 笔记数据与提醒链路；入口一律 try/catch 兜底，失败即静默；配色只吃主题变量。
 // ── 图鉴进度键与 nsEggMap/Has/Unlock 已上移至「徽章状态机」之前（闸 R1 实锤：顶层
@@ -4552,30 +4544,6 @@ function nsFwHit(tail) { // 纯尾匹配（大小写不敏感）；只判定不�
   const s = (tail || '').toLowerCase();
   return s.length >= NS_FW_WORD.length && s.slice(-NS_FW_WORD.length) === NS_FW_WORD;
 }
-// ── 禅模式：空白笔记静置 30 秒 → 顶栏页脚淡出 + 一行提示；任意输入即退 ──
-let zenTimer = null, zenOn = false;
-function nsZenEmpty() { try { return !(editor.textContent || '').trim(); } catch (e) { return false; } }
-function nsZenEnter() {
-  if (zenOn || !cryptoKey || !nsZenEmpty()) return;
-  zenOn = true;
-  document.body.classList.add('zen');
-  nsEggUnlock('zen');
-}
-function nsZenExit() {
-  try { clearTimeout(zenTimer); } catch (e) {} // 退出必清待触发的窗（防关页/退出后悬空回调）
-  if (!zenOn) return;
-  zenOn = false;
-  document.body.classList.remove('zen');
-}
-function nsZenArm(ms) { // 每次真实输入重置；ms 可注入（测试走短延时，生产 30s）
-  try { clearTimeout(zenTimer); } catch (e) {}
-  if (!cryptoKey) return; // 未解锁（无密钥）不计时：落地页/口令框不算发呆
-  zenTimer = setTimeout(() => { try { nsZenEnter(); } catch (e) {} }, ms || 30000);
-}
-function nsZenToggle() { if (zenOn) { nsZenExit(); return; } zenOn = false; nsZenEnter(); }
-document.addEventListener('visibilitychange', () => { // 切后台不计时（手机锁屏不该算发呆），回前台重新起算
-  try { if (document.hidden) clearTimeout(zenTimer); else nsZenArm(); } catch (e) {}
-});
 // ── 打字机音：只在复古皮肤环内发声，出环或静音即停（WebAudio 合成，零素材）──
 let tyMuted = false;
 try { tyMuted = localStorage.getItem('notesync_tymute') === '1'; } catch (e) {}
@@ -4625,6 +4593,7 @@ function nsTypeSound(kind, force) {
     nsEggUnlock('type');
   } catch (e) {}
 }
+let tyEnterAt = 0, tyCompAt = 0, tyLastData = '', tyLastDataAt = 0; // v8.3.1 方案B：物理回车与 insertParagraph 双通道防重（一声回车=一次铃）；tyCompAt=组字上屏防重窗；tyLastData=长按同字符连发抑制
 document.addEventListener('keydown', (e) => {
   if (nsSkin === 0 || tyMuted) return;
   if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -4632,9 +4601,41 @@ document.addEventListener('keydown', (e) => {
   if (typeof isComposing !== 'undefined' && isComposing) return; // IME 组字期不发声
   const t = e.target;
   if (t !== editor && !(editor.contains && editor.contains(t))) return; // 只认编辑器内击键
-  if (e.key === 'Enter') nsTypeSound('enter');
-  else if (e.key === ' ') nsTypeSound('space');
-  else if (e.key && e.key.length === 1) nsTypeSound('key');
+  if (e.key === 'Enter') { tyEnterAt = Date.now(); nsTypeSound('enter'); } // 换行+回车铃走 keydown（不预防默认）；软键盘不发 keydown 的机型由下行 beforeinput 兜底
+  else if (e.key === ' ') nsTypeSound('space'); // 物理空格；软键盘空格上屏走 insertText，24ms 节流天然去重
+});
+// v8.3.1 方案B（用户实测：打字机纸皮肤只有回车有声）：触屏软键盘敲字符基本不发 keydown（仅
+// Enter/Backspace 等功能键发），桌面 IME 组字期字母又被静默——keydown 通道永远只剩回车。
+// 发声判据改挂输入层 beforeinput：凡产生可见字符的击键（软键盘/实体键/英文直打）各响一声；
+// IME 整词上屏走 compositionend 兜底一声（闸 R2 P1：部分内核 commit 不派 insertText，
+// insertCompositionText 又被排除，中文打字会整段哑火——tyCompAt 短窗防与 insertText 双响）；
+// 粘贴/拖拽/撤回/补全不响；删除类不响（只响「打字」）。
+document.addEventListener('beforeinput', (e) => {
+  if (nsSkin === 0 || tyMuted) return;
+  if (e.isComposing) return; // 闸 R2 P2：组字过程双保险（白名单已挡 insertCompositionText，防个别内核组字期误标 insertText）
+  const t = e.target;
+  if (t !== editor && !(editor.contains && editor.contains(t))) return; // 与 keydown 通道同一编辑器判据
+  const ty = e.inputType || '';
+  if (ty !== 'insertText' && ty.indexOf('insertLine') !== 0 && ty !== 'insertParagraph') return;
+  const now = Date.now();
+  if (ty === 'insertText') {
+    if (now - tyCompAt < 60) return; // compositionend 刚兜过底：吞掉双通道二击（闸二 R2 P2：120→60ms，防吞中英混打后第一记英文击键）
+    const d = typeof e.data === 'string' ? e.data : '';
+    if (d && d === tyLastData && now - tyLastDataAt < 50) { tyLastDataAt = now; return; } // 闸二 R2 P1：长按 auto-repeat 逐重复仍派 insertText（e.repeat 只守 keydown 死通道），同字符 50ms 内=连发抑制；抑制时也链式占窗（B19 冻时钟实锤：只记上一声则 33ms×2=66ms 越窗漏响，人手连打同键 ≥50ms 间隙不误伤）
+    tyLastData = d; tyLastDataAt = now;
+  } else {
+    if (now - tyEnterAt < 300) return; // keydown 刚响过回车铃：吞掉换行类二击
+    tyEnterAt = now; // 闸 R2 P1②：兜底响过即占住防重窗，软键盘连打两次回车不叠双铃
+  }
+  nsTypeSound(ty === 'insertText' ? 'key' : 'enter');
+});
+document.addEventListener('compositionend', (e) => { // IME 整词上屏兜底：commit 派 insertText 的内核由上面 60ms 窗去重，不派的内核（部分国产 WebView）在此出声
+  if (nsSkin === 0 || tyMuted) return;
+  if (e && e.isComposing === false) return; // 防御：显式 false 的伪事件不响
+  const t = e.target;
+  if (t !== editor && !(editor.contains && editor.contains(t))) return;
+  tyCompAt = Date.now();
+  nsTypeSound('key');
 });
 // ── 图鉴：?eggs 打开；已发现可点行「再玩一次」，未发现显示 ??? ──
 const NS_EGG_LIST = [
@@ -4643,7 +4644,6 @@ const NS_EGG_LIST = [
   { id: 'badge', name: '节日徽章', hint: '节日或深夜自己冒出来', replay: null },
   { id: 'num', name: '数字梗粒子', hint: '打一串 666 / 520', replay: () => { const b = editor.getBoundingClientRect(); nsBurst(b.left + b.width / 2, Math.max(56, b.bottom - 120), '🔥'); } },
   { id: 'fw', name: 'Notesync 烟花', hint: '在笔记里敲出 notesync', replay: () => nsFirework(window.innerWidth / 2, window.innerHeight / 2) },
-  { id: 'zen', name: '禅模式', hint: '空白笔记发呆三十秒', replay: () => nsZenToggle() },
   { id: 'type', name: '打字机音', hint: '复古皮肤里敲键盘', replay: () => nsTypeSound('enter', true) },
   { id: 'diag', name: '诊断面板', hint: '关于弹窗标题连点四次', replay: () => { try { openDiagModal(); } catch (e) {} } }
 ];
