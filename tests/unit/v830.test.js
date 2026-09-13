@@ -14,6 +14,18 @@ function fresh(pageUrl) {
   const dom = loadApp(null, pageUrl);
   return { dom, window: dom.window };
 }
+// 全新用户的断言必须与运行时刻无关：v8.3.0 起 22:00-06:00（或节日）开机，
+// 徽章状态机会当场把 badge 记入图鉴（B14 正是钉这个行为的），拿真实时钟跑「0/17 全锁」就会在夜里必红。
+// 冻到一个无节日的白天天时（B14 同法，只是方向相反）。
+function freshDay(pageUrl) {
+  const dom = loadApp(w => {
+    class FakeDate extends Date {
+      constructor(...a) { if (a.length === 0) { super(2026, 2, 15, 12, 0, 0); } else { super(...a); } }
+    }
+    w.Date = FakeDate;
+  }, pageUrl);
+  return { dom, window: dom.window };
+}
 function wait(ms) { return new Promise(r => setTimeout(r, ms)); }
 function makeFakeAC() {
   const stat = { filters: 0, oscs: 0 };
@@ -29,14 +41,14 @@ function makeFakeAC() {
 
 // ── B1 图鉴：未发现=??? + locked；解锁后显名显提示 + 计数 ──
 test('B1 图鉴渲染：未发现锁态显示 ???，解锁后显名与触发提示，计数同步', t => {
-  const app = fresh(); t.after(() => app.dom.window.close());
+  const app = freshDay(); t.after(() => app.dom.window.close());
   const w = app.window;
   w.nsEggOpen();
   const rows = w.document.querySelectorAll('#eggList .egg-row');
-  assert.strictEqual(rows.length, 7, '图鉴应有 7 个条目（v8.3.1 禅模式退役 8→7）');
+  assert.strictEqual(rows.length, 17, '图鉴应有 17 个条目（v9.0.0 彩蛋十门牌 7→17）');
   assert.ok([...rows].every(r => r.classList.contains('locked')), '全新用户全部为未发现锁态');
   assert.strictEqual([...rows][0].querySelector('.egg-name').textContent, '???', '未发现不得泄露彩蛋名');
-  assert.strictEqual(w.document.getElementById('eggCount').textContent, '0 / 7 FOUND');
+  assert.strictEqual(w.document.getElementById('eggCount').textContent, '0 / 17 FOUND');
   w.nsEggUnlock('skin');
   w.nsEggUnlock('fw');
   w.nsEggRender();
@@ -45,7 +57,7 @@ test('B1 图鉴渲染：未发现锁态显示 ???，解锁后显名与触发提�
   assert.ok(!skin.classList.contains('locked'));
   assert.strictEqual(skin.querySelector('.egg-name').textContent, '复古皮肤');
   assert.strictEqual(skin.querySelector('.egg-hint').textContent, '连点左上角 logo 七次');
-  assert.strictEqual(w.document.getElementById('eggCount').textContent, '2 / 7 FOUND');
+  assert.strictEqual(w.document.getElementById('eggCount').textContent, '2 / 17 FOUND');
   assert.ok(!w.document.getElementById('eggMask').classList.contains('hidden'), 'nsEggOpen 应打开面板');
 });
 
@@ -67,7 +79,7 @@ test('B2 ?eggs 自动打开；X、关闭按钮、点遮罩空白三条路径都�
 
 // ── B3 解锁进度持久化：只写 notesync_eggs 位图，不落任何笔记内容 ──
 test('B3 解锁只写 localStorage notesync_eggs 位图；幂等；键名不含笔记/正文', t => {
-  const app = fresh(); t.after(() => app.dom.window.close());
+  const app = freshDay(); t.after(() => app.dom.window.close());
   const w = app.window;
   w.nsEggUnlock('rain'); w.nsEggUnlock('rain'); w.nsEggUnlock('type');
   const raw = w.localStorage.getItem('notesync_eggs');
@@ -267,9 +279,9 @@ test('B12 图鉴 replay：点「Notesync 烟花」行放烟花；锁态行无点
 });
 
 // ── B13 静态钉：配色只吃变量、浮层不抢焦点、版本号同步、图鉴条目数与常量一致 ──
-test('B13 源码钉：新彩蛋零新色字面量 / 浮层 pointer-events:none / 版本 8.3.2 / 条目数一致', t => {
-  assert.ok(SRC.includes("const APP_VERSION = '8.3.2';"), '版本号应随逐字母发声升到 8.3.2');
-  assert.ok(SRC.includes("const NS_EGG_TOTAL = 7;"), '图鉴总数应随禅模式退役为 7');
+test('B13 源码钉：新彩蛋零新色字面量 / 浮层 pointer-events:none / 版本 9.0.0 / 条目数一致', t => {
+  assert.ok(SRC.includes("const APP_VERSION = '9.0.0';"), '版本号应随彩蛋十门牌与音效层升到 9.0.0');
+  assert.ok(SRC.includes("const NS_EGG_TOTAL = 17;"), '图鉴总数应随 v9.0.0 十个 URL 门牌 7→17');
   assert.ok(!SRC.includes('nsZen') && !SRC.includes('zenTip') && !SRC.includes("id: 'zen'"), '禅模式禁回潮：函数/DOM/图鉴条目三处字面量一律不得残留');
   assert.ok(SRC.includes("else if (e.key && e.key.length === 1) { tyKdAt = Date.now(); tyKdData = e.key; nsTypeSound('key'); }"), 'v8.3.2 用户挑定逐字母节奏：字符击键必须挂 keydown 发声且记占供双通道去重（撤销 v8.3.1 禁挂钉）');
   assert.ok(SRC.includes('location.search.indexOf(\'eggs\')'), '?eggs 通道在位');
@@ -278,7 +290,7 @@ test('B13 源码钉：新彩蛋零新色字面量 / 浮层 pointer-events:none /
   const app = fresh(); t.after(() => app.dom.window.close());
   // 顶层 const 不挂 window（本项目已知铁律），取值一律走 eval
   assert.strictEqual(app.window.eval('NS_EGG_LIST.length'), app.window.eval('NS_EGG_TOTAL'), '图鉴条目数须与 NS_EGG_TOTAL 一致');
-  assert.strictEqual(app.window.eval('NS_EGG_LIST.length'), 7);
+  assert.strictEqual(app.window.eval('NS_EGG_LIST.length'), 17);
 });
 
 // ── B14 闸 R1 P1①回归：深夜时刻开机，徽章挂出必须当场记入图鉴（TDZ 吞错钉）+ 声明顺序静态钉 ──

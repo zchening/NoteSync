@@ -45,7 +45,7 @@
   ::selection{background:rgba(169,134,60,.22)}
 
   /* ── 顶栏 ───────────────────────────── */
-  header{display:flex;align-items:center;gap:10px;padding:12px 20px;border-bottom:1px solid var(--line);font-size:12px;color:var(--muted);letter-spacing:.04em}
+  header{position:relative;display:flex;align-items:center;gap:10px;padding:12px 20px;border-bottom:1px solid var(--line);font-size:12px;color:var(--muted);letter-spacing:.04em} /* v9.0.0：position:relative 给桌宠当包含块（#nsPet 是 absolute 且 append 进 header，缺它等于钉在首屏底缘外） */
   header .brand{display:flex;align-items:center;gap:8px;color:var(--fg);flex-shrink:1;min-width:0} /* v7.3.3：放开收缩——长笔记名在窄屏不再把右侧工具按钮挤出屏幕（B层审查P1-1），ellipsis 优雅截断 */
   header .brand svg{width:17px;height:17px;color:var(--accent);flex-shrink:0}
   header .brand b{font-family:var(--serif);font-weight:500;font-size:13.5px;letter-spacing:.06em}
@@ -627,7 +627,14 @@ const UPLOAD_PRESET = 'NoteXCloudinary';
 const CLOUDINARY_URL = 'https://api.cloudinary.com/v1_1/' + CLOUD_NAME + '/image/upload';
 const MAX_IMG_WIDTH = 1920;
 
-const noteId = location.pathname.split('?')[0].replace(/^\/+|\/+$/g, '');
+// v9.0.0：十个彩蛋门牌为专属保留字——命中即不解析为笔记（noteId 置空走首页态），
+// 由彩蛋层按 pathname 启动对应游戏；同时新建笔记处同步禁用这批名字（见 landing 校验）。
+const NS_RESERVED_ROUTES = ['mirror', 'snake', 'dragon', 'brick', 'satoshi', 'bitcoin', 'tank', 'spacex', 'tesla', 'pet'];
+const nsRouteHit = (function () {
+  const p = location.pathname.split('?')[0].replace(/^\/+|\/+$/g, '').toLowerCase();
+  return NS_RESERVED_ROUTES.indexOf(p) >= 0 ? p : '';
+})();
+const noteId = nsRouteHit ? '' : location.pathname.split('?')[0].replace(/^\/+|\/+$/g, '');
 // 动态 manifest：让每个笔记的 start_url 指向自身路径，Chrome 安装/创建快捷方式时打开正确页面
 document.querySelector('link[rel="manifest"]').href = '/manifest.json?start=/' + encodeURIComponent(noteId);
 // v5.52：APK 改为 server.url 直连线上，与 Web 同源，相对路径天然可用，无需注入绝对地址。
@@ -658,7 +665,7 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '8.3.2';
+const APP_VERSION = '9.0.0';
 const BUILD_DATE = '2026-09-13';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
@@ -2535,6 +2542,7 @@ async function applyUnlocked(key, note) {
   tryShowInstallBar(); // v5.35：解锁后再弹安装引导，不在落地页打扰
   consumeBackupImportMsg(); // v7.7.0：首页扫备份码跳转解锁后的一次性成功提示
   try { nsFestWelcome(); } catch (e) {} // v8.2.0：节日雨——每次打开 App 那一刻放一轮（非节日静默）
+  try { if (window.nsClaimPassport) window.nsClaimPassport(); } catch (e) {} // v9.0.0：护照认领必须在正文真渲染出来之后（boot 那一枪对加密笔记必然扫空）
 }
 
 async function unlock(pass) {
@@ -4326,7 +4334,7 @@ function nsFestAt(date) {
 // ── 图鉴进度：localStorage 只存「已发现」位图，不存任何笔记内容 ──
 // 必须声明在徽章状态机之前：顶层 updateNsBadge() 是第一个埋点消费方（v8.3.0 闸 R1）。
 const NS_EGG_KEY = 'notesync_eggs';
-const NS_EGG_TOTAL = 7; // 与 NS_EGG_LIST 同长；新增条目必同版改此数（单测硬钉）；v8.3.1 禅模式退役 8→7
+const NS_EGG_TOTAL = 17; // 与 NS_EGG_LIST 同长；新增条目必同版改此数（单测硬钉）；v9.0.0 彩蛋十门牌 7→17
 function nsEggMap() {
   try { const o = JSON.parse(localStorage.getItem(NS_EGG_KEY) || '{}'); return (o && typeof o === 'object') ? o : {}; } catch (e) { return {}; }
 }
@@ -4648,7 +4656,18 @@ const NS_EGG_LIST = [
   { id: 'num', name: '数字梗粒子', hint: '打一串 666 / 520', replay: () => { const b = editor.getBoundingClientRect(); nsBurst(b.left + b.width / 2, Math.max(56, b.bottom - 120), '🔥'); } },
   { id: 'fw', name: 'Notesync 烟花', hint: '在笔记里敲出 notesync', replay: () => nsFirework(window.innerWidth / 2, window.innerHeight / 2) },
   { id: 'type', name: '打字机音', hint: '复古皮肤里敲键盘', replay: () => nsTypeSound('enter', true) },
-  { id: 'diag', name: '诊断面板', hint: '关于弹窗标题连点四次', replay: () => { try { openDiagModal(); } catch (e) {} } }
+  { id: 'diag', name: '诊断面板', hint: '关于弹窗标题连点四次', replay: () => { try { openDiagModal(); } catch (e) {} } },
+  // v9.0.0 十个 URL 门牌彩蛋：replay 一律走 nsRouteEgg（App 内无地址栏，图鉴即发射台）
+  { id: 'mirror', name: '镜像模式', hint: '访问 /mirror', replay: () => nsRouteEgg('mirror') },
+  { id: 'snake', name: '贪吃蛇', hint: '访问 /snake 或正文敲 /snake', replay: () => nsRouteEgg('snake') },
+  { id: 'dragon', name: '断网恐龙', hint: '访问 /dragon', replay: () => nsRouteEgg('dragon') },
+  { id: 'brick', name: '打砖块', hint: '访问 /brick · 砖是你的收藏', replay: () => nsRouteEgg('brick') },
+  { id: 'satoshi', name: '聪合币', hint: '访问 /satoshi · 合到 1 亿聪', replay: () => nsRouteEgg('satoshi') },
+  { id: 'bitcoin', name: '黄金矿工', hint: '访问 /bitcoin · 越深越肥', replay: () => nsRouteEgg('bitcoin') },
+  { id: 'tank', name: '坦克大战', hint: '访问 /tank · 保卫记事本', replay: () => nsRouteEgg('tank') },
+  { id: 'spacex', name: '垂直着陆', hint: '访问 /spacex · 按住是推力', replay: () => nsRouteEgg('spacex') },
+  { id: 'tesla', name: '轨道巡航', hint: '访问 /tesla · 撞碎飘过的标题', replay: () => nsRouteEgg('tesla') },
+  { id: 'pet', name: '桌宠', hint: '访问 /pet 或正文敲 /pet', replay: () => nsRouteEgg('pet') }
 ];
 function nsEggRender() {
   const list = document.getElementById('eggList');
@@ -4677,7 +4696,8 @@ function nsEggRender() {
   const c = document.getElementById('eggCount');
   if (c) c.textContent = got + ' / ' + NS_EGG_LIST.length + ' FOUND';
 }
-function nsEggOpen() { try { nsEggRender(); const m = document.getElementById('eggMask'); if (m) m.classList.remove('hidden'); } catch (e) {} }
+function nsEggOpen() { try { nsEggRender(); const m = document.getElementById('eggMask'); if (m) m.classList.remove('hidden'); } catch (e) {}
+  try { if (window.NSG) { window.NSG.paused = true; if (typeof nsGamePauseAudio === 'function') nsGamePauseAudio(); } } catch (e) {} } // 图鉴 z90 打开即暂停游戏
 function nsEggClose() { try { document.getElementById('eggMask').classList.add('hidden'); } catch (e) {} if (CHIP_HOVER_OK) { try { editor.focus(); ensureCaret(); } catch (e) {} } } // 红线10：关闭回编辑器归还焦点（桌面失焦光标不绘制）
 (function setupEggPanel() {
   const x = document.getElementById('eggX'), c = document.getElementById('eggClose'), m = document.getElementById('eggMask');
@@ -7242,6 +7262,12 @@ if (noteId && (isNativeApp() || !CHIP_HOVER_OK)) {
     const syncOpenBtn = () => { lb.disabled = li.value.trim().length === 0; };
     const sanitizeName = () => {
       // v5.19 恢复 _ 与 -（与后端 ID_RE 一致）；中文等其它字符仍被剔除
+      // v9.0.0：彩蛋门牌为专属保留字，命中即清空并给专属文案（这些名字永远打不开笔记）
+      if (typeof NS_RESERVED_ROUTES !== 'undefined' && NS_RESERVED_ROUTES.indexOf(li.value.trim().toLowerCase()) >= 0) {
+        li.value = ''; syncOpenBtn(); if (urlEl) urlEl.classList.add('hidden');
+        if (warnEl) { warnEl.textContent = '这个名字是彩蛋专属门牌，换一个'; warnEl.classList.remove('hidden'); }
+        return;
+      }
       const cleaned = li.value.replace(/[^A-Za-z0-9_-]/g, '');
       if (cleaned !== li.value) {
         li.value = cleaned;
@@ -7282,6 +7308,7 @@ if (noteId && (isNativeApp() || !CHIP_HOVER_OK)) {
     lb.addEventListener('click', () => {
       clearInterval(pollTimer);
       const name = li.value.trim();
+      if (name && typeof NS_RESERVED_ROUTES !== 'undefined' && NS_RESERVED_ROUTES.indexOf(name.toLowerCase()) >= 0) return;
       if (name) location.href = '/' + encodeURIComponent(name);
     });
     li.addEventListener('keydown', e => { if (e.key === 'Enter') lb.click(); });
@@ -7358,6 +7385,1627 @@ if ('serviceWorker' in navigator) {
   // "CACHE 硬编码 notesync-v1、发版后离线用户拿旧壳"的隐患
   navigator.serviceWorker.register('/sw.js?v=' + encodeURIComponent(APP_VERSION)).catch(() => {});
 }
+</script>
+<style>
+/* ═══ v9.0.0 彩蛋层样式：全部只吃主题令牌，零新色字面量 ═══ */
+.ns-game{position:fixed;inset:0;z-index:70;display:flex;flex-direction:column;background:var(--bg);color:var(--fg)}
+/* dom 型彩蛋（镜像）：壳必须透明且不吃点击，否则全屏不透明底把被镜像的站点整个盖住 */
+.ns-game.ns-passthru{background:transparent;pointer-events:none}
+.ns-game.ns-passthru .ns-hud,.ns-game.ns-passthru .ns-mirror-panel{pointer-events:auto}
+.ns-game.ns-passthru .ns-mirror-panel{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);width:min(92vw,420px);background:var(--box-bg);border:1px solid var(--line);border-radius:16px}
+/* 反向抵消名单补齐：控制条/确认浮层/提示条若不在名单里会在镜像态下左右反读 */
+body.ns-mirror-A #nsAsk,body.ns-mirror-B #nsAsk,body.ns-mirror-A .ns-mirror-panel,body.ns-mirror-B .ns-mirror-panel,body.ns-mirror-A #installBar,body.ns-mirror-B #installBar,body.ns-mirror-A #timechip,body.ns-mirror-B #timechip{transform:scaleX(-1)}
+body.ns-in-game{overflow:hidden}
+.ns-hud{display:flex;align-items:center;gap:8px;height:44px;padding:0 10px;border-bottom:1px solid var(--line);font:400 10.5px/1 var(--mono);letter-spacing:.12em;color:var(--muted);background:var(--bg);flex:none}
+.ns-hud .ns-x{display:flex;align-items:center;gap:6px;height:32px;padding:0 8px 0 4px;color:var(--fg);border-radius:9px;cursor:pointer}
+.ns-hud .ns-x:hover{background:var(--hover)}
+.ns-hud .ns-x svg{width:13px;height:13px}
+.ns-hud .ns-gate{color:var(--accent)}
+.ns-hud .ns-lv{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.ns-hud .ns-sp{flex:1}
+.ns-hud .ns-sc{font-weight:600;color:var(--fg);font-variant-numeric:tabular-nums}
+.ns-hud .ns-mute{position:relative;width:32px;height:32px;display:flex;align-items:center;justify-content:center;color:var(--muted);border-radius:9px;cursor:pointer}
+.ns-hud .ns-mute:hover{background:var(--hover);color:var(--fg)}
+.ns-hud .ns-mute svg{width:15px;height:15px}
+.ns-hud .ns-mute.off{opacity:.45}
+.ns-hud .ns-mute.off::after{content:'';position:absolute;left:6px;right:6px;top:50%;height:1.7px;background:currentColor;transform:rotate(-38deg)}
+.ns-stage{flex:1;position:relative;overflow:hidden;background:var(--bg)}
+#nsCv{display:block;touch-action:none;cursor:pointer;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)}
+.ns-game,.ns-hud,.ns-tip{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.ns-tip{flex:none;text-align:center;font:400 10px/1.5 var(--mono);letter-spacing:.06em;color:var(--muted);padding:9px 12px 12px}
+.ns-over{position:absolute;left:0;right:0;top:44px;bottom:0;z-index:78;display:flex;align-items:center;justify-content:center;background:rgba(20,20,18,.42)}
+body.dark .ns-over{background:rgba(0,0,0,.6)}
+.ns-over.hidden{display:none}
+.ns-card{background:var(--box-bg);border:1px solid var(--line);border-radius:16px;padding:20px 22px;width:min(86%,300px);text-align:center}
+.ns-card h2{font:600 16px/1.4 var(--serif);letter-spacing:.04em;margin:0}
+.ns-card h2::after{content:'';display:block;width:44px;height:1px;background:var(--accent);margin:10px auto 0;opacity:.8}
+.ns-rows{margin:12px 0 0;display:flex;flex-direction:column;gap:6px;font:400 11px/1.6 var(--mono);color:var(--muted)}
+.ns-rows div{display:flex;justify-content:space-between;gap:10px}
+.ns-rows b{color:var(--fg);font-weight:600}
+.ns-btns{display:flex;gap:8px;margin-top:14px}
+.ns-btns button{flex:1;font:inherit;font-size:12.5px;letter-spacing:.06em;padding:10px 0;border-radius:10px;border:1px solid var(--line);background:none;color:var(--fg);cursor:pointer}
+.ns-btns .ns-again{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+/* 非 canvas 型彩蛋（镜像 / 桌宠）自带画面 */
+.ns-dom .ns-mirror-panel,.ns-dom .ns-pet-panel{margin:auto;max-width:420px;padding:22px 20px 30px}
+.ns-mirror-panel h2,.ns-pet-panel h2{font:600 17px/1.4 var(--serif);letter-spacing:.04em;margin:0 0 10px}
+.ns-mirror-panel p,.ns-pet-panel p{font-size:12.5px;line-height:1.8;color:var(--muted);margin:0 0 12px}
+.ns-mrow{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.ns-mrow button{flex:1;min-width:96px;font:400 11px/1 var(--mono);letter-spacing:.04em;padding:10px 6px;border:1px solid var(--line);border-radius:9px;background:var(--box-bg);color:var(--muted);cursor:pointer}
+.ns-mrow button.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.ns-mnote{font:400 10.5px/1.7 var(--mono)!important;color:var(--muted)!important;border-left:2px solid var(--accent);padding-left:10px}
+/* 镜像：transform 挂 body，文字/图片/二维码/浮层反回 */
+body.ns-mirror-A,body.ns-mirror-B{transform:scaleX(-1)}
+body.ns-mirror-B #editor,body.ns-mirror-B header .brand,body.ns-mirror-B footer,body.ns-mirror-B img,
+body.ns-mirror-B .box,body.ns-mirror-B #remCard,body.ns-mirror-B #nsBadge,body.ns-mirror-B #nsGame,
+body.ns-mirror-B #nsPet,body.ns-mirror-B .mask,body.ns-mirror-B #timechip,body.ns-mirror-B .confcard{transform:scaleX(-1)}
+body.ns-mirror-A img{transform:scaleX(-1)}
+body.ns-mirror-C header{flex-direction:row-reverse}
+body.ns-mirror-C #editor{text-align:right}
+body.ns-mirror-C .brand{flex-direction:row-reverse}
+/* 桌宠：挂顶栏下沿骑线，0 占宽 */
+#nsPet{position:absolute;left:0;bottom:-11px;width:24px;height:24px;color:var(--fg);background:var(--bg);border-radius:7px;padding:1px;z-index:5;cursor:pointer;transition:opacity .3s;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+#nsPet svg{width:22px;height:22px;display:block}
+#nsPet{animation:nsPetBob 2.6s ease-in-out infinite}
+@keyframes nsPetBob{0%,100%{margin-bottom:0}50%{margin-bottom:2px}}
+#nsPet.talk{animation:nsPetNod .5s ease-in-out}
+@keyframes nsPetNod{0%,100%{transform:rotate(0)}40%{transform:rotate(-8deg) translateY(-2px)}}
+#nsPet.asleep{opacity:.42;animation:none}
+@media (max-width:560px){#nsPet{width:22px;height:22px}}
+.ns-pet-top{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.ns-pet-av{width:44px;height:44px;flex:none;border:1px solid var(--line);border-radius:12px;display:flex;align-items:center;justify-content:center;color:var(--fg);background:var(--box-bg)}
+.ns-pet-av svg{width:28px;height:28px}
+.ns-pet-meta b{display:block;font:600 15px/1.4 var(--serif);letter-spacing:.04em}
+.ns-pet-meta span{font:400 10.5px/1.6 var(--mono);color:var(--muted)}
+.ns-shelf{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:14px}
+.ns-sh{aspect-ratio:1;border:1px solid var(--line);border-radius:9px;background:var(--box-bg);display:flex;align-items:center;justify-content:center;font:400 9px/1.3 var(--mono);color:var(--muted);text-align:center;padding:4px}
+.ns-sh.empty{border-style:dashed;opacity:.55}
+.ns-pet-btns{display:flex;gap:8px;margin-bottom:12px}
+.ns-pet-btns button{flex:1;font:400 11px/1.3 var(--mono);padding:10px 4px;border:1px solid var(--line);border-radius:10px;background:none;color:var(--fg);cursor:pointer}
+.ns-pet-free{border-color:var(--accent)!important;color:var(--accent)!important;background:var(--accent-soft)!important}
+.ns-pass{border:1px dashed var(--accent);border-radius:10px;background:var(--accent-soft);padding:10px 11px;font:400 10.5px/1.7 var(--mono);color:var(--fg);word-break:break-all;margin-bottom:10px}
+.ns-pnote{font:400 10.5px/1.7 var(--mono)!important;color:var(--muted)!important}
+/* 关于页第四行「彩蛋 N/M FOUND」（方案 A） */
+.ns-egg-entry{cursor:pointer;border-radius:9px;margin:0 -2px;padding:0 2px;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.ns-egg-entry .about-v{display:flex;align-items:baseline;gap:5px;position:relative}
+.ns-egg-entry .ns-num{font:400 12px/1.5 var(--mono);letter-spacing:.1em;color:var(--fg);font-weight:600}
+.ns-egg-entry .ns-num .of{color:var(--muted);font-weight:400}
+.ns-egg-entry.found .ns-num::before{content:'';display:inline-block;width:4px;height:4px;border-radius:50%;background:var(--accent);margin-right:6px;vertical-align:2px}
+.ns-egg-entry .ns-chev{width:11px;height:11px;color:var(--accent);flex:none}
+/* 词表触发确认浮层：不点就当没发生，字留在正文 */
+/* z 序：确认浮层必须低于图鉴 z90（"图鉴最高"是钉住的口径），投影沿用 .box 既有先例（禁投影只约束精灵） */
+#nsAsk{position:fixed;left:50%;bottom:76px;transform:translateX(-50%);z-index:85;display:flex;align-items:center;gap:9px;padding:9px 11px;border:1px solid var(--line);border-radius:14px;background:var(--box-bg);box-shadow:0 10px 30px rgba(20,20,18,.14);font:400 11.5px/1 var(--mono);color:var(--muted)}
+#nsAsk button{font:400 11.5px/1 var(--mono);padding:8px 11px;border:1px solid var(--line);border-radius:9px;background:none;color:var(--fg);cursor:pointer}
+#nsAsk .ns-go{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+/* 桌宠三件（偷字贴片／嘴里叼的字／说话气泡）：JS 按视口坐标写 inline left/top，缺 position:fixed
+   就是 static 流元素——left/top 不吃，贴片盖不住字、气泡坠到正文末尾（闸 R2 P1：CSS 零定义实锤）。
+   层级：正文之上、确认浮层 #nsAsk(85) 与图鉴(90) 之下；零新色，只吃令牌 */
+.ns-pet-cover{position:fixed;z-index:8;display:block;background:var(--bg);pointer-events:none}
+#nsPetChip{position:fixed;z-index:8;display:block;padding:1px 3px;border:1px solid var(--line);border-radius:6px;background:var(--box-bg);color:var(--fg);font:400 11px/1.2 var(--mono);pointer-events:none}
+#nsPetBubble{position:fixed;z-index:8;max-width:200px;padding:6px 9px;border:1px solid var(--line);border-radius:10px;background:var(--box-bg);color:var(--fg);font:400 11px/1.5 var(--mono);pointer-events:none}
+@media (prefers-reduced-motion:reduce){#nsPet,#nsPet.talk{animation:none}}
+</style>
+<script>
+/* ════════════════════════════════════════════════════════════════════
+   v9.0.0 彩蛋层 A —— 音效引擎 + 游戏外壳 + 路由/词表 + 图鉴扩容 + 镜像 + 桌宠
+   铁律：① 零外部资源（音效全部 WebAudio 现场合成，精灵全部内联 SVG/canvas）
+        ② 零新色字面量（只吃 --fg/--accent/--muted/--line/--bg/--box-bg）
+        ③ 不触正文 DOM、不改任何用户数据（游戏内一切"消除/打碎/偷字"皆为显示层演出）
+        ④ 单一 AudioContext：复用 unlockRemAudio()/remAudioCtx，绝不新建第二个
+        ⑤ 默认静音；未解锁前发声一律静默丢弃、不排队
+   ════════════════════════════════════════════════════════════════════ */
+(function () {
+'use strict';
+
+/* ── 1. 保留路由：十个门牌为彩蛋专属，禁止作为笔记名 ───────────────── */
+var NS_ROUTES = ['mirror', 'snake', 'dragon', 'brick', 'satoshi', 'bitcoin', 'tank', 'spacex', 'tesla', 'pet'];
+window.NS_ROUTES = NS_ROUTES;
+function nsIsRouteName(s) { return NS_ROUTES.indexOf(String(s || '').toLowerCase()) >= 0; }
+window.nsIsRouteName = nsIsRouteName;
+
+/* ── 2. 音色引擎：一套合成器，十个蛋十种性格，共用五声音阶基因 ────── */
+var SND = { muted: true, vol: 0.12, nb: null, nbCtx: null, curve: null, wet: null, cont: null };
+try { SND.muted = (localStorage.getItem('notesync_snd') !== 'on'); } catch (e) {}
+function sndPersist() { try { localStorage.setItem('notesync_snd', SND.muted ? 'off' : 'on'); } catch (e) {} }
+function actx() {
+  if (typeof unlockRemAudio !== 'function') return null;
+  unlockRemAudio();
+  var a = (typeof remAudioCtx === 'undefined') ? null : remAudioCtx;
+  if (a && !SND.curve) {
+    var n = 256, c = new Float32Array(n);
+    for (var i = 0; i < n; i++) { var x = i * 2 / (n - 1) - 1; c[i] = 10 * x / (1 + 9 * Math.abs(x)); }
+    SND.curve = c;
+    SND.wet = a.createGain(); SND.wet.gain.value = 0.3;
+    var dl = a.createDelay(1); dl.delayTime.value = 0.19;
+    var fb = a.createGain(); fb.gain.value = 0.33;
+    SND.wet.connect(dl); dl.connect(fb); fb.connect(dl); dl.connect(OUT());
+  }
+  return a;
+}
+function OUT() { // 主增益：全局音量与静音的唯一出口
+  if (!SND.out) { SND.out = remAudioCtx.createGain(); SND.out.gain.value = SND.vol; SND.out.connect(remAudioCtx.destination); }
+  return SND.out;
+}
+function noiseBuf(a) {
+  if (SND.nb && SND.nbCtx === a) return SND.nb;
+  var n = Math.max(1, Math.floor(a.sampleRate * 0.6));
+  var b = a.createBuffer(1, n, a.sampleRate), d = b.getChannelData(0);
+  for (var i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+  SND.nb = b; SND.nbCtx = a; return b;
+}
+function adsr(a, g, t, atk, dur, rev, dest) {
+  var e = a.createGain();
+  e.gain.setValueAtTime(0.0001, t);
+  e.gain.linearRampToValueAtTime(g, t + atk);
+  e.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  e.connect(dest || OUT());
+  if (rev && SND.wet) { var w = a.createGain(); w.gain.value = rev; e.connect(w); w.connect(SND.wet); }
+  return e;
+}
+// v=voice 性格包；o=本次发声参数
+function tone(v, o) {
+  if (SND.muted) return;
+  var a; try { a = actx(); } catch (e) { return; }
+  if (!a || a.state !== 'running') return; // 未解锁：静默丢弃，不排队
+  var t = a.currentTime + (o.at || 0), dur = o.dur || v.d || 0.12;
+  var atk = (o.atk != null) ? o.atk : (v.renv ? Math.min(dur * 0.85, v.a || 0.006) : (v.a || 0.006));
+  var e = adsr(a, o.g == null ? 0.4 : o.g, t, atk, dur, o.rev == null ? v.r : o.rev);
+  var tail = e;
+  if (v.dist) { var ws = a.createWaveShaper(); ws.curve = SND.curve; ws.oversample = '2x'; e.connect(ws); tail = ws; }
+  (v.h || [1]).forEach(function (h, i) {
+    var s = a.createOscillator(), ws2 = v.w || ['sine'];
+    s.type = ws2[Math.min(i, ws2.length - 1)];
+    s.frequency.setValueAtTime((o.f || 440) * h, t);
+    if (o.f1) s.frequency.exponentialRampToValueAtTime(Math.max(20, o.f1 * h), t + dur);
+    if (v.det && i > 0) s.detune.value = v.det * (i % 2 ? 1 : -1);
+    var g2 = a.createGain(); g2.gain.value = (v.hg ? v.hg[i] : 1 / (i + 1.5));
+    s.connect(g2); g2.connect(e); s.start(t); s.stop(t + dur + 0.06);
+  });
+}
+function nz(v, o) { // 噪声类：一律过带通/低通，避免"嘶"的廉价感
+  if (SND.muted) return;
+  var a; try { a = actx(); } catch (e) { return; }
+  if (!a || a.state !== 'running') return;
+  var t = a.currentTime + (o.at || 0), dur = o.dur || 0.08;
+  var s = a.createBufferSource(); s.buffer = noiseBuf(a); s.loop = true;
+  var f = a.createBiquadFilter(); f.type = o.ft || v.ft || 'bandpass'; f.Q.value = v.q || 1.2;
+  f.frequency.setValueAtTime(o.cut || v.cut || 1200, t);
+  f.frequency.exponentialRampToValueAtTime(Math.max(60, o.cut1 || v.cut1 || 300), t + dur);
+  var e = adsr(a, o.g == null ? 0.34 : o.g, t, v.a || 0.004, dur, v.r);
+  s.connect(f); f.connect(e); s.start(t); s.stop(t + dur + 0.05);
+  if (o.body) tone({ h: [1], w: ['sine'], a: 0.003, r: 0 }, { f: o.body, f1: o.body * 0.6, dur: dur * 1.3, g: 0.3, at: o.at || 0 });
+}
+function lfoGrowl(v, o) { // 桌宠呼噜：低频锯齿 + LFO 频率调制，唯一"有体温"的声
+  if (SND.muted) return;
+  var a; try { a = actx(); } catch (e) { return; }
+  if (!a || a.state !== 'running') return;
+  var t = a.currentTime + (o.at || 0), dur = o.dur || 0.7;
+  var s = a.createOscillator(); s.type = 'sawtooth'; s.frequency.value = o.f || 58;
+  var f = a.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = o.lp || 320;
+  var l = a.createOscillator(), lg = a.createGain(); l.frequency.value = o.lfo || 22; lg.gain.value = o.depth || 26;
+  l.connect(lg); lg.connect(s.frequency);
+  var e = adsr(a, o.g == null ? 0.32 : o.g, t, 0.02, dur, v.r || 0);
+  s.connect(f); f.connect(e); s.start(t); l.start(t); s.stop(t + dur + 0.05); l.stop(t + dur + 0.05);
+}
+var VOICES = {
+  mirror:  { w: ['sine', 'triangle'], h: [1, 2], hg: [0.5, 0.25], a: 0.16, d: 0.34, r: 0.3, renv: 1 },
+  dragon:  { w: ['square'], h: [1], a: 0.004, d: 0.1, r: 0 },
+  snake:   { w: ['sine'], h: [1, 2], hg: [0.6, 0.22], a: 0.012, d: 0.13, r: 0.12 },
+  brick:   { cut: 2600, cut1: 900, q: 0.9, a: 0.002, d: 0.07 },
+  tank:    { w: ['square', 'sawtooth'], h: [1, 0.5], a: 0.003, d: 0.16, dist: 1, r: 0.14 },
+  satoshi: { w: ['sine'], h: [1, 3, 5], hg: [0.6, 0.16, 0.06], a: 0.004, d: 0.42, r: 0.26 },
+  bitcoin: { w: ['triangle'], h: [1, 2], hg: [0.5, 0.18], a: 0.003, d: 0.2, r: 0.1 },
+  spacex:  { w: ['sine'], h: [1, 2], hg: [0.5, 0.2], a: 0.02, d: 0.5, r: 0.4 },
+  tesla:   { w: ['sawtooth', 'sawtooth'], h: [1, 1], det: 9, a: 0.14, d: 0.7, r: 0.3 },
+  pet:     { w: ['sine'], h: [1, 3], hg: [0.5, 0.08], a: 0.02, d: 0.16, r: 0.08 }
+};
+var PENTA = { C: 261.63, D: 293.66, E: 329.63, G: 392, A: 440, c: 523.26, d: 587.33, e: 659.25, g: 783.99, a: 880, C2: 130.81, E2: 164.81, G2: 196, A2: 220 };
+var FX = {
+  tap:     function (v) { tone(v, { f: 880, f1: 660, dur: 0.05, g: 0.2 }); },
+  start:   function (v) { [PENTA.C, PENTA.E, PENTA.G].forEach(function (f, i) { tone(v, { f: f, dur: 0.13, g: 0.28, at: i * 0.09 }); }); },
+  score:   function (v, n) { tone(v, { f: 660 * Math.pow(2, Math.min(8, n || 0) / 12), f1: 990, dur: 0.09, g: 0.3 }); },
+  win:     function (v) { [PENTA.C, PENTA.E, PENTA.G, PENTA.c, PENTA.e].forEach(function (f, i) { tone(v, { f: f, dur: 0.18, g: 0.28, at: i * 0.1 }); }); },
+  fail:    function (v) { tone(v, { f: 220, f1: 70, dur: 0.18, g: 0.3 }); nz(v, { cut: 400, cut1: 120, dur: 0.18, g: 0.2, ft: 'lowpass' }); },
+  jump:    function (v) { tone(v, { f: 420, f1: 900, dur: 0.11, g: 0.3 }); },
+  land:    function (v) { tone(v, { f: 150, f1: 80, dur: 0.06, g: 0.32 }); },
+  bonk:    function (v) { nz(v, { cut: 900, cut1: 180, dur: 0.16, g: 0.36 }); tone(v, { f: 180, f1: 60, dur: 0.16, g: 0.26 }); },
+  eat:     function (v) { tone(v, { f: 700, f1: 1100, dur: 0.08, g: 0.3 }); },
+  grow:    function (v) { [PENTA.E, PENTA.G, PENTA.c].forEach(function (f, i) { tone(v, { f: f, dur: 0.1, g: 0.26, at: i * 0.08 }); }); },
+  pad:     function (v) { nz(v, { cut: 900, cut1: 600, dur: 0.05, g: 0.3, body: 180 }); },
+  brick:   function (v) { nz(v, { cut: 2600, cut1: 900, dur: 0.07, g: 0.32 }); },
+  shot:    function (v) { tone(v, { f: 120, f1: 40, dur: 0.12, g: 0.4 }); nz(v, { cut: 1500, cut1: 300, dur: 0.09, g: 0.28 }); },
+  hit:     function (v) { nz(v, { cut: 3200, cut1: 1400, dur: 0.06, g: 0.3 }); },
+  boom:    function (v) { nz(v, { cut: 700, cut1: 90, dur: 0.4, g: 0.42, ft: 'lowpass' }); tone(v, { f: 90, f1: 35, dur: 0.32, g: 0.3 }); },
+  pow:     function (v) { [PENTA.G, PENTA.A, PENTA.c].forEach(function (f, i) { tone(v, { f: f, dur: 0.09, g: 0.28, at: i * 0.07 }); }); },
+  merge:   function (v, n) { tone(v, { f: PENTA.G * Math.pow(2, Math.min(5, n || 0) / 12), dur: 0.16, g: 0.3 }); },
+  coin:    function (v) { [1200, 1400, 1600].forEach(function (f, i) { tone(v, { f: f, dur: 0.08, g: 0.26, at: i * 0.08 }); }); },
+  heavy:   function (v) { tone(v, { f: 110, f1: 70, dur: 0.15, g: 0.4 }); },
+  drop:    function (v) { nz(v, { cut: 1400, cut1: 520, dur: 0.07, g: 0.28, body: 300 }); },
+  tnt:     function (v) { nz(v, { cut: 900, cut1: 80, dur: 0.42, g: 0.44, ft: 'lowpass' }); tone(v, { f: 70, dur: 0.36, g: 0.28 }); },
+  ign:     function (v) { nz(v, { cut: 300, cut1: 1600, dur: 0.55, g: 0.4, ft: 'lowpass' }); },
+  confirm: function (v) { [PENTA.C, PENTA.G, PENTA.c].forEach(function (f, i) { tone(v, { f: f, dur: 0.18, g: 0.28, at: i * 0.13 }); }); }, // 三声确认音：短音叠出来，不靠拉长
+  crack:   function (v) { nz(v, { cut: 4200, cut1: 1800, dur: 0.07, g: 0.28 }); },
+  horn:    function (v) { tone(v, { f: 440, dur: 0.18, g: 0.24 }); tone(v, { f: 554, dur: 0.18, g: 0.2 }); },
+  flip:    function (v) { tone(v, { f: 660, f1: 330, dur: 0.18, g: 0.28 }); },
+  flipb:   function (v) { tone(v, { f: 330, f1: 660, dur: 0.18, g: 0.28 }); },
+  burp:    function (v) { tone(v, { f: 180, f1: 90, dur: 0.16, g: 0.34 }); },
+  snatch:  function (v) { nz(v, { cut: 600, cut1: 3000, dur: 0.16, g: 0.24 }); },
+  wake:    function (v) { tone(v, { f: PENTA.C, dur: 0.16, g: 0.2 }); tone(v, { f: PENTA.E, dur: 0.18, g: 0.18, at: 0.13 }); },
+  purr:    function (v) { lfoGrowl(v, { f: 58, dur: 0.7 }); }
+};
+var lastFx = {}; // 按音效种类分桶节流——全局单时戳会让「弹板+碎砖」同帧互吞（闸 R2 实测连发 10 声仅 1 声）
+function fx(name, arg) { // 当前蛋的音色 + 60ms 同类节流（连射不糊成一片）
+  var v = VOICES[NSG.voice] || VOICES.snake, f = FX[name];
+  if (!f) return;
+  var now = Date.now();
+  if (name !== 'win' && name !== 'fail' && name !== 'confirm' && (now - (lastFx[name] || 0)) < 60) return;
+  lastFx[name] = now;
+  try { f(v, arg); } catch (e) {}
+}
+function stopVoice() { if (SND.cont) { try { SND.cont(); } catch (e) {} SND.cont = null; } }
+function engineOn(on) { // 持续音（火箭/跑车引擎）：带通噪声 + LFO 抖动
+  if (!on) { stopVoice(); return; }
+  if (SND.cont) return;
+  if (SND.muted) return;
+  var a; try { a = actx(); } catch (e) { return; }
+  if (!a || a.state !== 'running') return;
+  var s = a.createBufferSource(); s.buffer = noiseBuf(a); s.loop = true;
+  var f = a.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 1.1; f.frequency.value = 520;
+  var l = a.createOscillator(), lg = a.createGain(); l.frequency.value = 5.5; lg.gain.value = 900;
+  l.connect(lg); lg.connect(f.frequency);
+  var g = a.createGain(); g.gain.value = 0.24;
+  s.connect(f); f.connect(g); g.connect(OUT()); s.start(); l.start();
+  SND.cont = function () { try { g.gain.exponentialRampToValueAtTime(0.0001, a.currentTime + 0.15); s.stop(a.currentTime + 0.25); l.stop(a.currentTime + 0.25); } catch (e) {} };
+}
+function setMuted(m) {
+  SND.muted = !!m; sndPersist(); stopVoice();
+  document.querySelectorAll('#nsSndBtn,.ns-mute').forEach(function (b) { b.classList.toggle('off', !!m); });
+  try { if (typeof nsTyMuteSet === 'function') { /* 打字机音的静音与彩蛋音效互不覆盖，仅同步图标态 */ } } catch (e) {}
+}
+window.nsSndMuted = function () { return SND.muted; };
+window.nsSndToggle = function () { setMuted(!SND.muted); fx('tap'); return !SND.muted; };
+window.nsFx = fx;
+
+/* ── 3. 游戏外壳：HUD + 画面 + 结束卡，十个蛋共用 ─────────────────── */
+var NSG = { cur: null, raf: 0, last: 0, voice: 'snake', W: 0, H: 0, dpr: 1, paused: false, over: false, score: 0, best: {}, route: '', pushed: false };
+window.NSG = NSG;
+var BEST_KEY = 'notesync_best';
+try { NSG.best = JSON.parse(localStorage.getItem(BEST_KEY) || '{}') || {}; } catch (e) { NSG.best = {}; }
+function saveBest(id, v) {
+  if (!(v > 0)) return;
+  if (!(NSG.best[id] > v)) { NSG.best[id] = v; try { localStorage.setItem(BEST_KEY, JSON.stringify(NSG.best)); } catch (e) {} }
+  arcadePush(id, v);
+}
+function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+// 无 requestAnimationFrame 的环境（jsdom 守护测试、极老 WebView）退化为 16ms 定时器循环：
+// 缺 rAF 就抛错等于「没有 rAF 的浏览器打不开彩蛋」，这不是可接受的降级
+function raf(fn) { return (typeof requestAnimationFrame === 'function') ? requestAnimationFrame(fn) : setTimeout(function () { fn(Date.now()); }, 16); }
+function caf(id) { if (typeof cancelAnimationFrame === 'function') { try { cancelAnimationFrame(id); } catch (e) {} } else clearTimeout(id); }
+function mk(tag, cls, html) { var d = document.createElement(tag); if (cls) d.className = cls; if (html != null) d.innerHTML = html; return d; }
+
+function shell(g) {
+  if (document.getElementById('nsGame')) return;
+  var root = mk('div'); root.id = 'nsGame'; root.className = 'ns-game';
+  var hud = mk('div', 'ns-hud');
+  hud.appendChild(mk('span', 'ns-x', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg><b>退出</b>'));
+  hud.appendChild(mk('span', 'ns-gate', '/' + g.id));
+  var lv = mk('span', 'ns-lv'); hud.appendChild(lv);
+  hud.appendChild(mk('span', 'ns-sp'));
+  hud.appendChild(mk('span', 'ns-sc', '0'));
+  hud.appendChild(mk('span', 'ns-mute' + (SND.muted ? ' off' : ''), '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 9.5v5h3.2L12 18.6V5.4L7.2 9.5H4Z"/><path d="M16 9.4a3.6 3.6 0 0 1 0 5.2M18.4 7a7 7 0 0 1 0 10"/></svg>'));
+  root.appendChild(hud);
+  var stage = mk('div', 'ns-stage'); var cv = mk('canvas'); cv.id = 'nsCv'; stage.appendChild(cv); root.appendChild(stage);
+  root.appendChild(mk('div', 'ns-tip', g.tip || ''));
+  var card = mk('div', 'ns-over'); card.classList.add('hidden');
+  card.appendChild(mk('div', 'ns-card', '<h2></h2><div class="ns-rows"></div><div class="ns-btns"><button class="ns-back">回到笔记</button><button class="ns-again">再来一局</button></div>'));
+  root.appendChild(card);
+  document.body.appendChild(root);
+  NSG.cv = cv; NSG.ctx = cv.getContext('2d'); NSG.hud = hud; NSG.card = card; NSG.stage = stage; NSG.lv = lv;
+  // 退出按钮必须显式传 false：直接把 closeShell 当监听器会把 Event 对象当 fromPop（truthy），UI 退出恒走「不动历史」分支
+  hud.querySelector('.ns-x').addEventListener('click', function () { closeShell(false); });
+  hud.querySelector('.ns-mute').addEventListener('click', function (e) { e.stopPropagation(); window.nsSndToggle(); });
+  card.querySelector('.ns-again').addEventListener('click', function () { fx('tap'); restart(g); });
+  card.querySelector('.ns-back').addEventListener('click', function () { closeShell(false); });
+  card.addEventListener('click', function (e) { if (e.target === card) closeShell(); });
+  bindInput(root, cv, g);
+  fit(g);
+  NSG.onResize = function () { fit(g); }; // 旋转屏后必须重算，否则绘制与命中错位
+  window.addEventListener('resize', NSG.onResize);
+  window.addEventListener('orientationchange', NSG.onResize);
+}
+function fit(g) {
+  var st = NSG.stage, r = st.getBoundingClientRect();
+  NSG.dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+  NSG.W = Math.max(200, Math.round(r.width)); NSG.H = Math.max(160, Math.round(r.height));
+  NSG.cv.width = NSG.W * NSG.dpr; NSG.cv.height = NSG.H * NSG.dpr;
+  NSG.cv.style.width = NSG.W + 'px'; NSG.cv.style.height = NSG.H + 'px';
+  // 无 2d 上下文的环境（jsdom 守护测试、极老内核）：只跳过变换，壳与逻辑照常可测
+  if (NSG.ctx) NSG.ctx.setTransform(NSG.dpr, 0, 0, NSG.dpr, 0, 0);
+  if (g && g.resize) g.resize(NSG.W, NSG.H);
+}
+function setScore(t) { var e = NSG.hud && NSG.hud.querySelector('.ns-sc'); if (e) e.textContent = t; }
+function setLevel(t) { var e = NSG && NSG.lv; if (e) e.textContent = t || ''; }
+function showEnd(title, rows) {
+  NSG.over = true; stopVoice();
+  var c = NSG.card.querySelector('.ns-card');
+  c.querySelector('h2').textContent = title;
+  var box = c.querySelector('.ns-rows'); box.textContent = '';
+  (rows || []).forEach(function (r) { var d = mk('div'); d.innerHTML = '<span></span><b></b>'; d.firstChild.textContent = r[0]; d.lastChild.textContent = r[1]; box.appendChild(d); });
+  NSG.card.classList.remove('hidden');
+}
+function hideEnd() { NSG.card.classList.add('hidden'); NSG.over = false; }
+
+function bindInput(root, cv, g) {
+  var sx = 0, sy = 0, tracking = false, moved = false, t0 = 0;
+  cv.addEventListener('pointerdown', function (e) {
+    if (!SND.muted) { try { actx(); } catch (x) {} } // 静音时不唤醒 ctx：默认静音就该零开销、零功耗
+    tracking = true; moved = false; sx = e.clientX; sy = e.clientY; t0 = Date.now();
+    var r = cv.getBoundingClientRect();
+    if (g.down) g.down(e.clientX - r.left, e.clientY - r.top, e);
+    e.preventDefault();
+  }, { passive: false });
+  cv.addEventListener('pointermove', function (e) {
+    var r = cv.getBoundingClientRect();
+    if (tracking && (Math.abs(e.clientX - sx) > 8 || Math.abs(e.clientY - sy) > 8)) moved = true;
+    if (g.move) g.move(e.clientX - r.left, e.clientY - r.top, e);
+  }, { passive: true });
+  function up(e) {
+    if (!tracking) return; tracking = false;
+    var dx = e.clientX - sx, dy = e.clientY - sy;
+    // 触屏四命门：划动阈值 18px、抬手才生效、一次划动只改一次向（不吃连击）
+    if (Math.abs(dx) >= 18 || Math.abs(dy) >= 18) { if (g.swipe) g.swipe(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'R' : 'L') : (dy > 0 ? 'D' : 'U')); }
+    else if (!moved && Date.now() - t0 < 400 && g.tap) g.tap();
+    if (g.up) g.up(e);
+  }
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+  document.addEventListener('keydown', keyHandler);
+  document.addEventListener('keyup', keyHandler); // 缺 keyup 等于「按下的键永远抬不起来」
+  root._key = keyHandler;
+}
+function keyHandler(e) {
+  var g = NSG.cur; if (!g) return;
+  if (e.key === 'Escape') { closeShell(false); return; }
+  if (e.key === 'p' || e.key === 'P') {
+    NSG.paused = !NSG.paused;
+    if (NSG.paused) { stopVoice(); if (g.pauseHook) g.pauseHook(); } // 暂停必须停持续音并松掉按住量
+    setLevel(NSG.paused ? '已暂停' : '');
+    return;
+  }
+  if (e.type === 'keyup') { if (g.keyup) g.keyup(e); return; }
+  if (g.key) g.key(e);
+}
+window.nsGamePauseAudio = stopVoice;
+function restart(g) { hideEnd(); NSG.paused = false; try { setLevel(''); } catch (e) {} if (g.reset) g.reset(); } // 与 launch 同口径清 paused：结束卡期间切过后台的话，不清就是「点了再来一局仍定格」
+function closeShell(fromPop, keepHistory) {
+  var g = NSG.cur;
+  stopVoice();
+  if (g && g.destroy) { try { g.destroy(); } catch (e) {} }
+  if (NSG.raf) { caf(NSG.raf); NSG.raf = 0; }
+  if (NSG.onResize) { window.removeEventListener('resize', NSG.onResize); window.removeEventListener('orientationchange', NSG.onResize); NSG.onResize = null; }
+  document.removeEventListener('keydown', keyHandler);
+  document.removeEventListener('keyup', keyHandler);
+  var el = document.getElementById('nsGame'); if (el && el.parentNode) el.parentNode.removeChild(el);
+  NSG.cur = null; NSG.over = false; NSG.paused = false;
+  document.body.classList.remove('ns-in-game');
+  // keepHistory：换游戏（launch 内收旧局）绝不许动历史——back 与紧随的 pushState 同 tick 交错，
+  // 会多出一发 popstate 把刚起来的新局又关掉；历史归属与 prevPath/pushed 原样交给新局
+  if (!keepHistory) {
+    // popstate 触发的退出不得再动历史；UI 触发的退出用 back 抵消 launch 的那一条，避免历史堆叠
+    // 冷启动直达门牌时 launch 没压历史（路径本就对），back() 等于把标签页退出站点变白页（e2e E1 实锤）→ 就地 replace
+    if (!fromPop && NSG.prevPath != null && location.pathname !== NSG.prevPath) {
+      if (NSG.pushed) { try { history.back(); } catch (e) {} }
+      else { try { history.replaceState({}, '', NSG.prevPath); } catch (e) {} }
+    }
+    else if (fromPop && NSG.prevPath != null && location.pathname !== NSG.prevPath) { try { history.replaceState({}, '', NSG.prevPath); } catch (e) {} }
+    NSG.pushed = false;
+    NSG.prevPath = undefined;
+  }
+  // 红线10：退出游戏把焦点还给编辑器并重建光标
+  if (typeof CHIP_HOVER_OK !== 'undefined' && CHIP_HOVER_OK) { try { editor.focus(); ensureCaret(); } catch (e) {} }
+}
+
+/* ── 4. 路由：URL 门牌 / 正文词表 / 图鉴 replay 三入口收敛到一处 ───── */
+var GAMES = {};
+function register(g) { GAMES[g.id] = g; }
+window.nsGameRegister = register;
+window.nsGameBest = saveBest;
+window.nsGameCss = css;
+window.nsGameMk = mk;
+window.nsGameShell = function () { return NSG; };
+window.nsGameScore = setScore;
+window.nsGameLevel = setLevel;
+window.nsGameEnd = function (title, rows) { saveBest(NSG.route, NSG.scoreVal || 0); showEnd(title, rows); };
+window.nsGameEngine = engineOn;
+window.nsGameProbe = function () { try { return (NSG.cur && NSG.cur.probe) ? NSG.cur.probe() : null; } catch (e) { return null; } };
+window.nsGameMuted = function () { return SND.muted; };
+
+function onPop() {
+  var p = location.pathname.replace(/^\/+|\/+$/g, '');
+  if (GAMES[p]) { if (!NSG.cur || NSG.route !== p) launch(p); }
+  else if (NSG.cur) closeShell(true);
+}
+function launch(id) {
+  var g = GAMES[id]; if (!g) return;
+  // 换游戏：旧局收壳时绝不许动历史（back 与紧随的 pushState 同 tick 交错会多出一发 popstate 把新局关掉），
+  // 改为原地 replaceState 换路径，历史归属（prevPath/pushed）原样交给新局
+  var switching = !!NSG.cur;
+  var keepPrev = switching ? NSG.prevPath : undefined;
+  var keepPushed = switching ? NSG.pushed : false;
+  if (NSG.cur) closeShell(false, true);
+  NSG.route = id; NSG.voice = id; NSG.cur = g; NSG.scoreVal = 0;
+  NSG.paused = false; // 必须在启动处复位：visibilitychange 会在「无游戏在跑」时把 paused 置 true，不清就是下一只游戏永久定格
+  if (switching) NSG.prevPath = keepPrev;
+  else if (NSG.prevPath === undefined) NSG.prevPath = location.pathname;
+  document.documentElement.classList.remove('ns-mirror-A', 'ns-mirror-B', 'ns-mirror-C');
+  document.body.classList.remove('ns-mirror-A', 'ns-mirror-B', 'ns-mirror-C'); // 镜像与游戏互斥：方向键全反必被骂
+  document.body.classList.add('ns-in-game');
+  // 图鉴 z90 高于游戏 z70：从图鉴 replay 启动必须先收遮罩，否则游戏在遮罩下空跑（闸 R2 P0）
+  try { var em = document.getElementById('eggMask'); if (em) em.classList.add('hidden'); } catch (e) {}
+  NSG.pushed = switching ? keepPushed : false; // 本次 launch 是否压了历史：closeShell 退出据此选 back 还是就地 replace
+  if (location.pathname !== '/' + id) {
+    try {
+      if (switching) history.replaceState({ nsGame: id }, '', '/' + id);
+      else { history.pushState({ nsGame: id }, '', '/' + id); NSG.pushed = true; }
+    } catch (e) {}
+  }
+  try { nsEggUnlock(id); } catch (e) {}
+  if (g.dom) { g.dom(); return; } // 非 canvas 型（镜像/桌宠）自带画面
+  shell(g); if (g.start) g.start();
+  NSG.last = 0;
+  var loop = function (ts) {
+    NSG.raf = raf(loop);
+    if (!NSG.cur) return;
+    if (!NSG.last) NSG.last = ts;
+    var dt = (ts - NSG.last) / 1000; NSG.last = ts;
+    if (dt > 0.05) dt = 0.05;
+    if (!NSG.paused && !NSG.over) { try { if (g.frame) g.frame(dt); } catch (e) {} }
+    try { if (g.draw) g.draw(); } catch (e) {}
+  };
+  NSG.raf = raf(loop);
+  fx('start');
+}
+window.nsRouteEgg = function (id) { launch(id); };
+
+/* 存量同名笔记遮蔽提示（闸 R1 P1）：门牌优先是拍板行为，「你的笔记悄悄打不开了」不是。
+   只在冷启动直达门牌时探一次；服务端对存量笔记照常放行，故判据保守——疑似即不提示，绝不误报 */
+var NS_SHADOW = {};
+function nsShadowSay(name) {
+  try {
+    var root = document.getElementById('nsGame');
+    if (!root || document.getElementById('nsShadowTip')) return;
+    var el = mk('div', 'ns-tip'); el.id = 'nsShadowTip';
+    el.textContent = '提示：/「' + name + '」也是你已有笔记的名字——门牌优先，笔记没被改也没被删，给笔记改个名就能照常打开';
+    root.appendChild(el);
+  } catch (e) {}
+}
+function nsShadowCheck(name) {
+  if (NS_SHADOW[name]) { nsShadowSay(name); return; }
+  try {
+    fetch('/api/note/' + encodeURIComponent(name), { cache: 'no-store' }).then(function (r) {
+      return r.status === 200 ? r.json() : null;
+    }).then(function (o) {
+      if (o && (o.ct || o.salt || o.updatedAt > 0 || o.v > 0)) { NS_SHADOW[name] = 1; nsShadowSay(name); }
+    }).catch(function () {});
+  } catch (e) {}
+}
+
+/* 正文词表触发：必须带斜杠、独立成词、粘贴与组字期不算、同词一次会话只提示一次 */
+var asked = {};
+function nsWordTrigger(text) {
+  var m = /(^|\s)\/(mirror|snake|dragon|brick|satoshi|bitcoin|tank|spacex|tesla|pet)(?=$|[\s，。、！？.;:!?])/.exec(text || '');
+  if (!m) return;
+  var id = m[2];
+  if (asked[id]) return;
+  asked[id] = 1;
+  nsAskConfirm(id);
+}
+function nsAskConfirm(id) {
+  var old = document.getElementById('nsAsk'); if (old && old.parentNode) old.parentNode.removeChild(old);
+  var b = mk('div'); b.id = 'nsAsk';
+  b.innerHTML = '<span>要开始吗？</span><button class="ns-go">进入 /' + id + '</button><button class="ns-no">不了</button>';
+  document.body.appendChild(b);
+  function askReturnFocus() { if (typeof CHIP_HOVER_OK !== 'undefined' && CHIP_HOVER_OK) { try { editor.focus(); ensureCaret(); } catch (e) {} } }
+  b.querySelector('.ns-go').addEventListener('click', function () { b.remove(); launch(id); });
+  b.querySelector('.ns-no').addEventListener('click', function () { b.remove(); askReturnFocus(); }); // 红线10：点浮层必 blur 编辑器，不收口=光标消失
+  setTimeout(function () { if (b.parentNode) { b.remove(); askReturnFocus(); } }, 6000);
+}
+document.addEventListener('beforeinput', function (e) {
+  if (e.isComposing || (e.inputType && e.inputType.indexOf('insertComposition') === 0)) return;
+  if (e.inputType === 'insertFromPaste' || e.inputType === 'insertReplacementText') return;
+  if (e.inputType !== 'insertText') return;
+  var t = e.target;
+  if (!t || !editor || (t !== editor && !editor.contains(t))) return;
+  setTimeout(function () { try { nsWordTrigger((editor.textContent || '').slice(-40)); } catch (x) {} }, 0);
+});
+
+/* 关于页入口行（方案 A：第四行「彩蛋 N/M FOUND」）*/
+function nsEggGot() { // 必须与图鉴同一口径：只数在册条目。位图里可能有已退役彩蛋的残键（v8.3.1 拍板「残按不清」），
+  // 照位图数就会「关于页 8/17、图鉴 7/17」自相矛盾，极端情况还能 18/17
+  try { var m = nsEggMap(); return NS_EGG_LIST.filter(function (it) { return m[it.id]; }).length; } catch (e) { return 0; } }
+function mountAboutRow() {
+  try {
+  var box = document.getElementById('aboutAuthor'); if (!box) return;
+  var had = document.getElementById('aboutEggRow');
+  if (had) { had.querySelector('.ns-num').textContent = nsEggGot() + ' / ' + NS_EGG_LIST.length + ' FOUND'; return; } // 重开必须刷新：本会话新解锁的蛋不能还挂着旧数
+  var row = mk('div', 'about-row ns-egg-entry');
+  row.id = 'aboutEggRow'; // 守卫查的就是这个 id（漏赋值=每次开关于多插一行）
+  row.setAttribute('role', 'button'); row.setAttribute('tabindex', '0');
+  row.innerHTML = '<span class="about-k">彩蛋</span><span class="about-v"><span class="ns-num">0 / 0 FOUND</span>' +
+    '<svg class="ns-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 5.5 16 12l-6.5 6.5"/></svg></span>';
+  box.parentNode.insertBefore(row, box.nextSibling);
+  function open() { try { nsEggOpen(); } catch (e) {} }
+  row.addEventListener('click', open);
+  row.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
+  row.querySelector('.ns-num').textContent = nsEggGot() + ' / ' + NS_EGG_LIST.length + ' FOUND';
+  } catch (e) {} // 本版彩蛋一律 try/catch 静默：入口行挂不出来也不该把主脚本点击链拖红
+}
+document.addEventListener('click', function (e) {
+  try { if (e.target && e.target.closest && e.target.closest('#menuAbout')) setTimeout(mountAboutRow, 60); } catch (x) {}
+});
+
+/* 切后台/图鉴打开 → 游戏自动暂停（z90 图鉴最高） */
+document.addEventListener('visibilitychange', function () { if (document.hidden) { NSG.paused = true; stopVoice(); } });
+window.addEventListener('blur', stopVoice);
+window.addEventListener('popstate', onPop);
+
+/* ── 5. /mirror 镜像模式：纯 transform，会话态不落盘，文字与图反回来 ── */
+register({
+  id: 'mirror', tip: '整站左右镜像 · 文字与图片已反回 · 刷新即回正常',
+  dom: function () {
+    // 镜像壳透明：站点必须可见（否则「镜像模式」只是看一块白板）
+    var root = mk('div'); root.id = 'nsGame'; root.className = 'ns-game ns-dom ns-passthru';
+    root.innerHTML = '<div class="ns-hud"><span class="ns-x"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg><b>退出</b></span>' +
+      '<span class="ns-gate">/mirror</span><span class="ns-sp"></span><span class="ns-sc">A</span>' +
+      '<span class="ns-mute' + (SND.muted ? ' off' : '') + '"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 9.5v5h3.2L12 18.6V5.4L7.2 9.5H4Z"/><path d="M16 9.4a3.6 3.6 0 0 1 0 5.2M18.4 7a7 7 0 0 1 0 10"/></svg></span></div>' +
+      '<div class="ns-mirror-panel"><h2>镜像模式</h2><p>整站左右翻面。文字、图片、二维码、导出图都会自动反回来——反了的二维码扫不出来、反了的人脸像坏了。</p>' +
+      '<div class="ns-mrow"><button data-m="A">A 全镜像（字也反）</button><button data-m="B" class="on">B 镜像不反字</button><button data-m="C">C 只翻装饰</button></div>' +
+      '<p class="ns-mnote">导出的图片永远是正的：html2canvas 前摘掉 transform。刷新即回正常，不写 localStorage。</p></div>';
+    document.body.appendChild(root);
+    document.body.classList.add('ns-in-game');
+    var mode = 'B';
+    function apply() {
+      // class 必须挂 body：样式选择器写的是 body.ns-mirror-*，挂 html 上等于零效果（闸自检实锤）
+      var de = document.body;
+      de.classList.remove('ns-mirror-A', 'ns-mirror-B', 'ns-mirror-C');
+      if (mode !== 'N') de.classList.add('ns-mirror-' + mode);
+      root.querySelector('.ns-sc').textContent = mode;
+      root.querySelectorAll('.ns-mrow button').forEach(function (b) { b.classList.toggle('on', b.dataset.m === mode); });
+    }
+    root.querySelectorAll('.ns-mrow button').forEach(function (b) {
+      b.addEventListener('click', function () { mode = b.dataset.m; apply(); fx(mode === 'A' ? 'flip' : 'flipb'); });
+    });
+    root.querySelector('.ns-x').addEventListener('click', function () { closeShell(false); });
+    root.querySelector('.ns-mute').addEventListener('click', function () { window.nsSndToggle(); });
+    apply();
+    try { nsEggUnlock('mirror'); } catch (e) {}
+  },
+  destroy: function () {
+    document.body.classList.remove('ns-mirror-A', 'ns-mirror-B', 'ns-mirror-C');
+    var el = document.getElementById('nsGame'); if (el && el.parentNode) el.parentNode.removeChild(el);
+    document.body.classList.remove('ns-in-game');
+    if (typeof CHIP_HOVER_OK !== 'undefined' && CHIP_HOVER_OK) { try { editor.focus(); ensureCaret(); } catch (e) {} }
+    NSG.cur = null;
+  }
+});
+
+/* ── 6. /pet 桌宠：跨笔记常驻浮层（挂顶栏下沿，0 占宽）───────────── */
+var PET_KEY = 'notesync_pet';
+function petBlank() { return { adopted: false, stage: 0, ate: 0, days: 1, shelf: [], born: Date.now(), last: Date.now(), asleep: false, retiredAt: 0, talked: 0 }; }
+// adopted 缺省 false = 用户拍板的「默认关」：不访问 /pet 就永远不出现（旧实现 asleep 默认 false + boot 无条件挂载，等于默认开）
+function petLoad() { try { var o = JSON.parse(localStorage.getItem(PET_KEY) || 'null'); return (o && typeof o === 'object') ? Object.assign(petBlank(), o) : petBlank(); } catch (e) { return petBlank(); } }
+function petSave(p) { try { localStorage.setItem(PET_KEY, JSON.stringify(p)); } catch (e) {}
+  // 形态落盘即上云（30s 节流）：只靠打纪录那次 PUT，桌宠成长会永远停在「本机的 localStorage 里」
+  try { if (ARC.id && typeof arcadeSchedulePet === 'function') arcadeSchedulePet(); } catch (e) {}
+}
+var PET = petLoad();
+var PET_TRINKET = ['橡皮鸭', '半块砖', '1987 硬币', '迷你恐龙', '会响的勺', '空白便签', '亮的那颗', '断齿梳子', '三叶草', '旧车票', '玻璃珠', '铁环', '贝壳', '小螺丝', '火柴盒', '月亮碎片'];
+function petBadgeOn() { // 节日/深夜徽章出现时桌宠让位（同一裸 emoji 位，两个不叠）
+  try { var b = document.getElementById('nsBadge'); return !!(b && b.getAttribute('data-ns')); } catch (e) { return false; }
+}
+function petMount() { // 常驻：任何笔记页顶栏下沿骑线，0 占宽（顶栏实测已无余量）
+  if (!document || !document.body) return; // 同上：销毁后定时器/观察者仍可能进来
+  if (document.getElementById('nsPet')) return;
+  if (!PET.adopted) return; // 默认关：没领养过就什么都不出现
+  if (petBadgeOn()) return; // 徽章优先，节后 petTick 里自己回来
+  var h = document.querySelector('header'); if (!h) return;
+  var d = mk('div'); d.id = 'nsPet'; d.setAttribute('aria-hidden', 'true');
+  d.innerHTML = '<svg viewBox="0 0 26 26"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 18c0-5 3.6-8.6 8.6-8.6S21 13 21 18"/><path d="M4 18h17"/><path d="M8 18v2.6M13 18v2.6M18 18v2.6"/></g><circle cx="9.6" cy="13.4" r="1.2" fill="var(--accent)" stroke="none"/><circle cx="15.6" cy="13.4" r="1.2" fill="var(--accent)" stroke="none"/></svg>';
+  h.appendChild(d);
+  var x = 14, dir = 1;
+  var t = setInterval(function () {
+    if (document.hidden) return;
+    x += dir * 0.35; if (x > (h.clientWidth - 34)) { x = h.clientWidth - 34; dir = -1; } if (x < 10) { x = 10; dir = 1; }
+    d.style.transform = 'translateX(' + x + 'px)' + (PET.asleep ? ' translateY(2px)' : '');
+  }, 60);
+  d._timer = t;
+  d.addEventListener('click', function () {
+    if (PET.asleep) { PET.asleep = false; PET.last = Date.now(); petSave(PET); fx('wake'); d.classList.remove('asleep'); return; }
+    NSG.voice = 'pet'; fx('purr'); d.classList.add('talk'); setTimeout(function () { d.classList.remove('talk'); }, 520);
+  });
+  d.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+}
+function petEat(n) { // 只记字节计数，吞掉的原文一个字都不落盘（红线）
+  PET.ate += n; PET.last = Date.now();
+  var st = PET.ate > 9000 ? 3 : PET.ate > 3000 ? 2 : PET.ate > 600 ? 1 : 0;
+  if (st > PET.stage) { PET.stage = st; setTimeout(function () { NSG.voice = 'pet'; fx('grow'); }, 200); }
+  // 每敲一字就 setItem 是写放大（同步落盘 + 配额抖动）：内存即时、落盘 2s 防抖
+  clearTimeout(petEat._t);
+  petEat._t = setTimeout(function () { petSave(PET); }, 2000);
+}
+document.addEventListener('click', function (e) {
+  if (!e.target || !e.target.closest) return;
+  if (e.target.closest('#copyBtn')) {
+    var sel = (window.getSelection && String(getSelection())) || '';
+    petEat(Math.min(400, sel.length || 12));
+    petRememberEcho(sel); // 学舌的粮：复制过的话它才会念（只在内存，绝不落盘/上云）
+  }
+});
+window.nsPetEat = petEat;
+/* 学舌：只留最近 8 条剪贴板文本在内存，刷新即失——绝不进 localStorage、绝不上云（红线） */
+var petEcho = [];
+function petRememberEcho(txt) {
+  txt = String(txt || '').trim();
+  if (!txt || txt.length < 4 || txt.length > 60) return;
+  petEcho.push(txt); if (petEcho.length > 8) petEcho.shift();
+}
+function petBubble(text, ms) {
+  var p = document.getElementById('nsPet'); if (!p) return;
+  var old = document.getElementById('nsPetBubble'); if (old) old.remove();
+  var b = mk('div'); b.id = 'nsPetBubble'; b.textContent = text;
+  document.body.appendChild(b);
+  // fixed 元素必须给坐标：挂在桌宠右下沿，横向夹进视口（右边缘外溢在窄屏必发生）
+  try {
+    var r = p.getBoundingClientRect(), bw = b.offsetWidth || 140;
+    b.style.left = Math.max(6, Math.min(r.left - 10, window.innerWidth - bw - 6)) + 'px';
+    b.style.top = (r.bottom + 6) + 'px';
+  } catch (e) {}
+  setTimeout(function () { if (b.parentNode) b.remove(); }, ms || 2600);
+}
+/* 偷字：Range 量出一个字的屏幕位置，用一块与页面同色的小贴片盖住它 + 宠物嘴里叼着这个字，
+   3 秒自动吐回。全程不碰正文 DOM（任何手术都会毁选区/撤销/br 结构，红线 1/4/5/11） */
+function petSteal() {
+  if (!PET.adopted || PET.asleep || document.getElementById('nsPetSteal')) return;
+  if (typeof editor === 'undefined' || !editor || !(editor.textContent || '').trim()) return;
+  var texts = [], w = document.createTreeWalker(editor, 4 /* SHOW_TEXT */, null, false), n;
+  while ((n = w.nextNode())) if (n.nodeValue && n.nodeValue.trim()) texts.push(n);
+  if (!texts.length) return;
+  var t = texts[Math.floor(Math.random() * texts.length)];
+  var idx = Math.max(0, Math.floor(Math.random() * t.nodeValue.length) - 1);
+  var ch = t.nodeValue.slice(idx, idx + 1); if (!ch.trim()) return;
+  var r = document.createRange();
+  try { r.setStart(t, idx); r.setEnd(t, Math.min(idx + 1, t.nodeValue.length)); } catch (e) { return; }
+  var rect = r.getBoundingClientRect(); if (!rect.width && !rect.height) return;
+  var cover = mk('div'); cover.className = 'ns-pet-cover'; cover.id = 'nsPetSteal';
+  cover.style.left = (rect.left - 1) + 'px'; cover.style.top = rect.top + 'px';
+  cover.style.width = (rect.width + 2) + 'px'; cover.style.height = rect.height + 'px';
+  var chip = mk('div'); chip.id = 'nsPetChip'; chip.textContent = ch;
+  var p = document.getElementById('nsPet');
+  if (p) { var pr = p.getBoundingClientRect(); chip.style.left = (pr.left + 14) + 'px'; chip.style.top = (pr.top - 12) + 'px'; }
+  document.body.appendChild(cover); document.body.appendChild(chip);
+  NSG.voice = 'pet'; fx('snatch');
+  var drop = function () { if (cover.parentNode) cover.remove(); if (chip.parentNode) chip.remove(); };
+  setTimeout(function () { drop(); NSG.voice = 'pet'; fx('burp'); }, 3000);
+  window.addEventListener('scroll', drop, { once: true, passive: true });
+}
+/* 摆摊：升档与每日首次打开各带一件完全无用的收藏品回来 */
+function petVend() {
+  if (PET.shelf.length >= 16) return -1;
+  var free = []; for (var i = 0; i < 16; i++) if (PET.shelf.indexOf(i) < 0) free.push(i);
+  if (!free.length) return -1;
+  var got = free[Math.floor(Math.random() * free.length)];
+  PET.shelf.push(got); PET.shelf.sort(function (a, b) { return a - b; });
+  petSave(PET);
+  return got;
+}
+function petTick() {
+  if (!PET.adopted || PET.asleep || document.hidden) return;
+  if (petBadgeOn()) { var el0 = document.getElementById('nsPet'); if (el0) el0.style.display = 'none'; return; }
+  var el = document.getElementById('nsPet'); if (el) el.style.display = '';
+  var day = 864e5, since = Date.now() - PET.last;
+  PET.days = 1 + Math.floor((Date.now() - PET.born) / day);
+  if (since > 7 * day && !PET.asleep) { PET.asleep = true; petSave(PET); if (el) el.classList.add('asleep'); return; } // 永不死，只睡着
+  if (since > 3 * 864e5) return; // 睡过就不打扰
+  var roll = Math.random();
+  if (roll < 0.22) petSteal();
+  else if (roll < 0.34 && petEcho.length) petBubble(petEcho[Math.floor(Math.random() * petEcho.length)]);
+  else if (roll < 0.42) { var g = petVend(); if (g >= 0) { petBubble('带回了' + PET_TRINKET[g] + (PET.shelf.length >= 16 ? '（柜子集齐，形态变了）' : '')); NSG.voice = 'pet'; fx('wake'); } }
+}
+setInterval(petTick, 45000);
+document.addEventListener('beforeinput', function (e) {
+  if (!e || e.isComposing) return;
+  if (PET.asleep || !PET.adopted) return;
+  var t = e.target;
+  if (!t || typeof editor === 'undefined' || (t !== editor && !(editor.contains && editor.contains(t)))) return; // 口令框/首页输入不算食量
+  if (e.inputType === 'insertText') petEat(Math.max(1, (e.data || '').length));
+  else if (e.inputType === 'deleteContentBackward' || e.inputType === 'deleteContentForward' || e.inputType === 'deleteByCut') petEat(1); // 删掉的字也算它吃过
+});
+window.nsPetState = function () { return PET; };
+
+register({
+  id: 'pet', tip: '',
+  dom: function () {
+    try { nsTryClaimFromBody(); } catch (e) {} // 面板可能就在本会话里刚粘好护照：不补扫一次等于按文案做了却认不回来
+    var p = PET;
+    var root = mk('div'); root.id = 'nsGame'; root.className = 'ns-game ns-dom';
+    root.innerHTML = '<div class="ns-hud"><span class="ns-x"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg><b>退出</b></span>' +
+      '<span class="ns-gate">/pet</span><span class="ns-sp"></span><span class="ns-mute' + (SND.muted ? ' off' : '') + '"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 9.5v5h3.2L12 18.6V5.4L7.2 9.5H4Z"/><path d="M16 9.4a3.6 3.6 0 0 1 0 5.2M18.4 7a7 7 0 0 1 0 10"/></svg></span></div>' +
+      '<div class="ns-pet-panel">' +
+      '<div class="ns-pet-top"><div class="ns-pet-av"><svg viewBox="0 0 26 26"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 18c0-5 3.6-8.6 8.6-8.6S21 13 21 18"/><path d="M4 18h17"/><path d="M8 18v2.6M13 18v2.6M18 18v2.6"/></g><circle cx="9.6" cy="13.4" r="1.2" fill="var(--accent)" stroke="none"/><circle cx="15.6" cy="13.4" r="1.2" fill="var(--accent)" stroke="none"/></svg></div>' +
+      '<div class="ns-pet-meta"><b>' + ['幼体', '成体', '胖体', '长老'][p.stage] + '</b><span>吃了 ' + p.ate.toLocaleString('en-US') + ' 字 · 醒着 ' + p.days + ' 天 · 柜子 ' + p.shelf.length + ' / 16</span></div></div>' +
+      '<div class="ns-shelf"></div>' +
+      '<div class="ns-pet-btns"><button class="ns-pet-sleep">让它去睡</button><button class="ns-pet-free">放归（档案保留 30 天）</button></div>' +
+      '<div class="ns-pass"></div>' +
+      '<p class="ns-pnote">档案只存计数与形态，不含任何笔记原文。护照即钥匙——粘进任意一条笔记存着，重装后打开那条笔记敲 /pet 就能认领回来；护照与本机存储同时丢失则找不回（找回就要账号）。</p>' +
+      '</div>';
+    document.body.appendChild(root);
+    document.body.classList.add('ns-in-game');
+    var sh = root.querySelector('.ns-shelf');
+    for (var i = 0; i < 16; i++) {
+      var got = p.shelf.indexOf(i) >= 0;
+      var c = mk('div', 'ns-sh' + (got ? '' : ' empty'), got ? PET_TRINKET[i] : '?');
+      sh.appendChild(c);
+    }
+    PET.adopted = true; PET.asleep = false; PET.last = Date.now(); petSave(PET); setTimeout(petMount, 60); // 访问 /pet 即领养
+    root.querySelector('.ns-pass').textContent = window.nsArcadePassport();
+    root.querySelector('.ns-x').addEventListener('click', function () { closeShell(false); });
+    root.querySelector('.ns-mute').addEventListener('click', function () { window.nsSndToggle(); });
+    root.querySelector('.ns-pet-sleep').addEventListener('click', function () { PET.asleep = true; PET.last = Date.now(); petSave(PET); var el = document.getElementById('nsPet'); if (el) el.classList.add('asleep'); NSG.voice = 'pet'; fx('burp'); closeShell(); }); // 睡眠必须刷 last，否则 petMount 的「3 天内」守卫会把它当场叫回来
+    var cp = mk('button', '', '复制护照'); cp.className = 'ns-pet-copy';
+    cp.addEventListener('click', function () { try { navigator.clipboard.writeText(window.nsArcadePassport()); cp.textContent = '已复制，粘进任意笔记存好'; setTimeout(function () { cp.textContent = '复制护照'; }, 2200); } catch (e) {} });
+    root.querySelector('.ns-pet-btns').appendChild(cp);
+    root.querySelector('.ns-pet-free').addEventListener('click', function () { // 放归=收起并打 retiredAt（档案保留 30 天可原样认领），不删任何数据
+      PET.asleep = true; PET.retiredAt = Date.now(); petSave(PET);
+      var el = document.getElementById('nsPet');
+      if (el) { clearInterval(el._timer); if (el.parentNode) el.parentNode.removeChild(el); } // 不清 interval 等于每次放归都留一条 60ms 死循环，再领养再叠一条
+      closeShell();
+    });
+    NSG.voice = 'pet'; fx('wake');
+    try { nsEggUnlock('pet'); } catch (e) {}
+  },
+  destroy: function () {
+    var el = document.getElementById('nsGame'); if (el && el.parentNode) el.parentNode.removeChild(el);
+    document.body.classList.remove('ns-in-game'); NSG.cur = null;
+  }
+});
+
+/* ── 7. 街机档案：petId 寻址 + writeKey 凭据 + 服务端只存哈希 ──────── */
+var ARC_KEY = 'notesync_arcade';
+function arcadeLoad() { try { return JSON.parse(localStorage.getItem(ARC_KEY) || 'null'); } catch (e) { return null; } }
+var ARC = arcadeLoad() || { id: '', key: '', counters: {}, shelf: [], updatedAt: 0 };
+function rnd(n) { var A = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', s = ''; try { var b = new Uint8Array(n); crypto.getRandomValues(b); for (var i = 0; i < n; i++) s += A[b[i] % A.length]; } catch (e) { for (var j = 0; j < n; j++) s += A[Math.floor(Math.random() * 32)]; } return s; }
+function arcadeCreate() { // 建档必须在 id 诞生的那一刻就发：只挂在「第一次写成绩」那条分支上，
+  // 任何先拿到护照（渲染/复制）的用户都会把 id 落进 localStorage 而云端无档，之后每次 PUT 都被 404 静默吞掉
+  if (!ARC.id || !ARC.key) return;
+  try {
+    fetch('/api/arcade', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: ARC.id, key: ARC.key, updatedAt: Date.now() }) })
+      .catch(function () {});
+  } catch (e) {}
+}
+function arcadeId() { if (!ARC.id) { ARC.id = rnd(8); ARC.key = rnd(16); try { localStorage.setItem(ARC_KEY, JSON.stringify(ARC)); } catch (e) {} arcadeCreate(); } return ARC.id; }
+function arcadeSchedule(ms) { // 成绩与桌宠形态共用一条防抖通道：5s 内的连打连吃合并成一次 PUT
+  clearTimeout(arcadePush._t);
+  arcadePush._t = setTimeout(arcadeSend, ms || 5000);
+}
+function arcadeSchedulePet() { // 桌宠状态 30s leading+trailing：petEat 每 2s 防抖落盘一次，共用 5s 通道必撞限流；
+  // 但「窗口内直接 return」会把睡眠/放归这种低频关键写正好丢掉，故窗口尾补一发
+  var wait = 30000 - (Date.now() - (arcadeSchedulePet._at || 0));
+  if (wait > 0) {
+    clearTimeout(arcadeSchedulePet._t);
+    arcadeSchedulePet._t = setTimeout(arcadeSchedulePet, wait);
+    return;
+  }
+  arcadeSchedulePet._at = Date.now();
+  arcadeSchedule();
+}
+function arcadeSend(keepalive) {
+  if (!ARC.id) return;
+  var body = { counters: ARC.counters, updatedAt: Date.now() };
+  // 桌宠形态必须随档上行：不带 stage/ate/柜子的话，跨设备认领只回得到成绩，「我昨天明明养到成体」必被冲掉
+  try {
+    if (typeof PET !== 'undefined' && PET) {
+      body.stage = PET.stage; body.ate = PET.ate; body.asleep = !!PET.asleep; body.retiredAt = PET.retiredAt || 0;
+      if (PET.born) body.born = Number(PET.born) || Date.now(); // born 是数字毫秒（petBlank 造的），不是 ISO 串
+      body.shelf = (ARC.shelf || []).concat((PET.shelf || []).map(Number)); // 柜子索引直接进 shelf 字段（服务端做并集并按 n<512 过滤，不得加偏移）
+    }
+  } catch (e) {}
+  try {
+    // keepalive 只给 pagehide 那一发：普通发送不需要占后台配额，关页时的补发不带它会被浏览器掐掉（flush 等于白挂）
+    fetch('/api/arcade/' + ARC.id, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-Arcade-Key': ARC.key }, body: JSON.stringify(body), keepalive: !!keepalive }).then(function (r) {
+      if (r.status === 429) { arcadeSchedule(20000); return; } // 撞限流不静默丢档：20s 退避后补推（5s 节奏会在窗口里一直撞 429）
+      if (r.status === 404 && !arcadeSend._rebuilt) { // 本机有 id 而云端无档（升级前建的本机档）：补建一次并重推
+        arcadeSend._rebuilt = true; // 只做一次：抄来的护照若钥匙错一位也回 404，不设限就成「补建→404→补建」死循环
+        arcadeCreate(); arcadeSchedule(3000);
+      }
+    }).catch(function () {});
+  } catch (e) {}
+}
+function arcadePush(counter, value) { // 计数器取 max、集合取并集，交服务端合并；本地同规则先合一次
+  if (!ARC.id) arcadeId(); // 惰性建档：不先打开 /pet 也该有档案；POST 已在 arcadeId() 内发过，这里再发一次就是双发白吃建档限流配额
+  var name = NSG.route || 'arcade';
+  var prev = ARC.counters[name] || 0;
+  if (value > prev) { ARC.counters[name] = value; ARC.updatedAt = Date.now(); try { localStorage.setItem(ARC_KEY, JSON.stringify(ARC)); } catch (e) {} }
+  arcadeSchedule();
+}
+window.nsArcadeId = function () { return arcadeId(); };
+window.nsArcadeKey = function () { return ARC.key; };
+window.nsArcadeFlush = function () { clearTimeout(arcadePush._t); arcadeSend(true); }; // 关页/切走前尽力补发（pagehide 用同一个，keepalive 才打得出去）
+try { window.addEventListener('pagehide', function () { try { window.nsArcadeFlush(); } catch (e) {} }); } catch (e) {}
+// 护照文本＝格式规范唯一出处，认领正则（PASS_RE）必须与它同形：分隔符统一用 ';'
+window.nsArcadePassport = function () { return 'ns1:id=' + arcadeId() + ';key=' + ARC.key; };
+var ARC_PASS_RE = /ns1:\s*id=([A-Z2-9]{8})\s*[;,\/]\s*key=([A-Z2-9]{8,32})/; // 容忍 '/'：早期文案与手写粘贴可能用斜杠
+window.nsArcadeClaimRe = function () { return ARC_PASS_RE; };
+
+/* ── 8. 启动：URL 命中门牌则直接进游戏；否则按已领养状态挂桌宠 ───── */
+/* 认领：打开任意笔记时扫一眼正文里的护照，认出 id/key 就换档并从服务端拉回成绩。
+   护照即钥匙——丢了不可找回（要做找回就得要账号，那就不再是 NoteSync） */
+function nsTryClaimFromBody() {
+  try {
+    // 不设「本轮已认过」标志：那种标志（无论持久还是会话）都会把第二本护照堵死。
+    // 防重复扫描由下面的「本机已是这只」承担；取档失败也自然留待下次再试
+    var txt = (typeof editor !== 'undefined' && editor && editor.textContent) || '';
+    if (!txt) return;
+    var m = ARC_PASS_RE.exec(txt);
+    if (!m) return;
+    if (ARC.id === m[1]) return; // 本机已是这只
+    var pend = { id: m[1], key: m[2] }; // 先拉后换：拉不到就原样不动（旧写法先换档再 fetch，护照手抄错一位就等于把本机切进不可达档且成绩清零）
+    fetch('/api/arcade/' + pend.id, { headers: { 'x-arcade-key': pend.key } }).then(function (r) {
+      return r.status === 200 ? r.json() : null;
+    }).then(function (o) {
+      if (!o) return; // 无此档/钥匙错/离线：不换档、下次再试
+      if (ARC.id === pend.id) return; // 等待期间本机已换到这只（并发扫描/两次点开面板）
+      ARC.id = pend.id; ARC.key = pend.key;
+      ARC.counters = o.counters || {}; ARC.shelf = o.shelf || []; ARC.updatedAt = Number(o.updatedAt) || 0;
+      try { localStorage.setItem(ARC_KEY, JSON.stringify(ARC)); } catch (e) {}
+      // 形态、柜子、生日、睡眠与放归态一次落全：只回 stage/ate 会把「集齐的柜子」停在旧设备，
+      // 而无条件 asleep=false 会把另一台机器刚放归的宠物当场复活
+      PET.adopted = true;
+      PET.asleep = !!o.asleep;
+      if (o.ate != null) PET.ate = Number(o.ate) || 0;
+      if (o.stage != null) PET.stage = Number(o.stage) || 0;
+      if (o.born) PET.born = Number(o.born) || PET.born;
+      if (o.retiredAt != null) PET.retiredAt = Number(o.retiredAt) || 0;
+      if (o.shelf) PET.shelf = o.shelf.map(Number).filter(function (n) { return n >= 0 && n < 16; });
+      if (!PET.asleep) PET.last = Date.now();
+      petSave(PET);
+      if (!PET.asleep) setTimeout(petMount, 200); // 他端已放归/在睡：照状态还原，绝不复活挂出（boot 同一口径）
+      // 面板正开着就把数字与柜子刷新（keepHistory 收壳再起新局：认领绝不该动到历史）
+      setTimeout(function () { try { if (NSG.cur && NSG.route === 'pet') { closeShell(false, true); launch('pet'); } } catch (e) {} }, 260);
+    }).catch(function () {});
+  } catch (e) {}
+}
+window.nsClaimPassport = nsTryClaimFromBody; // 主脚本在解锁渲染正文后调一次：加密笔记在 boot+2.5s 时正文还是空的
+function boot() {
+  var raw = (location.pathname || '').replace(/^\/+|\/+$/g, '');
+  var p = raw.toLowerCase();
+  if (GAMES[p]) { NSG.prevPath = '/'; nsShadowCheck(raw || p); launch(p); return; } // 冷启动直达门牌：退出回首页而非停在门牌路径（遮蔽探测用原样名：笔记名允许大写）
+  setTimeout(nsTryClaimFromBody, 2500); // 非门牌路径：解锁后正文可读时再扫护照
+  if (PET.adopted && !PET.asleep) setTimeout(petMount, 800);
+  var mo = new MutationObserver(function () {
+    // 窗口销毁后 observer 仍可能收到一次通知，此时 document 已为 undefined——必须早退并断开，
+    // 否则抛错会被 jsdom 记成 Uncaught TypeError 污染测试（闸自检实锤 4 次/例）
+    if (!document || !document.body) { try { mo.disconnect(); } catch (e) {} return; }
+    var h = document.querySelector('header');
+    if (h && !document.getElementById('nsPet') && !PET.asleep) petMount();
+  });
+  mo.observe(document.body, { childList: true, subtree: true });
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else setTimeout(boot, 0);
+})();
+</script>
+<script>
+/* ════════════════════════════════════════════════════════════════════
+   v9.0.0 彩蛋层 B —— 八个 canvas 蛋（贪吃蛇 / 恐龙 / 打砖块 / 2048 /
+   黄金矿工 / 坦克 / 垂直着陆 / 轨道巡航）
+   统一画风：只吃六个主题令牌；精灵用线稿/实心剪影，禁 emoji；
+   速度一律「像素/秒」或「格/秒」，不按屏宽百分比（否则宽屏送难度）
+   ════════════════════════════════════════════════════════════════════ */
+(function () {
+'use strict';
+var R = window.nsGameRegister, SH = window.nsGameShell, SC = window.nsGameScore, LV = window.nsGameLevel,
+    END = window.nsGameEnd, FX = window.nsFx, ENG = window.nsGameEngine, GC = window.nsGameCss;
+var PAL = null, palKey = '';
+function pal() { // 主题色缓存：只在配色变化时重取，避免每帧 getComputedStyle
+  var k = [GC('--fg'), GC('--bg'), GC('--accent'), GC('--muted'), GC('--line'), GC('--box-bg')].join('|');
+  if (k !== palKey) { palKey = k; PAL = { fg: GC('--fg'), bg: GC('--bg'), ac: GC('--accent'), mu: GC('--muted'), ln: GC('--line'), bx: GC('--box-bg'), soft: GC('--accent-soft') }; }
+  return PAL;
+}
+function rnd(a, b) { return a + Math.floor(Math.random() * (b - a + 1)); }
+function rf(a, b) { return a + Math.random() * (b - a); }
+function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+function rr(c, x, y, w, h, r) { c.beginPath(); if (c.roundRect) c.roundRect(x, y, w, h, r); else c.rect(x, y, w, h); }
+function names(kind) { // 素材：只读拷贝，与笔记本体无引用关系（游戏全程零写入）
+  var out = [];
+  try { // 收藏夹真身 = localStorage notesync_favs，元素为笔记名字符串（index.html:5712）
+    var favs = JSON.parse(localStorage.getItem('notesync_favs') || '[]');
+    if (Array.isArray(favs)) out = out.concat(favs.filter(function (x) { return typeof x === 'string' && x.trim(); }));
+  } catch (e) {}
+  try { // 待办真身 = 全局 reminders 数组（index.html:3784），只取文本不取时间
+    if (typeof reminders !== 'undefined' && Array.isArray(reminders)) out = out.concat(reminders.map(function (r) { return (r && (r.text || r.t)) || ''; }));
+  } catch (e) {}
+  try { if (typeof noteId !== 'undefined' && noteId) out.push(noteId); } catch (e) {}
+  var fb = kind === 'obs' ? ['会议', '待办', '未读 12', '周报', '已读不回', '@我', '截止今天', 'synchronisation']
+       : ['灵感池', '工作随记', '九月·周中', '读书笔记', '菜谱', '健身', '发票', '旧文', '备忘', '想法池', '会议', '周报'];
+  out = out.filter(function (s) { return s && String(s).trim(); }).map(function (s) { return String(s).trim(); });
+  return out.length ? out : fb;
+}
+function title() { try { return noteId || '未命名笔记'; } catch (e) { return '未命名笔记'; } }
+
+/* ═══ /snake 贪吃蛇：蛇身由笔记名接成，蛇头是当前笔记 ═══════════════ */
+R(function () {
+  var N = 15, cell = 24, sn = [], dir = 'R', q = [], food = null, score = 0, step = 0.19, acc = 0, dead = false, nm = [];
+  function place() { // 满格时 do-while 会死循环冻页：先取空格集合，空了就判通关
+    var free = [];
+    for (var y = 0; y < N; y++) for (var x = 0; x < N; x++) if (!sn.some(function (s) { return s.x === x && s.y === y; })) free.push({ x: x, y: y });
+    if (!free.length) return null;
+    var p = free[Math.floor(Math.random() * free.length)]; p.v = rnd(3, 48); return p;
+  }
+  function reset() {
+    sn = [{ x: 7, y: 7 }, { x: 6, y: 7 }, { x: 5, y: 7 }].map(function (s, i) { return { x: s.x, y: s.y, n: i === 0 ? title() : pick(nm) }; });
+    dir = 'R'; q = []; score = 0; step = 0.19; acc = 0; dead = false; food = place();
+  }
+  function turn(nd) {
+    var cur = q.length ? q[q.length - 1] : dir;
+    var opp = { L: 'R', R: 'L', U: 'D', D: 'U' };
+    if (nd === opp[cur] || nd === cur) return; // 禁止 180° 掉头：慌乱回划会自杀
+    if (q.length < 2) q.push(nd);              // 转向进队列，下一格才应用
+  }
+  function move() {
+    if (q.length) dir = q.shift();
+    var d = { L: [-1, 0], R: [1, 0], U: [0, -1], D: [0, 1] }[dir];
+    var h = { x: sn[0].x + d[0], y: sn[0].y + d[1], n: sn[0].n };
+    if (h.x < 0 || h.y < 0 || h.x >= N || h.y >= N) return die('撞墙了');
+    if (sn.some(function (s) { return s.x === h.x && s.y === h.y; })) return die('咬到自己了');
+    sn.unshift(h);
+    if (food && h.x === food.x && h.y === food.y) {
+      score += food.v; FX('eat', sn.length); if (sn.length % 10 === 0) FX('grow');
+      step = Math.max(0.11, step - 0.004); // 触屏端下限放宽到 0.11
+      if (sn.length >= N * N - 1) { return die('盘满了，你赢了'); }
+      var last = sn[sn.length - 1];
+      sn.push({ x: last.x, y: last.y, n: pick(nm) });
+      food = place();
+    } else sn.pop();
+  }
+  function die(why) {
+    dead = true; FX('fail');
+    SH().scoreVal = score;
+    END(why, [['本局', score + ' 字'], ['蛇身', sn.length + ' 节'], ['历史最佳', (SH().best.snake || 0) + ' 字']]);
+  }
+  return {
+    id: 'snake', tip: '四向划屏 / 方向键转向 · 吃 +字数 颗粒长一节',
+    start: function () { nm = names(); reset(); },
+    reset: function () { nm = names(); reset(); },
+    resize: function (w, h) { cell = Math.floor(Math.min(w, h) / N); },
+    key: function (e) { var m = { ArrowUp: 'U', ArrowDown: 'D', ArrowLeft: 'L', ArrowRight: 'R', w: 'U', s: 'D', a: 'L', d: 'R' }; if (m[e.key]) { e.preventDefault(); turn(m[e.key]); } },
+    swipe: function (d) { turn(d); },
+    tap: function () { SH().paused = !SH().paused; },
+    probe: function () { return { dir: dir, len: sn.length, score: score, dead: dead, queued: q.length }; },
+    frame: function (dt) { acc += dt; while (acc >= step) { acc -= step; move(); if (dead) break; } SC(score + ' 字'); LV('蛇身 ' + sn.length); },
+    draw: function () {
+      var c = SH().ctx, P = pal(), W = SH().W, H = SH().H, ox = Math.floor((W - cell * N) / 2), oy = Math.floor((H - cell * N) / 2);
+      c.clearRect(0, 0, W, H);
+      c.strokeStyle = P.ln; c.lineWidth = 1;
+      for (var i = 1; i < N; i++) { c.beginPath(); c.moveTo(ox, oy + i * cell + .5); c.lineTo(ox + N * cell, oy + i * cell + .5); c.stroke(); c.beginPath(); c.moveTo(ox + i * cell + .5, oy); c.lineTo(ox + i * cell + .5, oy + N * cell); c.stroke(); }
+      if (food) {
+        c.lineWidth = 1.7; c.strokeStyle = P.ac; c.fillStyle = P.bx;
+        c.beginPath(); c.arc(ox + food.x * cell + cell / 2, oy + food.y * cell + cell / 2, cell * 0.36, 0, 7); c.fill(); c.stroke();
+        c.fillStyle = P.ac; c.font = '600 ' + Math.round(cell * 0.36) + 'px ui-monospace,Consolas,monospace'; c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.fillText('+' + food.v, ox + food.x * cell + cell / 2, oy + food.y * cell + cell / 2 + .5);
+      }
+      sn.forEach(function (s, i) {
+        var x = ox + s.x * cell, y = oy + s.y * cell;
+        c.lineWidth = 1.7; c.lineJoin = 'round';
+        c.fillStyle = i === 0 ? P.fg : 'transparent'; c.strokeStyle = i === 0 ? P.fg : P.ac;
+        rr(c, x + 2, y + 2, cell - 4, cell - 4, i === 0 ? 7 : 4); if (i === 0) c.fill(); c.stroke();
+        if (i === 0) { c.fillStyle = P.bg; c.beginPath(); c.arc(x + cell * .34, y + cell * .38, 1.6, 0, 7); c.arc(x + cell * .66, y + cell * .38, 1.6, 0, 7); c.fill(); }
+        if (i % 3 === 0 && cell >= 20) { c.fillStyle = i === 0 ? P.bg : P.mu; c.font = Math.round(cell * .34) + 'px -apple-system,"PingFang SC",sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(String(s.n).slice(0, 2), x + cell / 2, y + cell / 2 + .5); }
+      });
+      c.textAlign = 'left'; c.textBaseline = 'alphabetic';
+    }
+  };
+}());
+
+/* ═══ /dragon 恐龙：三秒分镜 → 横版跳跃，障碍是你躲不掉的事 ═════════ */
+R(function () {
+  var DINO = [[1, 7], [9, 10], [9, 17], [3, 14]], BODY = [[7, 10], [20, 10], [18, 18], [9, 18]];
+  var phase = 'intro', it = 0, y = 0, vy = 0, ground = true, duck = false, sp = 132, dist = 0, obs = [], pass = 0, dead = false, shake = 0, words = [];
+  var GY = 0;
+  function reset() { phase = 'intro'; it = 0; y = 0; vy = 0; ground = true; sp = 132; dist = 0; obs = []; pass = 0; dead = false; shake = 0; }
+  function spawn() {
+    var last = obs[obs.length - 1];
+    var gap = Math.max(150, 215 - sp * 0.35) + rf(0, 90); // 保证最小间距够跳一次
+    var hi = Math.random() < 0.3;
+    obs.push({ x: last ? last.x + last.w + gap : SH().W + 80, hi: hi, w: hi ? 52 : 30, h: hi ? 20 : 26, label: pick(words) });
+  }
+  function jump() { if (phase === 'run' && ground && !dead) { vy = 330; ground = false; FX('jump'); } } // y 是离地高度，起跳必须给正初速（与 vy -= g 同向才跳得起来）
+  function poly(c, pts, u) { c.beginPath(); pts.forEach(function (p, i) { i ? c.lineTo(p[0] * u, p[1] * u) : c.moveTo(p[0] * u, p[1] * u); }); c.closePath(); c.fill(); }
+  return {
+    id: 'dragon', tip: '点屏幕 / 空格 = 跳 · ↓ 或下半屏按住 = 低头 · 撞上"会议"就结束',
+    probe: function () { return { phase: phase, y: y, vy: vy, ground: ground, duck: duck, obs: obs.length, pass: pass, dead: dead }; }, // y=离地高度：跳不起来这种物理反号只有真状态能抓
+    start: function () { words = names('obs'); reset(); },
+    reset: function () { words = names('obs'); reset(); },
+    resize: function (w, h) { GY = h - 26; },
+    key: function (e) {
+      if (e.code === 'Space' || e.code === 'ArrowUp') { e.preventDefault(); if (phase === 'intro') { phase = 'run'; return; } jump(); }
+      if (e.code === 'ArrowDown') { e.preventDefault(); duck = true; FX('land'); }
+    },
+    keyup: function (e) { if (e.code === 'ArrowDown') duck = false; },
+    down: function (x, y0) { if (phase === 'intro') { phase = 'run'; return; } if (y0 > SH().H * 0.55) { duck = true; } else jump(); },
+    up: function () { duck = false; },
+    frame: function (dt) {
+      if (phase === 'intro') { it += dt; if (it > 3) { phase = 'run'; FX('start'); } return; }
+      if (dead) return;
+      sp = 132 + Math.min(70, it * 0.8); it += dt; dist += sp * dt;
+      vy -= 900 * dt; y += vy * dt; if (y <= 0) { if (!ground) FX('land'); y = 0; vy = 0; ground = true; } // y=离地高度（向上为正）：写成 vy+=g 会把起跳首帧就夹回地面
+      if (!obs.length || obs[obs.length - 1].x < SH().W - 40) spawn();
+      obs.forEach(function (o) { o.x -= sp * dt; if (!o.hit && o.x + o.w < 16) { o.hit = true; pass++; FX('score', pass % 9); } });
+      obs = obs.filter(function (o) { return o.x > -140; });
+      var dh = duck ? 18 : 26, dy = GY - y - dh;
+      obs.forEach(function (o) {
+        var oy = o.hi ? GY - 38 : GY - o.h;
+        if (16 + 22 > o.x && 16 < o.x + o.w && dy + dh > oy && dy < oy + o.h && !dead) {
+          dead = true; shake = 0.2; FX('bonk'); SH().scoreVal = Math.floor(dist / 4);
+          END('被' + o.label + '撞倒了', [['本局跑了', Math.floor(dist / 4) + ' 字'], ['躲过', pass + ' 个'], ['历史最佳', (SH().best.dragon || 0) + ' 字']]);
+        }
+      });
+      SC(String(Math.floor(dist / 4)).padStart(3, '0'));
+    },
+    draw: function () {
+      var c = SH().ctx, P = pal(), W = SH().W, H = SH().H;
+      c.clearRect(0, 0, W, H);
+      if (shake > 0) { shake -= 0.016; c.save(); c.translate(rf(-3, 3), rf(-2.5, 2.5)); }
+      c.strokeStyle = P.ln; c.lineWidth = 1; c.beginPath(); c.moveTo(0, GY + .5); c.lineTo(W, GY + .5); c.stroke();
+      c.fillStyle = P.mu;
+      for (var i = 0; i < 12; i++) { var x = ((i * 47 - (dist * 2.2) % 47) % (W + 47) + W + 47) % (W + 47); c.fillRect(x, GY + 7, 3, 1); }
+      var dx = 16, dip = 0;
+      if (phase === 'intro') { if (it < 1.2) { dx = -30 + (it / 1.2) * 46; dip = Math.sin(it * 16) * 1.3; } else if (it < 2.2) { dip = 3 * Math.min(1, (it - 1.2) / 0.45); } }
+      else if (ground && !duck) dip = (Math.floor(it * 9) % 2) ? -1.4 : 0;
+      var s = duck ? 18 : 26, dy = GY - y - s;
+      c.save(); c.translate(dx, dy + dip); if (duck) c.transform(1, 0, 0, .72, 0, s * .28);
+      var u = s / 26; c.fillStyle = P.fg;
+      poly(c, DINO, u); poly(c, BODY, u); rr(c, 13 * u, 2 * u, 11 * u, 8 * u, 1.6 * u); c.fill();
+      rr(c, 9 * u, 18 * u, 3.2 * u, 6 * u, 1 * u); c.fill();
+      rr(c, 15 * u, 18 * u, 3.2 * u, 6 * u, 1 * u); c.fill();
+      c.strokeStyle = P.fg; c.lineWidth = 1.7; c.lineCap = 'round'; c.beginPath(); c.moveTo(19 * u, 14 * u); c.lineTo(22.6 * u, 15 * u); c.stroke();
+      c.fillStyle = P.bg; rr(c, 20 * u, 6.3 * u, 4 * u, 1.7 * u, .4 * u); c.fill(); rr(c, 21 * u, 4 * u, 1.9 * u, 1.9 * u, .5 * u); c.fill();
+      c.restore();
+      if (phase === 'intro') {
+        c.fillStyle = P.mu; c.font = '10px ui-monospace,Consolas,monospace';
+        c.fillText('NO NETWORK · 那就跑会儿步', W / 2 - 84, 22);
+        if (it >= 1.2 && it < 3) {
+          var pw = 132, px = W - pw - 10, py = GY - 30;
+          c.strokeStyle = it < 2.2 ? P.ln : P.ac; c.fillStyle = P.bx;
+          rr(c, px, py, pw, 22, 4); c.fill(); c.stroke();
+          c.fillStyle = P.mu; c.font = '9px ui-monospace,Consolas,monospace'; c.textBaseline = 'middle';
+          c.fillText('未命名笔记 · ' + (title().length * 128).toLocaleString('en-US') + ' 字', px + 7, py + 11.5); c.textBaseline = 'alphabetic';
+        }
+      }
+      obs.forEach(function (o) {
+        var oy = o.hi ? GY - 38 : GY - o.h;
+        c.lineWidth = 1.7; c.strokeStyle = P.ln; c.fillStyle = P.bx;
+        rr(c, o.x, oy, o.w, o.h, 4); c.fill(); c.stroke();
+        c.fillStyle = P.mu; c.font = '10px ui-monospace,Consolas,monospace'; c.textBaseline = 'middle';
+        c.fillText(String(o.label).slice(0, 6), o.x + 5, oy + o.h / 2 + 1); c.textBaseline = 'alphabetic';
+      });
+      if (shake > 0) c.restore();
+    }
+  };
+}());
+
+/* ═══ /brick 打砖块：砖是收藏条目与待办，打掉只计分不改数据 ═════════ */
+R(function () {
+  var COLS = 6, ROWS = 3, bw = 58, bh = 24, gap = 3, bricks = [], ball = null, pad = { x: 0, w: 74 }, score = 0, combo = 0, best = 0, t0 = 0, dead = false;
+  function reset() {
+    var nm = names(); bricks = [];
+    for (var r = 0; r < ROWS; r++) for (var c = 0; c < COLS; c++) {
+      var kind = (r === 1 && c % 2 === 0) ? 'hard' : (r === 0 && c === 3 ? 'steel' : 'norm');
+      bricks.push({ x: 6 + c * (bw + gap), y: 26 + r * (bh + gap), w: bw, h: bh, name: nm[(r * COLS + c) % nm.length], kind: kind, hp: kind === 'hard' ? 2 : 1, alive: true });
+    }
+    ball = { x: SH().W / 2, y: SH().H - 70, vx: 118, vy: -196, r: 5 }; pad.x = SH().W / 2 - pad.w / 2;
+    score = 0; combo = 0; best = 0; t0 = 0; dead = false;
+  }
+  function end(win) {
+    dead = true; SH().scoreVal = score;
+    END(win ? '全清了' : '球掉了', [['打掉', score + ' 块'], ['最长连击', best], ['用时', Math.round(t0) + 's']]);
+    FX(win ? 'win' : 'fail');
+  }
+  return {
+    id: 'brick', tip: '单指横拖 / 鼠标移动 = 挡板 · 砖面是你的收藏与待办标题 · 打掉只计分，不改一条数据',
+    start: function () { reset(); }, reset: function () { reset(); },
+    resize: function (w) { bw = Math.floor((w - 12 - gap * (COLS - 1)) / COLS); },
+    move: function (x) { pad.x = Math.max(0, Math.min(SH().W - pad.w, x - pad.w / 2)); },
+    down: function (x, y) { pad.x = Math.max(0, Math.min(SH().W - pad.w, x - pad.w / 2)); },
+    key: function (e) { if (e.key === 'ArrowLeft') { pad.x = Math.max(0, pad.x - 22); e.preventDefault(); } if (e.key === 'ArrowRight') { pad.x = Math.min(SH().W - pad.w, pad.x + 22); e.preventDefault(); } },
+    probe: function () { return { padX: pad.x, ballY: ball.y, alive: bricks.filter(function (x) { return x.alive; }).length, score: score }; },
+    frame: function (dt) {
+      if (dead) return; t0 += dt;
+      ball.x += ball.vx * dt; ball.y += ball.vy * dt;
+      if (ball.x < ball.r) { ball.x = ball.r; ball.vx *= -1; } if (ball.x > SH().W - ball.r) { ball.x = SH().W - ball.r; ball.vx *= -1; }
+      if (ball.y < ball.r + 6) { ball.y = ball.r + 6; ball.vy *= -1; }
+      if (ball.y > SH().H - 30 && ball.y < SH().H - 14 && ball.x > pad.x - 4 && ball.x < pad.x + pad.w + 4 && ball.vy > 0) {
+        ball.vy = -Math.abs(ball.vy); ball.vx += ((ball.x - (pad.x + pad.w / 2)) / pad.w) * 150; combo++; best = Math.max(best, combo); FX('pad');
+      }
+      if (ball.y > SH().H + 10) return end(false);
+      for (var i = 0; i < bricks.length; i++) {
+        var b = bricks[i]; if (!b.alive) continue;
+        if (ball.x > b.x - ball.r && ball.x < b.x + b.w + ball.r && ball.y > b.y - ball.r && ball.y < b.y + b.h + ball.r) {
+          if (b.kind === 'steel') { ball.vy *= -1; FX('hit'); break; }
+          b.hp--; ball.vy *= -1;
+          if (b.hp <= 0) { b.alive = false; score++; combo++; best = Math.max(best, combo); FX('brick'); SC(score + ' / ' + bricks.length);
+            if (bricks.every(function (x) { return !x.alive || x.kind === 'steel'; })) return end(true);
+          } else FX('hit');
+          break;
+        }
+      }
+      LV('连击 ' + combo);
+    },
+    draw: function () {
+      var c = SH().ctx, P = pal(), W = SH().W, H = SH().H;
+      c.clearRect(0, 0, W, H);
+      c.strokeStyle = P.ln; c.lineWidth = 1;
+      for (var i = 1; i < 17; i++) { c.beginPath(); c.moveTo(0, i * 26 + .5); c.lineTo(W, i * 26 + .5); c.stroke(); }
+      bricks.forEach(function (b) {
+        if (!b.alive) return;
+        c.lineWidth = 1.7; c.lineJoin = 'round';
+        c.fillStyle = b.kind === 'hard' ? P.soft : P.bx; c.strokeStyle = b.kind === 'hard' ? P.ac : P.ln;
+        if (b.kind === 'hard' && b.hp === 1) c.globalAlpha = 0.55;
+        rr(c, b.x, b.y, b.w, b.h, 4); c.fill(); c.stroke(); c.globalAlpha = 1;
+        if (b.kind === 'steel') { c.strokeStyle = P.fg; c.setLineDash([2.6, 2.4]); rr(c, b.x + 2, b.y + 2, b.w - 4, b.h - 4, 3); c.stroke(); c.setLineDash([]); }
+        c.fillStyle = b.kind === 'hard' ? P.ac : P.mu; c.font = '10px ui-monospace,Consolas,monospace'; c.textBaseline = 'middle';
+        c.fillText(String(b.name).slice(0, 4), b.x + 6, b.y + b.h / 2 + .5); c.textBaseline = 'alphabetic';
+      });
+      c.lineWidth = 1.7; c.strokeStyle = P.ac; c.fillStyle = P.soft;
+      rr(c, pad.x, H - 24, pad.w, 8, 4); c.fill(); c.stroke();
+      c.strokeStyle = P.fg; c.fillStyle = P.bx; c.beginPath(); c.arc(ball.x, ball.y, ball.r, 0, 7); c.fill(); c.stroke();
+    }
+  };
+}());
+
+/* ═══ /satoshi 2048 聪合币：合到 1 亿聪 = 1 个币 ═══════════════════ */
+R(function () {
+  // 出生 65,536 聪（2^16）：过 1 亿聪的最近一档是 2^27=134,217,728，即从出生值翻 11 次；4×4 理论上限 17 次 → 难度精确等于经典 2048 合出 2048。
+  // （此前出生 2/4 聪，上限只有 2^17=131,072 聪 = 目标的 0.13%，won 与「1 ₿」永不触发、/bitcoin 解锁链是死内容）
+  var SPAWN = 65536, SPAWN2 = 131072, BIG = 8388608, MID = 524288;
+  var GOAL = 1e8, b = [], score = 0, moves = 0, won = false, nm = [], ghost = 0;
+  function fmt(n) { return n >= GOAL ? '1 ₿' : n.toLocaleString('en-US'); }
+  function add() {
+    var e = []; b.forEach(function (r, i) { r.forEach(function (v, j) { if (!v) e.push([i, j]); }); });
+    if (!e.length) return; var p = pick(e); b[p[0]][p[1]] = Math.random() < 0.9 ? SPAWN : SPAWN2;
+  }
+  function reset() { b = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]; score = 0; moves = 0; won = false; add(); add(); }
+  function slide(row) { var a = row.filter(Boolean), g = 0;
+    // i++ 跳过刚合出来的块：否则 [2,2,4] 会连合两次变 8（违反 2048 规则，闸 R2 命中）
+    for (var i = 0; i < a.length - 1; i++) if (a[i] === a[i + 1]) { a[i] *= 2; g += a[i]; if (a[i] >= GOAL) won = true; a.splice(i + 1, 1); i++; }
+    while (a.length < 4) a.push(0); return { row: a, g: g }; }
+  function canMove() {
+    for (var i = 0; i < 4; i++) for (var j = 0; j < 4; j++) { if (!b[i][j]) return true;
+      if (j < 3 && b[i][j] === b[i][j + 1]) return true; if (i < 3 && b[i][j] === b[i + 1][j]) return true; } return false; }
+  function move(d) {
+    var before = JSON.stringify(b), g = 0;
+    if (d === 'L') b = b.map(function (r) { var s = slide(r); g += s.g; return s.row; });
+    if (d === 'R') b = b.map(function (r) { var s = slide(r.slice().reverse()); g += s.g; return s.row.reverse(); });
+    if (d === 'U') for (var c = 0; c < 4; c++) { var s1 = slide(b.map(function (r) { return r[c]; })); g += s1.g; for (var r1 = 0; r1 < 4; r1++) b[r1][c] = s1.row[r1]; }
+    if (d === 'D') for (var c2 = 0; c2 < 4; c2++) { var s2 = slide(b.map(function (r) { return r[c2]; }).reverse()); g += s2.g; var rr2 = s2.row.reverse(); for (var r2 = 0; r2 < 4; r2++) b[r2][c2] = rr2[r2]; }
+    if (JSON.stringify(b) === before) return;
+    score += g; moves++; add(); FX('merge', Math.min(4, Math.round(Math.log2(Math.max(2, (g || SPAWN) / SPAWN)) / 2.5)));
+    if (moves % 20 === 0) { // 每 20 步一个剪影跑过棋盘撞乱一格：纯随机小破坏，制造「啊？」的瞬间
+      ghost = 1;
+      var cells = []; for (var i2 = 0; i2 < 4; i2++) for (var j2 = 0; j2 < 4; j2++) if (b[i2][j2]) cells.push([i2, j2]);
+      if (cells.length > 1) { var pc = pick(cells), qc = pick(cells); var tv = b[pc[0]][pc[1]]; b[pc[0]][pc[1]] = b[qc[0]][qc[1]]; b[qc[0]][qc[1]] = tv; }
+    }
+    if (won) { won = false; FX('win'); SH().scoreVal = score; END('合成了 1 个币', [['本局得分', score.toLocaleString('en-US')], ['步数', moves + ' 步'], ['解锁', '/bitcoin 更深一层']]); return; }
+    if (!canMove()) { FX('fail'); SH().scoreVal = score; END('无路可走', [['本局得分', score.toLocaleString('en-US')], ['最大格', fmt(Math.max.apply(null, b.flat()))], ['步数', moves + ' 步']]); }
+  }
+  return {
+    probe: function () { return { moves: moves, score: score, max: Math.max.apply(null, b.flat()), ghost: ghost }; },
+    id: 'satoshi', tip: '四向滑动 / 方向键 · 相同单位相加，一路合到 1 个币（1 亿聪）',
+    start: function () { nm = names(); reset(); }, reset: function () { reset(); },
+    key: function (e) { var m = { ArrowLeft: 'L', ArrowRight: 'R', ArrowUp: 'U', ArrowDown: 'D' }; if (m[e.key]) { e.preventDefault(); move(m[e.key]); } },
+    swipe: function (d) { move(d); },
+    frame: function () { SC(score.toLocaleString('en-US')); LV(fmt(Math.max.apply(null, b.flat())) + ' 聪'); },
+    draw: function () {
+      var c = SH().ctx, P = pal(), W = SH().W, H = SH().H, side = Math.min(W, H) * 0.92, g = side / 4, ox = (W - side) / 2, oy = (H - side) / 2;
+      c.clearRect(0, 0, W, H);
+      c.strokeStyle = P.ln; c.lineWidth = 1; c.setLineDash([4, 5]);
+      c.beginPath(); c.moveTo(ox, oy + side + 14); c.lineTo(ox + side, oy + side + 14); c.stroke();
+      c.beginPath(); c.moveTo(ox + side * .62, oy + side + 14); c.lineTo(ox + side * .78, oy + side + 30); c.stroke(); c.setLineDash([]);
+      for (var i = 0; i < 4; i++) for (var j = 0; j < 4; j++) {
+        var v = b[i][j], x = ox + j * g + 5, y = oy + i * g + 5, s = g - 10;
+        c.lineWidth = 1.7; c.lineJoin = 'round';
+        if (!v) { c.strokeStyle = P.ln; c.fillStyle = 'transparent'; rr(c, x, y, s, s, 9); c.stroke(); continue; }
+        var big = v >= BIG;
+        c.fillStyle = big ? P.ac : P.bx; c.strokeStyle = v > SPAWN ? P.ac : P.ln;
+        rr(c, x, y, s, s, 9); c.fill(); c.stroke();
+        c.fillStyle = big ? P.bg : (v > SPAWN ? P.ac : P.mu);
+        var txt = fmt(v), fs = txt.length > 8 ? s * .2 : txt.length > 5 ? s * .26 : s * .34;
+        c.font = '600 ' + Math.round(fs) + 'px ui-monospace,Consolas,monospace'; c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.fillText(txt, x + s / 2, y + s / 2 + (v < GOAL ? fs * .55 : 0));
+        if (v < GOAL) { c.font = Math.round(fs * .5) + 'px ui-monospace,Consolas,monospace'; c.fillText('聪', x + s / 2, y + s / 2 + fs * .95); }
+      }
+      if (ghost > 0) { ghost -= 0.02; // 线稿小人横穿棋盘一次，不做真寻路
+        var gxp = ox + side * Math.max(0, Math.min(1, ghost)), gyp = oy + side * 0.5;
+        c.strokeStyle = P.ac; c.lineWidth = 1.7; c.beginPath();
+        c.arc(gxp, gyp - 10, 4, 0, 7); c.moveTo(gxp, gyp - 6); c.lineTo(gxp, gyp + 4); c.moveTo(gxp - 5, gyp - 2); c.lineTo(gxp + 5, gyp - 2); c.moveTo(gxp, gyp + 4); c.lineTo(gxp - 4, gyp + 11); c.moveTo(gxp, gyp + 4); c.lineTo(gxp + 4, gyp + 11); c.stroke();
+      }
+      c.textAlign = 'left'; c.textBaseline = 'alphabetic';
+    }
+  };
+}());
+
+/* ═══ /bitcoin 黄金矿工：钩爪摆、点一下放钩、越深越肥 ══════════════ */
+R(function () {
+  var ang = 0, dir = 1, rope = 0, state = 'swing', items = [], grab = null, score = 0, best = 0, miss = 0, left = 60, shake = 0, PX = 0, PY = 14;
+  function reset() {
+    ang = 0; dir = 1; rope = 0; state = 'swing'; grab = null; score = 0; best = 0; miss = 0; left = 60; shake = 0;
+    PX = SH().W / 2;
+    var nm = names(), kinds = [['gold', 5000, 140], ['coin', 2500, 60], ['rock', 100, 190], ['tnt', -1500, 80], ['gold', 5000, 140], ['coin', 2500, 60], ['rock', 100, 190], ['gold', 5000, 140], ['coin', 2500, 60]];
+    // 「越深越值钱」必须是真的：同一档按深度 0.6→2.2 倍加成（价值与重量同比，深了更肥也更难拉），
+    // 否则提示语就是在骗人——浅处随手一钩和深处冒险放钩没有取舍差
+    var TOP = 130, BOT = SH().H - 86, span = Math.max(1, BOT - TOP);
+    items = kinds.map(function (k) {
+      var y = rf(TOP, BOT), mul = 0.6 + 1.6 * Math.min(1, Math.max(0, (y - TOP) / span)); // 必须夹住：矮视口下 span 会退化，不夹就算出负加成、矿块价值变负
+      return { t: k[0], v: Math.max(10, Math.round(Math.abs(k[1]) * mul / 10) * 10) * (k[1] < 0 ? -1 : 1), w: Math.round(k[2] * mul), x: rf(26, SH().W - 56), y: y, m: Math.round(mul * 100) / 100, r: k[0] === 'rock' ? 15 : (k[0] === 'gold' ? 17 : 11), n: pick(nm) };
+    });
+    items.push({ t: 'genesis', v: 25000, w: 230, x: SH().W / 2 - 40, y: SH().H - 52, r: 22, n: '创世块' });
+  }
+  function end(msg) { SH().scoreVal = score; FX(msg === '挖到创世块' ? 'win' : 'fail');
+    END(msg, [['挖到', score.toLocaleString('en-US') + ' 聪'], ['最重一钩', (best > 0 ? best.toLocaleString('en-US') : '0') + ' 聪'], ['空钩', miss + ' 次']]); }
+  return {
+    id: 'bitcoin', tip: '点屏幕 / 空格 = 放钩 · 越深越值钱，但拉回来更慢',
+    probe: function () { return { items: items.map(function (i) { return { t: i.t, v: i.v, w: i.w, y: i.y, m: i.m }; }), score: score, left: left, state: state }; },
+    start: function () { reset(); }, reset: function () { reset(); },
+    down: function () { if (state === 'swing') { state = 'out'; FX('drop'); } },
+    key: function (e) { if (e.code === 'Space') { e.preventDefault(); if (state === 'swing') { state = 'out'; FX('drop'); } } },
+    frame: function (dt) {
+      if (left <= 0) return end('时间到');
+      left -= dt;
+      if (state === 'swing') { ang += dir * dt * 1.15 * (1 + (60 - left) / 120); if (ang > 1.19) { ang = 1.19; dir = -1; } if (ang < -1.19) { ang = -1.19; dir = 1; } }
+      else if (state === 'out') {
+        rope += 330 * dt;
+        var hx = PX + Math.sin(ang) * rope, hy = PY + Math.cos(ang) * rope;
+        items.forEach(function (it) { if (Math.hypot(it.x - hx, it.y - hy) < it.r + 9 && !grab) { grab = it; state = 'grab'; if (it.t === 'rock' || it.t === 'genesis') FX('heavy'); } });
+        if (!grab && rope > SH().H + 30) { rope = 0; state = 'swing'; miss++; }
+      } else {
+        rope -= (210 - (grab ? grab.w * 0.75 : 0)) * dt;
+        if (grab && grab.t === 'gold' && Math.floor(rope) % 40 === 0) FX('coin');
+        if (rope <= 0) {
+          rope = 0;
+          if (grab) {
+            score += grab.v; best = Math.max(best, grab.v);
+            if (grab.t === 'tnt') { shake = 0.25; FX('tnt'); } else FX('score', 2);
+            items = items.filter(function (x) { return x !== grab; });
+            if (grab.t === 'genesis') return end('挖到创世块');
+            grab = null;
+          }
+          state = 'swing'; SC(score.toLocaleString('en-US') + ' 聪');
+        }
+      }
+      LV(Math.ceil(left) + 's');
+    },
+    draw: function () {
+      var c = SH().ctx, P = pal(), W = SH().W, H = SH().H;
+      c.clearRect(0, 0, W, H);
+      if (shake > 0) { shake -= 0.016; c.save(); c.translate(rf(-3, 3), rf(-2.5, 2.5)); }
+      c.strokeStyle = P.ln; c.lineWidth = 1;
+      for (var i = 1; i < 17; i++) { c.beginPath(); c.moveTo(0, i * 26 + .5); c.lineTo(W, i * 26 + .5); c.stroke(); }
+      var hx = PX + Math.sin(ang) * Math.max(rope, 26), hy = PY + Math.cos(ang) * Math.max(rope, 26);
+      c.strokeStyle = P.fg; c.lineWidth = 1.7; c.lineCap = 'round';
+      c.beginPath(); c.moveTo(PX - 16, PY); c.lineTo(PX + 16, PY); c.stroke();
+      c.beginPath(); c.moveTo(PX, PY); c.lineTo(hx, hy); c.stroke();
+      c.beginPath(); c.moveTo(hx - 7, hy + 2); c.lineTo(hx, hy + 10); c.lineTo(hx + 7, hy + 2); c.stroke();
+      items.forEach(function (it) {
+        if (grab === it) { it.x = hx; it.y = hy + 12; }
+        c.save(); c.translate(it.x, it.y); c.lineWidth = 1.7; c.lineJoin = 'round';
+        if (it.t === 'gold') {
+          c.fillStyle = P.ac; c.strokeStyle = P.fg;
+          c.beginPath(); c.moveTo(-14, -4); c.lineTo(-8, -11); c.lineTo(8, -11); c.lineTo(14, -4); c.lineTo(0, 4); c.closePath(); c.fill(); c.stroke();
+          c.fillStyle = P.bg; c.font = '8px ui-monospace,Consolas,monospace'; c.textAlign = 'center'; c.fillText(String(it.n).slice(0, 2), 0, -3);
+        } else if (it.t === 'coin') {
+          c.strokeStyle = P.ac; c.fillStyle = P.bx; c.beginPath(); c.arc(0, 0, 11, 0, 7); c.fill(); c.stroke();
+          c.fillStyle = P.ac; c.font = '600 11px ui-monospace,Consolas,monospace'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('₿', 0, .5); c.textBaseline = 'alphabetic';
+        } else if (it.t === 'rock') {
+          c.strokeStyle = P.fg; c.fillStyle = P.bx;
+          c.beginPath(); c.moveTo(-12, 6); c.lineTo(-9, -6); c.lineTo(2, -11); c.lineTo(12, -3); c.lineTo(8, 9); c.lineTo(-4, 11); c.closePath(); c.fill(); c.stroke();
+        } else if (it.t === 'tnt') {
+          c.strokeStyle = P.fg; c.setLineDash([2.6, 2.4]); c.strokeRect(-11, -8, 22, 16); c.setLineDash([]);
+          c.strokeStyle = P.ac; c.beginPath(); c.moveTo(0, -8); c.lineTo(0, -14); c.stroke();
+        } else {
+          c.strokeStyle = P.ac; c.fillStyle = P.soft; c.fillRect(-22, -14, 44, 28); c.strokeRect(-22, -14, 44, 28);
+          c.beginPath(); c.moveTo(-16, -6); c.lineTo(16, -6); c.moveTo(-16, 0); c.lineTo(6, 0); c.stroke();
+        }
+        c.restore();
+      });
+      c.fillStyle = P.mu; c.font = '10px ui-monospace,Consolas,monospace';
+      c.fillText('深度 ' + Math.round(H - 130) + 'px', 10, H - 10);
+      c.textAlign = 'right'; c.fillText(score.toLocaleString('en-US') + ' 聪', W - 10, H - 10); c.textAlign = 'left';
+      if (shake > 0) c.restore();
+    }
+  };
+}());
+
+/* ═══ /tank 单屏 13×13 四向三关：基地是写着你笔记名的记事本 ═════════ */
+R(function () {
+  var N = 13, u = 26, map = [], me = null, foes = [], bullets = [], items = [], level = 1, left = 0, killT = 0, base = null, lives = 3, t = 0, shield = 0, freeze = 0, fireCd = .32;
+  function buildMap() { // 地形种子取自收藏/待办字数：每个人的第一关都是自己笔记长出来的
+    var src = names('obs').join('|') + title(); var h = 0;
+    for (var i = 0; i < src.length; i++) h = (h * 31 + src.charCodeAt(i)) >>> 0;
+    map = []; for (var y = 0; y < N; y++) { map[y] = []; for (var x = 0; x < N; x++) map[y][x] = 0; }
+    function put(x, y, v) { if (x >= 0 && y >= 0 && x < N && y < N) map[y][x] = v; }
+    for (var k = 0; k < N * 2; k++) { h = (h * 1103515245 + 12345) >>> 0; put(h % N, 1 + (h >> 4) % (N - 4), 1); }
+    for (var s = 0; s < 5; s++) { h = (h * 1103515245 + 12345) >>> 0; put(h % N, 1 + (h >> 6) % (N - 4), 2); }
+    // 河(3)挡车不挡弹、草(4)藏车（画在坦克之后）——两句话的代价换十倍策略，值
+    for (var r = 0; r < 4; r++) { h = (h * 1103515245 + 12345) >>> 0; var rx = 1 + (h % (N - 3)), ry = 3 + ((h >> 8) % 6); put(rx, ry, 3); put(rx + 1, ry, 3); }
+    for (var gg = 0; gg < 6; gg++) { h = (h * 1103515245 + 12345) >>> 0; put(h % N, 2 + ((h >> 10) % (N - 5)), 4); }
+    [[5, 10], [7, 10], [4, 11], [8, 11], [5, 11], [7, 11]].forEach(function (p) { put(p[0], p[1], 1); });
+    put(6, 12, 9); put(6, 11, 0);
+  }
+  function cellFree(x, y) { return x >= 0 && y >= 0 && x < N && y < N && (!map[y][x] || map[y][x] === 4); }
+  function occupied(x, y) { return (me && me.x === x && me.y === y) || foes.some(function (f) { return f.x === x && f.y === y; }); }
+  function spawnFoe() {
+    if (foes.length >= 4 || left <= 0) return;
+    var sx = pick([0, 6, 12]); if (occupied(sx, 0)) return;
+    foes.push({ x: sx, y: 0, d: pick(['D', 'L', 'R']), cd: rf(.6, 1.8), hp: 1 }); left--;
+  }
+  function reset() {
+    level = 1; lives = 3; buildMap();
+    me = { x: 6, y: 9, d: 'U', cd: .3 }; bullets = []; items = []; t = 0; shield = 0; freeze = 0; fireCd = .32;
+    left = 5 + level * 2; killT = 0; foes = []; spawnFoe();
+    base = { x: 6, y: 12, alive: true };
+  }
+  function move(o, d) {
+    var v = { L: [-1, 0], R: [1, 0], U: [0, -1], D: [0, 1] }[d]; o.d = d;
+    var nx = o.x + v[0], ny = o.y + v[1];
+    if (!cellFree(nx, ny) || occupied(nx, ny)) return false;
+    o.x = nx; o.y = ny; return true;
+  }
+  function shoot(o) {
+    if (bullets.filter(function (b) { return b.own === o; }).length > 1) return;
+    var v = { L: [-1, 0], R: [1, 0], U: [0, -1], D: [0, 1] }[o.d];
+    bullets.push({ x: o.x + .5, y: o.y + .5, vx: v[0] * 7, vy: v[1] * 7, own: o === me ? 1 : 0 }); FX('shot');
+  }
+  function end(msg, win) { SH().scoreVal = win ? level * 100 : 0; FX(win ? 'win' : 'fail');
+    END(msg, [['关卡', '第 ' + level + ' / 3 关'], ['剩余敌军', left + foes.length], ['生命', lives]]); }
+  return {
+    id: 'tank', tip: '划屏改向 / 方向键移动 · 点右半屏或空格开火 · 别让记事本被炸',
+    start: function () { reset(); }, reset: function () { reset(); },
+    resize: function (w, h) { u = Math.floor(Math.min(w, h) / N); },
+    key: function (e) {
+      var m = { ArrowLeft: 'L', ArrowRight: 'R', ArrowUp: 'U', ArrowDown: 'D' };
+      if (m[e.key]) { e.preventDefault(); move(me, m[e.key]); }
+      if (e.code === 'Space') { e.preventDefault(); if (me.cd <= 0) { shoot(me); me.cd = fireCd; } } // ★ 提射速就是压这个 cd // 长按靠 keydown 自动重复 + cd 门控连射
+    },
+    swipe: function (d) { move(me, d); },
+    down: function (x, y) { if (x > SH().W / 2) { if (me.cd <= 0) { shoot(me); me.cd = .32; } } },
+    tap: function () { if (me.cd <= 0) { shoot(me); me.cd = .32; } },
+    frame: function (dt) {
+      t += dt; me.cd -= dt;
+      killT += dt; if (killT > 1.4) { killT = 0; spawnFoe(); }
+      if (freeze > 0) freeze -= dt;
+      // 道具吃下即生效：★ 射速 / 盾 / 时钟定身 / 铲子把基地四周砖升钢
+      items = items.filter(function (it) {
+        if (it.x !== me.x || it.y !== me.y) return true;
+        if (it.k === 'star') fireCd = Math.max(.14, fireCd * .6);
+        else if (it.k === 'shield') shield = 1;
+        else if (it.k === 'clock') freeze = 3;
+        else if (it.k === 'shovel') [[5, 11], [6, 11], [7, 11], [4, 12], [8, 12]].forEach(function (q) { if (map[q[1]] && map[q[1]][q[0]] === 1) map[q[1]][q[0]] = 2; });
+        FX('pow'); return false;
+      });
+      foes.forEach(function (f) {
+        if (freeze > 0) return;
+        f.cd -= dt;
+        if (f.cd <= 0) { f.cd = rf(.5, 1.4);
+          if (Math.random() < .45) { var dx = me.x - f.x, dy = me.y - f.y; f.d = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'R' : 'L') : (dy > 0 ? 'D' : 'U'); }
+          else f.d = pick(['L', 'R', 'U', 'D']);
+          move(f, f.d);
+          if (Math.random() < .3 && bullets.filter(function (b) { return !b.own; }).length < 4) shoot(f);
+        }
+      });
+      bullets.forEach(function (b) { b.x += b.vx * dt; b.y += b.vy * dt; });
+      bullets = bullets.filter(function (b) {
+        if (b.x < 0 || b.y < 0 || b.x > N || b.y > N) return false;
+        var cx = Math.floor(b.x), cy = Math.floor(b.y), m2 = map[cy] && map[cy][cx];
+        if (m2 === 1) { map[cy][cx] = 0; FX('hit'); return false; }
+        if (m2 === 2) { FX('hit'); return false; } // 钢墙挡弹不碎
+        if (m2 === 3 || m2 === 4) return true; // 河与草不拦弹——子弹照飞（原作语义）
+        if (m2 === 9) { base.alive = false; FX('boom'); return end('你的笔记被擦了', false); }
+        if (b.own) { for (var i = 0; i < foes.length; i++) if (foes[i].x === cx && foes[i].y === cy) {
+            foes.splice(i, 1);
+            if (Math.random() < .34) items.push({ x: cx, y: cy, k: pick(['star', 'shield', 'clock', 'shovel']) }); // 击毁有概率掉道具
+            FX('boom'); return false; } }
+        else if (me.x === cx && me.y === cy) { if (shield) { shield = 0; FX('hit'); return false; } lives--; FX('boom'); if (lives <= 0) return end('坦克被打爆了', false); me.x = 6; me.y = 9; return false; }
+        return true;
+      });
+      if (!foes.length && left <= 0) {
+        if (level >= 3) return end('三关全通', true);
+        level++; left = 5 + level * 2; buildMap(); foes = []; spawnFoe(); FX('confirm');
+      }
+      SC('敌 ' + (left + foes.length)); LV('第 ' + level + ' / 3 关 · 命 ' + lives);
+    },
+    probe: function () { return { level: level, lives: lives, foes: foes.length, left: left, items: items.length, shield: shield, freeze: freeze }; },
+    draw: function () {
+      var c = SH().ctx, P = pal(), W = SH().W, H = SH().H, ox = (W - N * u) / 2, oy = (H - N * u) / 2;
+      c.clearRect(0, 0, W, H);
+      c.strokeStyle = P.ln; c.lineWidth = 1; c.globalAlpha = .5;
+      for (var i = 1; i < N; i++) { c.beginPath(); c.moveTo(ox, oy + i * u + .5); c.lineTo(ox + N * u, oy + i * u + .5); c.stroke(); c.beginPath(); c.moveTo(ox + i * u + .5, oy); c.lineTo(ox + i * u + .5, oy + N * u); c.stroke(); }
+      c.globalAlpha = 1;
+      for (var y = 0; y < N; y++) for (var x = 0; x < N; x++) {
+        var v = map[y][x]; if (!v) continue;
+        var px = ox + x * u, py = oy + y * u;
+        c.lineWidth = 1.7; c.lineJoin = 'round';
+        if (v === 1) { c.strokeStyle = P.fg; c.fillStyle = P.bx; rr(c, px + 2, py + 2, u - 4, u - 4, 4); c.fill(); c.stroke(); }
+        if (v === 2) { c.strokeStyle = P.fg; c.setLineDash([2.6, 2.4]); rr(c, px + 2, py + 2, u - 4, u - 4, 3); c.stroke(); c.setLineDash([]); }
+        if (v === 3) { c.strokeStyle = P.ac; c.globalAlpha = .75; c.lineWidth = 1.4; c.beginPath(); // 河：三道波纹，靠形态而非颜色与钢墙区分
+          c.moveTo(px + 3, py + u * .38); c.lineTo(px + u - 3, py + u * .38); c.moveTo(px + 3, py + u * .58); c.lineTo(px + u - 3, py + u * .58); c.moveTo(px + 3, py + u * .78); c.lineTo(px + u - 3, py + u * .78); c.stroke(); c.globalAlpha = 1; }
+        if (v === 9) {
+          c.strokeStyle = P.ac; c.fillStyle = P.soft; rr(c, px + 1, py + 2, u - 2, u - 4, 3); c.fill(); c.stroke();
+          c.beginPath(); c.moveTo(px + 5, py + u * .45); c.lineTo(px + u - 5, py + u * .45); c.moveTo(px + 5, py + u * .68); c.lineTo(px + u * .6, py + u * .68); c.stroke();
+        }
+      }
+      function tank(o, foe) {
+        var px = ox + o.x * u, py = oy + o.y * u;
+        c.lineWidth = 1.7; c.strokeStyle = foe ? P.fg : P.fg; c.lineJoin = 'round';
+        rr(c, px + 3, py + u * .5, u - 6, u * .32, 3); c.stroke();
+        rr(c, px + u * .3, py + u * .28, u * .4, u * .3, 3); c.stroke();
+        c.beginPath();
+        var v = { L: [-1, 0], R: [1, 0], U: [0, -1], D: [0, 1] }[o.d];
+        c.moveTo(px + u / 2, py + u / 2); c.lineTo(px + u / 2 + v[0] * u * .48, py + u / 2 + v[1] * u * .48); c.stroke();
+        if (!foe) { c.fillStyle = P.ac; c.beginPath(); c.arc(px + u * .44, py + u * .42, 1.6, 0, 7); c.fill(); }
+      }
+      foes.forEach(function (f) { tank(f, true); }); tank(me, false);
+      items.forEach(function (it) { // 道具金形：★ / 盾 / 钟 / 铲
+        var ix = ox + it.x * u, iy = oy + it.y * u; c.strokeStyle = P.ac; c.lineWidth = 1.7; c.beginPath();
+        if (it.k === 'star') { c.moveTo(ix + u * .5, iy + u * .2); c.lineTo(ix + u * .66, iy + u * .46); c.lineTo(ix + u * .92, iy + u * .5); c.lineTo(ix + u * .7, iy + u * .68); c.lineTo(ix + u * .77, iy + u * .94); c.lineTo(ix + u * .5, iy + u * .79); c.lineTo(ix + u * .23, iy + u * .94); c.lineTo(ix + u * .3, iy + u * .68); c.lineTo(ix + u * .08, iy + u * .5); c.lineTo(ix + u * .34, iy + u * .46); c.closePath(); }
+        else if (it.k === 'shield') { rr(c, ix + u * .26, iy + u * .22, u * .48, u * .56, u * .12); }
+        else if (it.k === 'clock') { c.arc(ix + u * .5, iy + u * .52, u * .28, 0, 7); }
+        else { rr(c, ix + u * .24, iy + u * .26, u * .52, u * .48, 2); }
+        c.stroke(); });
+      for (var gy = 0; gy < N; gy++) for (var gx = 0; gx < N; gx++) { // 草画在车之后 = 藏车
+        if (map[gy][gx] !== 4) continue;
+        var qx = ox + gx * u, qy = oy + gy * u; c.strokeStyle = P.mu; c.globalAlpha = .55; c.lineWidth = 1.4; c.beginPath();
+        for (var k2 = 0; k2 < 3; k2++) { c.moveTo(qx + 4 + k2 * 7, qy + u - 4); c.lineTo(qx + 7 + k2 * 7, qy + 5); } c.stroke(); c.globalAlpha = 1; }
+      bullets.forEach(function (b) { c.fillStyle = b.own ? P.ac : P.fg; c.beginPath(); c.arc(ox + b.x * u, oy + b.y * u, 2.6, 0, 7); c.fill(); });
+    },
+  };
+}());
+
+/* ═══ /spacex 一级垂直着陆：按住=推力，落稳在驳船中线 ══════════════ */
+R(function () {
+  var y, vy, vx, rot, rotV, fuel, thrust, t, done, PADX, GY, mx = 0;
+  function reset() { y = SH().H * 0.16; vy = 0; vx = rf(-8, 8); rot = rf(-.12, .12); rotV = 0; fuel = 100; thrust = false; t = 0; done = false;
+    PADX = SH().W * 0.5; GY = SH().H - 34; }
+  function end(win) {
+    done = true; thrust = false; ENG(false);
+    if (win) { FX('confirm'); SH().scoreVal = Math.round(fuel); } else FX('fail');
+    SH().scoreVal = win ? Math.round(fuel + 100) : 0;
+    END(win ? '稳稳落在船上' : (t > 3 ? '姿态歪了' : '摔了'), [['剩余燃料', Math.round(fuel) + '%'], ['落地速度', Math.abs(vy).toFixed(1) + ' m/s'], ['倾角', (Math.abs(rot) * 57.3).toFixed(1) + '°']]);
+  }
+  return {
+    id: 'spacex', tip: '按住屏幕 = 开推力，松手 = 自由落体 · 落稳条件写在仪表上',
+    start: function () { reset(); FX('ign'); }, reset: function () { reset(); },
+    down: function () { thrust = true; ENG(true); },
+    up: function () { thrust = false; ENG(false); },
+    key: function (e) {
+      if (e.code === 'Space' || e.code === 'ArrowUp') { e.preventDefault(); thrust = true; ENG(true); }
+      if (e.code === 'ArrowLeft') rotV -= 0.9; if (e.code === 'ArrowRight') rotV += 0.9;
+    },
+    keyup: function (e) { // 缺这条等于「点着的火永远关不掉」：燃料烧光、引擎噪音不停
+      if (e.code === 'Space' || e.code === 'ArrowUp') { thrust = false; ENG(false); }
+    },
+    pauseHook: function () { thrust = false; ENG(false); },
+    frame: function (dt) {
+      if (done) return; t += dt;
+      var acc = thrust && fuel > 0 ? 17.4 : 0;
+      if (thrust && fuel > 0) fuel = Math.max(0, fuel - dt * 17.5);
+      vy += 9.8 * dt - acc * dt * Math.cos(rot);
+      vx += -acc * dt * Math.sin(rot) + (Math.sin(t * 1.7) * 0.6) * dt;
+      rot += rotV * dt * 0.06; rotV *= 0.92; rot *= 0.995;
+      y += vy * dt * 12;
+      mx = SH().W / 2 + vx * t * 6;
+      SC(Math.max(0, Math.round(GY - y)) + 'm');
+      LV('垂直 ' + vy.toFixed(1) + ' · 角 ' + (Math.abs(rot) * 57.3).toFixed(1) + '° · 油 ' + Math.round(fuel) + '%');
+      if (y >= GY - 12) {
+        var off = Math.abs(mx - PADX), ok = Math.abs(vy) <= 4.2 && Math.abs(rot) <= 0.055 && off <= 26;
+        end(ok);
+      }
+      if (Math.abs(rot) > 0.5 && t > 1.2) end(false);
+    },
+    draw: function () {
+      var c = SH().ctx, P = pal(), W = SH().W, H = SH().H;
+      c.clearRect(0, 0, W, H);
+      c.strokeStyle = P.ln; c.lineWidth = 1;
+      for (var i = 1; i < 12; i++) { c.beginPath(); c.moveTo(0, i * 26 + .5); c.lineTo(W, i * 26 + .5); c.stroke(); }
+      c.fillStyle = P.mu;
+      [[.12, .18], [.8, .11], [.46, .26], [.22, .4], [.7, .46]].forEach(function (s) { c.fillRect(W * s[0], H * s[1], 2, 2); });
+      c.strokeStyle = P.ac; c.lineWidth = 1.7;
+      c.beginPath(); c.moveTo(PADX - 62, GY); c.lineTo(PADX + 62, GY); c.stroke();
+      c.setLineDash([3, 4]); c.beginPath(); c.moveTo(PADX, GY); c.lineTo(PADX, GY - 12); c.stroke(); c.setLineDash([]);
+      c.strokeStyle = P.mu; c.beginPath();
+      for (var k = 0; k < W; k += 14) c.lineTo(k, GY + 10 + Math.sin((k + t * 30) / 22) * 2.2);
+      c.stroke();
+      c.save(); c.translate(mx || W / 2, y); c.rotate(rot);
+      c.strokeStyle = P.fg; c.lineWidth = 1.7; c.lineJoin = 'round';
+      c.beginPath(); c.moveTo(0, -30); c.bezierCurveTo(7, -20, 9, -10, 9, 0); c.lineTo(9, 22); c.lineTo(-9, 22); c.lineTo(-9, 0); c.bezierCurveTo(-9, -10, -7, -20, 0, -30); c.closePath(); c.stroke();
+      c.beginPath(); c.moveTo(-9, 2); c.lineTo(-19, 22); c.lineTo(-17, 6); c.moveTo(9, 2); c.lineTo(19, 22); c.lineTo(17, 6); c.stroke();
+      c.beginPath(); c.moveTo(-9, 22); c.lineTo(9, 22); c.stroke();
+      if (Math.abs(mx - PADX) <= 26 && Math.abs(vy) <= 4.2 && Math.abs(rot) <= 0.055) { c.strokeStyle = P.ac; c.beginPath(); c.moveTo(-12, 22); c.lineTo(-16, 30); c.moveTo(12, 22); c.lineTo(16, 30); c.moveTo(0, 22); c.lineTo(0, 30); c.stroke(); }
+      if (thrust && fuel > 0) { c.strokeStyle = P.ac; c.beginPath(); c.moveTo(-4, 23); c.bezierCurveTo(-1, 30, 1, 32, 0, 38); c.bezierCurveTo(2, 32, 4, 28, 4, 23); c.stroke(); }
+      c.restore();
+    },
+    destroy: function () { ENG(false); }
+  };
+}());
+
+/* ═══ /tesla 轨道巡航：微调推力撞碎飘过的笔记标题 ══════════════════ */
+R(function () {
+  var px, py, vx, vy, fuel, frags, dist, hit, dead, stars, AU;
+  function reset() {
+    px = SH().W * 0.3; py = SH().H * 0.5; vx = 0; vy = 0; fuel = 100; dist = 0; hit = 0; dead = false; AU = 0.7;
+    frags = []; for (var i = 0; i < 7; i++) frags.push(newFrag(true));
+    stars = []; for (var j = 0; j < 26; j++) stars.push([rf(0, SH().W), rf(0, SH().H), rf(.2, 1)]);
+  }
+  function newFrag(init) {
+    var nm = names();
+    return { x: init ? rf(SH().W * .5, SH().W - 40) : SH().W + 40, y: rf(30, SH().H - 40), vx: -rf(28, 62), w: 74, h: 18, rare: Math.random() < 0.16, label: pick(nm) };
+  }
+  var ax = 0, ay = 0;
+  return {
+    id: 'tesla', tip: '左半屏摇杆 / 方向键微调姿态 · 撞碎飘过的笔记标题 · 点右半屏鸣笛',
+    start: function () { reset(); }, reset: function () { reset(); },
+    down: function (x, y) { if (x > SH().W / 2) { FX('horn'); SH().scoreVal = hit; } },
+    key: function (e) {
+      var m = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+      if (m[e.key]) { e.preventDefault(); ax = m[e.key][0]; ay = m[e.key][1]; ENG(true); }
+    },
+    move: function (x, y) { if (x < SH().W / 2) { ax = (x - SH().W / 4) / (SH().W / 4); ay = (y - SH().H / 2) / (SH().H / 2); ENG(true); } },
+    up: function () { ax = 0; ay = 0; ENG(false); },
+    keyup: function (e) { // 键盘抬起不清零 → 车一路漂到撞墙
+      if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].indexOf(e.key) >= 0) { ax = 0; ay = 0; ENG(false); }
+    },
+    pauseHook: function () { ax = 0; ay = 0; ENG(false); },
+    frame: function (dt) {
+      if (dead) return;
+      var p = Math.min(1, Math.hypot(ax, ay));
+      if (p > 0.05 && fuel > 0) { vx += ax * 150 * dt * p; vy += ay * 150 * dt * p; fuel = Math.max(0, fuel - dt * 6 * p); }
+      else fuel = Math.min(100, fuel + dt * 3);
+      vx *= 0.985; vy *= 0.985; px += vx * dt; py += vy * dt;
+      px = Math.max(18, Math.min(SH().W - 18, px));
+      if (py < 16 || py > SH().H - 40) { dead = true; FX('fail'); SH().scoreVal = hit; END('撞上火星了', [['撞碎', hit + ' 片'], ['轨道', AU.toFixed(2) + ' AU'], ['稀有', (frags.filter(function (f) { return f.rare; }).length)]]); return; }
+      dist += dt * 0.012; AU = 0.7 + dist * 0.05;
+      frags.forEach(function (f) { f.x += f.vx * dt; });
+      frags = frags.filter(function (f) { return f.x > -90; });
+      if (frags.length < 7) frags.push(newFrag(false));
+      frags.forEach(function (f) {
+        if (!f.gone && Math.abs(px - (f.x + f.w / 2)) < f.w / 2 + 12 && Math.abs(py - (f.y + f.h / 2)) < f.h / 2 + 10) {
+          f.gone = true; hit++; FX(f.rare ? 'win' : 'crack'); if (f.rare) FX('coin');
+        }
+      });
+      SC(hit + ' 片'); LV('轨道 ' + AU.toFixed(2) + ' AU · 燃料 ' + Math.round(fuel) + '%');
+    },
+    draw: function () {
+      var c = SH().ctx, P = pal(), W = SH().W, H = SH().H;
+      c.clearRect(0, 0, W, H);
+      c.fillStyle = P.mu; stars.forEach(function (s) { c.globalAlpha = .3 + s[2] * .5; c.fillRect(s[0], s[1], 1.6, 1.6); }); c.globalAlpha = 1;
+      c.strokeStyle = P.ln; c.lineWidth = 1; c.beginPath(); c.arc(W / 2, H + 190, 230, Math.PI * 1.15, Math.PI * 1.85); c.stroke();
+      c.setLineDash([3, 5]); c.strokeStyle = P.ac; c.globalAlpha = .5;
+      c.beginPath(); c.arc(W / 2, H + 190, 258, Math.PI * 1.2, Math.PI * 1.8); c.stroke(); c.setLineDash([]); c.globalAlpha = 1;
+      frags.forEach(function (f) {
+        if (f.gone) return;
+        c.lineWidth = 1.7; c.strokeStyle = f.rare ? P.ac : P.fg; c.fillStyle = P.bx; c.globalAlpha = f.rare ? 1 : .9;
+        rr(c, f.x, f.y, f.w, f.h, 4); c.fill(); c.stroke();
+        c.fillStyle = f.rare ? P.ac : P.mu; c.font = '10px ui-monospace,Consolas,monospace'; c.textBaseline = 'middle';
+        c.fillText(String(f.label).slice(0, 6), f.x + 6, f.y + f.h / 2 + .5); c.textBaseline = 'alphabetic'; c.globalAlpha = 1;
+      });
+      c.save(); c.translate(px, py); c.rotate(Math.max(-.3, Math.min(.3, vy / 260)));
+      c.strokeStyle = P.fg; c.lineWidth = 1.7; c.lineJoin = 'round';
+      c.beginPath(); c.moveTo(-30, 6); c.bezierCurveTo(-29, -3, -25, -8, -19, -10); c.lineTo(-10, -17); c.bezierCurveTo(-4, -20, 3, -20, 8, -17); c.lineTo(16, -11); c.bezierCurveTo(24, -10, 29, -5, 30, 2); c.lineTo(30, 6); c.closePath(); c.stroke();
+      c.beginPath(); c.moveTo(-30, 6); c.lineTo(30, 6); c.stroke();
+      c.beginPath(); c.arc(-19, 9, 5.4, 0, 7); c.stroke(); c.beginPath(); c.arc(18, 9, 5.4, 0, 7); c.stroke();
+      c.fillStyle = P.ac; c.beginPath(); c.arc(25, 1, 1.8, 0, 7); c.fill();
+      if (Math.hypot(ax, ay) > .05) { c.strokeStyle = P.ac; c.globalAlpha = .8; c.beginPath(); c.moveTo(-32, 2); c.lineTo(-42, 4); c.moveTo(-32, -1); c.lineTo(-40, -2); c.stroke(); c.globalAlpha = 1; }
+      c.restore();
+    },
+    destroy: function () { ENG(false); }
+  };
+}());
+})();
 </script>
 </body>
 </html>

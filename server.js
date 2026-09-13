@@ -3,22 +3,88 @@
 // 只做一件事：按 URL 路径存/取多段密文。所有加解密都在浏览器完成，服务器从不见明文、不见口令、不见密钥。
 
 const http = require('http');
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
 const PORT = process.env.PORT || 8080;
 const APP_DIR = __dirname;
-const DATA_DIR = path.join(APP_DIR, 'data');
+// 数据目录允许用环境变量改址：唯一目的是让 e2e 能起真服务器做接口测试而不污染仓库 data/
+const DATA_DIR = process.env.NOTESYNC_DATA_DIR || path.join(APP_DIR, 'data');
 const NOTES_DIR = path.join(DATA_DIR, 'notes');
 const INDEX_FILE = path.join(APP_DIR, 'index.html');
 
 if (!fs.existsSync(NOTES_DIR)) fs.mkdirSync(NOTES_DIR, { recursive: true });
+
+// --- v9.0.0 街机档案（彩蛋成绩 + 桌宠成长）：极小 KV 文件存储，零依赖零数据库 ---
+// 归属模型：id 只寻址、writeKey 走请求头当凭据、服务端只存其哈希；
+// 「不存在」与「钥匙错」统一 404，防枚举探测。档案只含计数与形态，永不含笔记内容。
+const ARCADE_DIR = path.join(DATA_DIR, 'arcade');
+if (!fs.existsSync(ARCADE_DIR)) fs.mkdirSync(ARCADE_DIR, { recursive: true });
+const ARC_ID_RE = /^[A-Z2-9]{8}$/;          // 32^8 ≈ 1.1e12 空间
+const ARC_KEY_MIN = 8;                      // 短于 8 的钥匙一律视为非法
+const ARC_MAX_BODY = 2048;                  // 档案硬上限 2KB
+const ARC_WRITE_PER_MIN = 10;               // 每个档案每分钟写入次数
+const arcWrites = new Map();                // id -> { n, t }
+function arcPath(id) { return path.join(ARCADE_DIR, id + '.json'); }
+function arcRead(id) { try { return JSON.parse(fs.readFileSync(arcPath(id), 'utf8')); } catch (e) { return null; } }
+function arcSave(id, obj) { const f = arcPath(id); const tmp = f + '.tmp.' + process.pid; fs.writeFileSync(tmp, JSON.stringify(obj)); fs.renameSync(tmp, f); }
+function arcHash(k) { return crypto.createHash('sha256').update(String(k)).digest('hex'); }
+function sweepArcWrites() { // 限流表无界增长=内存泄漏（公网可无限建档把它刷大）
+  if (arcWrites.size < 2000) return;
+  const now = Date.now();
+  for (const [k, v] of arcWrites) { if (now - v.t > 120000) arcWrites.delete(k); }
+}
+function arcLimited(id) {
+  const now = Date.now(), rec = arcWrites.get(id);
+  if (!rec || now - rec.t > 60000) { arcWrites.set(id, { n: 1, t: now }); return false; }
+  rec.n++; return rec.n > ARC_WRITE_PER_MIN;
+}
+// 合并规则写在服务端、不信客户端整体覆盖：计数器取 max、集合并、小字段按 updatedAt 后者胜。
+// 否则两台设备各玩各的会互相把对方进度冲掉（「我昨天明明养到成体了」）。
+function arcMerge(cur, inc) {
+  const out = cur || { counters: {}, shelf: [], updatedAt: 0 };
+  const incU = Number(inc.updatedAt) || 0;
+  if (incU >= (Number(out.updatedAt) || 0)) {
+    out.stage = inc.stage != null ? inc.stage : out.stage;
+    out.ate = inc.ate != null ? inc.ate : out.ate;
+    out.asleep = inc.asleep != null ? !!inc.asleep : out.asleep;
+    out.born = inc.born || out.born || Date.now();
+    out.retiredAt = inc.retiredAt != null ? (Number(inc.retiredAt) || 0) : (out.retiredAt || 0); // 客户端已上行；不搬等于「保留 30 天可原样认领」是空话
+    out.updatedAt = incU;
+  }
+  out.counters = out.counters || {};
+  const ic = (inc.counters && typeof inc.counters === 'object') ? inc.counters : {};
+  Object.keys(ic).slice(0, 40).forEach(function (k) {
+    const v = Number(ic[k]); if (!Number.isFinite(v)) return;
+    const p = Number(out.counters[k]); if (!Number.isFinite(p) || v > p) out.counters[k] = Math.min(v, 1e12);
+  });
+  const set = new Set((out.shelf || []).concat(inc.shelf || []).map(Number).filter(n => Number.isFinite(n) && n >= 0 && n < 512));
+  out.shelf = Array.from(set).sort(function (a, b) { return a - b; });
+  return out;
+}
+function arcAuth(req, id) {
+  const k = req.headers['x-arcade-key'];
+  if (typeof k !== 'string' || k.length < ARC_KEY_MIN || k.length > 64) return null;
+  return arcHash(k);
+}
+function readBody(req, limit) {
+  return new Promise(function (resolve, reject) {
+    let size = 0; const chunks = [];
+    req.on('data', function (c) { size += c.length; if (size > limit) { reject(new Error('too large')); req.destroy(); return; } chunks.push(c); });
+    req.on('end', function () { resolve(Buffer.concat(chunks).toString('utf8')); });
+    req.on('error', reject);
+  });
+}
 
 const EMPTY = { v: 0, ct: '', iv: '', salt: '', updatedAt: 0 };
 
 // noteId 校验：英文/数字/下划线/短横线，1-64 字符（v5.19 恢复 _ 与 -：
 // v5.15 为禁中文收紧成纯字母数字，误伤了早期带 _/- 的旧笔记；中文仍被拒绝）
 const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+// v9.0.0：十个彩蛋门牌为专属保留字。只挡前端不够——MCP 工具与直接 PUT 仍能建出同名笔记，
+// 而那条笔记会被路由永久遮蔽（用户视角=笔记蒸发）。只挡「新建」，已存在的存量仍可 GET，不毁数据。
+const RESERVED_IDS = new Set(['mirror', 'snake', 'dragon', 'brick', 'satoshi', 'bitcoin', 'tank', 'spacex', 'tesla', 'pet']);
 
 // --- 限流参数 ---
 const FAIL_LIMIT = 10;                   // 失败阈值
@@ -284,6 +350,11 @@ const server = http.createServer((req, res) => {
 
   // --- API: 写入笔记 ---
   if (req.method === 'PUT' && url.startsWith('/api/note/')) {
+    // 门牌专属：新建（服务器无此档）时才挡，存量笔记仍可正常读写，不毁用户数据
+    // 必须按「原样名 + 小写名」两处都查：ID_RE 允许大写，v9 之前的存量笔记可能就叫 Snake，
+    // 只查小写文件会把这台机器真实存在的笔记判成新建并永久 400（用户保存静默失败）
+    { const _raw = String(extractId(url, '/api/note') || ''), _low = _raw.toLowerCase();
+      if (RESERVED_IDS.has(_low) && !fs.existsSync(notePath(_raw)) && !fs.existsSync(notePath(_low))) return sendJSON(res, 400, { error: 'reserved name' }); }
     const id = extractId(url, '/api/note');
     if (!id || !ID_RE.test(id)) return sendJSON(res, 400, { error: 'bad id' });
     const limit = checkLimit(ip, id);
@@ -338,6 +409,50 @@ const server = http.createServer((req, res) => {
     if (limit.locked) return sendJSON(res, 429, { locked: true, retryAfter: limit.retryAfter });
     const rec = failMap.get(ip + ':' + id);
     return sendJSON(res, 200, { locked: false, count: rec ? rec.count : 0 });
+  }
+
+  // --- API: 街机档案（彩蛋成绩 / 桌宠）v9.0.0 ---
+  if (url.startsWith('/api/arcade')) {
+    // 路径段为 '' / 'api' / 'arcade' / '<id>'：必须取 [3]，取 [2] 会拿到字面量 arcade 致全部 404
+    const aid = (url.split('?')[0].split('/')[3] || '').toUpperCase();
+    if (req.method === 'GET' || req.method === 'PUT') {
+      if (!ARC_ID_RE.test(aid)) return sendJSON(res, 404, { error: 'not found' });
+      const rec = arcRead(aid);
+      const kh = arcAuth(req, aid);
+      if (!kh || !rec || rec.keyHash !== kh) return sendJSON(res, 404, { error: 'not found' }); // 钥匙错与不存在同形，防枚举
+      if (req.method === 'GET') { // 回档必须剥掉 keyHash 与 id：连哈希都不出门
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      const pub = Object.assign({}, rec); delete pub.keyHash; delete pub.id;
+      res.end(JSON.stringify(pub)); return;
+    }
+      if (arcLimited(aid)) return sendJSON(res, 429, { error: 'too many writes' });
+      readBody(req, ARC_MAX_BODY).then(function (body) {
+        let inc; try { inc = JSON.parse(body || '{}'); } catch (e) { return sendJSON(res, 400, { error: 'bad json' }); }
+        if (!inc || typeof inc !== 'object') return sendJSON(res, 400, { error: 'bad body' });
+        const merged = arcMerge(rec, inc);
+        merged.id = aid; merged.keyHash = rec.keyHash; delete merged.key;
+        const txt = JSON.stringify(merged);
+        if (txt.length > ARC_MAX_BODY) return sendJSON(res, 413, { error: 'too large' });
+        try { arcSave(aid, merged); } catch (e) { return sendJSON(res, 500, { error: 'write failed' }); }
+        return sendJSON(res, 200, { ok: true, updatedAt: merged.updatedAt || 0 });
+      }).catch(function () { return sendJSON(res, 413, { error: 'too large' }); });
+      return;
+    }
+    if (req.method === 'POST') { // 建档：客户端自带 id+key，服务端只留哈希
+      readBody(req, ARC_MAX_BODY).then(function (body) {
+        let inc; try { inc = JSON.parse(body || '{}'); } catch (e) { return sendJSON(res, 400, { error: 'bad json' }); }
+        const id = String(inc.id || '').toUpperCase(), k = String(inc.key || '');
+        if (!ARC_ID_RE.test(id) || k.length < ARC_KEY_MIN || k.length > 64) return sendJSON(res, 400, { error: 'bad id/key' });
+        sweepArcWrites();
+        if (arcLimited('post:' + getClientIP(req))) return sendJSON(res, 429, { error: 'too many' }); // 建档按 IP 限速，防公网刷盘占满 inode
+        if (arcRead(id)) return sendJSON(res, 200, { ok: true }); // 与新建统一回 {ok:true}：回 exists:true 等于告诉探测者该 id 有人占，破防枚举口径
+        const rec = { id: id, keyHash: arcHash(k), counters: {}, shelf: [], updatedAt: Number(inc.updatedAt) || Date.now(), born: Date.now() };
+        try { arcSave(id, rec); } catch (e) { return sendJSON(res, 500, { error: 'write failed' }); }
+        return sendJSON(res, 200, { ok: true });
+      }).catch(function () { return sendJSON(res, 413, { error: 'too large' }); });
+      return;
+    }
+    return sendJSON(res, 405, { error: 'method not allowed' });
   }
 
   // --- 健康检查 ---
