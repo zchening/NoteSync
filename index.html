@@ -658,7 +658,7 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '8.3.1';
+const APP_VERSION = '8.3.2';
 const BUILD_DATE = '2026-09-13';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
@@ -4593,16 +4593,17 @@ function nsTypeSound(kind, force) {
     nsEggUnlock('type');
   } catch (e) {}
 }
-let tyEnterAt = 0, tyCompAt = 0, tyLastData = '', tyLastDataAt = 0; // v8.3.1 方案B：物理回车与 insertParagraph 双通道防重（一声回车=一次铃）；tyCompAt=组字上屏防重窗；tyLastData=长按同字符连发抑制
+let tyEnterAt = 0, tyCompAt = 0, tyLastData = '', tyLastDataAt = 0, tyKdAt = 0, tyKdData = ''; // v8.3.2：+tyKdAt/tyKdData=keydown↔beforeinput 双通道 10ms 去重（桌面物理键同 tick 连发两事件只响一声）
 document.addEventListener('keydown', (e) => {
   if (nsSkin === 0 || tyMuted) return;
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.repeat) return; // 长按自动重复不是新击键：不过滤会以 24ms 顶格连响（闸 R2）
-  if (typeof isComposing !== 'undefined' && isComposing) return; // IME 组字期不发声
+  if (e.keyCode === 229) return; // iOS WebKit 软键盘组字期 key 不可信（其逐字母声由 compositionend/insertText 通道承担）；Blink 组字期发真实 key 值→逐拼音字母在此出声（v8.3.2 用户挑定逐字母节奏，撤销旧「组字期一律静默」——那正是中文只剩回回车响的另一半成因）
   const t = e.target;
   if (t !== editor && !(editor.contains && editor.contains(t))) return; // 只认编辑器内击键
   if (e.key === 'Enter') { tyEnterAt = Date.now(); nsTypeSound('enter'); } // 换行+回车铃走 keydown（不预防默认）；软键盘不发 keydown 的机型由下行 beforeinput 兜底
   else if (e.key === ' ') nsTypeSound('space'); // 物理空格；软键盘空格上屏走 insertText，24ms 节流天然去重
+  else if (e.key && e.key.length === 1) { tyKdAt = Date.now(); tyKdData = e.key; nsTypeSound('key'); } // v8.3.2 逐字母：英文直打与拼音组字期同通道；记占供 beforeinput 10ms 去重
 });
 // v8.3.1 方案B（用户实测：打字机纸皮肤只有回车有声）：触屏软键盘敲字符基本不发 keydown（仅
 // Enter/Backspace 等功能键发），桌面 IME 组字期字母又被静默——keydown 通道永远只剩回车。
@@ -4612,7 +4613,8 @@ document.addEventListener('keydown', (e) => {
 // 粘贴/拖拽/撤回/补全不响；删除类不响（只响「打字」）。
 document.addEventListener('beforeinput', (e) => {
   if (nsSkin === 0 || tyMuted) return;
-  if (e.isComposing) return; // 闸 R2 P2：组字过程双保险（白名单已挡 insertCompositionText，防个别内核组字期误标 insertText）
+  // v8.3.2 发版前评审 P1：不设 e.isComposing 早退——白名单已挡真组字过程（insertCompositionText），
+  // 而部分安卓/国产内核 commit 的 insertText 带 isComposing=true，那腿会把移动上屏声全数挡哑；桌面同键双响已由下行 10ms 双通道去重防住。
   const t = e.target;
   if (t !== editor && !(editor.contains && editor.contains(t))) return; // 与 keydown 通道同一编辑器判据
   const ty = e.inputType || '';
@@ -4621,6 +4623,7 @@ document.addEventListener('beforeinput', (e) => {
   if (ty === 'insertText') {
     if (now - tyCompAt < 60) return; // compositionend 刚兜过底：吞掉双通道二击（闸二 R2 P2：120→60ms，防吞中英混打后第一记英文击键）
     const d = typeof e.data === 'string' ? e.data : '';
+    if (d && d === tyKdData && now - tyKdAt < 10) return; // v8.3.2 双通道去重：桌面物理键 keydown 刚响过同字符（两事件同 tick，人手/33ms 连发链均越不过 10ms）
     if (d && d === tyLastData && now - tyLastDataAt < 50) { tyLastDataAt = now; return; } // 闸二 R2 P1：长按 auto-repeat 逐重复仍派 insertText（e.repeat 只守 keydown 死通道），同字符 50ms 内=连发抑制；抑制时也链式占窗（B19 冻时钟实锤：只记上一声则 33ms×2=66ms 越窗漏响，人手连打同键 ≥50ms 间隙不误伤）
     tyLastData = d; tyLastDataAt = now;
   } else {

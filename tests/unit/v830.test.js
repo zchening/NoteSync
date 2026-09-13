@@ -171,34 +171,47 @@ test('B8 回车防重与兜底：keydown Enter+换行二击=一声一铃；纯 i
   assert.strictEqual(fake.stat.oscs, 2, '兜底换行=回车形态，带回铃');
 });
 
-// ── B9 打字机音：皮肤外静默、环内发声、静音开关生效并持久化 ──
-test('B9 打字机音三态：默认皮肤零发声；复古皮肤发声（回车带铃）；静音后归零', t => {
+// ── B9 v8.3.2 逐字母发声（冻时钟，人速 30ms/键）：keydown 字母出声、其 insertText 被 10ms 双通道去重、229 静默、回车带铃、静音归零 ──
+test('B9 打字机音：默认皮肤零发声；逐字母 keydown 出声+insertText 同 tick 吞击；回车带铃；静音归零', t => {
   const fake = makeFakeAC();
   const dom = loadApp(w => { w.AudioContext = fake.AC; });
   t.after(() => dom.window.close());
   const w = dom.window;
+  const realNow = w.Date.now;
+  let vt = realNow.call(w.Date);
+  w.Date.now = () => vt;
+  const advance = (ms) => { vt += ms; };
   const ed = w.document.getElementById('editor');
-  const key = (k) => ed.dispatchEvent(new w.KeyboardEvent('keydown', { key: k, bubbles: true }));
-  const bi = () => ed.dispatchEvent(new w.InputEvent('beforeinput', { inputType: 'insertText', data: 'a', bubbles: true, cancelable: true }));
+  const key = (k, keyCode) => ed.dispatchEvent(new w.KeyboardEvent('keydown', { key: k, keyCode: keyCode === undefined ? k.charCodeAt(0) : keyCode, bubbles: true }));
+  const bi = (data) => ed.dispatchEvent(new w.InputEvent('beforeinput', { inputType: 'insertText', data: data, bubbles: true, cancelable: true }));
   w.nsSetSkin(0);
-  key('a'); key('Enter'); bi();
+  key('a'); key('Enter'); bi('a');
   assert.strictEqual(fake.stat.filters, 0, '默认皮肤必须彻底静默（用户没主动进复古模式）');
   w.nsSetSkin(1);
   key('a');
-  assert.strictEqual(fake.stat.filters, 0, '字符击键不再挂 keydown（发声判据=输入层，防双通道误重）');
-  bi();
-  assert.strictEqual(fake.stat.filters, 1, '复古皮肤内可见字符上屏应发声');
-  key('Enter');
-  assert.strictEqual(fake.stat.filters, 2, '回车也应发声');
+  assert.strictEqual(fake.stat.filters, 1, 'v8.3.2：物理键/拼音组字期字母逐 keydown 出声（用户挑定逐字母节奏）');
+  bi('a');
+  assert.strictEqual(fake.stat.filters, 1, '双通道去重：紧随同字符 insertText（同 tick）吞击不两响');
+  advance(30); key('p');
+  assert.strictEqual(fake.stat.filters, 2, '下一字母（30ms 后人速节奏）再响一声');
+  bi('p');
+  assert.strictEqual(fake.stat.filters, 2, '其 insertText 被 10ms 双通道去重——拼音 pa 两键两声不多不少');
+  advance(30); key('n', 229);
+  assert.strictEqual(fake.stat.filters, 2, 'iOS 软键盘组字期 keyCode=229 静默（其声由 compositionend/insertText 通道承担）');
+  advance(30); bi('b');
+  assert.strictEqual(fake.stat.filters, 3, '软键盘/异字符 insertText 独立通道仍出声（30ms>24ms 节流）');
+  advance(30); key('Enter');
+  assert.strictEqual(fake.stat.filters, 4, '回车也应发声');
   assert.strictEqual(fake.stat.oscs, 1, '回车额外带一声回车铃（打字机灵魂）');
   assert.ok(w.nsEggHas('type'), '发过声即记入图鉴');
   w.nsTyMuteSet(true);
   const f = fake.stat.filters;
-  key('Enter'); bi();
+  advance(30); key('c'); advance(30); key('Enter'); advance(30); bi('c');
   assert.strictEqual(fake.stat.filters, f, '静音后不得再发声');
   assert.strictEqual(w.localStorage.getItem('notesync_tymute'), '1', '静音开关持久化');
   w.nsTyToggle();
   assert.strictEqual(w.localStorage.getItem('notesync_tymute'), '0', '再切回开声');
+  w.Date.now = realNow;
 });
 
 // ── B10 打字机音：节流（24ms 内连击只出一声）+ 非编辑器输入不响 ──
@@ -254,11 +267,11 @@ test('B12 图鉴 replay：点「Notesync 烟花」行放烟花；锁态行无点
 });
 
 // ── B13 静态钉：配色只吃变量、浮层不抢焦点、版本号同步、图鉴条目数与常量一致 ──
-test('B13 源码钉：新彩蛋零新色字面量 / 浮层 pointer-events:none / 版本 8.3.1 / 条目数一致', t => {
-  assert.ok(SRC.includes("const APP_VERSION = '8.3.1';"), '版本号应随禅模式退役+打字音输入层驱动升到 8.3.1');
+test('B13 源码钉：新彩蛋零新色字面量 / 浮层 pointer-events:none / 版本 8.3.2 / 条目数一致', t => {
+  assert.ok(SRC.includes("const APP_VERSION = '8.3.2';"), '版本号应随逐字母发声升到 8.3.2');
   assert.ok(SRC.includes("const NS_EGG_TOTAL = 7;"), '图鉴总数应随禅模式退役为 7');
   assert.ok(!SRC.includes('nsZen') && !SRC.includes('zenTip') && !SRC.includes("id: 'zen'"), '禅模式禁回潮：函数/DOM/图鉴条目三处字面量一律不得残留');
-  assert.ok(!SRC.includes("else if (e.key && e.key.length === 1) nsTypeSound('key');"), '禁回潮：字符击键不得回挂 keydown 通道（发声判据唯一=输入层）');
+  assert.ok(SRC.includes("else if (e.key && e.key.length === 1) { tyKdAt = Date.now(); tyKdData = e.key; nsTypeSound('key'); }"), 'v8.3.2 用户挑定逐字母节奏：字符击键必须挂 keydown 发声且记占供双通道去重（撤销 v8.3.1 禁挂钉）');
   assert.ok(SRC.includes('location.search.indexOf(\'eggs\')'), '?eggs 通道在位');
   assert.ok(SRC.includes('.ns-fw{position:fixed;z-index:58;pointer-events:none}'), '烟花层不得抢焦点');
   assert.ok(SRC.includes('background:var(--accent)'), '烟花粒子吃 --accent，不引新色');
@@ -291,8 +304,9 @@ test('B15 闸修源码钉：关图鉴归还焦点 / eggMask z90 / 滤 e.repeat /
   assert.ok(SRC.includes('if (tyNoise && tyNoiseCtx === ctx) return tyNoise;'), '白噪声缓存必须绑定 ctx（跨 ctx buffer 抛错会被 catch 吞成永久消音）');
   assert.ok(SRC.includes("replay: () => nsTypeSound('enter', true)"), '打字机音「再玩一次」=点播示例音');
   assert.ok(!SRC.includes('replay: () => nsTyToggle()'), '禁回潮：replay 挂 toggle 会一点就静音，语义反向');
-  assert.ok(SRC.includes("if (typeof isComposing !== 'undefined' && isComposing) return; // IME 组字期不发声"), 'v8.3.1 补丁行钉：keydown 通道组字期防重护栏在位（改被守护行必同版改此钉）');
-  assert.ok(SRC.includes('if (e.isComposing) return;'), 'v8.3.1 闸R2 P2 钉：beforeinput 通道组字期双保险在位');
+  assert.ok(SRC.includes('if (d && d === tyKdData && now - tyKdAt < 10) return;'), 'v8.3.2 补丁行钉：keydown↔beforeinput 双通道 10ms 去重在位（改被守护行必同版改此钉）');
+  assert.ok(SRC.includes('if (e.keyCode === 229) return;'), 'v8.3.2 钉：iOS 软键盘组字期精准静默（keyCode 229），非一刀切挡 Blink 逐字母');
+  assert.ok(!SRC.includes('if (e.isComposing) return;'), 'v8.3.2 评审 P1 禁现钉：beforeinput 不得再挂 e.isComposing 早退（安卓/国产内核 commit 的 insertText 全带该标记，挡=移动上屏声全哑；桌面双响另有 10ms 去重）');
   assert.ok(SRC.includes('tyEnterAt = now; // 闸 R2 P1②：兜底响过即占住防重窗，软键盘连打两次回车不叠双铃'), 'v8.3.1 闸R2 P1② 钉：换行兜底出声必回写防重窗');
   assert.ok(SRC.includes('if (now - tyCompAt < 60) return;'), 'v8.3.1 闸R2 P1① 钉：compositionend 兜底后 insertText 双通道去重窗在位（闸二 R2 P2 收窄 120→60ms）');
   assert.ok(SRC.includes('if (d && d === tyLastData && now - tyLastDataAt < 50) { tyLastDataAt = now; return; }'), 'v8.3.1 闸二R2 P1 钉：beforeinput 长按同字符 auto-repeat 抑制在位且抑制时链式占窗（e.repeat 只守 keydown 通道，字符通道须自防）');
@@ -320,7 +334,7 @@ test('B16 nsTypeSound force：图鉴点播绕皮肤/静音门各响一声，tymu
 });
 
 // ── B17 v8.3.1 闸R2 P1①回归：IME 整词上屏兜底通道——compositionend 出声；随后 insertText 60ms 窗去重；窗过恢复；组字期 insertText 双保险不响 ──
-test('B17 IME 上屏兜底：compositionend 响一声；60ms 内 insertText 吞击；isComposing=true 的 insertText 不响', async t => {
+test('B17 IME 上屏兜底：compositionend 响一声；60ms 内 insertText 吞击；commit 形态 isComposing=true 的 insertText 出声（评审 P1 反转）', async t => {
   const fake = makeFakeAC();
   const dom = loadApp(w => { w.AudioContext = fake.AC; });
   t.after(() => dom.window.close());
@@ -343,8 +357,9 @@ test('B17 IME 上屏兜底：compositionend 响一声；60ms 内 insertText 吞�
   await wait(200);
   bi({ data: 'k' }); // 异字符：不踩同字符连发护栏，验纯窗过恢复
   assert.strictEqual(fake.stat.filters, 3, '窗过后英文直打 insertText 恢复发声');
-  ed.dispatchEvent(new w.InputEvent('beforeinput', { inputType: 'insertText', data: 'a', bubbles: true, cancelable: true, isComposing: true }));
-  assert.strictEqual(fake.stat.filters, 3, '双保险：组字期被误标 insertText 的事件不响（e.isComposing 早退）');
+  await wait(30); // 越过 24ms 节流（紧随 bi('k') 同 tick 出声会被节流吞，属预期）
+  ed.dispatchEvent(new w.InputEvent('beforeinput', { inputType: 'insertText', data: 'q', bubbles: true, cancelable: true, isComposing: true }));
+  assert.strictEqual(fake.stat.filters, 4, 'v8.3.2 评审 P1：commit 形态 insertText 带 isComposing=true 不得再被挡（安卓/国产内核上屏声的独苗），本条由吞声变出声');
 });
 
 // ── B18 v8.3.1 闸R2 P1②回归：软键盘连打回车（无 keydown）两声两铃封顶，300ms 内二击被兜底占窗吞掉 ──
