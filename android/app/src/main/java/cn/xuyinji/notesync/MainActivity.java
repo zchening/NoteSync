@@ -25,6 +25,7 @@ import java.net.URL;
 
 import cn.xuyinji.notesync.rem.RemPlugin;
 import cn.xuyinji.notesync.img.ImgClipPlugin;
+import cn.xuyinji.notesync.img.ImgSavePlugin;
 import cn.xuyinji.notesync.link.LinkOpenPlugin;
 
 public class MainActivity extends BridgeActivity {
@@ -43,6 +44,7 @@ public class MainActivity extends BridgeActivity {
         // v5.51：注册自定义提醒桥（Capacitor 7 也支持自动扫描，显式注册更稳）
         registerPlugin(RemPlugin.class);
         registerPlugin(ImgClipPlugin.class); // v7.7.0：图片写系统剪贴板原生桥
+        registerPlugin(ImgSavePlugin.class); // v9.2.0：正文图片保存到相册原生桥（零新权限，壳内 a[download] 是哑弹）
         registerPlugin(LinkOpenPlugin.class); // v8.1.0：链接打开方式（外跳默认浏览器/应用内子 WebView）
         super.onCreate(savedInstanceState);
 

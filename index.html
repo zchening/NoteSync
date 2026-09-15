@@ -28,7 +28,19 @@
     --bg:#FBFBF8; --fg:#1C1C1A; --muted:#98958A; --line:#ECEAE2;
     --accent:#8F7126; --accent-soft:rgba(143,113,38,.07); --ring:rgba(143,113,38,.16);
     --box-bg:#FFFFFF; --upload-bg:#1C1C1A; --hover:rgba(28,28,26,.05);
+    /* v9.2.0 画布专用弱档提亮三令牌：只被彩蛋层 pal() 消费（边界细线/面板实底/标签文字），
+       不进任何 DOM 选择器。日间与基础令牌逐字节同值＝白天画面零变化；夜间才抬一档。 */
+    --g-line:#ECEAE2; --g-fill:#FFFFFF; --g-mute:#98958A;
+    /* v9.2.0 开奖卡金属分档色（用户拍板放行）：只在 #nsDraw 卡面消费，不渗到别处。日间压暗、夜间提亮。 */
+    --foil-silver:#A9ACB4; --foil-gold:#8F7126; --foil-gold-hi:#C9A24B; --foil-sheen:rgba(255,255,255,.5);
+    /* v9.2.0 图片查看器：底色压深到近黑（照片要看清必须暗背景），日间也暗——与 .mask 的深色遮罩同族。 */
+    --zoom-bg:rgba(20,20,18,.94); --zoom-ink:#F2F1EC; --zoom-chip:rgba(255,255,255,.12); --zoom-line:rgba(255,255,255,.22); --zoom-dim:rgba(242,241,236,.62);
+    --danger:#C0453E;
     --serif:Georgia,"Times New Roman","Songti SC","STSong",serif;
+    /* v9.2.0 补既有缺陷：--mono 被 19 处 font 简写引用却从未定义，var() 解析失败会让整条
+       font 简写在计算值阶段作废，等宽小字全部回落到继承的 16px 无衬线——这正是
+       「10 / 10 FOUND」撑破 110px 掉行、桌宠小字翻倍的放大器。 */
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Consolas,Menlo,monospace;
     /* 只声明 light，不写 light dark：写 light dark 会被国产强制深色引擎读成"页面已适配深色"，
        进而在页面实际是浅色时判定"未适配"并反色。夜间由 body.dark 精确声明 dark。 */
     color-scheme:light;
@@ -37,6 +49,11 @@
     --bg:#0F0F11; --fg:#E9E8E3; --muted:#7A786F; --line:#242428;
     --accent:#D4B068; --accent-soft:rgba(212,176,104,.08); --ring:rgba(212,176,104,.22);
     --box-bg:#17171A; --upload-bg:#E9E8E3; --hover:rgba(233,232,227,.07);
+    /* 夜间：#17171A 的面板压在 #0F0F11 底上只差 8 级、#242428 的细线几乎看不见、#7A786F 的字读不动
+       —— 抬到能看清但仍属"暗色体系"的三档，不引入任何新色相。 */
+    --g-line:#45454E; --g-fill:#1F1F25; --g-mute:#B4B0A6;
+    --foil-silver:#8E9199; --foil-gold:#D4B068; --foil-gold-hi:#F0D89A; --foil-sheen:rgba(255,255,255,.42);
+    --zoom-bg:rgba(0,0,0,.95); --zoom-ink:#F2F1EC; --zoom-chip:rgba(255,255,255,.1); --zoom-line:rgba(255,255,255,.18); --zoom-dim:rgba(242,241,236,.55);
     color-scheme:dark;
   }
   *{box-sizing:border-box}
@@ -58,6 +75,40 @@
   header button svg{width:17px;height:17px;pointer-events:none}
   #versionToast{position:fixed;top:54px;left:50%;transform:translateX(-50%);z-index:60;padding:7px 14px;font-size:12px;letter-spacing:.04em;color:var(--fg);background:var(--box-bg);border:1px solid var(--line);border-radius:20px;opacity:0;pointer-events:none;transition:opacity .35s;box-shadow:0 4px 16px rgba(0,0,0,.12)}
   #versionToast.show{opacity:1}
+  /* ── v9.2.0 刷新开奖卡（方案 A 角标式）──────────────────────────────
+     刷新钮语义零改动（仍是字面 location.reload()），点击时先把「这次要说的话」落 sessionStorage，
+     页面重建后浮出来——于是白送「按下 → 转圈 → 开奖」的节奏。
+     与 #nsGreet 同一条底部浮层泳道（bottom:64px），互斥由 nsDrawConsume 的在场守卫保证，
+     绝不同时挂两张（历版教训：同位浮层必须检查 z 轴与互斥）。
+     非模态、不抓焦点（红线10 无从触发）、点一下即收；R/SR/SSR 定时自收，UR 按拍板不自收。 */
+  #nsDraw{position:fixed;left:50%;bottom:64px;transform:translateX(-50%);z-index:59;width:min(88vw,340px);
+    background:var(--box-bg);border:1px solid var(--line);border-radius:18px;box-shadow:0 24px 70px rgba(20,20,18,.16);
+    padding:30px 26px 22px;text-align:center;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;
+    -webkit-user-select:none;user-select:none;animation:drawRise .5s cubic-bezier(.2,.7,.3,1) both}
+  /* 通用 rise 的 to 帧是 transform:none，fill-mode:both 会在动画结束后永久接管 transform，
+     把基座的 translateX(-50%) 抹掉＝卡片右偏半个屏（v5.44 remCard 同款事故，必须自带居中帧）。 */
+  @keyframes drawRise{from{opacity:0;transform:translate(-50%,10px)}to{opacity:1;transform:translate(-50%,0)}}
+  #nsDraw.out{animation:drawOut .3s ease both}
+  @keyframes drawOut{to{opacity:0;transform:translate(-50%,8px)}}
+  #nsDraw .dw-tx{font-size:15px;line-height:1.9;color:var(--fg);letter-spacing:.02em}
+  #nsDraw .dw-ft{margin-top:14px;font:400 9.5px/1 var(--mono);letter-spacing:.18em;color:var(--muted);opacity:.7}
+  #nsDraw .dw-rar{position:absolute;top:0;right:0;font:600 10px/1 var(--mono);letter-spacing:.12em;
+    padding:5px 10px 5px 12px;border-radius:0 18px 0 10px;color:var(--muted);background:var(--hover)}
+  #nsDraw.sr::before,#nsDraw.ssr::before,#nsDraw.ur::before{content:'';position:absolute;inset:5px;border-radius:13px;pointer-events:none}
+  #nsDraw.sr::before{border:1px solid var(--foil-silver);opacity:.5}
+  #nsDraw.sr .dw-rar{color:var(--foil-silver)}
+  #nsDraw.ssr{border-color:var(--foil-gold)}
+  #nsDraw.ssr::before{border:1px solid var(--foil-gold);opacity:.55}
+  #nsDraw.ssr .dw-tx{font-family:var(--serif);font-size:16.5px;letter-spacing:.04em}
+  #nsDraw.ssr .dw-rar{color:var(--foil-gold);background:var(--accent-soft)}
+  #nsDraw.ur{border:1px solid transparent;overflow:hidden;
+    background:linear-gradient(var(--box-bg),var(--box-bg)) padding-box,linear-gradient(135deg,var(--foil-gold),var(--foil-gold-hi),var(--foil-silver),var(--foil-gold)) border-box}
+  #nsDraw.ur::before{border:1px solid var(--foil-gold-hi);opacity:.7}
+  #nsDraw.ur .dw-tx{font-family:var(--serif);font-size:17px;letter-spacing:.05em;color:var(--foil-gold)}
+  #nsDraw.ur .dw-rar{color:var(--box-bg);background:linear-gradient(135deg,var(--foil-gold),var(--foil-gold-hi))}
+  #nsDraw.ur::after{content:'';position:absolute;top:-60%;left:-32%;width:40%;height:220%;transform:rotate(20deg);pointer-events:none;
+    background:linear-gradient(90deg,transparent,var(--foil-sheen),transparent);animation:dwSweep 2.8s ease-in-out .45s 2}
+  @keyframes dwSweep{0%{left:-40%}55%{left:118%}100%{left:118%}}
   /* v5.35 草稿冲突条（顶部）/安装引导条（底部）：颜色全用主题变量——跟随内部主题，
      借壳滤镜自动翻色，无需进三处反色覆盖块；禁用新颜色值的纪律同提醒卡片。
      v5.38：背景由 rgba(--hover)（95% 透明）改实底 var(--box-bg)——透明背景浮在正文上
@@ -223,7 +274,38 @@
   #editor{flex:1;width:100%;max-width:720px;margin:0 auto;border:0;outline:0;resize:none;padding:40px 28px 120px;background:transparent;color:var(--fg);font:inherit;font-size:17px;overflow-x:hidden;overflow-y:auto;word-wrap:break-word;overflow-wrap:anywhere;word-break:break-all;white-space:pre-wrap;-webkit-user-select:text;user-select:text;line-height:1.9}
   #editor:empty:before{content:attr(data-ph);color:var(--muted);opacity:.75;pointer-events:none}
   #editor.dragover{background:var(--accent-soft);outline:1.5px dashed var(--accent);outline-offset:-8px}
-  #editor img{max-width:100%;border-radius:10px;margin:6px 0;display:block;border:1px solid var(--line)}
+  #editor img{max-width:100%;border-radius:10px;margin:6px 0;display:block;border:1px solid var(--line);cursor:zoom-in}
+  /* ── v9.2.0 正文图片查看器与菜单 ──────────────────────────────────────
+     用户拍板：单击=放大（编辑动作改走菜单，含删除），PC 右键 / 移动长按=统一自建菜单。
+     z 序：查看器 88、菜单 89，都在图鉴 z90 之下（"图鉴最高"是钉住的口径）。
+     底色/墨色走新令牌，日间压深、夜间近黑，借壳反色与皮肤环自动同权。 */
+  #nsZoom{position:fixed;inset:0;z-index:88;background:var(--zoom-bg);display:flex;align-items:center;justify-content:center;
+    touch-action:none;-webkit-user-select:none;user-select:none;cursor:zoom-out;animation:rise .22s ease both}
+  #nsZoom .nz-stage{width:100%;height:100%;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  #nsZoom img{max-width:92vw;max-height:82vh;object-fit:contain;border-radius:8px;background:var(--box-bg);
+    transform-origin:center center;will-change:transform;cursor:zoom-in}
+  #nsZoom.zm img{cursor:grab}
+  #nsZoom .nz-x{position:absolute;top:14px;right:16px;width:38px;height:38px;display:flex;align-items:center;justify-content:center;
+    border:0;border-radius:50%;background:var(--zoom-chip);color:var(--zoom-ink);cursor:pointer}
+  #nsZoom .nz-x svg{width:16px;height:16px}
+  #nsZoom .nz-tip{position:absolute;top:22px;left:50%;transform:translateX(-50%);font:400 10.5px/1 var(--mono);
+    letter-spacing:.1em;color:var(--zoom-dim);pointer-events:none;text-align:center}
+  #nsZoom .nz-bar{position:absolute;left:50%;bottom:26px;transform:translateX(-50%);display:flex;gap:8px;flex-wrap:wrap;justify-content:center;max-width:92vw}
+  #nsZoom .nz-bar button{font:400 12px/1 var(--mono);letter-spacing:.06em;padding:11px 16px;border:1px solid var(--zoom-line);
+    border-radius:999px;background:var(--zoom-chip);color:var(--zoom-ink);cursor:pointer;touch-action:manipulation}
+  #nsImgMenu{position:fixed;z-index:89;min-width:150px;background:var(--box-bg);border:1px solid var(--line);border-radius:12px;
+    box-shadow:0 18px 50px rgba(20,20,18,.22);padding:5px;animation:menuFade .16s ease both}
+  /* 入场只动 opacity：通用 rise 的 to 帧是 transform:none，fill:both 下会把镜像补偿的
+     scaleX(-1) 一起吞掉（闸 R1b 实锤：B 模式菜单中文仍反读）。菜单靠 left/top 定位，不需要 transform。 */
+  @keyframes menuFade{from{opacity:0}to{opacity:1}}
+  #nsImgMenu button{display:block;width:100%;text-align:left;padding:11px 12px;font:inherit;font-size:13.5px;color:var(--fg);
+    background:none;border:0;border-radius:8px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+  #nsImgMenu button:hover{background:var(--hover)}
+  #nsImgMenu button.nz-del{color:var(--danger)}
+  /* 触屏端自建菜单接管「保存」，iOS 原生 callout 在 contenteditable 里本来只给选择/复制，留着会与自建菜单打架 */
+  html.ns-no-callout #editor img{-webkit-touch-callout:none}
+  /* 镜像模式：照片必须回到正常朝向。缩放 transform 挂在 img 的 inline 上，所以补偿加在外层 stage，两者不打架 */
+  body.ns-mirror-A #nsZoom .nz-stage,body.ns-mirror-B #nsZoom .nz-stage{transform:scaleX(-1)}
   #editor a{color:var(--accent);text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(169,134,60,.35);transition:text-decoration-color .2s;word-break:break-all;overflow-wrap:break-word}
   #editor a:hover{text-decoration-color:var(--accent)}
   /* v9.1.1：折叠列表——行首写 [折叠] 显示为行首三角（收起 ▶ / 展开 ▼），正文整段隐藏。
@@ -372,6 +454,7 @@
   #landing>*:nth-child(6){animation-delay:.30s} /* v7.9.0：预览行/扫码/信任行续上 0.06s 步进 */
   #landing>*:nth-child(7){animation-delay:.36s}
   #landing>*:nth-child(8){animation-delay:.42s}
+  #landing>*:nth-child(9){animation-delay:.48s} /* v9.2.0：新增彩蛋说明行，后续子节点步进顺延 */
   #landing .logo{width:56px;height:56px;margin:0 0 22px;color:var(--accent)}
   #landing h1{font-family:var(--serif);font-size:34px;font-weight:500;margin:0 0 10px;letter-spacing:.05em}
   #landing .sub{color:var(--muted);font-size:13px;margin:0 0 44px;letter-spacing:.32em;padding-left:.32em}
@@ -380,6 +463,14 @@
   #landing input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--ring)}
   #landing button{height:46px;padding:0 24px;border:0;border-radius:10px;background:var(--fg);color:var(--bg);font-size:15px;font-weight:500;letter-spacing:.06em;cursor:pointer;white-space:nowrap;transition:opacity .2s}
   #landing button:hover{opacity:.85}
+  /* v9.2.0 首页彩蛋入口（方案 B）：命中门牌时主按钮由黑色实底改金色描边——一眼区分「这一步不是打开笔记」，
+     下方补一行说明把「不新建笔记」讲明白。颜色全吃主题令牌（--accent/--accent-soft/--ring/--muted），
+     不进三处反色覆盖块也能随夜间与皮肤环自动同权（同 hintbar 先例）。 */
+  #landing button.egg{background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent);opacity:1}
+  #landing button.egg:hover{opacity:.9}
+  #landing input.egging{border-color:var(--accent);box-shadow:0 0 0 3px var(--ring)}
+  #landing .eggtip{margin:12px 0 0;max-width:340px;width:100%;font-size:11px;line-height:1.7;letter-spacing:.04em;color:var(--muted)}
+  #landing .eggtip b{color:var(--accent);font-weight:600}
   #landing .warn{color:#C0453E;font-size:12px;margin:14px 0 0;letter-spacing:.04em}
   /* v7.7.0 首页扫码入口：ghost 胶囊与输入框同族（细线边框、muted 字色、hover 主色），全走变量自适应日夜 */
   #landing .scan-row{margin:26px 0 0}
@@ -446,6 +537,7 @@
   </div>
   <p id="landingWarn" class="warn hidden">仅支持英文、数字、下划线和短横线</p>
   <p id="landingUrlLine" class="urlline hidden">你的笔记网址为：&nbsp;<span class="dyn-domain"></span>/<span id="landingUrlName" class="u-name"></span></p>
+  <p id="landingEggTip" class="eggtip hidden"></p>
   <div class="scan-row"><span id="landingScan" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5V6a3 3 0 0 1 3-3h2.5"/><path d="M15.5 3H18a3 3 0 0 1 3 3v2.5"/><path d="M21 15.5V18a3 3 0 0 1-3 3h-2.5"/><path d="M8.5 21H6a3 3 0 0 1-3-3v-2.5"/><path class="g" d="M3.5 12h17"/><rect class="gf" x="6.6" y="14.8" width="1.7" height="1.7" rx=".55"/><rect class="gf" x="11.2" y="14.8" width="1.7" height="1.7" rx=".55"/><rect class="gf" x="15.8" y="14.8" width="1.7" height="1.7" rx=".55"/></svg>扫码打开笔记</span></div>
   <div class="trust" aria-hidden="true">
     <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.8 4.6 5.6v5.6c0 4.7 3.1 7.9 7.4 9.4 4.3-1.5 7.4-4.7 7.4-9.4V5.6Z"/><path class="g" d="m8.7 11.9 2.3 2.3 4.3-4.7"/></svg>服务器只见密文</span>
@@ -678,8 +770,8 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '9.1.1';
-const BUILD_DATE = '2026-09-13';
+const APP_VERSION = '9.2.0';
+const BUILD_DATE = '2026-09-15';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
 let nsSkin = 0;
@@ -832,6 +924,8 @@ function themeCssCore(p, accent, accentSoft, dot, warn, extra) {
     .list-kicker::before{background:${accent}!important}
     #landing input{background:${p.box}!important;color:${p.fg}!important;border-color:${p.line}!important;-webkit-text-fill-color:${p.fg}!important}
     #landing button:not(:disabled){background:${p.fg}!important;color:${p.bg}!important;-webkit-text-fill-color:${p.bg}!important}
+    /* 彩蛋态是金色描边，必须排在上面那条广规则之后并自带 !important，否则被 ${p.fg} 实底碾平 */
+    #landing button.egg:not(:disabled){background:${accentSoft}!important;color:${accent}!important;-webkit-text-fill-color:${accent}!important;border-color:${accent}!important}
     #loading{background:${p.bg}!important;color:${p.muted}!important;-webkit-text-fill-color:${p.muted}!important}
     #versionToast{background:${p.bg}!important;color:${p.fg}!important;border-color:${p.line}!important;-webkit-text-fill-color:${p.fg}!important}
     .upload-status{background:${p.fg}!important;color:${p.bg}!important;-webkit-text-fill-color:${p.bg}!important}
@@ -930,6 +1024,8 @@ const SHELL_CSS = [
   '.list-kicker::before{background:#708ED9!important}',
   '#landing input{background:#000000!important;color:#E3E3E5!important;border-color:#13151D!important;-webkit-text-fill-color:#E3E3E5!important}',
   '#landing button:not(:disabled){background:#E3E3E5!important;color:#040407!important;-webkit-text-fill-color:#040407!important}',
+  // 预反色=255−目标色：日间 accent #8F7126 → #708ED9；accent-soft 合成后 ≈ #F7F6F0 → #08090F
+  '#landing button.egg:not(:disabled){background:#08090F!important;color:#708ED9!important;-webkit-text-fill-color:#708ED9!important;border-color:#708ED9!important}',
   '#loading{background:#040407!important;color:#676A75!important;-webkit-text-fill-color:#676A75!important}',
   '#versionToast{background:#040407!important;color:#E3E3E5!important;border-color:#13151D!important;-webkit-text-fill-color:#E3E3E5!important}',
   '.upload-status{background:#E3E3E5!important;color:#040407!important;-webkit-text-fill-color:#040407!important}',
@@ -2561,6 +2657,7 @@ async function applyUnlocked(key, note) {
   tryShowInstallBar(); // v5.35：解锁后再弹安装引导，不在落地页打扰
   consumeBackupImportMsg(); // v7.7.0：首页扫备份码跳转解锁后的一次性成功提示
   try { nsFestWelcome(); } catch (e) {} // v8.2.0：节日雨——每次打开 App 那一刻放一轮（非节日静默）
+  try { nsDrawConsume(); } catch (e) {} // v9.2.0：刷新开奖——节日雨/问候在场时 nsDrawBusy 自动让位
   try { if (window.nsClaimPassport) window.nsClaimPassport(); } catch (e) {} // v9.0.0：护照认领必须在正文真渲染出来之后（boot 那一枪对加密笔记必然扫空）
 }
 
@@ -2591,6 +2688,7 @@ async function unlock(pass) {
             editor.contentEditable = true;
             startSync();
             try { nsFestWelcome(); } catch (e3) {} // v8.2.0：离线解锁也是「打开 App」，节日雨同等触发
+            try { nsDrawConsume(); } catch (e4) {} // v9.2.0：离线解锁同样兑现上一拍的开奖
             return;
           }
         } catch (e2) { err.textContent = '口令与本地缓存不符'; return; }
@@ -3227,7 +3325,126 @@ editor.addEventListener('keydown', e => {
   clearTimeout(saveTimer); saveTimer = setTimeout(saveLocal, 800); // 删了 [折叠] 是真内容改动，照常落库
   try { ensureCaret(); } catch (err) {}
 });
+// ── v9.2.0：折叠隐形标记对光标导航透明 ──────────────────────────────
+// 用户拍板：光标能到的最左位置＝▶ 三角右边、标题第一个字前面；那串 font-size:0 的 [折叠] 文本
+// 不是停靠点——不许让人多按一次键，也不许把光标吞进去。两条腿：
+//   ① 归一化（selectionchange）：任何路径（←/→/Home/鼠标点/拖拽/程序落位）把光标送进标记内，
+//      立刻推到「标记右」这个合法最左位；
+//   ② 最左再按 ← （keydown）：直接跳上一行可见内容末尾，与普通行「走到最左、再按左键跳上一行」一致。
+// 与上面退格护栏互不干涉：那个是「删」（整删 [折叠] 原子），这个是「走」。
+function foldMarkOfBlock(block) {
+  if (!block || block.nodeType !== 1 || !block.classList) return null;
+  if (!block.classList.contains('ns-fold')) return null;
+  const mk = block.firstElementChild; // applyFolds 恒插为块首，不用 :scope（老内核抛错=护栏静默失效）
+  return (mk && mk.classList.contains('ns-fold-mark')) ? mk : null;
+}
+// 标记右边的合法最左停靠点：优先标题文本节点 offset 0；标题被拆成元素则落该元素 offset 0；
+// 极端形态（标记后无兄弟，只有 <br>）退回块级偏移「标记之后」。
+function foldLeftmostPos(mark) {
+  const block = mark.parentNode;
+  let after = mark.nextSibling;
+  while (after && after.nodeType === 3 && after.nodeValue === '') after = after.nextSibling; // 跳过 linkify 留下的空文本
+  if (after) return { node: after, off: 0 };
+  const idx = Array.prototype.indexOf.call(block.childNodes, mark);
+  return { node: block, off: idx + 1 };
+}
+// 光标是否落在标记内或标记左缘（含块级偏移 ≤ 标记下标）
+function caretInsideFoldMark(range) {
+  const node = range.startContainer, off = range.startOffset;
+  if (node.nodeType === 3) {
+    const p = node.parentElement && node.parentElement.closest ? node.parentElement.closest('span.ns-fold-mark') : null;
+    return p;
+  }
+  if (node.nodeType === 1) {
+    if (node.classList && node.classList.contains('ns-fold-mark')) return node;
+    const mk = foldMarkOfBlock(node);
+    if (mk) { const idx = Array.prototype.indexOf.call(node.childNodes, mk); if (off <= idx) return mk; }
+  }
+  return null;
+}
+// 光标是否正好停在合法最左位（标记右）
+function caretAtFoldLeftmost(range) {
+  const node = range.startContainer, off = range.startOffset;
+  if (node.nodeType === 3) {
+    const prev = node.previousSibling;
+    return !!(prev && prev.nodeType === 1 && prev.classList && prev.classList.contains('ns-fold-mark') && off === 0);
+  }
+  if (node.nodeType === 1) {
+    const mk = foldMarkOfBlock(node);
+    if (!mk) return false;
+    return off === Array.prototype.indexOf.call(node.childNodes, mk) + 1;
+  }
+  return false;
+}
+// 把落进标记内的光标推到最左位；返回 true 表示本次确实归一过
+function foldCaretNormalize() {
+  if (typeof isComposing !== 'undefined' && isComposing) return false; // 红线9：组字期绝不动选区
+  // 只在编辑器真持有焦点时归一：全局 selectionchange 在别的元素（提醒面板事项框、口令框、首页框）
+  // 聚焦时同样会触发，而 document.getSelection() 此时仍可能报编辑器里的旧选区，照旧归一就会
+  // setCaret 把焦点从输入框抢回编辑器（V544-2 / V71-3 实锤回归）。
+  try { if (document.activeElement !== editor) return false; } catch (e) { return false; }
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount || !sel.isCollapsed) return false;
+  const r = sel.getRangeAt(0);
+  if (!editor || !editor.contains(r.startContainer)) return false;
+  const mk = caretInsideFoldMark(r);
+  if (!mk) return false;
+  const pos = foldLeftmostPos(mk);
+  setCaret(pos.node, pos.off); // 红线3：只走 setCaret，绝不 removeAllRanges+addRange
+  return true;
+}
+// 块内可见内容的末尾落位（优先最后一个非空文本节点，避开 <br>/隐藏子节点）
+function foldEndPosOfBlock(block) {
+  let n = block.lastChild;
+  while (n && n.nodeType === 3 && n.nodeValue === '') n = n.previousSibling;
+  if (n && n.nodeType === 3) return { node: n, off: n.nodeValue.length };
+  if (n && n.nodeType === 1 && n.tagName !== 'BR') return { node: n, off: (n.firstChild && n.firstChild.nodeType === 3) ? (n.firstChild.nodeValue || '').length : n.childNodes.length };
+  return { node: block, off: block.childNodes.length };
+}
+// 从某块往上找第一个「可见」块并落到它行尾；display:none 的折叠正文块一律跳过（原生 ← 也不进不可见内容）
+function foldJumpToPrevLineEnd(fromBlock) {
+  let p = fromBlock ? fromBlock.previousSibling : null;
+  while (p) {
+    if (p.nodeType === 1) {
+      const hidden = p.classList && p.classList.contains('ns-fold-hide');
+      const dispNone = !hidden && window.getComputedStyle && (window.getComputedStyle(p).display === 'none');
+      if (!hidden && !dispNone) {
+        const mk = foldMarkOfBlock(p); // 上一行本身也是折叠标题 → 落它的最左位（标记不是停靠点）
+        const pos = mk ? foldLeftmostPos(mk) : foldEndPosOfBlock(p);
+        setCaret(pos.node, pos.off);
+        return true;
+      }
+    } else if (p.nodeType === 3 && p.nodeValue.replace(/\s/g, '').length) {
+      setCaret(p, p.nodeValue.length);
+      return true;
+    }
+    p = p.previousSibling;
+  }
+  return false; // 上面没有可见行了（本行就是第一行）→ 什么都不做，等价于普通行"已在文首"
+}
+document.addEventListener('selectionchange', function () {
+  try { foldCaretNormalize(); } catch (e) {} // 归一化失败绝不影响编辑，退回原生行为
+}, true);
+editor.addEventListener('keydown', function (e) {
+  if (isComposing) return;                                   // 红线9
+  if (e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return; // 扩选与组合键交回系统
+  if (e.key !== 'ArrowLeft') return;
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount || !sel.isCollapsed) return;
+  const r = sel.getRangeAt(0);
+  if (!editor.contains(r.startContainer)) return;
+  if (caretInsideFoldMark(r)) { e.preventDefault(); foldCaretNormalize(); return; } // 已在标记内：一步跨出去，不多按
+  if (!caretAtFoldLeftmost(r)) return;
+  e.preventDefault(); // 拦下原生「往标记里挪一格」，改成跳上一行末尾
+  foldJumpToPrevLineEnd(blockOf(r.startContainer, editor));
+  try { ensureCaret(); } catch (err) {}
+});
 // 调试/测试钩子（仅供自动化探针读取/驱动，无业务副作用）
+window.foldCaretHelpers = {
+  markOfBlock: foldMarkOfBlock, leftmostPos: foldLeftmostPos,
+  insideMark: caretInsideFoldMark, atLeftmost: caretAtFoldLeftmost,
+  normalize: foldCaretNormalize, jumpPrev: foldJumpToPrevLineEnd
+};
 window.applyFolds = applyFolds;
 window.__foldState = () => {
   const handles = Array.prototype.filter.call(editor.children, b => b.nodeType === 1 && b.classList.contains('ns-fold'));
@@ -3721,6 +3938,342 @@ function showOfflineBar(ts) {
 // 前置守卫保留：未解锁（重载只会回锁屏页，属自伤）；busy/在途写入（reload 会掐断在途 PUT，
 // 红线15 toast 守卫不动）。脏内容与在途保存的卸载兜底走既有 pagehide→flushDirtySave 链，
 // 密钥/草稿/缓存在 localStorage——重载后 loadStoredKey 自动解锁，与用户手按 F5 行为逐字节相同。
+/* ── v9.2.0 正文图片：点开放大 / 右键·长按统一菜单 / 三端保存阶梯 ──────────
+   现状（读码结论）：正文图片是粘贴后压成 JPEG 上传 Cloudinary 得到的 https 直链（端到端加密
+   不覆盖图片），App 壳内 <a download> 是哑弹（v8.0.8 导出图片链路已实锤）。所以保存必须分层：
+     ① 壳内 → ImgSave 原生桥真存进相册（Pictures/NoteSync，零新权限）
+     ② 通用 → fetch 成 blob 再走 a[download]（Cloudinary 带 CORS，导出 PNG 早已依赖这点）
+     ③ 失败 → navigator.share 系统分享面板（用户自己选「存储到文件」）
+     ④ 再失败 → 新标签打开原图 + 提示长按保存
+   单击=放大是用户拍板，代价是「点图选图」这条编辑路没了，所以菜单里必须给删除。
+   镜像模式下照片朝向补偿加在外层 .nz-stage，不碰 img 的 inline 缩放 transform。 */
+var NS_IMG = { cur: null, open: false, scale: 1, tx: 0, ty: 0, pinch: 0, base: 1, pts: {}, dragging: false, sx: 0, sy: 0 };
+// 与 CHIP_HOVER_OK 同一条谓词（联动门两律：JS 判据与 CSS 媒体查询必须同谓词）。
+// 绝不直接读那个 const——它定义在本块之后，本块又在主脚本前段，顶层读它会撞 TDZ 抛错，
+// 一个未捕获异常会掐掉主脚本后续全部执行（实测：开奖卡的 var 池子赋值全灭）。
+function nsHoverPointer() { try { return !!(window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches); } catch (e) { return false; } }
+function nsImgSrcOf(img) { try { return (img && (img.currentSrc || img.src)) || ''; } catch (e) { return ''; } }
+function nsImgApplyT() {
+  var im = NS_IMG.cur; if (!im) return;
+  im.style.transform = 'translate(' + NS_IMG.tx + 'px,' + NS_IMG.ty + 'px) scale(' + NS_IMG.scale + ')';
+  var z = document.getElementById('nsZoom'); if (z) z.classList.toggle('zm', NS_IMG.scale > 1.02);
+}
+function nsImgGiveFocusBack() { // 红线10：PC 端任何「关闭后回到编辑器」的路径都必须归还焦点，漏一处＝编辑器失焦、光标不绘制
+  try { if (typeof CHIP_HOVER_OK !== "undefined" && CHIP_HOVER_OK) { editor.focus(); ensureCaret(); } } catch (e) {}
+}
+function nsImgCloseZoom() {
+  var z = document.getElementById('nsZoom');
+  NS_IMG.open = false; NS_IMG.cur = null; NS_IMG.scale = 1; NS_IMG.tx = 0; NS_IMG.ty = 0; NS_IMG.pts = {};
+  try { document.removeEventListener('keydown', nsImgEsc, true); } catch (e) {} // P2：关闭必须摘 Esc 监听，否则每开一次叠一份
+  if (!z || !z.parentNode) return; // 本来就没有查看器在场：绝不归还焦点（红线10 只对"真的关掉了浮层"成立）
+  z.parentNode.removeChild(z);
+  nsImgGiveFocusBack();
+}
+function nsImgOpenZoom(img) {
+  try {
+    nsImgCloseZoom(); nsImgMenuClose();
+    var src = nsImgSrcOf(img); if (!src) return;
+    var z = document.createElement('div'); z.id = 'nsZoom';
+    var stage = document.createElement('div'); stage.className = 'nz-stage';
+    var im = document.createElement('img'); im.src = src; im.alt = ''; im.decoding = 'async';
+    stage.appendChild(im);
+    var tip = document.createElement('div'); tip.className = 'nz-tip';
+    tip.textContent = nsHoverPointer() ? '滚轮缩放 · 双击 1:1 · 点空白关闭' : '双指缩放 · 点空白关闭';
+    var bar = document.createElement('div'); bar.className = 'nz-bar';
+    [['保存', function () { nsImgSave(im); }], ['复制链接', function () { nsImgCopyLink(im); }], ['删除图片', function () { nsImgDelete(im); nsImgCloseZoom(); }]]
+      .forEach(function (b) { var e2 = document.createElement('button'); e2.textContent = b[0]; e2.addEventListener('click', b[1]); bar.appendChild(e2); });
+    var x = document.createElement('div'); x.className = 'nz-x';
+    x.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>';
+    z.appendChild(stage); z.appendChild(tip); z.appendChild(bar); z.appendChild(x);
+    document.body.appendChild(z);
+    NS_IMG.cur = im; NS_IMG.open = true; NS_IMG.scale = 1; NS_IMG.tx = 0; NS_IMG.ty = 0;
+    nsImgApplyT();
+    // 点空白/点 × 关闭；点图片本身不关（它在缩放态还要接受拖拽）
+    z.addEventListener('click', function (e) { if (e.target === z || e.target === stage || e.target === x || x.contains(e.target)) nsImgCloseZoom(); });
+    x.addEventListener('click', nsImgCloseZoom);
+    im.addEventListener('dblclick', function (e) { e.preventDefault(); NS_IMG.scale = NS_IMG.scale > 1.02 ? 1 : 2.4; if (NS_IMG.scale === 1) { NS_IMG.tx = 0; NS_IMG.ty = 0; } nsImgApplyT(); });
+    z.addEventListener('wheel', function (e) { e.preventDefault(); var k = e.deltaY < 0 ? 1.12 : 1 / 1.12; NS_IMG.scale = Math.max(1, Math.min(6, NS_IMG.scale * k)); if (NS_IMG.scale === 1) { NS_IMG.tx = 0; NS_IMG.ty = 0; } nsImgApplyT(); }, { passive: false });
+    // 指针事件统一管拖拽平移与双指缩放（桌面/触屏一套代码）
+    z.addEventListener('pointerdown', function (e) {
+      if (e.target !== im) return;
+      NS_IMG.pts[e.pointerId] = { x: e.clientX, y: e.clientY };
+      var ids = Object.keys(NS_IMG.pts);
+      if (ids.length === 2) { var a = NS_IMG.pts[ids[0]], b = NS_IMG.pts[ids[1]]; NS_IMG.pinch = Math.hypot(a.x - b.x, a.y - b.y); NS_IMG.base = NS_IMG.scale; }
+      else if (ids.length === 1) { NS_IMG.dragging = true; NS_IMG.sx = e.clientX; NS_IMG.sy = e.clientY; }
+      try { z.setPointerCapture(e.pointerId); } catch (err) {}
+      e.preventDefault();
+    });
+    z.addEventListener('pointermove', function (e) {
+      if (!NS_IMG.pts[e.pointerId]) return;
+      NS_IMG.pts[e.pointerId] = { x: e.clientX, y: e.clientY };
+      var ids = Object.keys(NS_IMG.pts);
+      if (ids.length === 2 && NS_IMG.pinch > 0) {
+        var a = NS_IMG.pts[ids[0]], b = NS_IMG.pts[ids[1]];
+        NS_IMG.scale = Math.max(1, Math.min(6, NS_IMG.base * (Math.hypot(a.x - b.x, a.y - b.y) / NS_IMG.pinch)));
+        if (NS_IMG.scale === 1) { NS_IMG.tx = 0; NS_IMG.ty = 0; }
+        nsImgApplyT();
+      } else if (NS_IMG.dragging && NS_IMG.scale > 1.02) {
+        NS_IMG.tx += e.clientX - NS_IMG.sx; NS_IMG.ty += e.clientY - NS_IMG.sy;
+        NS_IMG.sx = e.clientX; NS_IMG.sy = e.clientY; nsImgApplyT();
+      }
+    });
+    var up = function (e) { delete NS_IMG.pts[e.pointerId]; if (Object.keys(NS_IMG.pts).length < 2) NS_IMG.pinch = 0; NS_IMG.dragging = false; };
+    z.addEventListener('pointerup', up); z.addEventListener('pointercancel', up);
+    document.addEventListener('keydown', nsImgEsc, true);
+  } catch (e) {}
+}
+function nsImgEsc(e) {
+  if (!e || e.key !== 'Escape') return;
+  if (document.getElementById('nsImgMenu')) { nsImgMenuClose(); return; } // 一次按键只关一层
+  if (NS_IMG.open) { document.removeEventListener('keydown', nsImgEsc, true); nsImgCloseZoom(); }
+}
+/* ── 统一菜单（PC 右键 / 移动长按同一份，文案与动作零分叉） ── */
+function nsImgMenuClose() { var m = document.getElementById('nsImgMenu'); if (!m || !m.parentNode) return; m.parentNode.removeChild(m); nsImgGiveFocusBack(); } // 无菜单在场时绝不抢焦点（它挂在 capture scroll/mousedown 上）
+function nsImgMenu(img, x, y) {
+  try {
+    nsImgMenuClose();
+    var m = document.createElement('div'); m.id = 'nsImgMenu';
+    [['放大查看', function () { nsImgOpenZoom(img); }],
+     ['保存图片', function () { nsImgSave(img); }],
+     ['复制图片链接', function () { nsImgCopyLink(img); }],
+     ['删除图片', function () { nsImgDelete(img); }, true]].forEach(function (it) {
+      var b = document.createElement('button'); b.textContent = it[0]; if (it[2]) b.className = 'nz-del';
+      b.addEventListener('click', function () { nsImgMenuClose(); it[1](); });
+      m.appendChild(b);
+    });
+    document.body.appendChild(m);
+    var w = m.offsetWidth || 160, h = m.offsetHeight || 180;
+    m.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, x)) + 'px';
+    m.style.top = Math.max(8, Math.min(window.innerHeight - h - 8, y)) + 'px';
+  } catch (e) {}
+}
+function nsImgCopyLink(img) {
+  var src = nsImgSrcOf(img); if (!src) return;
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(src);
+    else { var ta = document.createElement('textarea'); ta.value = src; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); }
+    showUploadStatus('图片链接已复制');
+    setTimeout(function () { if (uploadStatus.textContent === '图片链接已复制') hideUploadStatus(); }, 2000); // 红线15
+  } catch (e) {}
+}
+function nsImgDelete(img) {
+  try {
+    var block = blockOf(img, editor);
+    if (!img.parentNode) return;
+    img.parentNode.removeChild(img);
+    if (block && !(block.textContent || '').trim() && !block.querySelector('img,br')) block.appendChild(document.createElement('br')); // 红线5：块不能真空
+    try { recordIfChanged('deleteContentBackward'); } catch (e) {} // 红线6：用户动作压栈
+    clearTimeout(saveTimer); saveTimer = setTimeout(saveLocal, 800);
+    showUploadStatus('图片已删除');
+    setTimeout(function () { if (uploadStatus.textContent === '图片已删除') hideUploadStatus(); }, 2000);
+  } catch (e) {}
+}
+async function nsImgSave(img) {
+  var src = nsImgSrcOf(img);
+  if (!src) { showUploadStatus('图片地址取不到'); setTimeout(function () { if (uploadStatus.textContent === '图片地址取不到') hideUploadStatus(); }, 2000); return; }
+  showUploadStatus('正在保存…');
+  setTimeout(function () { if (uploadStatus.textContent === '正在保存…') hideUploadStatus(); }, 8000); // 红线15：进行态也要有自己的守卫式兜底自收，异常分支漏收终态也不许常驻
+  var done = function (msg) {
+    showUploadStatus(msg);
+    setTimeout(function () { if (uploadStatus.textContent === msg) hideUploadStatus(); }, 2400);
+  };
+  try {
+    var blob;
+    if (src.indexOf('data:') === 0) { blob = await (await fetch(src)).blob(); }
+    else { const r = await fetch(src); if (!r.ok) throw new Error('http ' + r.status); blob = await r.blob(); }
+    // ① 壳内：原生存相册
+    var cap = window.Capacitor;
+    var bridge = (cap && cap.Plugins && cap.Plugins.ImgSave) || null;
+    if (isNativeApp() && bridge && typeof bridge.saveImage === 'function') {
+      var res = await bridge.saveImage({ base64: await blobToB64(blob), mime: blob.type || 'image/jpeg' });
+      if (res && res.ok) { done('已存入相册 Pictures/NoteSync'); return; }
+      // 原生失败不直接放弃，继续往下走分享面板
+    }
+    // ② 通用下载
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a'); a.href = url;
+    a.download = 'notesync-' + Date.now() + '.' + (/png/.test(blob.type) ? 'png' : /gif/.test(blob.type) ? 'gif' : /webp/.test(blob.type) ? 'webp' : 'jpg');
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function () { try { URL.revokeObjectURL(url); } catch (e) {} }, 8000);
+    if (!isNativeApp()) { done('已开始下载'); return; }
+    // ③ 壳内下载是哑弹 → 分享面板
+    try {
+      var file = new File([blob], a.download, { type: blob.type || 'image/jpeg' });
+      if (navigator.canShare && navigator.canShare({ files: [file] }) && navigator.share) {
+        await navigator.share({ files: [file] }); done('已通过系统分享发出'); return;
+      }
+    } catch (e2) { if (e2 && e2.name === 'AbortError') { hideUploadStatus(); return; } }
+    // ④ 兜底：新标签打开原图，长按可存
+    try { window.open(src, '_blank'); } catch (e3) {}
+    done('已打开原图，长按可保存');
+  } catch (e) {
+    try {
+      var w = window.open(src, '_blank');
+      if (w) { done('已打开原图，长按可保存'); return; }
+      done('保存未成功，可长按图片或用浏览器菜单保存'); // 弹窗被拦截时 open 返回 null 而不抛，不能报「已打开」
+    }
+    catch (e4) { done('保存失败：' + (e && e.message ? e.message : '未知错误')); }
+  }
+}
+/* ── 接线 ── */
+(function () {
+  if (!nsHoverPointer()) { try { document.documentElement.classList.add('ns-no-callout'); } catch (e) {} }
+  // mousedown 拦默认：不拦的话点图会把光标挪进正文、选区被清，放大就顺带改了编辑位置（红线4 同源）
+  editor.addEventListener('mousedown', function (e) {
+    var im = e.target && e.target.tagName === 'IMG' ? e.target : null;
+    if (im && editor.contains(im)) e.preventDefault();
+  }, true);
+  editor.addEventListener('click', function (e) {
+    var im = e.target && e.target.tagName === 'IMG' ? e.target : null;
+    if (!im || !editor.contains(im)) return;
+    e.preventDefault();
+    if (NS_IMG.lp) return; // 长按已弹菜单，别紧接着又放大
+    nsImgOpenZoom(im);
+  });
+  // PC 右键：自建统一菜单（用户拍板替换原生「图片另存为」）
+  editor.addEventListener('contextmenu', function (e) {
+    var im = e.target && e.target.tagName === 'IMG' ? e.target : null;
+    if (!im || !editor.contains(im)) return;
+    e.preventDefault();
+    nsImgMenu(im, e.clientX, e.clientY);
+  });
+  // 移动长按：520ms 计时，移动超 10px 或抬手即取消；触发后吞掉紧随的 click
+  editor.addEventListener('touchstart', function (e) {
+    var t = e.target;
+    var im = (t && t.tagName === 'IMG' && editor.contains(t)) ? t : null;
+    if (!im) return;
+    var p = e.touches[0] || {}; NS_IMG.lpx = p.clientX; NS_IMG.lpy = p.clientY;
+    clearTimeout(NS_IMG.lpt);
+    NS_IMG.lpt = setTimeout(function () {
+      NS_IMG.lp = Date.now();
+      nsImgMenu(im, NS_IMG.lpx, NS_IMG.lpy);
+    }, 520);
+  }, { passive: true });
+  var lpCancel = function () { clearTimeout(NS_IMG.lpt); };
+  editor.addEventListener('touchmove', function (e) {
+    var p = e.touches && e.touches[0]; if (!p) return;
+    if (Math.abs(p.clientX - NS_IMG.lpx) > 10 || Math.abs(p.clientY - NS_IMG.lpy) > 10) lpCancel();
+  }, { passive: true });
+  editor.addEventListener('touchend', function () { lpCancel(); setTimeout(function () { NS_IMG.lp = 0; }, 420); }, { passive: true });
+  editor.addEventListener('touchcancel', lpCancel, { passive: true });
+  // 菜单点外面即收；页面滚动也收（浮层钉在视口坐标，滚着不跟着走会错位）
+  document.addEventListener('mousedown', function (e) {
+    var m = document.getElementById('nsImgMenu');
+    if (m && !m.contains(e.target)) nsImgMenuClose();
+  }, true);
+  window.addEventListener('scroll', nsImgMenuClose, { passive: true, capture: true });
+})();
+window.nsImgOpenZoom = nsImgOpenZoom; window.nsImgSave = nsImgSave; window.nsImgMenu = nsImgMenu;
+/* ── v9.2.0 刷新开奖卡 ───────────────────────────────────────────────
+   档位权重 R70/SR20/SSR8/UR2（合计 100，按每天点十次算：SR 约每 5 次、SSR 约每天、UR 约每 5 天）。
+   落库只有两样、都不含文案：sessionStorage 存本次抽中的 {t 档位, i 序号}，localStorage 存每档已用序号数组
+   （一轮用完自动洗牌重开）。序号只在同档池内有效，池子改版后越界即视为无效、直接静默不弹。
+   让位规则：节日雨/问候气泡在场、草稿或远端冲突条在场、彩蛋局内、只读预览——一律不弹，坏消息的时候不发奖。 */
+var NS_DRAW_KEY = 'notesync_draw', NS_DRAW_SEEN = 'notesync_draw_seen';
+var NS_DRAW_W = [['r', 70], ['sr', 20], ['ssr', 8], ['ur', 2]];
+var NS_DRAW_HOLD = { r: 2500, sr: 3200, ssr: 4500, ur: 0 }; // ur=0 按拍板「不自动消失」，点一下收
+var NS_DRAW_POOL = {
+  'r':['字落下，就别管它','这里不催你','先记下来，回头再说','一句就够了','别急着写完','空页也是记录','标题也算进度','写三行，够今晚用','慢慢写，不急','记一半，交给忘性','不用整齐，能看懂就行','今天的先留今天','先占住这页','空白不算浪费','想清楚了再改','写完就去忙','顺手一笔就好','一句顶三句','先记结论','细节会自己回来','想起来就补一行','别删，以后再看','记完这条就收手','剩下的路上想','别改标点，先存','想到人就记一笔','记完就放下','从头写太难，从中段写','时间也记一下','谁说的也记一下','关键词就行','缩写也算字','记错的地方最诚实','短一点更好找','先搁这儿','这事明天还重要','不急着想明白','写下来就不用想了','一句一句攒','留着对比，别急着删','空一行，回头填','写完这件再想下一件','不用写给别人看','写得乱，说明快','快比好看重要','先占个位','值得记一下','记一半也行','后半段自己会长出来','这句今天够用','标题可以后起','起了标题也算写了','数字不容易记错','记住的感觉不可靠','不写才发现自己不知道','一句话压住一件事','记完心就定了','轮廓先立住','细节以后补','这条以后会用到','以后再说以后','存疑也是一种记法','存着不丢人','想不出就先空着','空着也是答案','记一笔，省三遍','等三天再删','一行也算写过','进度不挑字数','写短点，明天看得完','动词最耐放','形容词晚点加','晚点加也来得及','这页记完就关','关掉不等于结束','整理是另一种拖延','拖一会儿也没事','最烦的那件先落下来','落下来就轻一点','今晚不用写完','漂亮是以后的事','事实放得住','看法晚点写更准','回头接得上','接得上就行','太长回头懒得看','长有长的记法','分几段来记','分段好找','开头那句最清楚','后面会想起来','想不起来就留白','留白也是内容','收不了尾也算写完','停在哪儿都行','写到哪里算哪里','落一句就睡','小事最经放','经放的还是小事','会重来一遍的先落','重来太贵','存住就不丢','不丢就有底','有底就能想别的','想别的也要记','记下来才想得清','想不清也记','记成什么样都行','重写的先存原版','存完再重写','重写也是记','记两遍不嫌多','多记一遍少想一遍','一个词能带出一段','带不出来就算了','算了也记一笔','当线索留着','线索不用完整','不完整也能用','疑问比答案耐看','答案会过期','疑问不会','下一件也会来','来一件记一件','记一条，少一条','少一件轻一点','轻一点就够今天','今天不必轻很多','到这里也算记了','半句也是句子','不必写满','先记一个词','记到这里就行','随手一记最经看','完整是后来的事','趁还记得，落一句','现在有用就够了','不用解释给谁听','写了就是进展','进展不分大小','小的也算','最要紧的那个先落','落下来就跑不掉','跑不掉的才要记','大事自然会记住','慌是因为没落下来','落一句，压住慌','先写最刺眼的那个','刺眼的通常是重点','重点不用写全'],
+  'sr':['密文比承诺可靠','服务器不懂中文','同步只是搬运，不评判','端到端加密，包括对你自己','你删掉的，服务器从没见过','网址即钥匙，别弄丢','这句话只有你读过','没有账号，也就没有忘记密码','换机不用登录，登录要设密码','这台机器不记事，它只存字','备份在另一台，想法在这台','回收站今天很安静','提醒会响，这里不响','加密的好处是可以写得难看点','服务器拿到的是乱码','它不解密，也解不了','盐存在你这边','云端只存结果','密钥不在云上，云帮不了你','忘了口令，我也没办法','我这边没有找回按钮','同步会冲突，不会替你选','冲突时两条都留着','它不删旧的那条，除非你删','离线也能写，联网才走','断网的时候它不催','页脚那个点是它的话','它说得很少','收藏只在你这台机器上','收藏不进云端','待办会响，是你让它响','云端只认识时间，不认识内容','图片是例外，它走图床','图片不加密，这条得记住','图床的链接谁拿到都能看','笔记名是明文，正文不是','网址公开，名字别写心事','它知道你有几条，不知道写了什么','它连你写没写都不知道','密文会变长，因为字多了','加密不防你截图','也不防你转发','它防别人，不防你自己','这页的钥匙只有一把','钥匙写在纸上，纸得收好','护照那串字，丢了没人能补','补就要账号，就不是它了','备份二维码是另一把钥匙','扫码那一下，收藏换了台机器','换机不搬家，搬家靠那一格码','同步是异步的，所以会晚一点到','晚一点到，不是没到','页脚的连接中是它在找服务器','找到之后它就不说话了','不说话不代表没在传','传完也不告诉你，除非出错','出错才响，是它唯一的礼貌','服务器只见密文，是字面意思','它没有后台能读你的字','没有客服能替你看一眼','所以也没人误读','没人误读，也没人救你','口令长一点，机器就笨一点','机器越笨，你越自由','加密的代价是丢了没人帮','没人帮你，也没人查你','这两句是一件事','一件事的两面','这页存在两台机器上','第三份在云端，是乱码','乱码也是备份','备份不必可读','可读的备份不算备份','所以它宁可看不懂','看不懂才睡得着','你写的字，服务器一个不认识','它只认识长度和时间','长度会出卖你，时间也会','出卖不到内容','出卖不到内容的出卖，可以忍','刷新只是再传一遍','传一遍不多问','不多问是这台机器的礼貌','不问为什么写','不问写给谁','完没写完它不管','没写完也存','存下来的半句也是半句','半句比没有强','这条笔记的网址只有你知道','知道网址的人也只能打开锁屏页','打开锁屏页也看不见字','看不见字，就还是你的','你的笔记，你的口令，你的麻烦','三件事归你，谁都不掺手','不掺手是设计，不是疏忽','疏忽不会写进说明里','说明里写了，所以是设计','端到端的意思是两头都是你','中间那一段，谁都不算知情'],
+  'ssr':['这页会比你记得久','有些笔记只为证明那天存在','很多年后这行字还会亮着','你删掉的比留下的多，正常','字攒得慢，但一直在攒','记下的事，一半会忘，一半够用','一句话能存很多年','笔记不替你判断，只替你留着','这台机器会换，这页不会','加密的意思不是安全，是可以不修饰','现在觉得不重要的，才是真话','写下来的那一刻，事情就定了型','人会忘，纸不会生气','忘了的部分，字替你留着','留着不等于记得','不等于记得，等于还能翻','翻不翻是以后的事','以后会翻的','有些句子只有当时写得出来','当时的自己不会再来','所以先存着','存着是一种信任','信任未来会看懂','也可能看不懂','看不懂也没损失','没损失的事都值得做','记的当天最不值钱','值钱的是三年后重读','重读才承认自己变过','变过这件事，只有字能证','字不会替你美化','不美化才是记录','记录的本质是不肯忘','不肯忘很累，交给它','交出去，人就轻一点','轻一点的人写得短','写得短的存得久','存得久的都是随手那条','随手那条最诚实','诚实不在意在长','一句话放十年还是那句话','人会变，那句话不会','所以重读会吓一跳','吓一跳说明走远了','走远了才看得见当初','当初写的人很陌生','陌生到值得再记一笔','把现在的自己也给未来','靠这几行接上','接不上也没关系','接不上就是变化本身','变化需要证据','证据不必完整','不完整才像真的','像真的比写得好重要','重要很多年','这页还在，你不在也没关系','留给老了的自己','老了的自己也是别人','是别人就值得保密','保密这事，年纪越大越懂','懂了就会多记几行','多记几行是买保险','保险不一定用上','用不上最好','没人重读，说明事情都顺了','顺了就不用记','不顺才会来这页','这页安静的时候，是好消息','好消息不用记，坏消息才记'],
+  'ur':['今天到这儿就行。','我这边一切正常。','不用每天都记。','这页没别人来过。','你关掉页面之后，这里很安静。','没什么事，就是想说一句。','这句不用回。','刚才那一下，你在找别的东西。','我看见了，但我不懂。','你写的字，我一个都不认识。','不认识，所以安全。','安全这两个字，我说得有点满。','说得满的部分，交给口令。','口令归你。','归你的我不碰。','不碰是本事，也是限制。','我这边没有昼夜。','关掉之后我不黑，只是没人看。','黑屏不等于关机。','我记不住你，这是设计。','记不住你，也记不住自己。','你按这一下时，没打算记。','别的东西也要记。','忘了才记，记了才不怕忘。','不怕忘是最便宜的安全感。','便宜的安全感也是安全感。','这句到这儿就没了。','没了之后，页面还是你的。','我不评判。前面那句是同步说的。','你按了一下，我浮出来，就这样。']
+};
+function nsDrawSeen() { try { return JSON.parse(localStorage.getItem(NS_DRAW_SEEN) || '{}') || {}; } catch (e) { return {}; } }
+function nsDrawSaveSeen(o) { try { localStorage.setItem(NS_DRAW_SEEN, JSON.stringify(o)); } catch (e) {} }
+function nsDrawTier() { // 权重轮盘：0..99 落哪一档
+  var n = Math.floor(Math.random() * 100), acc = 0;
+  for (var i = 0; i < NS_DRAW_W.length; i++) { acc += NS_DRAW_W[i][1]; if (n < acc) return NS_DRAW_W[i][0]; }
+  return 'r';
+}
+function nsDrawIdx(t, pool, seen) {
+  var used = Array.isArray(seen[t]) ? seen[t] : [];
+  if (used.length >= pool.length) used = []; // 一轮抽完，洗牌重开
+  var free = [];
+  for (var i = 0; i < pool.length; i++) if (used.indexOf(i) < 0) free.push(i);
+  if (!free.length) free = [Math.floor(Math.random() * pool.length)];
+  var pick = free[Math.floor(Math.random() * free.length)];
+  if (used.length && used[used.length - 1] === pick && free.length > 1) { // 连抽不重复同一条
+    var alt = free[Math.floor(Math.random() * free.length)];
+    if (alt !== pick) pick = alt;
+  }
+  return pick;
+}
+function nsDrawRoll() { // 点击刷新时抽一次并落袋；任何异常都不得挡住刷新本身
+  try {
+    var t = nsDrawTier(), pool = NS_DRAW_POOL[t];
+    if (!pool || !pool.length) return;
+    var seen = nsDrawSeen();
+    var i = nsDrawIdx(t, pool, seen);
+    seen[t] = (Array.isArray(seen[t]) ? seen[t] : []).concat([i]);
+    if (seen[t].length > pool.length) seen[t] = [i];
+    nsDrawSaveSeen(seen);
+    sessionStorage.setItem(NS_DRAW_KEY, JSON.stringify({ t: t, i: i }));
+  } catch (e) {}
+}
+function nsDrawBusy() { // 让位判据：一条泳道只放一个东西，坏消息优先占位
+  try {
+    if (document.body && document.body.classList.contains('ns-in-game')) return true;
+    // 两个常驻空壳的开关各不相同，必须分开判——一律按「存在」或一律按「.hidden」都会把空壳误判在场：
+    // #nsRain 静态就在 DOM 里、靠 .hidden 切换（按存在判＝永远有一场不存在的雨）；
+    // #nsGreet 静态也在、靠 .show 点亮（按 .hidden 判＝永远在放问候气泡）。两者叠加即开奖永不兑现。
+    var greet = document.getElementById('nsGreet');
+    if (greet && greet.classList.contains('show')) return true;      // 问候气泡：看 .show
+    var rain = document.getElementById('nsRain');
+    if (rain && !rain.classList.contains('hidden')) return true;     // 节日雨：看 .hidden
+    var ids = ['draftBar', 'remoteBar', 'nsDraw', 'nsAsk'];           // 含正文门牌确认层：同一条底部泳道                   // 冲突条/自身：.hidden 类切换
+    for (var i = 0; i < ids.length; i++) {
+      var el = document.getElementById(ids[i]);
+      if (el && !el.classList.contains('hidden')) return true;
+    }
+    return false;
+  } catch (e) { return true; }
+}
+var NS_DRAW_WAIT = 0; // 让位轮询计数：等的是同泳道的问候气泡/确认浮层，最长 8s
+function nsDrawConsume() { // 页面重建后读出并开奖；读不到/越界一律静默
+  try {
+    var raw = sessionStorage.getItem(NS_DRAW_KEY);
+    if (!raw) return;
+    var d = JSON.parse(raw);
+    var pool = NS_DRAW_POOL && NS_DRAW_POOL[d && d.t];
+    if (!pool || !(d.i >= 0) || d.i >= pool.length) { sessionStorage.removeItem(NS_DRAW_KEY); return; }
+    // 让位时绝不删袋：窄屏深夜/节日问候气泡一挂就是 5 秒，旧写法「先删袋再判 busy」的结果是
+    // 这次刷新既不出卡、奖也被静默吞掉（闸 R3b 实测 3/3 复现）。改成等泳道空出来再兑现，
+    // 最多等 8 秒（气泡 5s + 余量），超时才作废；真兑现了才 removeItem，保证一次开奖只兑一次。
+    if (nsDrawBusy()) {
+      if (NS_DRAW_WAIT++ >= 32) { NS_DRAW_WAIT = 0; sessionStorage.removeItem(NS_DRAW_KEY); return; }
+      setTimeout(nsDrawConsume, 250);
+      return;
+    }
+    NS_DRAW_WAIT = 0;
+    sessionStorage.removeItem(NS_DRAW_KEY);
+    nsDrawShow(d.t, pool[d.i]);
+  } catch (e) {}
+}
+function nsDrawShow(t, text) {
+  try {
+    var old = document.getElementById('nsDraw'); if (old && old.parentNode) old.parentNode.removeChild(old);
+    var card = document.createElement('div');
+    card.id = 'nsDraw'; card.className = t;
+    var rar = document.createElement('span'); rar.className = 'dw-rar'; rar.textContent = t.toUpperCase();
+    var tx = document.createElement('div'); tx.className = 'dw-tx'; tx.textContent = text; // 文案走 textContent，绝不 innerHTML
+    var ft = document.createElement('div'); ft.className = 'dw-ft'; ft.textContent = 'NOTE SYNC';
+    card.appendChild(rar); card.appendChild(tx); card.appendChild(ft);
+    document.body.appendChild(card);
+    var gone = false;
+    var close = function () {
+      if (gone) return; gone = true;
+      card.classList.add('out');
+      setTimeout(function () { try { if (card.parentNode) card.parentNode.removeChild(card); } catch (e) {} }, 320);
+    };
+    card.addEventListener('click', close); // 非模态：不抓焦点，关掉也不需要归还焦点（红线10 无从触发）
+    var hold = NS_DRAW_HOLD[t];
+    if (hold > 0) setTimeout(close, hold);
+  } catch (e) {}
+}
+window.nsDrawRoll = nsDrawRoll; window.nsDrawConsume = nsDrawConsume;
+window.nsDrawPoolSize = function () { var n = 0; try { for (var k in NS_DRAW_POOL) n += NS_DRAW_POOL[k].length; } catch (e) {} return n; };
+window.nsDrawPool = NS_DRAW_POOL; // 只读导出：e2e 要验「卡面文案确实出自该档池子」，防抽卡与池子脱钩
+
 const refreshBtnEl = document.getElementById('refreshBtn');
 if (refreshBtnEl) {
   refreshBtnEl.addEventListener('click', () => {
@@ -3730,6 +4283,7 @@ if (refreshBtnEl) {
       setTimeout(() => { if (uploadStatus.textContent.indexOf('正在保存中') === 0) hideUploadStatus(); }, 1500);
       return;
     }
+    try { nsDrawRoll(); } catch (e) {} // v9.2.0：抽卡必须落在 reload 之前——reload 一执行后面就是死代码
     location.reload();
   });
 }
@@ -7442,19 +7996,41 @@ if (noteId && (isNativeApp() || !CHIP_HOVER_OK)) {
     // v7.9.0：实时网址预览——旧版底部 URL 用法提示行（.hint）退役。值经 sanitizeName 净化后必合法，
     // 非空即显行、空值整行隐身（不闪现光杆域名）；域名段由 .dyn-domain 装载既有 IIFE 填 hostname。
     const urlEl = document.getElementById('landingUrlLine'), urlName = document.getElementById('landingUrlName');
+    const eggTipEl = document.getElementById('landingEggTip');
+    // v9.2.0 首页彩蛋入口：名单一律复用 NS_RESERVED_ROUTES（与路由白名单、图鉴条目、正文词表正则同源），
+    // 绝不在首页再抄一份十个名字——抄一份就有漂移，漂了就是「首页说是门牌、路由不认」。
+    const eggHit = () => {
+      const nm = li.value.trim().toLowerCase();
+      return (typeof NS_RESERVED_ROUTES !== 'undefined' && NS_RESERVED_ROUTES.indexOf(nm) >= 0) ? nm : '';
+    };
     const syncUrlHint = () => {
       if (!urlEl || !urlName) return;
       const nm = li.value.trim();
-      if (nm) { urlName.textContent = nm; urlEl.classList.remove('hidden'); }
+      if (nm && !eggHit()) { urlName.textContent = nm; urlEl.classList.remove('hidden'); }
       else urlEl.classList.add('hidden');
     };
-    const syncOpenBtn = () => { lb.disabled = li.value.trim().length === 0; };
+    const syncOpenBtn = () => {
+      const egg = eggHit();
+      lb.classList.toggle('egg', !!egg);
+      li.classList.toggle('egging', !!egg);
+      lb.textContent = egg ? '打开彩蛋' : '打开';
+      lb.disabled = egg ? false : (li.value.trim().length === 0);
+      if (!eggTipEl) return;
+      eggTipEl.textContent = '';
+      if (egg) { // 红线1 同款纪律：文案走 DOM API 拼装，不拼 innerHTML（门牌名虽来自白名单，也不留坏习惯）
+        const b = document.createElement('b'); b.textContent = '/' + egg;
+        eggTipEl.appendChild(b);
+        eggTipEl.appendChild(document.createTextNode(' 是彩蛋门牌，不会新建笔记'));
+      }
+      eggTipEl.classList.toggle('hidden', !egg);
+    };
     const sanitizeName = () => {
       // v5.19 恢复 _ 与 -（与后端 ID_RE 一致）；中文等其它字符仍被剔除
-      // v9.0.0：彩蛋门牌为专属保留字，命中即清空并给专属文案（这些名字永远打不开笔记）
-      if (typeof NS_RESERVED_ROUTES !== 'undefined' && NS_RESERVED_ROUTES.indexOf(li.value.trim().toLowerCase()) >= 0) {
-        li.value = ''; syncOpenBtn(); if (urlEl) urlEl.classList.add('hidden');
-        if (warnEl) { warnEl.textContent = '这个名字是彩蛋专属门牌，换一个'; warnEl.classList.remove('hidden'); }
+      // v9.2.0：门牌名不再清空——旧版「清空 + 报换一个」在用户眼里就是「输入了没反应」。
+      // 保留字不能当笔记名这条守卫一字未动（服务端与路由层照旧拦），这里只是把「不能建」翻成「可以玩」。
+      if (eggHit()) {
+        if (warnEl) warnEl.classList.add('hidden');
+        syncOpenBtn(); syncUrlHint();
         return;
       }
       const cleaned = li.value.replace(/[^A-Za-z0-9_-]/g, '');
@@ -7496,8 +8072,12 @@ if (noteId && (isNativeApp() || !CHIP_HOVER_OK)) {
     }, 250);
     lb.addEventListener('click', () => {
       clearInterval(pollTimer);
+      const egg = eggHit();
+      if (egg) { // 首页即发射台：走彩蛋层唯一入口（图鉴 replay 同款），不新建笔记、不开第二条启动路径
+        try { if (typeof window.nsRouteEgg === 'function') window.nsRouteEgg(egg); } catch (e) {}
+        return;
+      }
       const name = li.value.trim();
-      if (name && typeof NS_RESERVED_ROUTES !== 'undefined' && NS_RESERVED_ROUTES.indexOf(name.toLowerCase()) >= 0) return;
       if (name) location.href = '/' + encodeURIComponent(name);
     });
     li.addEventListener('keydown', e => { if (e.key === 'Enter') lb.click(); });
@@ -7583,7 +8163,9 @@ if ('serviceWorker' in navigator) {
 .ns-game.ns-passthru .ns-hud,.ns-game.ns-passthru .ns-mirror-panel{pointer-events:auto}
 .ns-game.ns-passthru .ns-mirror-panel{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);width:min(92vw,420px);background:var(--box-bg);border:1px solid var(--line);border-radius:16px}
 /* 反向抵消名单补齐：控制条/确认浮层/提示条若不在名单里会在镜像态下左右反读 */
-body.ns-mirror-A #nsAsk,body.ns-mirror-B #nsAsk,body.ns-mirror-A .ns-mirror-panel,body.ns-mirror-B .ns-mirror-panel,body.ns-mirror-A #installBar,body.ns-mirror-B #installBar,body.ns-mirror-A #timechip,body.ns-mirror-B #timechip{transform:scaleX(-1)}
+body.ns-mirror-A .ns-mirror-panel,body.ns-mirror-B .ns-mirror-panel,body.ns-mirror-A #installBar,body.ns-mirror-B #installBar,body.ns-mirror-A #timechip,body.ns-mirror-B #timechip{transform:scaleX(-1)}
+/* #nsAsk 基座带 translateX(-50%)，同理必须叠加而非替换（v9.1 存量同型缺陷，闸 R1b 命中，与本次新增名单一并修） */
+body.ns-mirror-A #nsAsk,body.ns-mirror-B #nsAsk{transform:translateX(-50%) scaleX(-1)}
 body.ns-in-game{overflow:hidden}
 .ns-hud{display:flex;align-items:center;gap:8px;height:44px;padding:0 10px;border-bottom:1px solid var(--line);font:400 10.5px/1 var(--mono);letter-spacing:.12em;color:var(--muted);background:var(--bg);flex:none}
 .ns-hud .ns-x{display:flex;align-items:center;gap:6px;height:32px;padding:0 8px 0 4px;color:var(--fg);border-radius:9px;cursor:pointer}
@@ -7615,7 +8197,13 @@ body.dark .ns-over{background:rgba(0,0,0,.6)}
 .ns-btns button{flex:1;font:inherit;font-size:12.5px;letter-spacing:.06em;padding:10px 0;border-radius:10px;border:1px solid var(--line);background:none;color:var(--fg);cursor:pointer}
 .ns-btns .ns-again{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
 /* 非 canvas 型彩蛋（镜像 / 桌宠）自带画面 */
-.ns-dom .ns-mirror-panel,.ns-dom .ns-pet-panel{margin:auto;max-width:420px;padding:22px 20px 30px}
+.ns-dom .ns-mirror-panel{margin:auto;max-width:420px;padding:22px 20px 30px}
+/* v9.2.0 桌宠档案页（方案 B）：旧形态与镜像共用「margin:auto + 父级 overflow:hidden」，
+   面板比视口高时上下两端一起被裁——「让它去睡」下面的护照与说明文字永不露出，且滑不动。
+   拆成两段：档案内容区自己滚，操作区钉在底部常驻。镜像面板零改动（它本来就短）。 */
+.ns-dom .ns-pet-panel{margin:0 auto;max-width:420px;padding:0;width:100%;flex:1;min-height:0;display:flex;flex-direction:column}
+.ns-pet-scroll{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:22px 20px 14px}
+.ns-pet-dock{flex:none;border-top:1px solid var(--line);background:var(--bg);padding:12px 20px calc(14px + env(safe-area-inset-bottom))}
 .ns-mirror-panel h2,.ns-pet-panel h2{font:600 17px/1.4 var(--serif);letter-spacing:.04em;margin:0 0 10px}
 .ns-mirror-panel p,.ns-pet-panel p{font-size:12.5px;line-height:1.8;color:var(--muted);margin:0 0 12px}
 .ns-mrow{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
@@ -7626,7 +8214,13 @@ body.dark .ns-over{background:rgba(0,0,0,.6)}
 body.ns-mirror-A,body.ns-mirror-B{transform:scaleX(-1)}
 body.ns-mirror-B #editor,body.ns-mirror-B header .brand,body.ns-mirror-B footer,body.ns-mirror-B img,
 body.ns-mirror-B .box,body.ns-mirror-B #remCard,body.ns-mirror-B #nsBadge,body.ns-mirror-B #nsGame,
-body.ns-mirror-B #nsPet,body.ns-mirror-B .mask,body.ns-mirror-B #timechip,body.ns-mirror-B .confcard{transform:scaleX(-1)}
+body.ns-mirror-B #nsPet,body.ns-mirror-B .mask,body.ns-mirror-B #timechip,body.ns-mirror-B .confcard,
+body.ns-mirror-B #nsImgMenu,
+body.ns-mirror-B #nsDraw .dw-tx,body.ns-mirror-B #nsDraw .dw-ft,body.ns-mirror-B #nsDraw .dw-rar{transform:scaleX(-1)}
+/* 查看器的提示条与按钮条基座是 left:50% + translateX(-50%)，补偿必须写成
+   translateX(-50%) scaleX(-1)——只给 scaleX(-1) 会把平移顶掉，整条钉死在左半屏（闸 R1b 实测偏 -105/-130px）。 */
+body.ns-mirror-A #nsZoom .nz-tip,body.ns-mirror-B #nsZoom .nz-tip,
+body.ns-mirror-A #nsZoom .nz-bar,body.ns-mirror-B #nsZoom .nz-bar{transform:translateX(-50%) scaleX(-1)}
 body.ns-mirror-A img{transform:scaleX(-1)}
 body.ns-mirror-C header{flex-direction:row-reverse}
 body.ns-mirror-C #editor{text-align:right}
@@ -7655,8 +8249,11 @@ body.ns-mirror-C .brand{flex-direction:row-reverse}
 .ns-pnote{font:400 10.5px/1.7 var(--mono)!important;color:var(--muted)!important}
 /* 关于页第四行「彩蛋 N/M FOUND」（方案 A） */
 .ns-egg-entry{cursor:pointer;border-radius:9px;margin:0 -2px;padding:0 2px;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
-.ns-egg-entry .about-v{display:flex;align-items:baseline;gap:5px;position:relative}
-.ns-egg-entry .ns-num{font:400 12px/1.5 var(--mono);letter-spacing:.1em;color:var(--fg);font-weight:600}
+/* v9.2.0：.about-v 基础板是 width:110px + word-break:break-all（为版本号那种短串设计），
+   「10 / 10 FOUND」塞进去必被 break-all 拦腰折断、尾字母 D 掉到下一行。
+   彩蛋行自己解掉定宽与断字，并让计数串与 chevron 整体不许换行（不动 .about-v 基础板，避免版本号行回归）。 */
+.ns-egg-entry .about-v{display:flex;align-items:baseline;gap:5px;position:relative;width:auto;word-break:normal;white-space:nowrap;flex:none}
+.ns-egg-entry .ns-num{font:400 12px/1.5 var(--mono);letter-spacing:.1em;color:var(--fg);font-weight:600;white-space:nowrap}
 .ns-egg-entry .ns-num .of{color:var(--muted);font-weight:400}
 .ns-egg-entry.found .ns-num::before{content:'';display:inline-block;width:4px;height:4px;border-radius:50%;background:var(--accent);margin-right:6px;vertical-align:2px}
 .ns-egg-entry .ns-chev{width:11px;height:11px;color:var(--accent);flex:none}
@@ -7864,7 +8461,19 @@ function saveBest(id, v) {
   if (!(NSG.best[id] > v)) { NSG.best[id] = v; try { localStorage.setItem(BEST_KEY, JSON.stringify(NSG.best)); } catch (e) {} }
   arcadePush(id, v);
 }
-function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+// v9.2.0 根因修复：旧版从 **documentElement** 读自定义属性，而夜间色板声明在 **body.dark** 上。
+// 自定义属性只向下继承、绝不上浮——html 永远看不见 body 那份覆盖，于是八个 canvas 蛋无论日夜一律
+// 拿到日间色板：夜间把「日间的近黑前景」画在「夜间的近黑底」上（只差十来级，几乎隐形）。用户报的
+// 「很多游戏夜间模式没做优化、看不清」根因在此——不是没做，是做的从来没生效。
+// 改读 body（body 尚未就绪时回落 html）。getComputedStyle 返回的是 live 对象，按元素身份缓存一次，
+// 之后每次 getPropertyValue 仍取最新计算值，但省掉旧版每帧 6 次样式解析。
+var _cssEl = null, _cssCS = null;
+function css(name) {
+  var el = document.body || document.documentElement;
+  if (el !== _cssEl || !_cssCS) { _cssEl = el; _cssCS = getComputedStyle(el); }
+  var v = _cssCS.getPropertyValue(name);
+  return v ? v.trim() : '';
+}
 // 无 requestAnimationFrame 的环境（jsdom 守护测试、极老 WebView）退化为 16ms 定时器循环：
 // 缺 rAF 就抛错等于「没有 rAF 的浏览器打不开彩蛋」，这不是可接受的降级
 function raf(fn) { return (typeof requestAnimationFrame === 'function') ? requestAnimationFrame(fn) : setTimeout(function () { fn(Date.now()); }, 16); }
@@ -8090,17 +8699,51 @@ function nsShadowCheck(name) {
   } catch (e) {}
 }
 
-/* 正文词表触发：必须带斜杠、独立成词、粘贴与组字期不算、同词一次会话只提示一次 */
+/* 正文词表触发（v9.2.0 放宽）：必须带斜杠、词尾正好落在光标处、斜杠前不是字母数字下划线，
+   粘贴不算（防误触），中文输入法整词上屏算。同词一次会话只提示一次。
+   旧版三处「敲 /mirror 没反应」的成因：①判据扫的是 textContent 末 40 字，`(^|\s)` 里的 `^`
+   其实是「40 字窗口的开头」而非行首，中文后紧跟斜杠（如「看/mirror」）永不匹配；②beforeinput
+   只认 insertText，Chromium 拼音 commit 不派 insertText 只发 compositionend，中文状态下整条哑火；
+   ③要求词后有分隔符，而「打完 /mirror 就停手」恰恰没有。现在一律以光标为锚，词尾=光标位。 */
 var asked = {};
-function nsWordTrigger(text) {
-  var m = /(^|\s)\/(mirror|snake|dragon|brick|satoshi|bitcoin|tank|spacex|tesla|pet)(?=$|[\s，。、！？.;:!?])/.exec(text || '');
-  if (!m) return;
-  var id = m[2];
+var NS_EGG_RE = /(^|[^A-Za-z0-9_\-])\/(mirror|snake|dragon|brick|satoshi|bitcoin|tank|spacex|tesla|pet)$/;
+function nsStripZW(s) { return s.replace(/[\u200B\u200C\uFEFF]/g, ''); } // linkify 的断行零宽不该挡住词边界
+// 取光标所在块内的前文与后文；无可用光标（jsdom／选区不在编辑器内／有选区）时返回 null
+function nsCaretCtx() {
+  try {
+    var sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return null;          // 完全没有选区（jsdom 守护）才交给尾部扫描兜底
+    if (!sel.isCollapsed) return { pre: "\u0000SEL", post: "" }; // 真人框选：\u0000 永不匹配门牌正则，绝不误弹
+    var r = sel.getRangeAt(0);
+    if (!editor || !editor.contains(r.startContainer)) return null;
+    var block = blockOf(r.startContainer, editor);
+    var a = document.createRange(); a.selectNodeContents(block);
+    try { a.setEnd(r.startContainer, r.startOffset); } catch (e) { return null; }
+    var b = document.createRange(); b.selectNodeContents(block);
+    try { b.setStart(r.startContainer, r.startOffset); } catch (e) { return null; }
+    var pre = nsStripZW(a.toString()), post = nsStripZW(b.toString());
+    return { pre: pre.length > 24 ? pre.slice(-24) : pre, post: post };
+  } catch (e) { return null; }
+}
+function nsWordTriggerAtCaret() {
+  var ctx = nsCaretCtx(), pre, okNext;
+  if (ctx) {
+    pre = ctx.pre;
+    okNext = !/^[A-Za-z0-9_\-]/.test(ctx.post); // 光标后紧跟字母数字＝还在打更长的词（/petshop），不弹
+  } else {
+    var all = (editor && editor.textContent) || ''; // 无光标环境（jsdom 守护）退回尾部扫描
+    pre = nsStripZW(all.length > 24 ? all.slice(-24) : all);
+    okNext = true;
+  }
+  var m = NS_EGG_RE.exec(pre);
+  if (!m || !okNext) return;
+  var id = m[2].toLowerCase();
   if (asked[id]) return;
   asked[id] = 1;
   nsAskConfirm(id);
 }
 function nsAskConfirm(id) {
+  try { var dc = document.getElementById('nsDraw'); if (dc && dc.parentNode) dc.parentNode.removeChild(dc); } catch (e0) {} // 同泳道让位：确认层是用户刚敲出来的，优先
   var old = document.getElementById('nsAsk'); if (old && old.parentNode) old.parentNode.removeChild(old);
   var b = mk('div'); b.id = 'nsAsk';
   b.innerHTML = '<span>要开始吗？</span><button class="ns-go">进入 /' + id + '</button><button class="ns-no">不了</button>';
@@ -8116,7 +8759,12 @@ document.addEventListener('beforeinput', function (e) {
   if (e.inputType !== 'insertText') return;
   var t = e.target;
   if (!t || !editor || (t !== editor && !editor.contains(t))) return;
-  setTimeout(function () { try { nsWordTrigger((editor.textContent || '').slice(-40)); } catch (x) {} }, 0);
+  setTimeout(function () { try { nsWordTriggerAtCaret(); } catch (x) {} }, 0);
+});
+// 中文/日文输入法整词上屏：Chromium 的拼音 commit 不派 insertText，只发 compositionend
+// （v8.3.1 闸二 CDP 真机实锤，打字机音同款坑）。旧版没有这条通道→中文状态下敲 /mirror 永不弹。
+editor.addEventListener('compositionend', function () {
+  setTimeout(function () { try { nsWordTriggerAtCaret(); } catch (x) {} }, 0);
 });
 
 /* 关于页入口行（方案 A：第四行「彩蛋 N/M FOUND」）*/
@@ -8331,12 +8979,16 @@ register({
     root.innerHTML = '<div class="ns-hud"><span class="ns-x"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg><b>退出</b></span>' +
       '<span class="ns-gate">/pet</span><span class="ns-sp"></span><span class="ns-mute' + (SND.muted ? ' off' : '') + '"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 9.5v5h3.2L12 18.6V5.4L7.2 9.5H4Z"/><path d="M16 9.4a3.6 3.6 0 0 1 0 5.2M18.4 7a7 7 0 0 1 0 10"/></svg></span></div>' +
       '<div class="ns-pet-panel">' +
+      '<div class="ns-pet-scroll">' +
       '<div class="ns-pet-top"><div class="ns-pet-av"><svg viewBox="0 0 26 26"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 18c0-5 3.6-8.6 8.6-8.6S21 13 21 18"/><path d="M4 18h17"/><path d="M8 18v2.6M13 18v2.6M18 18v2.6"/></g><circle cx="9.6" cy="13.4" r="1.2" fill="var(--accent)" stroke="none"/><circle cx="15.6" cy="13.4" r="1.2" fill="var(--accent)" stroke="none"/></svg></div>' +
       '<div class="ns-pet-meta"><b>' + ['幼体', '成体', '胖体', '长老'][p.stage] + '</b><span>吃了 ' + p.ate.toLocaleString('en-US') + ' 字 · 醒着 ' + p.days + ' 天 · 柜子 ' + p.shelf.length + ' / 16</span></div></div>' +
       '<div class="ns-shelf"></div>' +
-      '<div class="ns-pet-btns"><button class="ns-pet-sleep">让它去睡</button><button class="ns-pet-free">放归（档案保留 30 天）</button></div>' +
       '<div class="ns-pass"></div>' +
       '<p class="ns-pnote">档案只存计数与形态，不含任何笔记原文。护照即钥匙——粘进任意一条笔记存着，重装后打开那条笔记敲 /pet 就能认领回来；护照与本机存储同时丢失则找不回（找回就要账号）。</p>' +
+      '</div>' +
+      '<div class="ns-pet-dock">' +
+      '<div class="ns-pet-btns"><button class="ns-pet-sleep">让它去睡</button><button class="ns-pet-free">放归（档案保留 30 天）</button></div>' +
+      '</div>' +
       '</div>';
     document.body.appendChild(root);
     document.body.classList.add('ns-in-game');
@@ -8506,14 +9158,38 @@ var R = window.nsGameRegister, SH = window.nsGameShell, SC = window.nsGameScore,
     END = window.nsGameEnd, FX = window.nsFx, ENG = window.nsGameEngine, GC = window.nsGameCss;
 var PAL = null, palKey = '';
 function pal() { // 主题色缓存：只在配色变化时重取，避免每帧 getComputedStyle
-  var k = [GC('--fg'), GC('--bg'), GC('--accent'), GC('--muted'), GC('--line'), GC('--box-bg')].join('|');
-  if (k !== palKey) { palKey = k; PAL = { fg: GC('--fg'), bg: GC('--bg'), ac: GC('--accent'), mu: GC('--muted'), ln: GC('--line'), bx: GC('--box-bg'), soft: GC('--accent-soft') }; }
+  // v9.2.0：三条「弱档」通道改走画布专用令牌——边界细线 --g-line、面板实底 --g-fill、标签文字 --g-mute。
+  // 日间这三个令牌与基础令牌逐字节同值（白天画面零变化），夜间各抬一档；取不到就回落基础令牌，
+  // 绝不写十六进制兜底色（A8 钉住「canvas 只吃主题变量」，写死兜底色等于给夜间留后门）。
+  var ln = GC('--g-line') || GC('--line'), bx = GC('--g-fill') || GC('--box-bg'), mu = GC('--g-mute') || GC('--muted');
+  var k = [GC('--fg'), GC('--bg'), GC('--accent'), mu, ln, bx, GC('--accent-soft')].join('|');
+  if (k !== palKey) {
+    palKey = k;
+    PAL = { fg: GC('--fg'), bg: GC('--bg'), ac: GC('--accent'), mu: mu, ln: ln, bx: bx, soft: GC('--accent-soft'),
+      // 借壳（国产内核强制深色）时 body.dark 是为骗过对手而伪装的，画布像素又被单独反回，
+      // 若按 body.dark 取夜盘就会「页面看着是白天、精灵却是夜间色」——必须把壳单独摘出去。
+      dark: !!(document.body && document.body.classList && document.body.classList.contains('dark')
+        && !(typeof darkShellActive === 'function' && darkShellActive())) };
+  }
   return PAL;
 }
+// 夜间装饰透明度下限：令牌本来就暗，再乘一次 globalAlpha 等于看不见（tank 网格 .5、草丛 .55 实锤）。
+// 日间原样返回，逐字节零变化。
+function gA(a) { var P = pal(); return (P && P.dark) ? Math.max(a, .8) : a; }
 function rnd(a, b) { return a + Math.floor(Math.random() * (b - a + 1)); }
 function rf(a, b) { return a + Math.random() * (b - a); }
 function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 function rr(c, x, y, w, h, r) { c.beginPath(); if (c.roundRect) c.roundRect(x, y, w, h, r); else c.rect(x, y, w, h); }
+// v9.2.0：把笔记名画进小框时，旧版一律 `String(label).slice(0, 6)`——6 个汉字按 10px 就是 60px，
+// 塞进 52px 的障碍框必压出长方形（用户报 dragon 实锤）。截断必须看**量出来的宽度**而不是数字数：
+// 逐字回退到能容下「…」。调用前必须先设好 c.font（measureText 量的是当前字体）。
+function clipTo(c, txt, max) {
+  var s = String(txt == null ? '' : txt);
+  if (!s || max <= 0) return '';
+  if (c.measureText(s).width <= max) return s;
+  while (s.length > 1 && c.measureText(s + '…').width > max) s = s.slice(0, -1);
+  return s + '…';
+}
 function names(kind) { // 素材：只读拷贝，与笔记本体无引用关系（游戏全程零写入）
   var out = [];
   try { // 收藏夹真身 = localStorage notesync_favs，元素为笔记名字符串（index.html:5712）
@@ -8685,7 +9361,7 @@ R(function () {
         c.lineWidth = 1.7; c.strokeStyle = P.ln; c.fillStyle = P.bx;
         rr(c, o.x, oy, o.w, o.h, 4); c.fill(); c.stroke();
         c.fillStyle = P.mu; c.font = '10px ui-monospace,Consolas,monospace'; c.textBaseline = 'middle';
-        c.fillText(String(o.label).slice(0, 6), o.x + 5, oy + o.h / 2 + 1); c.textBaseline = 'alphabetic';
+        c.fillText(clipTo(c, o.label, o.w - 10), o.x + 5, oy + o.h / 2 + 1); c.textBaseline = 'alphabetic'; // v9.2.0：按框宽截断，不再压出长方形
       });
       if (shake > 0) c.restore();
     }
@@ -8817,10 +9493,16 @@ R(function () {
         c.fillStyle = big ? P.ac : P.bx; c.strokeStyle = v > SPAWN ? P.ac : P.ln;
         rr(c, x, y, s, s, 9); c.fill(); c.stroke();
         c.fillStyle = big ? P.bg : (v > SPAWN ? P.ac : P.mu);
-        var txt = fmt(v), fs = txt.length > 8 ? s * .2 : txt.length > 5 ? s * .26 : s * .34;
+        // v9.2.0：格内千分位逗号是会下伸的字符，旧排版把「聪」压在它正下方（fs*.55 → fs*.95 只差 .4 个字高），
+        // 六位以上必重叠。两处一起修：① 格内数字的分节符换 thin space（读位数不受影响、且不下伸）；
+        // ② 数字与单位的行距改按**格宽**定死，不再随字号缩放——字越大旧版两行反而越近，方向是反的。
+        var txt = fmt(v).replace(/,/g, '\u2009'), fs = txt.length > 8 ? s * .2 : txt.length > 5 ? s * .26 : s * .34;
         c.font = '600 ' + Math.round(fs) + 'px ui-monospace,Consolas,monospace'; c.textAlign = 'center'; c.textBaseline = 'middle';
-        c.fillText(txt, x + s / 2, y + s / 2 + (v < GOAL ? fs * .55 : 0));
-        if (v < GOAL) { c.font = Math.round(fs * .5) + 'px ui-monospace,Consolas,monospace'; c.fillText('聪', x + s / 2, y + s / 2 + fs * .95); }
+        if (v >= GOAL) { c.fillText(txt, x + s / 2, y + s / 2); continue; }
+        var lh = s * .30;
+        c.fillText(txt, x + s / 2, y + s / 2 - lh * .42);
+        c.font = Math.round(fs * .5) + 'px ui-monospace,Consolas,monospace';
+        c.fillText('聪', x + s / 2, y + s / 2 + lh * .58);
       }
       if (ghost > 0) { ghost -= 0.02; // 线稿小人横穿棋盘一次，不做真寻路
         var gxp = ox + side * Math.max(0, Math.min(1, ghost)), gyp = oy + side * 0.5;
@@ -9025,7 +9707,7 @@ R(function () {
     draw: function () {
       var c = SH().ctx, P = pal(), W = SH().W, H = SH().H, ox = (W - N * u) / 2, oy = (H - N * u) / 2;
       c.clearRect(0, 0, W, H);
-      c.strokeStyle = P.ln; c.lineWidth = 1; c.globalAlpha = .5;
+      c.strokeStyle = P.ln; c.lineWidth = 1; c.globalAlpha = gA(.5); // v9.2.0：夜间装饰 alpha 下限，令牌已暗再乘 .5 等于看不见
       for (var i = 1; i < N; i++) { c.beginPath(); c.moveTo(ox, oy + i * u + .5); c.lineTo(ox + N * u, oy + i * u + .5); c.stroke(); c.beginPath(); c.moveTo(ox + i * u + .5, oy); c.lineTo(ox + i * u + .5, oy + N * u); c.stroke(); }
       c.globalAlpha = 1;
       for (var y = 0; y < N; y++) for (var x = 0; x < N; x++) {
@@ -9034,7 +9716,7 @@ R(function () {
         c.lineWidth = 1.7; c.lineJoin = 'round';
         if (v === 1) { c.strokeStyle = P.fg; c.fillStyle = P.bx; rr(c, px + 2, py + 2, u - 4, u - 4, 4); c.fill(); c.stroke(); }
         if (v === 2) { c.strokeStyle = P.fg; c.setLineDash([2.6, 2.4]); rr(c, px + 2, py + 2, u - 4, u - 4, 3); c.stroke(); c.setLineDash([]); }
-        if (v === 3) { c.strokeStyle = P.ac; c.globalAlpha = .75; c.lineWidth = 1.4; c.beginPath(); // 河：三道波纹，靠形态而非颜色与钢墙区分
+        if (v === 3) { c.strokeStyle = P.ac; c.globalAlpha = gA(.75); c.lineWidth = 1.4; c.beginPath(); // 河：三道波纹，靠形态而非颜色与钢墙区分
           c.moveTo(px + 3, py + u * .38); c.lineTo(px + u - 3, py + u * .38); c.moveTo(px + 3, py + u * .58); c.lineTo(px + u - 3, py + u * .58); c.moveTo(px + 3, py + u * .78); c.lineTo(px + u - 3, py + u * .78); c.stroke(); c.globalAlpha = 1; }
         if (v === 9) {
           c.strokeStyle = P.ac; c.fillStyle = P.soft; rr(c, px + 1, py + 2, u - 2, u - 4, 3); c.fill(); c.stroke();
@@ -9061,7 +9743,7 @@ R(function () {
         c.stroke(); });
       for (var gy = 0; gy < N; gy++) for (var gx = 0; gx < N; gx++) { // 草画在车之后 = 藏车
         if (map[gy][gx] !== 4) continue;
-        var qx = ox + gx * u, qy = oy + gy * u; c.strokeStyle = P.mu; c.globalAlpha = .55; c.lineWidth = 1.4; c.beginPath();
+        var qx = ox + gx * u, qy = oy + gy * u; c.strokeStyle = P.mu; c.globalAlpha = gA(.55); c.lineWidth = 1.4; c.beginPath();
         for (var k2 = 0; k2 < 3; k2++) { c.moveTo(qx + 4 + k2 * 7, qy + u - 4); c.lineTo(qx + 7 + k2 * 7, qy + 5); } c.stroke(); c.globalAlpha = 1; }
       bullets.forEach(function (b) { c.fillStyle = b.own ? P.ac : P.fg; c.beginPath(); c.arc(ox + b.x * u, oy + b.y * u, 2.6, 0, 7); c.fill(); });
     },
@@ -9184,16 +9866,16 @@ R(function () {
     draw: function () {
       var c = SH().ctx, P = pal(), W = SH().W, H = SH().H;
       c.clearRect(0, 0, W, H);
-      c.fillStyle = P.mu; stars.forEach(function (s) { c.globalAlpha = .3 + s[2] * .5; c.fillRect(s[0], s[1], 1.6, 1.6); }); c.globalAlpha = 1;
+      c.fillStyle = P.mu; stars.forEach(function (s) { c.globalAlpha = gA(.3 + s[2] * .5); c.fillRect(s[0], s[1], 1.6, 1.6); }); c.globalAlpha = 1;
       c.strokeStyle = P.ln; c.lineWidth = 1; c.beginPath(); c.arc(W / 2, H + 190, 230, Math.PI * 1.15, Math.PI * 1.85); c.stroke();
-      c.setLineDash([3, 5]); c.strokeStyle = P.ac; c.globalAlpha = .5;
+      c.setLineDash([3, 5]); c.strokeStyle = P.ac; c.globalAlpha = gA(.5);
       c.beginPath(); c.arc(W / 2, H + 190, 258, Math.PI * 1.2, Math.PI * 1.8); c.stroke(); c.setLineDash([]); c.globalAlpha = 1;
       frags.forEach(function (f) {
         if (f.gone) return;
         c.lineWidth = 1.7; c.strokeStyle = f.rare ? P.ac : P.fg; c.fillStyle = P.bx; c.globalAlpha = f.rare ? 1 : .9;
         rr(c, f.x, f.y, f.w, f.h, 4); c.fill(); c.stroke();
         c.fillStyle = f.rare ? P.ac : P.mu; c.font = '10px ui-monospace,Consolas,monospace'; c.textBaseline = 'middle';
-        c.fillText(String(f.label).slice(0, 6), f.x + 6, f.y + f.h / 2 + .5); c.textBaseline = 'alphabetic'; c.globalAlpha = 1;
+        c.fillText(clipTo(c, f.label, f.w - 12), f.x + 6, f.y + f.h / 2 + .5); c.textBaseline = 'alphabetic'; c.globalAlpha = 1; // v9.2.0：与 dragon 同款按框宽截断
       });
       c.save(); c.translate(px, py); c.rotate(Math.max(-.3, Math.min(.3, vy / 260)));
       c.strokeStyle = P.fg; c.lineWidth = 1.7; c.lineJoin = 'round';

@@ -85,11 +85,18 @@ test('A3 图鉴 17 条；十个门牌条目 replay 全部指 nsRouteEgg，无第
 });
 
 /* ── A4 新建笔记禁用门牌（首页净化 + 提交兜底双挡）── */
-test('A4 首页输入门牌名被清空并给专属文案，提交处另有兜底', () => {
-  const L = SRC.slice(SRC.indexOf('const sanitizeName'), SRC.indexOf("li.addEventListener('input'"));
-  assert.ok(L.includes("NS_RESERVED_ROUTES.indexOf(li.value.trim().toLowerCase()) >= 0"), '净化函数须显式挡门牌（锚补丁行）');
-  assert.ok(L.includes('这个名字是彩蛋专属门牌'), '须给专属文案，不得静默吞字');
-  assert.ok(SRC.includes("if (name && typeof NS_RESERVED_ROUTES !== 'undefined' && NS_RESERVED_ROUTES.indexOf(name.toLowerCase()) >= 0) return;"), '提交处兜底钉');
+test('A4 首页命中门牌：不清空输入、主按钮变「打开彩蛋」并走 nsRouteEgg（v9.2.0 用户改判，旧「清空+换一个」= 输入了没反应）', () => {
+  const S = SRC.slice(SRC.indexOf('const eggHit'), SRC.indexOf("li.addEventListener('input'"));
+  assert.ok(S.includes('NS_RESERVED_ROUTES.indexOf(nm) >= 0'), '门牌名单必须复用 NS_RESERVED_ROUTES，绝不在首页抄第二份（抄了就漂移）');
+  assert.ok(S.includes("lb.textContent = egg ? '打开彩蛋' : '打开'"), '命中须改按钮文案（锚补丁行，裸匹配会命中同形代码成恒真）');
+  assert.ok(S.includes("lb.classList.toggle('egg', !!egg)"), '命中须上金色描边态');
+  assert.ok(S.includes('是彩蛋门牌，不会新建笔记'), '须给专属说明行，把「不新建笔记」讲明白');
+  const C = SRC.slice(SRC.indexOf("lb.addEventListener('click'"), SRC.indexOf("li.addEventListener('keydown'"));
+  assert.ok(C.includes('window.nsRouteEgg(egg)'), '点击必须走彩蛋层唯一入口（图鉴 replay 同款），不开第二条启动路径');
+  // 旧形态禁现：清空输入 + 提交处静默 return——正是用户报「输入了却什么也没发生」的两行成因
+  assert.ok(!S.includes("li.value = ''; syncOpenBtn(); if (urlEl)"), '旧「命中即清空输入」禁回潮');
+  assert.ok(!SRC.includes("if (name && typeof NS_RESERVED_ROUTES !== 'undefined' && NS_RESERVED_ROUTES.indexOf(name.toLowerCase()) >= 0) return;"), '旧「提交处静默 return」禁回潮');
+  assert.ok(!SRC.includes('这个名字是彩蛋专属门牌，换一个'), '旧「换一个」文案已退役，禁回潮');
 });
 
 /* ── A5 启动：壳挂出、HUD 五件套、body 锁滚动、当场入图鉴 ── */
@@ -297,8 +304,8 @@ test('A14 彩蛋层两段位于主脚本之后、</body> 之前；样式块紧�
 });
 
 /* ── A15 三 bump 与壳字节一致 ── */
-test('A15 版本 9.1.1；www 与 android 壳与根 index 逐字节一致', () => {
-  assert.ok(SRC.includes("const APP_VERSION = '9.1.1';"), 'APP_VERSION 应随彩蛋十门牌与音效层升到 9.1.1');
+test('A15 版本 9.2.0；www 与 android 壳与根 index 逐字节一致', () => {
+  assert.ok(SRC.includes("const APP_VERSION = '9.2.0';"), 'APP_VERSION 应随彩蛋十门牌与音效层升到 9.2.0');
   assert.strictEqual(SRC, WWW, 'www 壳必须逐字节同步（本仓 brand W3/D5 同源钉）');
   assert.strictEqual(SRC, APK, 'android assets 壳必须逐字节同步');
 });
