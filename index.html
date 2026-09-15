@@ -226,7 +226,7 @@
   #editor img{max-width:100%;border-radius:10px;margin:6px 0;display:block;border:1px solid var(--line)}
   #editor a{color:var(--accent);text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(169,134,60,.35);transition:text-decoration-color .2s;word-break:break-all;overflow-wrap:break-word}
   #editor a:hover{text-decoration-color:var(--accent)}
-  /* v9.1.0：折叠列表——行首写 [折叠] 显示为行首三角（收起 ▶ / 展开 ▼），正文整段隐藏。
+  /* v9.1.1：折叠列表——行首写 [折叠] 显示为行首三角（收起 ▶ / 展开 ▼），正文整段隐藏。
      纯显示层：[折叠] 文本仍在 DOM（同步/导出/打印仍全文），只是被 font-size:0 收起、
      用 ::before 画三角替代；折叠正文用 .ns-fold-hide 隐藏。全部作用域锁在 #editor 下，
      故 renderNotePng 的离屏 tmp（不在 #editor 内）自动按全文 + 原样 [折叠] 渲染。颜色只吃令牌。 */
@@ -234,8 +234,10 @@
   #editor .ns-fold-mark::before{content:'▶';font-size:12px;line-height:1.9;vertical-align:baseline}
   #editor .ns-fold-open>.ns-fold-mark::before{content:'▼'}
   #editor .ns-fold-mark:hover{background:var(--hover)}
+  /* v9.1.1：折叠正文往里缩进 1.5em + 左侧引导线（--line 令牌，非新色），层级更清晰；线沿每个正文块画，到空行（非 ns-fold-body）自然断开 */
+  #editor .ns-fold-body{margin-left:.5em;padding-left:1em;border-left:2px solid var(--line)}
   #editor .ns-fold-hide{display:none}
-  /* v9.1.0：打印时展开全部折叠（浏览器 Ctrl+P 直打活的 #editor，收起态正文会丢）——还原正文、显回 [折叠] 文本、去三角；无新色 */
+  /* v9.1.1：打印时展开全部折叠（浏览器 Ctrl+P 直打活的 #editor，收起态正文会丢）——还原正文、显回 [折叠] 文本、去三角；无新色 */
   @media print{#editor .ns-fold-hide{display:block}#editor .ns-fold-mark{font-size:inherit}#editor .ns-fold-mark::before{content:''}}
   #editor s, #editor strike, #editor del{text-decoration:line-through;text-decoration-color:rgba(152,149,138,.7);color:var(--muted)}
   #editor p{margin:0}
@@ -676,7 +678,7 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '9.1.0';
+const APP_VERSION = '9.1.1';
 const BUILD_DATE = '2026-09-13';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
@@ -1891,7 +1893,7 @@ function applyState(s) {
   } finally {
     isRestoring = false;
   }
-  try { applyFolds(); } catch (e) {} // v9.1.0：undo/redo 直接换 innerHTML、不走 linkify，先补折叠重绘
+  try { applyFolds(); } catch (e) {} // v9.1.1：undo/redo 直接换 innerHTML、不走 linkify，先补折叠重绘
   backfillLastHtmlIfDecorativelyEqual(); // v7.1.0：undo/redo 恢复后若与 lastHtml 装饰等价，回填消除假 dirty
   lastState = captureState();
 }
@@ -2166,6 +2168,8 @@ function openNoteLink(href) {
 }
 // 点击链接：tel: 拨号，URL 按「打开链接」偏好分流（mousedown 阶段拦截，防止光标落入编辑）
 editor.addEventListener('mousedown', e => {
+  // v9.1.1：点折叠三角不聚焦编辑器（移动端 mousedown 聚焦＝软键盘自动弹起，干扰阅读）；开合仍在 click 处理器做
+  if (e.target && e.target.closest && e.target.closest('span.ns-fold-mark')) { e.preventDefault(); return; }
   const a = e.target.closest('a');
   if (a) {
     e.preventDefault();
@@ -2189,7 +2193,7 @@ copyBtn.addEventListener('click', async () => {
   dismissKeyboardForTouch(); // v7.5.1：光标在笔记内点复制不弹软键盘（blur 不改动编辑器内容）
   try {
     // ZWSP（\u200B）仅用于编辑器内长词/链接断行，复制出去会污染其它应用，剥离
-    // v9.1.0：复制前临时展开全部折叠，保证 text/plain 与 text/html 都含被折正文（折叠是纯显示层，复制不得丢字）；读完立即同步还原，await 前完成 → 无闪动
+    // v9.1.1：复制前临时展开全部折叠，保证 text/plain 与 text/html 都含被折正文（折叠是纯显示层，复制不得丢字）；读完立即同步还原，await 前完成 → 无闪动
     Array.prototype.forEach.call(document.querySelectorAll('#editor .ns-fold-hide'), x => x.classList.remove('ns-fold-hide'));
     const html = editor.innerHTML.replace(/\u200B/g, '');
     const text = editor.innerText.replace(/\u200B/g, '');
@@ -2939,7 +2943,7 @@ function linkifyEditor(opts) {
     const breakSeparators = /([\/.?:=&#_%-])/g;
 
     const autoLinks = Array.from(editor.querySelectorAll('a[data-url="1"]'));
-    const straySpans = Array.from(editor.querySelectorAll('span:not(.ns-fold-mark)')); // v9.1.0：折叠标记 span 由 applyFolds 自管先拆后建，不并入杂散 span 拍平——否则只要有一处折叠，linkify 永不走无操作早退、每键都全量拆建（性能/光标抖动）
+    const straySpans = Array.from(editor.querySelectorAll('span:not(.ns-fold-mark)')); // v9.1.1：折叠标记 span 由 applyFolds 自管先拆后建，不并入杂散 span 拍平——否则只要有一处折叠，linkify 永不走无操作早退、每键都全量拆建（性能/光标抖动）
     const remMarks = Array.from(editor.querySelectorAll('u.rem-mark')); // v5.45：提醒标记也要先拆后建
     // v8.1.8（用户拍板③「加提醒后日期下两条下划线」）：本 App 无手动下划线功能（用户确认），任何非 rem-mark
     // 的 <u> 都是 contenteditable 打字延续的克隆（紧邻已有下划线后新敲的字被塞进裸 <u>，先「自带下划线」），
@@ -3049,7 +3053,7 @@ function linkifyEditor(opts) {
     // v7.1.0：linkify 是程序化改动：同步撤销栈当前状态后，若结果与 lastHtml 装饰等价
     // （纯打标重写，如添加提醒 400ms 后的 rem-mark 包裹），回填 lastHtml 消除假 dirty，
     // 避免下轮 poll 把打标 DOM 误判为「本机未保存修改」弹假冲突条。
-    applyFolds(); // v9.1.0：折叠重绘挂在 linkify 之后、syncCurrentState 之前——linkify 已把上轮 fold-mark 拍平回文本，这里按行首 [折叠] 先拆后建重算；置于 sync 前避免折叠 DOM 变成一条幻影撤销
+    applyFolds(); // v9.1.1：折叠重绘挂在 linkify 之后、syncCurrentState 之前——linkify 已把上轮 fold-mark 拍平回文本，这里按行首 [折叠] 先拆后建重算；置于 sync 前避免折叠 DOM 变成一条幻影撤销
     syncCurrentState();
     backfillLastHtmlIfDecorativelyEqual();
     // v7.7.0 术后补存（用户报障步骤3「对端不更新」根修）：800ms 防抖保存早于延迟手术时，
@@ -3069,7 +3073,7 @@ function linkifyEditor(opts) {
   }
 }
 
-// ===== v9.1.0 折叠列表（纯显示层，内容/同步/导出/打印仍全文）=====
+// ===== v9.1.1 折叠列表（纯显示层，内容/同步/导出/打印仍全文）=====
 // 规则：某一行「开头」写 [折叠] 才生效；它下面直到第一个空行为止的正文被折叠；末尾以空行收束。
 // 支持一条笔记多处折叠。[折叠] 文本始终留在正文 DOM（同步/导出/打印不丢字），只是显示时
 // 用行首三角替代、正文用 class 隐藏。开/合状态存本机 localStorage（按 noteId），不跨设备同步。
@@ -3123,7 +3127,7 @@ function applyFolds() {
     s.remove();
   });
   Array.prototype.forEach.call(editor.children, b => {
-    if (b.nodeType === 1) b.classList.remove('ns-fold', 'ns-fold-open', 'ns-fold-collapsed', 'ns-fold-hide');
+    if (b.nodeType === 1) b.classList.remove('ns-fold', 'ns-fold-open', 'ns-fold-collapsed', 'ns-fold-hide', 'ns-fold-body');
   });
   try { editor.normalize(); } catch (e) {}
   // 2) 逐块扫描：行首 [折叠] → 包标记 + 折叠其下正文到第一个空行
@@ -3150,6 +3154,7 @@ function applyFolds() {
         b.classList.add(isOpen ? 'ns-fold-open' : 'ns-fold-collapsed');
         let j = i + 1;
         while (j < blocks.length && !isBlankFoldLine(blocks[j])) {
+          blocks[j].classList.add('ns-fold-body'); // 始终标记正文块（展开/收起都在），CSS 据此缩进 + 画左引导线
           if (!isOpen) blocks[j].classList.add('ns-fold-hide');
           j++;
         }
@@ -3179,6 +3184,7 @@ editor.addEventListener('click', e => {
     localStorage.setItem(NS_FOLD_KEY, JSON.stringify(all));
   } catch (err) {}
   try { applyFolds(); } catch (err) {}
+  try { dismissKeyboardForTouch(); } catch (err) {} // 触屏兜底：个别内核 touchstart 早于 mousedown 已聚焦，开合后收一次键盘（桌面/组字期为 no-op）
   try { backfillLastHtmlIfDecorativelyEqual(); } catch (err) {} // 开合只改折叠装饰（与正文装饰等价），回填 lastHtml 防后续「改回原文+残留标记」误判成真实改动多存一版
 });
 // 护栏：光标落在 [折叠] 标记内或紧随其后时按退格，整删 [折叠]（原子），绝不一个字一个字啃出 [折叠 半截坏标记
@@ -6273,7 +6279,7 @@ async function loadHistList() {
         lastRestoreAt = Date.now(); // P0-5/P0-4：标记恢复窗口——窗口内不自动采纳他端远端，防无声撤销本机刚拍板的恢复
         menuMask.classList.add('hidden');
         if (CHIP_HOVER_OK) { try { editor.focus(); ensureCaret(); } catch (e) {} }
-        try { applyFolds(); } catch (e) {} // v9.1.0：历史恢复直接换 innerHTML、不走 linkify，补一次折叠重绘
+        try { applyFolds(); } catch (e) {} // v9.1.1：历史恢复直接换 innerHTML、不走 linkify，补一次折叠重绘
         saveLocal(true); // P0-5：强制落库——恢复后 editor==lastHtml 会触发普通早期返回导致内容永不落库，force 把恢复内容作为新版本推上服务端；历史不删（恢复不动快照环，防误删的最后保障）
         showUploadStatus('已恢复所选版本');
         setTimeout(() => { if (uploadStatus.textContent === '已恢复所选版本') hideUploadStatus(); }, 2200);
@@ -6873,7 +6879,7 @@ function normDecorHtml(html) {
       const tag = child.tagName;
       if (tag === 'A' && child.getAttribute('data-url') === '1') { out += walk(child); continue; }
       if (tag === 'U') { out += walk(child); continue; } // v8.1.8：本 App 无手动下划线（用户拍板），任何 <u>（rem-mark 或打字延续克隆）都是非语义装饰，一律拍平（旧口径只拆 rem-mark，克隆 u 会被判真实差异 → 术后假脏多存一版）
-      if (tag === 'SPAN' && child.classList.contains('ns-fold-mark')) { out += walk(child); continue; } // v9.1.0：折叠标记 <span class="ns-fold-mark">[折叠]</span> 是纯显示层装饰，拍平回 [折叠] 文本——加/去标记、开/合折叠（折叠态是块 div 上的 class，本函数不输出 div class）都不算内容改动，绝不误触 PUT/撤销/草稿冲突条
+      if (tag === 'SPAN' && child.classList.contains('ns-fold-mark')) { out += walk(child); continue; } // v9.1.1：折叠标记 <span class="ns-fold-mark">[折叠]</span> 是纯显示层装饰，拍平回 [折叠] 文本——加/去标记、开/合折叠（折叠态是块 div 上的 class，本函数不输出 div class）都不算内容改动，绝不误触 PUT/撤销/草稿冲突条
       if (tag === 'S' && child.classList.contains('rem-done')) { out += walk(child); continue; }
       if (tag === 'SPAN' && isCloneNoiseSpan(child)) { out += walk(child); continue; } // v7.7.0：克隆噪声 span 同裸 span 拍平
       const lt = tag.toLowerCase();
@@ -6931,7 +6937,7 @@ function normPlaceholderHtml(html) {
       if (c.nodeType === 3) { out += c.nodeValue.replace(ZWSP, ''); continue; }
       if (c.nodeType !== 1) continue;
       if (isEmptyShell(c)) continue; // 空壳连子树剥（壳内 <br> 一并消失）
-      if (c.tagName === 'SPAN' && c.classList.contains('ns-fold-mark')) { out += walk(c); continue; } // v9.1.0：折叠标记拍平回 [折叠] 文本（对齐 normDecorHtml 口径），占位等价也不把折叠装饰当真实差异
+      if (c.tagName === 'SPAN' && c.classList.contains('ns-fold-mark')) { out += walk(c); continue; } // v9.1.1：折叠标记拍平回 [折叠] 文本（对齐 normDecorHtml 口径），占位等价也不把折叠装饰当真实差异
       if (isCloneNoiseSpan(c)) { out += walk(c); continue; } // v7.5.0（修6）拍平裸 span + v7.7.0 克隆噪声 span（对齐 normDecorHtml 口径），包装差异不再干扰占位等价
       const lt = c.tagName.toLowerCase();
       let attrs = '';

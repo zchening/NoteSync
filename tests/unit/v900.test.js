@@ -297,8 +297,8 @@ test('A14 彩蛋层两段位于主脚本之后、</body> 之前；样式块紧�
 });
 
 /* ── A15 三 bump 与壳字节一致 ── */
-test('A15 版本 9.1.0；www 与 android 壳与根 index 逐字节一致', () => {
-  assert.ok(SRC.includes("const APP_VERSION = '9.1.0';"), 'APP_VERSION 应随彩蛋十门牌与音效层升到 9.1.0');
+test('A15 版本 9.1.1；www 与 android 壳与根 index 逐字节一致', () => {
+  assert.ok(SRC.includes("const APP_VERSION = '9.1.1';"), 'APP_VERSION 应随彩蛋十门牌与音效层升到 9.1.1');
   assert.strictEqual(SRC, WWW, 'www 壳必须逐字节同步（本仓 brand W3/D5 同源钉）');
   assert.strictEqual(SRC, APK, 'android assets 壳必须逐字节同步');
 });
@@ -862,7 +862,7 @@ test('A52 建档 POST 全链只有一处发出', () => {
   assert.ok(!/arcadeSend\._posted/.test(src), '只写不读的死标志不得残留');
 });
 
-/* ═══ v9.1.0：dom 型蛋（镜像/桌宠）不走 shell()/bindInput，此前没有任何 keydown 监听，
+/* ═══ v9.1.1：dom 型蛋（镜像/桌宠）不走 shell()/bindInput，此前没有任何 keydown 监听，
    真机实测「按 Esc 收不掉、只能去点 ×」。行为钉 + 不累积钉 + 补丁行钉三件一起上。═══ */
 
 /* A53 镜像与桌宠：按 Esc 必须收壳（与 canvas 型同一退出语义） */

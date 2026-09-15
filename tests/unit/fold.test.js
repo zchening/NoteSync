@@ -151,3 +151,31 @@ test('F10 isPlaceholderEqual 也忽略折叠标记/收起类，与 isDecorativel
   assert.ok(w.isPlaceholderEqual(clean, decorated), '折叠装饰不得被占位等价判成真实差异（否则残留标记会被 PUT 进同步内容）');
 });
 
+/* ── F11 折叠正文始终带 ns-fold-body（缩进+引导线靠它），把手/空行不带 ── */
+test('F11 正文块打 ns-fold-body（收起/展开都打），把手与空行不打', t => {
+  const app = loadApp(); t.after(() => app.window.close());
+  const w = app.window;
+  ed(w).innerHTML = '<div>[折叠]甲</div><div>a1</div><div>a2</div><div><br></div><div>尾</div>';
+  w.applyFolds(); // 默认收起
+  let b = blocks(w);
+  assert.ok(!b[0].classList.contains('ns-fold-body'), '把手块不是正文');
+  assert.ok(b[1].classList.contains('ns-fold-body') && b[2].classList.contains('ns-fold-body'), '收起态正文仍带 ns-fold-body');
+  assert.ok(!b[3].classList.contains('ns-fold-body'), '空行（收束点）不带 ns-fold-body');
+  assert.ok(!b[4].classList.contains('ns-fold-body'), '空行之后的正文不带');
+  // 展开后仍带
+  ed(w).querySelector('.ns-fold-mark').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+  b = blocks(w);
+  assert.ok(b[1].classList.contains('ns-fold-body'), '展开态正文仍带 ns-fold-body');
+  assert.ok(!b[1].classList.contains('ns-fold-hide'), '展开后正文不再隐藏');
+});
+
+/* ── F12 v9.1.1 源码锚定：缩进引导线 CSS + 移动端点三角不弹键盘 ── */
+test('F12 折叠正文缩进引导线 CSS 与移动端不聚焦护栏锚定执法行', () => {
+  assert.ok(SRC.includes("#editor .ns-fold-body{margin-left:.5em;padding-left:1em;border-left:2px solid var(--line)}"),
+    '正文缩进 + 左引导线内缩到三角下方（--line 令牌，非新色）规则必须在');
+  assert.ok(SRC.includes("if (e.target && e.target.closest && e.target.closest('span.ns-fold-mark')) { e.preventDefault(); return; }"),
+    'mousedown 必须在点折叠三角时 preventDefault（阻止 contenteditable 聚焦→移动端不弹键盘）');
+  assert.ok(SRC.includes('try { dismissKeyboardForTouch(); } catch (err) {}'),
+    '开合处理器必须补一次 dismissKeyboardForTouch（触屏 touchstart 早聚焦的兜底）');
+});
+
