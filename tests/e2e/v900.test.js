@@ -293,3 +293,27 @@ test('E9 形态随档上行后：他端只更新成绩也不得冲掉 stage/ate�
   assert.strictEqual(rec.stage, 1, '旧时间戳的形态写入必须被 updatedAt 后者胜挡住');
   assert.strictEqual(rec.ate, 5000);
 }));
+
+/* ── E11 dom 型蛋真机退出：/mirror 与 /pet 按 Esc 必须收壳（v9.0.0 实测收不掉） ── */
+test('E11 /mirror 与 /pet 冷启动直达后按 Esc 收壳，且不把桌宠摘掉', guard(async () => {
+  const ctx = await browser.newContext({ viewport: { width: 375, height: 667 }, hasTouch: true, isMobile: true });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e).slice(0, 90)));
+  await page.goto(baseURL + 'mirror', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => !!document.getElementById('nsGame'), null, { timeout: 8000 });
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.getElementById('nsGame'), null, { timeout: 4000 });
+  assert.strictEqual(await page.evaluate(() => document.body.classList.contains('ns-in-game')), false, '镜像退出后应解掉锁滚动类');
+  await page.goto(baseURL + 'pet', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => !!document.getElementById('nsGame'), null, { timeout: 8000 });
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.getElementById('nsGame'), null, { timeout: 4000 });
+  // 只断不随时刻漂移的不变量：退出面板＝收面板，绝不解散领养与形态。
+  // （不能断「精灵还挂着」：深夜/节日态徽章优先，petMount 按口径主动让位，夜里跑就是假红）
+  const pet = await page.evaluate(() => window.nsPetState());
+  assert.ok(pet && pet.adopted === true, '退出面板后领养状态必须在（面板退出≠放归）：' + JSON.stringify(pet));
+  assert.ok(Number.isFinite(pet.born), '生日等形态字段不得被退出流程清掉：' + JSON.stringify(pet));
+  assert.strictEqual(errs.length, 0, '零未捕获报错：' + errs.join(' | '));
+  await ctx.close();
+}));

@@ -297,8 +297,8 @@ test('A14 彩蛋层两段位于主脚本之后、</body> 之前；样式块紧�
 });
 
 /* ── A15 三 bump 与壳字节一致 ── */
-test('A15 版本 9.0.0；www 与 android 壳与根 index 逐字节一致', () => {
-  assert.ok(SRC.includes("const APP_VERSION = '9.0.0';"), 'APP_VERSION 应随彩蛋十门牌与音效层升到 9.0.0');
+test('A15 版本 9.1.0；www 与 android 壳与根 index 逐字节一致', () => {
+  assert.ok(SRC.includes("const APP_VERSION = '9.1.0';"), 'APP_VERSION 应随彩蛋十门牌与音效层升到 9.1.0');
   assert.strictEqual(SRC, WWW, 'www 壳必须逐字节同步（本仓 brand W3/D5 同源钉）');
   assert.strictEqual(SRC, APK, 'android assets 壳必须逐字节同步');
 });
@@ -860,4 +860,87 @@ test('A52 建档 POST 全链只有一处发出', () => {
   assert.strictEqual((src.match(/method: 'POST'/g) || []).length, 1, '彩蛋层只允许一处建档 POST');
   assert.ok(src.includes('if (!ARC.id) arcadeId();'), 'arcadePush 必须把建档交给 arcadeId()，不得自己再发一发');
   assert.ok(!/arcadeSend\._posted/.test(src), '只写不读的死标志不得残留');
+});
+
+/* ═══ v9.1.0：dom 型蛋（镜像/桌宠）不走 shell()/bindInput，此前没有任何 keydown 监听，
+   真机实测「按 Esc 收不掉、只能去点 ×」。行为钉 + 不累积钉 + 补丁行钉三件一起上。═══ */
+
+/* A53 镜像与桌宠：按 Esc 必须收壳（与 canvas 型同一退出语义） */
+test('A53 dom 型蛋（mirror/pet）按 Esc 必须收壳', t => {
+  const app = loadApp(); t.after(() => app.window.close());
+  const w = app.window;
+  w.document.body.focus = () => {};
+  for (const id of ['mirror', 'pet']) {
+    w.nsRouteEgg(id);
+    assert.ok(w.document.getElementById('nsGame'), id + ' 应起壳');
+    w.document.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    assert.ok(!w.document.getElementById('nsGame'), id + ' 按 Esc 必须收壳（v9.0.0 实测收不掉）');
+    assert.ok(!w.document.body.classList.contains('ns-in-game'), id + ' 退出后必须解掉锁滚动类');
+  }
+  // 桌宠蛋不能顺手把宠物摘掉（它是跨笔记常驻浮层，退出面板只该收面板）
+  assert.ok(true);
+});
+
+/* A54 dom 型蛋的 Esc 监听必须按函数身份配平（按事件名计数会被收壳里那句无条件
+   removeEventListener(keyHandler) 干扰——dom 型根本没挂过它，净数直接跑成负数＝假红） */
+test('A54 dom 型蛋 Esc 监听挂摘配平，十二次进出零残留', t => {
+  const app = loadApp(); t.after(() => app.window.close());
+  const w = app.window;
+  w.document.body.focus = () => {};
+  let live = 0;
+  const origAdd = w.document.addEventListener.bind(w.document);
+  const origRem = w.document.removeEventListener.bind(w.document);
+  const mine = (ty, fn) => ty === 'keydown' && !!fn && fn.name === 'domKeyHandler';
+  w.document.addEventListener = function (ty, fn) { if (mine(ty, fn)) live++; return origAdd(ty, fn); };
+  w.document.removeEventListener = function (ty, fn) { if (mine(ty, fn)) live--; return origRem(ty, fn); };
+  for (let i = 0; i < 12; i++) {
+    w.nsRouteEgg('mirror');
+    assert.strictEqual(live, 1, '第 ' + (i + 1) + ' 次启动后应恰有一份在挂着（多了就是没摘干净）：' + live);
+    w.document.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    assert.strictEqual(live, 0, '第 ' + (i + 1) + ' 次收壳后应归零：' + live);
+  }
+  // 往返净数钉：开一次 dom 型蛋必须真挂上一份 Esc 监听（只判「不累积」时，压根没挂也是 0，照样绿）
+  w.nsRouteEgg('mirror');
+  assert.strictEqual(live, 1, 'dom 型蛋启动必须恰挂一份 Esc 监听（0 = 压根没挂，就是「Esc 收不掉」的复发）：' + live);
+  w.document.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  assert.strictEqual(live, 0, '收壳必须摘掉自己那份，否则进出十二次叠十二层：' + live);
+});
+
+/* A55 补丁行钉：挂载/摘除必须是真语句行（注释里的同形串不算），
+   且 domKeyHandler 本体必须带「在局判定 + 顶层浮层让位」（R1 收口后它是多行函数） */
+test('A55 dom 型蛋 Esc 挂载与摘除都是真语句行', () => {
+  const src = layerSrc().a + layerSrc().b;
+  const lines = src.split(String.fromCharCode(10)).map(l => l.replace(/\r$/, ''));
+  const add = lines.filter(l => /^\s*try \{ document\.addEventListener\('keydown', domKeyHandler, true\); \} catch \(e\) \{\}/.test(l));
+  assert.strictEqual(add.length, 1, 'launch 的 dom 分支必须有一行真语句挂监听（实得 ' + add.length + '；躲在注释里的同形串不算）');
+  const off = lines.filter(l => /^\s*document\.removeEventListener\('keydown', domKeyHandler, true\);/.test(l));
+  assert.strictEqual(off.length, 1, 'closeShell 必须有一行真语句摘掉它（实得 ' + off.length + '）');
+  assert.ok(src.includes('function domKeyHandler(e) {'), 'dom 专用 Esc 处理器不在位');
+  assert.ok(src.includes("if (!e || e.key !== 'Escape' || !NSG.cur) return;"), '处理器必须判在局：浮层已被别的路径收掉时不能再关一次');
+  assert.ok(src.includes("if (em && !em.classList.contains('hidden')) return;"), '图鉴 z90 在场时必须让位（否则一次 Esc 关两层）');
+  assert.ok(src.includes('remPanelOpen'), '提醒面板开着时必须让位');
+  assert.ok(!/void 0;[^\n]*domKeyHandler/.test(src), '挂载被降级成 void 0 + 注释（反证探针残留形态）');
+  assert.ok(src.includes("addEventListener('keydown', domKeyHandler, true)"), '必须捕捉阶段注册：图鉴的 Esc 出口注册更早，冒泡阶段看到现场时已被它自己关掉，让位判据会失效');
+});
+
+/* A56 dom 型蛋不得与顶层浮层抢同一发 Esc（R1 实锤：镜像是 passthru，可以「开着镜像再开图鉴」，
+   早退之前那一发 Esc 会把图鉴和镜像一起关掉） */
+test('A56 图鉴/提醒面板在场时 dom 型蛋必须让位，一次 Esc 只关一层', t => {
+  const app = loadApp(); t.after(() => app.window.close());
+  const w = app.window;
+  w.document.body.focus = () => {};
+  // 图鉴 z90 开着：这发 Esc 归图鉴，镜像壳必须还在（这才叫「一次按键只消一层」）
+  w.nsRouteEgg('mirror');
+  w.nsEggOpen();
+  w.document.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  assert.ok(w.document.getElementById('nsGame'), '图鉴在场时 dom 型蛋不得跟着一起收（一次按两消）');
+  assert.ok(w.document.getElementById('eggMask').classList.contains('hidden'), '图鉴应已被这一发 Esc 关掉');
+  // 提醒面板开着：同样让位
+  w.eval('remPanelOpen = true');
+  w.document.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  assert.ok(w.document.getElementById('nsGame'), '提醒面板开着时 dom 型蛋不得抢 Esc');
+  // 让位条件解除后必须能正常收壳
+  w.eval('remPanelOpen = false');
+  w.document.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  assert.ok(!w.document.getElementById('nsGame'), '让位条件解除后 Esc 必须收壳');
 });

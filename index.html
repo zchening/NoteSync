@@ -226,6 +226,17 @@
   #editor img{max-width:100%;border-radius:10px;margin:6px 0;display:block;border:1px solid var(--line)}
   #editor a{color:var(--accent);text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(169,134,60,.35);transition:text-decoration-color .2s;word-break:break-all;overflow-wrap:break-word}
   #editor a:hover{text-decoration-color:var(--accent)}
+  /* v9.1.0：折叠列表——行首写 [折叠] 显示为行首三角（收起 ▶ / 展开 ▼），正文整段隐藏。
+     纯显示层：[折叠] 文本仍在 DOM（同步/导出/打印仍全文），只是被 font-size:0 收起、
+     用 ::before 画三角替代；折叠正文用 .ns-fold-hide 隐藏。全部作用域锁在 #editor 下，
+     故 renderNotePng 的离屏 tmp（不在 #editor 内）自动按全文 + 原样 [折叠] 渲染。颜色只吃令牌。 */
+  #editor .ns-fold-mark{font-size:0;cursor:pointer;user-select:none;-webkit-user-select:none;white-space:nowrap;padding:0 3px;margin-right:2px;border-radius:6px;color:var(--muted)}
+  #editor .ns-fold-mark::before{content:'▶';font-size:12px;line-height:1.9;vertical-align:baseline}
+  #editor .ns-fold-open>.ns-fold-mark::before{content:'▼'}
+  #editor .ns-fold-mark:hover{background:var(--hover)}
+  #editor .ns-fold-hide{display:none}
+  /* v9.1.0：打印时展开全部折叠（浏览器 Ctrl+P 直打活的 #editor，收起态正文会丢）——还原正文、显回 [折叠] 文本、去三角；无新色 */
+  @media print{#editor .ns-fold-hide{display:block}#editor .ns-fold-mark{font-size:inherit}#editor .ns-fold-mark::before{content:''}}
   #editor s, #editor strike, #editor del{text-decoration:line-through;text-decoration-color:rgba(152,149,138,.7);color:var(--muted)}
   #editor p{margin:0}
   #editor::-webkit-scrollbar{width:8px}
@@ -665,7 +676,7 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '9.0.0';
+const APP_VERSION = '9.1.0';
 const BUILD_DATE = '2026-09-13';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
@@ -1880,6 +1891,7 @@ function applyState(s) {
   } finally {
     isRestoring = false;
   }
+  try { applyFolds(); } catch (e) {} // v9.1.0：undo/redo 直接换 innerHTML、不走 linkify，先补折叠重绘
   backfillLastHtmlIfDecorativelyEqual(); // v7.1.0：undo/redo 恢复后若与 lastHtml 装饰等价，回填消除假 dirty
   lastState = captureState();
 }
@@ -2177,8 +2189,11 @@ copyBtn.addEventListener('click', async () => {
   dismissKeyboardForTouch(); // v7.5.1：光标在笔记内点复制不弹软键盘（blur 不改动编辑器内容）
   try {
     // ZWSP（\u200B）仅用于编辑器内长词/链接断行，复制出去会污染其它应用，剥离
+    // v9.1.0：复制前临时展开全部折叠，保证 text/plain 与 text/html 都含被折正文（折叠是纯显示层，复制不得丢字）；读完立即同步还原，await 前完成 → 无闪动
+    Array.prototype.forEach.call(document.querySelectorAll('#editor .ns-fold-hide'), x => x.classList.remove('ns-fold-hide'));
     const html = editor.innerHTML.replace(/\u200B/g, '');
     const text = editor.innerText.replace(/\u200B/g, '');
+    try { applyFolds(); } catch (e0) {}
     const item = new ClipboardItem({
       'text/html': new Blob([html], { type: 'text/html' }),
       'text/plain': new Blob([text], { type: 'text/plain' })
@@ -2924,7 +2939,7 @@ function linkifyEditor(opts) {
     const breakSeparators = /([\/.?:=&#_%-])/g;
 
     const autoLinks = Array.from(editor.querySelectorAll('a[data-url="1"]'));
-    const straySpans = Array.from(editor.querySelectorAll('span'));
+    const straySpans = Array.from(editor.querySelectorAll('span:not(.ns-fold-mark)')); // v9.1.0：折叠标记 span 由 applyFolds 自管先拆后建，不并入杂散 span 拍平——否则只要有一处折叠，linkify 永不走无操作早退、每键都全量拆建（性能/光标抖动）
     const remMarks = Array.from(editor.querySelectorAll('u.rem-mark')); // v5.45：提醒标记也要先拆后建
     // v8.1.8（用户拍板③「加提醒后日期下两条下划线」）：本 App 无手动下划线功能（用户确认），任何非 rem-mark
     // 的 <u> 都是 contenteditable 打字延续的克隆（紧邻已有下划线后新敲的字被塞进裸 <u>，先「自带下划线」），
@@ -3034,6 +3049,7 @@ function linkifyEditor(opts) {
     // v7.1.0：linkify 是程序化改动：同步撤销栈当前状态后，若结果与 lastHtml 装饰等价
     // （纯打标重写，如添加提醒 400ms 后的 rem-mark 包裹），回填 lastHtml 消除假 dirty，
     // 避免下轮 poll 把打标 DOM 误判为「本机未保存修改」弹假冲突条。
+    applyFolds(); // v9.1.0：折叠重绘挂在 linkify 之后、syncCurrentState 之前——linkify 已把上轮 fold-mark 拍平回文本，这里按行首 [折叠] 先拆后建重算；置于 sync 前避免折叠 DOM 变成一条幻影撤销
     syncCurrentState();
     backfillLastHtmlIfDecorativelyEqual();
     // v7.7.0 术后补存（用户报障步骤3「对端不更新」根修）：800ms 防抖保存早于延迟手术时，
@@ -3052,6 +3068,170 @@ function linkifyEditor(opts) {
     } catch (e) {}
   }
 }
+
+// ===== v9.1.0 折叠列表（纯显示层，内容/同步/导出/打印仍全文）=====
+// 规则：某一行「开头」写 [折叠] 才生效；它下面直到第一个空行为止的正文被折叠；末尾以空行收束。
+// 支持一条笔记多处折叠。[折叠] 文本始终留在正文 DOM（同步/导出/打印不丢字），只是显示时
+// 用行首三角替代、正文用 class 隐藏。开/合状态存本机 localStorage（按 noteId），不跨设备同步。
+const FOLD_MARK = '[折叠]';
+const NS_FOLD_KEY = 'notesync_fold_open';
+// 折叠身份用「第几处折叠」的序号（在本文所有 [折叠] 把手中的位置），而非把手文字——
+// 改标题不换身份（否则展开态一改标题就被重置收起）；序号天然唯一（重名折叠不互撞），
+// 每次开合整表重写（自动剪掉已删折叠的陈旧序号，存储有界）。默认：序号不在展开表里 = 收起。
+function foldOpenSet() {
+  try {
+    const all = JSON.parse(localStorage.getItem(NS_FOLD_KEY) || '{}');
+    const arr = all && all[noteId];
+    return new Set(Array.isArray(arr) ? arr.map(Number).filter(n => Number.isFinite(n)) : []);
+  } catch (e) { return new Set(); }
+}
+function persistFoldStates() {
+  try {
+    const open = [];
+    let idx = 0;
+    Array.prototype.forEach.call(editor.children, b => {
+      if (b.nodeType === 1 && b.classList.contains('ns-fold')) {
+        if (b.classList.contains('ns-fold-open')) open.push(idx);
+        idx++;
+      }
+    });
+    const all = JSON.parse(localStorage.getItem(NS_FOLD_KEY) || '{}') || {};
+    all[noteId] = open;
+    localStorage.setItem(NS_FOLD_KEY, JSON.stringify(all));
+  } catch (e) {}
+}
+function isBlankFoldLine(b) {
+  if (!b || b.nodeType !== 1) return true;
+  return (b.textContent || '').replace(/\u200B/g, '').trim() === '' && !b.querySelector('img');
+}
+function applyFolds() {
+  if (typeof editor === 'undefined' || !editor) return;
+  // 折叠重绘会改块内 DOM——先按「块内可见字符偏移」存选区，术后恢复（仿 linkifyEditor）
+  const hadFocus = document.activeElement === editor;
+  let saved = null;
+  if (hadFocus) {
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0) {
+      const r = sel.getRangeAt(0);
+      if (editor.contains(r.commonAncestorContainer)) { try { saved = saveSelectionBlocked(editor, r); } catch (e) {} }
+    }
+  }
+  // 1) 复位：拆掉已有 fold-mark span（[折叠] 文本合回行首），清掉所有折叠类——先拆后建，幂等
+  Array.prototype.forEach.call(editor.querySelectorAll('span.ns-fold-mark'), s => {
+    const p = s.parentNode;
+    while (s.firstChild) p.insertBefore(s.firstChild, s);
+    s.remove();
+  });
+  Array.prototype.forEach.call(editor.children, b => {
+    if (b.nodeType === 1) b.classList.remove('ns-fold', 'ns-fold-open', 'ns-fold-collapsed', 'ns-fold-hide');
+  });
+  try { editor.normalize(); } catch (e) {}
+  // 2) 逐块扫描：行首 [折叠] → 包标记 + 折叠其下正文到第一个空行
+  const open = foldOpenSet();
+  const blocks = Array.prototype.filter.call(editor.children, b => b.nodeType === 1);
+  let i = 0, foldIdx = 0;
+  while (i < blocks.length) {
+    const b = blocks[i];
+    const first = b.firstChild;
+    let hit = false;
+    if (first && first.nodeType === 3) {
+      const orig = first.nodeValue;
+      const lead = orig.length - orig.replace(/^\u200B+/, '').length; // 只吞前导零宽（linkify 可能留），不动标题正文
+      const afterLead = orig.slice(lead);
+      if (afterLead.indexOf(FOLD_MARK) === 0) {
+        const span = document.createElement('span');
+        span.className = 'ns-fold-mark';
+        span.textContent = FOLD_MARK;
+        first.nodeValue = afterLead.slice(FOLD_MARK.length);
+        b.insertBefore(span, first);
+        b.classList.add('ns-fold');
+        const isOpen = open.has(foldIdx);
+        foldIdx++;
+        b.classList.add(isOpen ? 'ns-fold-open' : 'ns-fold-collapsed');
+        let j = i + 1;
+        while (j < blocks.length && !isBlankFoldLine(blocks[j])) {
+          if (!isOpen) blocks[j].classList.add('ns-fold-hide');
+          j++;
+        }
+        i = j; hit = true;
+      }
+    }
+    if (!hit) i++;
+  }
+  // 3) 恢复选区
+  if (hadFocus && saved) {
+    try { const nr = restoreSelectionInBlock(editor, saved); if (nr) setSel(nr); } catch (e) {}
+  }
+}
+// 点行首三角开合（事件委托；三角是 .ns-fold-mark 的 ::before，点击 target 即该 span）
+editor.addEventListener('click', e => {
+  const mark = e.target && e.target.closest ? e.target.closest('span.ns-fold-mark') : null;
+  if (!mark || !editor.contains(mark)) return;
+  e.preventDefault();
+  const handle = mark.closest('.ns-fold'); if (!handle) return;
+  let idx = 0, n = handle;
+  while ((n = n.previousElementSibling)) { if (n.nodeType === 1 && n.classList.contains('ns-fold')) idx++; }
+  const open = foldOpenSet();
+  if (open.has(idx)) open.delete(idx); else open.add(idx);
+  try {
+    const all = JSON.parse(localStorage.getItem(NS_FOLD_KEY) || '{}') || {};
+    all[noteId] = Array.from(open).sort((a, b) => a - b);
+    localStorage.setItem(NS_FOLD_KEY, JSON.stringify(all));
+  } catch (err) {}
+  try { applyFolds(); } catch (err) {}
+  try { backfillLastHtmlIfDecorativelyEqual(); } catch (err) {} // 开合只改折叠装饰（与正文装饰等价），回填 lastHtml 防后续「改回原文+残留标记」误判成真实改动多存一版
+});
+// 护栏：光标落在 [折叠] 标记内或紧随其后时按退格，整删 [折叠]（原子），绝不一个字一个字啃出 [折叠 半截坏标记
+function foldMarkTouchedByCaret(range) {
+  const node = range.startContainer, off = range.startOffset;
+  if (node.nodeType === 3) {
+    const m = node.parentElement && node.parentElement.closest ? node.parentElement.closest('span.ns-fold-mark') : null;
+    if (m && off > 0) return m; // 在标记文本内部（非最左边缘）
+  }
+  const block = blockOf(node, editor);
+  if (block && block.classList && block.classList.contains('ns-fold')) {
+    // applyFolds 恒把标记插为块首子元素 → 用 firstElementChild 判定，不用 :scope（老内核不支持会抛 SyntaxError，护栏静默失效）
+    const mark = (block.firstElementChild && block.firstElementChild.classList.contains('ns-fold-mark')) ? block.firstElementChild : null;
+    if (mark) {
+      const after = mark.nextSibling;
+      if (after && after.nodeType === 3 && node === after && off === 0) return mark; // 紧随标记之后（标题首字前）
+      if (node === block) { const idx = Array.prototype.indexOf.call(block.childNodes, mark); if (off > idx) return mark; }
+    }
+  }
+  return null;
+}
+editor.addEventListener('keydown', e => {
+  if (isComposing) return;
+  if (e.key !== 'Backspace') return;
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount || !sel.getRangeAt(0).collapsed) return;
+  let mark = null;
+  try { mark = foldMarkTouchedByCaret(sel.getRangeAt(0)); } catch (err) { return; } // 判据异常时退回默认退格，绝不让监听器抛错
+  if (!mark) return; // 不在标记边界 → 交给默认退格
+  e.preventDefault();
+  const handle = mark.closest('.ns-fold');
+  mark.remove();
+  if (handle) {
+    handle.classList.remove('ns-fold', 'ns-fold-open', 'ns-fold-collapsed');
+    try { const t = handle.firstChild; if (t) setCaret(t.nodeType === 3 ? t : handle, 0); } catch (err) {}
+  }
+  try { applyFolds(); } catch (err) {}
+  try { persistFoldStates(); } catch (err) {} // 删了一处折叠，其后把手序号整体前移，落库当前展开集防错位
+  try { recordIfChanged('deleteContentBackward'); } catch (err) {}
+  clearTimeout(saveTimer); saveTimer = setTimeout(saveLocal, 800); // 删了 [折叠] 是真内容改动，照常落库
+  try { ensureCaret(); } catch (err) {}
+});
+// 调试/测试钩子（仅供自动化探针读取/驱动，无业务副作用）
+window.applyFolds = applyFolds;
+window.__foldState = () => {
+  const handles = Array.prototype.filter.call(editor.children, b => b.nodeType === 1 && b.classList.contains('ns-fold'));
+  return {
+    count: handles.length,
+    open: handles.map((b, idx) => b.classList.contains('ns-fold-open') ? idx : -1).filter(x => x >= 0),
+    hidden: editor.querySelectorAll('.ns-fold-hide').length,
+    store: (() => { try { return JSON.parse(localStorage.getItem(NS_FOLD_KEY) || '{}')[noteId] || []; } catch (e) { return []; } })()
+  };
+};
 
 // 删除多行选区后，contenteditable 常残留首/尾空白块（<br>、空 <div>、纯空白文本节点），
 // 导致光标落到第二行、或末尾多一个空行。仅在“存在后续内容”时清理，
@@ -6093,6 +6273,7 @@ async function loadHistList() {
         lastRestoreAt = Date.now(); // P0-5/P0-4：标记恢复窗口——窗口内不自动采纳他端远端，防无声撤销本机刚拍板的恢复
         menuMask.classList.add('hidden');
         if (CHIP_HOVER_OK) { try { editor.focus(); ensureCaret(); } catch (e) {} }
+        try { applyFolds(); } catch (e) {} // v9.1.0：历史恢复直接换 innerHTML、不走 linkify，补一次折叠重绘
         saveLocal(true); // P0-5：强制落库——恢复后 editor==lastHtml 会触发普通早期返回导致内容永不落库，force 把恢复内容作为新版本推上服务端；历史不删（恢复不动快照环，防误删的最后保障）
         showUploadStatus('已恢复所选版本');
         setTimeout(() => { if (uploadStatus.textContent === '已恢复所选版本') hideUploadStatus(); }, 2200);
@@ -6692,6 +6873,7 @@ function normDecorHtml(html) {
       const tag = child.tagName;
       if (tag === 'A' && child.getAttribute('data-url') === '1') { out += walk(child); continue; }
       if (tag === 'U') { out += walk(child); continue; } // v8.1.8：本 App 无手动下划线（用户拍板），任何 <u>（rem-mark 或打字延续克隆）都是非语义装饰，一律拍平（旧口径只拆 rem-mark，克隆 u 会被判真实差异 → 术后假脏多存一版）
+      if (tag === 'SPAN' && child.classList.contains('ns-fold-mark')) { out += walk(child); continue; } // v9.1.0：折叠标记 <span class="ns-fold-mark">[折叠]</span> 是纯显示层装饰，拍平回 [折叠] 文本——加/去标记、开/合折叠（折叠态是块 div 上的 class，本函数不输出 div class）都不算内容改动，绝不误触 PUT/撤销/草稿冲突条
       if (tag === 'S' && child.classList.contains('rem-done')) { out += walk(child); continue; }
       if (tag === 'SPAN' && isCloneNoiseSpan(child)) { out += walk(child); continue; } // v7.7.0：克隆噪声 span 同裸 span 拍平
       const lt = tag.toLowerCase();
@@ -6749,6 +6931,7 @@ function normPlaceholderHtml(html) {
       if (c.nodeType === 3) { out += c.nodeValue.replace(ZWSP, ''); continue; }
       if (c.nodeType !== 1) continue;
       if (isEmptyShell(c)) continue; // 空壳连子树剥（壳内 <br> 一并消失）
+      if (c.tagName === 'SPAN' && c.classList.contains('ns-fold-mark')) { out += walk(c); continue; } // v9.1.0：折叠标记拍平回 [折叠] 文本（对齐 normDecorHtml 口径），占位等价也不把折叠装饰当真实差异
       if (isCloneNoiseSpan(c)) { out += walk(c); continue; } // v7.5.0（修6）拍平裸 span + v7.7.0 克隆噪声 span（对齐 normDecorHtml 口径），包装差异不再干扰占位等价
       const lt = c.tagName.toLowerCase();
       let attrs = '';
@@ -7773,6 +7956,15 @@ function keyHandler(e) {
   if (e.type === 'keyup') { if (g.keyup) g.keyup(e); return; }
   if (g.key) g.key(e);
 }
+// dom 型蛋（镜像/桌宠）不走 shell()/bindInput，因此没有 keyHandler——只给它们挂这一个管 Esc 的轻处理器。
+// 刻意不复用 keyHandler：它带 p 暂停与「已暂停」标签，对没有帧循环的浮层是无关副作用。
+function domKeyHandler(e) {
+  if (!e || e.key !== 'Escape' || !NSG.cur) return; // 不在局内不接键盘（浮层可能已被别的路径收掉）
+  try { var em = document.getElementById('eggMask'); if (em && !em.classList.contains('hidden')) return; } catch (x) {} // 图鉴 z90 在场时 Esc 归图鉴：一次按键只关一层
+  try { if (typeof remPanelOpen !== 'undefined' && remPanelOpen) return; } catch (x) {} // 提醒面板开着时同理让位给它自己的 Esc（5671）
+  try { e.preventDefault(); } catch (x) {}
+  closeShell(false);
+}
 window.nsGamePauseAudio = stopVoice;
 function restart(g) { hideEnd(); NSG.paused = false; try { setLevel(''); } catch (e) {} if (g.reset) g.reset(); } // 与 launch 同口径清 paused：结束卡期间切过后台的话，不清就是「点了再来一局仍定格」
 function closeShell(fromPop, keepHistory) {
@@ -7783,6 +7975,7 @@ function closeShell(fromPop, keepHistory) {
   if (NSG.onResize) { window.removeEventListener('resize', NSG.onResize); window.removeEventListener('orientationchange', NSG.onResize); NSG.onResize = null; }
   document.removeEventListener('keydown', keyHandler);
   document.removeEventListener('keyup', keyHandler);
+  document.removeEventListener('keydown', domKeyHandler, true); // 与挂载同阶段，否则摘不掉 // 与 launch 的 dom 分支对称，防进出十次叠十份监听
   var el = document.getElementById('nsGame'); if (el && el.parentNode) el.parentNode.removeChild(el);
   NSG.cur = null; NSG.over = false; NSG.paused = false;
   document.body.classList.remove('ns-in-game');
@@ -7848,7 +8041,10 @@ function launch(id) {
     } catch (e) {}
   }
   try { nsEggUnlock(id); } catch (e) {}
-  if (g.dom) { g.dom(); return; } // 非 canvas 型（镜像/桌宠）自带画面
+  if (g.dom) { // 非 canvas 型（镜像/桌宠）自带画面，不走 shell()——不补这一发就是「按 Esc 收不掉」（v9.0.0 真机实测两枚）
+    try { document.addEventListener('keydown', domKeyHandler, true); } catch (e) {} // 必须捕捉阶段：图鉴自己的 Esc 出口注册更早，冒泡阶段轮到我已经晚了一拍
+    g.dom(); return;
+  }
   shell(g); if (g.start) g.start();
   NSG.last = 0;
   var loop = function (ts) {
