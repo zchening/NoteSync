@@ -1,0 +1,56 @@
+{
+  "note": "改动域 → 测试文件映射（初版粗粒度）。manifest 变更需人工确认：粗粒度漏映射 = 闸静默变窄。unit/e2e 值为文件名（相对 tests/），probes 值为探针名（相对 e2e/_probe_<name>.js）。",
+  "domains": {
+    "editor-core": {
+      "unit": ["dom.test.js", "fold.test.js", "undo_stack.test.js", "triple_click.test.js", "timechip.test.js", "toast_autodismiss.test.js", "cache.test.js"],
+      "e2e": ["flow.test.js", "new_note_version.test.js"],
+      "probes": ["backspace_merge", "blockwrap", "caret_space", "hangspace", "paste_caret", "triple_click", "undo_paste"]
+    },
+    "sync": {
+      "unit": ["sync.test.js", "server.test.js"],
+      "e2e": ["sync.test.js", "offline_live.test.js", "offline_cache.test.js"],
+      "probes": ["save_reliability", "stale", "v519_independent"]
+    },
+    "reminder": {
+      "unit": ["reminder.test.js", "rem-bridge.test.js"],
+      "e2e": ["rem_line_move.test.js"],
+      "probes": []
+    },
+    "menu-ui": {
+      "unit": [],
+      "e2e": ["menu_align.test.js", "menu_blur.test.js", "chip_mobile_fit.test.js", "trust_keyboard.test.js"],
+      "probes": ["f11", "f12", "f13", "f13_edge"]
+    },
+    "qr-pairing": {
+      "unit": ["qr_pairing.test.js"],
+      "e2e": ["qr_pairing_enlarge.test.js"],
+      "probes": ["qr_pairing"]
+    },
+    "theme": {
+      "unit": ["theme.test.js", "brand.test.js", "_verify_v529_static.test.js"],
+      "e2e": ["_verify_v529_theme.test.js"],
+      "probes": []
+    },
+    "offline-export": {
+      "unit": ["offline.test.js", "export_offline.test.js"],
+      "e2e": [],
+      "probes": []
+    },
+    "userbugs": {
+      "unit": ["userbugs.test.js"],
+      "e2e": ["userbugs.test.js"],
+      "probes": ["user_bugs", "review_bugs", "v520_blind"]
+    },
+    "version-regression": {
+      "unit": ["v553.test.js", "v554.test.js", "v555.test.js", "v556.test.js", "v557.test.js", "v558.test.js", "v60.test.js", "v61.test.js", "v61_behavior.test.js", "v62.test.js", "v63.test.js", "v71.test.js", "v711.test.js", "v72.test.js", "v73.test.js", "v732.test.js", "v734.test.js", "v734_mod.test.js", "v74.test.js", "v740.test.js", "v751.test.js", "v770.test.js", "v780.test.js", "v781.test.js", "v790.test.js", "v800.test.js", "v801.test.js", "v804.test.js", "v805.test.js", "v806.test.js", "v807.test.js", "v810.test.js", "v816.test.js", "v817.test.js", "v818.test.js", "v820.test.js", "v830.test.js", "v900.test.js", "v920.test.js", "version_pins.test.js"],
+      "e2e": ["v63.test.js", "v71.test.js", "v732.test.js", "v74.test.js", "v809_k_routes.test.js", "v810_link_open.test.js", "v818.test.js", "v820.test.js", "v900.test.js", "v920.test.js", "_verify_v544.test.js", "_verify_v545.test.js", "_verify_v72.test.js"],
+      "probes": ["c1", "v734_full"]
+    },
+    "shell-mcp": {
+      "unit": ["pwa.test.js"],
+      "e2e": [],
+      "probes": []
+    }
+  },
+  "allProbes": ["backspace_merge", "blockwrap", "c1", "caret_space", "f11", "f12", "f13", "f13_edge", "hangspace", "paste_caret", "qr_pairing", "review_bugs", "save_reliability", "stale", "triple_click", "undo_paste", "user_bugs", "v519_independent", "v520_blind", "v734_full"]
+}
