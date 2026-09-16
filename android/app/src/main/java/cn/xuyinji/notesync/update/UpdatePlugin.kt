@@ -83,7 +83,10 @@ class UpdatePlugin : Plugin() {
             req.setAllowedNetworkTypes(
                 DownloadManager.Request.NETWORK_WIFI or DownloadManager.Request.NETWORK_MOBILE)
             req.setVisibleInDownloadsUi(false)              // 不混进系统下载列表
-            req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_HIDDEN) // 通知也关掉，进度条 JS 自己轮询
+            // v9.3.4：VISIBILITY_HIDDEN(=2) 是已废弃常量，setNotificationVisibility 只接受 0/1/3，传 2 会抛
+            // 「Invalid value for visibility: 2」→ enqueue 前即崩、下载启动失败（用户 9.3.2 实测「立即更新」报错）。
+            // 改合法的 VISIBILITY_VISIBLE：下载期间显示一条通知，进度仍由 JS 轮询，下完本插件自行拉安装器，不靠通知点击。
+            req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
             req.setMimeType("application/vnd.android.package-archive")
             val id = dm.enqueue(req)
             urlToId[url] = id

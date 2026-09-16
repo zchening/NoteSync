@@ -342,17 +342,21 @@ test('V11d 借壳模式不得吃夜间画布色板（壳会把页面翻成"看�
   assert.ok(fn.includes("typeof darkShellActive === 'function'"), '必须 typeof 守卫（旧壳无此函数不得抛）');
 });
 test('V11e 图片查看器与菜单每条关闭路径都归还编辑器焦点（红线10）', () => {
-  const i = SRC.indexOf('function nsImgCloseZoom()');
-  const fn = SRC.slice(i, SRC.indexOf('\n}', i) + 2);
-  assert.ok(fn.includes('nsImgGiveFocusBack()'), '关闭查看器必须归还焦点');
-  assert.ok(fn.includes("document.removeEventListener('keydown', nsImgEsc, true)"), '关闭必须摘掉 Esc 监听，否则每开一次叠一份');
+  // v9.3.4 #7：查看器关闭拆成「纯同步拆除」nsImgRemoveZoom（三条不变量都在这），用户/Esc 关闭经 nsImgCloseZoom→nsImgRemoveZoom。
+  const ri = SRC.indexOf('function nsImgRemoveZoom()');
+  const rm = SRC.slice(ri, SRC.indexOf('\n}', ri) + 2);
+  assert.ok(ri > 0 && rm.includes('nsImgGiveFocusBack()'), '拆除必须归还焦点');
+  assert.ok(rm.includes("document.removeEventListener('keydown', nsImgEsc, true)"), '拆除必须摘掉 Esc 监听，否则每开一次叠一份');
+  assert.ok(/if \(!z \|\| !z\.parentNode\) return false;/.test(rm), '查看器拆除必须"真关掉了"才归还焦点（无浮层 return false 早退）');
+  const ci = SRC.indexOf('function nsImgCloseZoom()');
+  const cn = SRC.slice(ci, SRC.indexOf('\n}', ci) + 2);
+  assert.ok(ci > 0 && cn.includes('nsImgRemoveZoom()'), '用户/Esc 关闭必须委托 nsImgRemoveZoom（无旁路漏归还焦点）');
   const m = SRC.indexOf('function nsImgMenuClose()');
   assert.ok(SRC.slice(m, m + 220).includes('nsImgGiveFocusBack()'), '菜单关闭同样归还');
   // 回归钉：两个关闭函数都挂在 capture 的 scroll / 全局 mousedown 上，"没有浮层"时也会被调用；
   // 无条件归还焦点会在提醒面板打开时把焦点从事项输入框抢回编辑器（V544-2 / V71-3 实测回归）。
   const mc = SRC.slice(m, SRC.indexOf('\n', m));
   assert.ok(/if \(!m \|\| !m\.parentNode\) return;/.test(mc), '菜单关闭必须"真关掉了"才归还焦点');
-  assert.ok(/if \(!z \|\| !z\.parentNode\) return;/.test(fn), '查看器关闭必须"真关掉了"才归还焦点');
   const g = SRC.indexOf('function nsImgGiveFocusBack()');
   const gf = SRC.slice(g, SRC.indexOf('\n}', g) + 2);
   assert.ok(gf.includes('editor.focus()') && gf.includes('ensureCaret()'), '归还必须是 focus + ensureCaret 两步');

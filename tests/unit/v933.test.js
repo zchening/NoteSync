@@ -63,8 +63,9 @@ test('K8 B2 移动端确认弹层 M2：按 CHIP_HOVER_OK 分支，移动挂 .ns-
   assert.ok(SRC.includes('#nsAsk.ns-ask-m .ns-go{border:0;background:var(--accent);color:var(--box-bg)'), 'M2 主按钮吃令牌（无新色字面量）');
 });
 
-test('K9 B1 V3：查看器主按钮改金边金字（透明底 + foil-gold-hi），旧「accent 底/box-bg 字」禁回潮', () => {
-  assert.ok(SRC.includes('#nsZoom .nz-bar button.nz-pri{background:transparent;color:var(--foil-gold-hi);border-color:var(--foil-gold-hi)}'),
-    '.nz-pri 须为 V3 金边金字');
+test('K9 B1：查看器主按钮金实底+深字（v9.3.4 方案A），旧「透明底金边」与更旧「accent 底/box-bg 字」均禁回潮', () => {
+  assert.ok(SRC.includes('#nsZoom .nz-bar button.nz-pri{background:var(--foil-gold-hi);color:var(--zoom-bg);border-color:var(--foil-gold-hi)}'),
+    '.nz-pri 须为 v9.3.4 方案A：亮金实底 + 深色字（--zoom-bg），日夜都清晰、主操作最突出');
+  assert.ok(!SRC.includes('#nsZoom .nz-bar button.nz-pri{background:transparent;color:var(--foil-gold-hi)'), '9.3.3 透明底金边形态禁回潮');
   assert.ok(!SRC.includes('.nz-bar button.nz-pri{background:var(--accent);color:var(--box-bg)}'), '旧「金底近黑字=像禁用」禁回潮');
 });

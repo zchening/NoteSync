@@ -280,7 +280,7 @@ test('B12 图鉴 replay：点「Notesync 烟花」行放烟花；锁态行无点
 
 // ── B13 静态钉：配色只吃变量、浮层不抢焦点、版本号同步、图鉴条目数与常量一致 ──
 test('B13 源码钉：新彩蛋零新色字面量 / 浮层 pointer-events:none / 版本 9.3.1 / 条目数一致', t => {
-  assert.ok(SRC.includes("const APP_VERSION = '9.3.3';"), '版本号应随彩蛋十门牌与音效层升到 9.3.1');
+  assert.ok(SRC.includes("const APP_VERSION = '9.3.4';"), '版本号应随彩蛋十门牌与音效层升到 9.3.1');
   assert.ok(SRC.includes("const NS_EGG_TOTAL = 17;"), '图鉴总数应随 v9.0.0 十个 URL 门牌 7→17');
   assert.ok(!SRC.includes('nsZen') && !SRC.includes('zenTip') && !SRC.includes("id: 'zen'"), '禅模式禁回潮：函数/DOM/图鉴条目三处字面量一律不得残留');
   assert.ok(SRC.includes("else if (e.key && e.key.length === 1) { tyKdAt = Date.now(); tyKdData = e.key; nsTypeSound('key'); }"), 'v8.3.2 用户挑定逐字母节奏：字符击键必须挂 keydown 发声且记占供双通道去重（撤销 v8.3.1 禁挂钉）');

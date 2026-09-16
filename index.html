@@ -209,11 +209,10 @@
   /* ── v9.3.0 App 在线升级：关于页「检查更新」行 + 确认更新弹窗（复用 .box 壳与全局按钮板，零新色）── */
   #aboutUpd{cursor:pointer;color:var(--accent);text-decoration:underline;text-underline-offset:3px;text-decoration-thickness:1px;-webkit-tap-highlight-color:transparent}
   #updMask .box{text-align:center}
-  #updMask .upd-cap{font-size:14px;font-weight:500;color:var(--muted);letter-spacing:.12em;margin:2px 0 8px}
   #updVer{font:600 22px/1.25 var(--serif);color:var(--accent);letter-spacing:.04em}
   #updVer .sz{font:400 12px/1 var(--mono);color:var(--muted);letter-spacing:0;margin-left:5px}
-  #updNotes{font-size:13.5px;line-height:1.95;color:var(--fg);text-align:left;margin:14px 22px 2px}
-  #updNotes i{font-style:normal;color:var(--accent);margin-right:5px}
+  #updNotes{font-size:13.5px;line-height:1.95;color:var(--fg);font-weight:500;text-align:left;margin:14px 22px 2px} /* v9.3.4 方案B：去顶部「发现新版本」小标题，正文保持 --fg 仅加字重 500（零新色，观感更实） */
+  #updNotes i{font-style:normal;color:var(--accent);margin-right:5px;font-weight:400} /* 金色「·」前缀维持常规字重，只让说明文字本身加粗 */
   #updProg{height:6px;border-radius:3px;background:var(--line);overflow:hidden;margin:12px 0 2px}
   #updProg.hidden{display:none}
   #updBar{display:block;height:100%;width:0;background:var(--accent);border-radius:3px;transition:width .3s}
@@ -313,7 +312,7 @@
   #nsZoom .nz-bar button{pointer-events:auto;flex:1;max-width:220px;min-height:44px;font:600 15px/1 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
     letter-spacing:.04em;padding:12px 0;border:1px solid transparent;border-radius:12px;
     background:var(--zoom-ink);color:var(--zoom-bg);cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
-  #nsZoom .nz-bar button.nz-pri{background:transparent;color:var(--foil-gold-hi);border-color:var(--foil-gold-hi)} /* v9.3.3 B1(V3)：金边金字替代旧「金底近黑字=像禁用」；亮金 --foil-gold-hi 日夜都清晰，次按钮维持实底 */
+  #nsZoom .nz-bar button.nz-pri{background:var(--foil-gold-hi);color:var(--zoom-bg);border-color:var(--foil-gold-hi)} /* v9.3.4 方案A：亮金实底+深字（底 --foil-gold-hi、字 --zoom-bg 近黑），主操作最突出、日夜都清晰，根治「黑底黑字看不见」；次按钮维持浅实底 */
   #nsImgMenu{position:fixed;z-index:89;min-width:150px;background:var(--box-bg);border:1px solid var(--line);border-radius:12px;
     box-shadow:0 18px 50px rgba(20,20,18,.22);padding:5px;animation:menuFade .16s ease both}
   /* 入场只动 opacity：通用 rise 的 to 帧是 transform:none，fill:both 下会把镜像补偿的
@@ -322,6 +321,12 @@
   #nsImgMenu button{display:block;width:100%;text-align:left;padding:11px 12px;font:inherit;font-size:13.5px;color:var(--fg);
     background:none;border:0;border-radius:8px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
   #nsImgMenu button:hover{background:var(--hover)}
+  /* v9.3.4 第1条：移动端上传「拍照 / 从相册选择」底部菜单——复用 nsImgMenu 同款令牌与入场，零新色 */
+  #nsUpMenu{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom,8px));z-index:95;
+    min-width:210px;background:var(--box-bg);border:1px solid var(--line);border-radius:14px;box-shadow:0 18px 50px rgba(20,20,18,.22);padding:5px;animation:menuFade .16s ease both}
+  #nsUpMenu button{display:block;width:100%;text-align:left;padding:13px 14px;font:inherit;font-size:14.5px;color:var(--fg);
+    background:none;border:0;border-radius:9px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+  #nsUpMenu button:hover,#nsUpMenu button:active{background:var(--hover)}
   /* 触屏端自建菜单接管「保存」，iOS 原生 callout 在 contenteditable 里本来只给选择/复制，留着会与自建菜单打架 */
   html.ns-no-callout #editor img{-webkit-touch-callout:none}
   /* 镜像模式：照片必须回到正常朝向。缩放 transform 挂在 img 的 inline 上，所以补偿加在外层 stage，两者不打架 */
@@ -727,7 +732,6 @@
 
 <div class="mask hidden" id="updMask">
   <div class="box">
-    <h1 class="upd-cap">发现新版本</h1>
     <div id="updVer">新版本 —</div>
     <p id="updNotes"></p>
     <div id="updProg" class="hidden"><i id="updBar"></i></div>
@@ -814,7 +818,7 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '9.3.3';
+const APP_VERSION = '9.3.4';
 const BUILD_DATE = '2026-09-16';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
@@ -2330,7 +2334,27 @@ editor.addEventListener('mousedown', e => {
 });
 
 // 文件选择上传
-uploadBtn.addEventListener('click', () => fileInput.click());
+// v9.3.4 第1条：桌面直接开系统文件框；纯触屏先弹「拍照 / 从相册选择」二选一，拍照走 capture=environment 调相机。
+function pickUploadFile(cam) {
+  if (cam) fileInput.setAttribute('capture', 'environment'); else fileInput.removeAttribute('capture');
+  try { fileInput.click(); } catch (e) {}
+}
+function nsUpMenuClose() { var m = document.getElementById('nsUpMenu'); if (m && m.parentNode) m.parentNode.removeChild(m); if (m && m.__off) { try { document.removeEventListener('click', m.__off, true); } catch (e) {} m.__off = null; } }
+function nsUpMenuOpen() {
+  nsUpMenuClose();
+  var m = document.createElement('div'); m.id = 'nsUpMenu';
+  [['拍照', true], ['从相册选择', false]].forEach(function (it) {
+    var b = document.createElement('button'); b.textContent = it[0];
+    b.addEventListener('click', function () { nsUpMenuClose(); pickUploadFile(it[1]); });
+    m.appendChild(b);
+  });
+  document.body.appendChild(m);
+  // 非模态：不加遮罩（遮罩会挡住随后弹出的原生文件/相机选择器），点外部下一帧再挂、由 close 统一摘掉，避免每开一次泄漏一枚 capture 监听
+  var off = function (e) { if (m.parentNode && !m.contains(e.target)) nsUpMenuClose(); };
+  m.__off = off;
+  setTimeout(function () { document.addEventListener('click', off, true); }, 0);
+}
+uploadBtn.addEventListener('click', () => { if (CHIP_HOVER_OK) { pickUploadFile(false); return; } nsUpMenuOpen(); });
 fileInput.addEventListener('change', e => {
   if (e.target.files && e.target.files[0]) handleImageUpload(e.target.files[0]);
   e.target.value = '';
@@ -4028,7 +4052,7 @@ function showOfflineBar(ts) {
      ③ 浏览器 → fetch blob→a[download]；取不到字节才开原图提示长按
    v9.3.0 用户拍板：PC 右键交还系统原生菜单（自建菜单只留触屏长按）；「删除图片」入口退役。
    镜像模式下照片朝向补偿加在外层 .nz-stage，不碰 img 的 inline 缩放 transform。 */
-var NS_IMG = { cur: null, open: false, scale: 1, tx: 0, ty: 0, pinch: 0, base: 1, pts: {}, dragging: false, sx: 0, sy: 0 };
+var NS_IMG = { cur: null, open: false, scale: 1, tx: 0, ty: 0, pinch: 0, base: 1, pts: {}, dragging: false, sx: 0, sy: 0, pushed: false };
 // 与 CHIP_HOVER_OK 同一条谓词（联动门两律：JS 判据与 CSS 媒体查询必须同谓词）。
 // 绝不直接读那个 const——它定义在本块之后，本块又在主脚本前段，顶层读它会撞 TDZ 抛错，
 // 一个未捕获异常会掐掉主脚本后续全部执行（实测：开奖卡的 var 池子赋值全灭）。
@@ -4042,18 +4066,31 @@ function nsImgApplyT() {
 function nsImgGiveFocusBack() { // 红线10：PC 端任何「关闭后回到编辑器」的路径都必须归还焦点，漏一处＝编辑器失焦、光标不绘制
   try { if (typeof CHIP_HOVER_OK !== "undefined" && CHIP_HOVER_OK) { editor.focus(); ensureCaret(); } } catch (e) {}
 }
-function nsImgCloseZoom() {
+function nsImgRemoveZoom() { // 纯同步拆除，绝不碰历史：重开清旧 / 用户·Esc 关闭 / popstate 关闭共用
   var z = document.getElementById('nsZoom');
   NS_IMG.open = false; NS_IMG.cur = null; NS_IMG.scale = 1; NS_IMG.tx = 0; NS_IMG.ty = 0; NS_IMG.pts = {};
   try { document.removeEventListener('keydown', nsImgEsc, true); } catch (e) {} // P2：关闭必须摘 Esc 监听，否则每开一次叠一份
-  if (!z || !z.parentNode) return; // 本来就没有查看器在场：绝不归还焦点（红线10 只对"真的关掉了浮层"成立）
+  if (!z || !z.parentNode) return false; // 本来就没有查看器在场：绝不归还焦点（红线10 只对"真的关掉了浮层"成立）
   z.parentNode.removeChild(z);
   nsImgGiveFocusBack();
+  return true;
 }
+function nsImgCloseZoom() { // 用户/Esc 关闭：同步拆除后，若压过一条同 URL 历史则 back() 抵消，防"多按一次返回没反应"
+  var had = nsImgRemoveZoom();
+  if (NS_IMG.pushed) { NS_IMG.pushed = false; if (had) { try { history.back(); } catch (e) {} } }
+  return had;
+}
+// v9.3.4 第7条：打开大图时压了一条同 URL 历史。安卓物理返回键/手势 → wv.goBack() → 本页 popstate：
+// 正是一次查看器压入被弹出 → 关掉大图回到笔记正文；非查看器的弹出（游戏/路由导航）完全不干预，不与 onPop 抢历史。
+window.addEventListener('popstate', function () {
+  if (!NS_IMG.pushed) return;
+  NS_IMG.pushed = false;
+  nsImgRemoveZoom();
+});
 function nsImgOpenZoom(img) {
   try {
-    nsImgCloseZoom(); nsImgMenuClose();
     var src = nsImgSrcOf(img); if (!src) return;
+    nsImgRemoveZoom(); nsImgMenuClose();
     var z = document.createElement('div'); z.id = 'nsZoom';
     var stage = document.createElement('div'); stage.className = 'nz-stage';
     var im = document.createElement('img'); im.src = src; im.alt = ''; im.decoding = 'async';
@@ -4069,6 +4106,8 @@ function nsImgOpenZoom(img) {
     document.body.appendChild(z);
     NS_IMG.cur = im; NS_IMG.open = true; NS_IMG.scale = 1; NS_IMG.tx = 0; NS_IMG.ty = 0;
     nsImgApplyT();
+    // v9.3.4 第7条：压一条同 URL 历史，让安卓物理返回键/手势（wv.goBack→popstate）关掉大图回正文；重开不同图沿用已压那条、不重复压
+    if (!NS_IMG.pushed) { try { history.pushState({ nsZoom: 1 }, ''); NS_IMG.pushed = true; } catch (e) { NS_IMG.pushed = false; } }
     // 点空白/点 × 关闭；点图片本身不关（它在缩放态还要接受拖拽）
     z.addEventListener('click', function (e) { if (e.target === z || e.target === stage || e.target === x || x.contains(e.target)) nsImgCloseZoom(); });
     x.addEventListener('click', nsImgCloseZoom);
@@ -8350,6 +8389,7 @@ if ('serviceWorker' in navigator) {
 body.ns-mirror-A .ns-mirror-panel,body.ns-mirror-B .ns-mirror-panel,body.ns-mirror-A #installBar,body.ns-mirror-B #installBar,body.ns-mirror-A #timechip,body.ns-mirror-B #timechip{transform:scaleX(-1)}
 /* #nsAsk 基座带 translateX(-50%)，同理必须叠加而非替换（v9.1 存量同型缺陷，闸 R1b 命中，与本次新增名单一并修） */
 body.ns-mirror-A #nsAsk,body.ns-mirror-B #nsAsk{transform:translateX(-50%) scaleX(-1)}
+body.ns-mirror-A #nsUpMenu,body.ns-mirror-B #nsUpMenu{transform:translateX(-50%) scaleX(-1)} /* v9.3.4 #1 上传菜单同 #nsAsk：基座带 translateX(-50%)，镜像须叠加而非替换 */
 body.ns-in-game{overflow:hidden}
 .ns-hud{display:flex;align-items:center;gap:8px;height:44px;padding:0 10px;border-bottom:1px solid var(--line);font:400 10.5px/1 var(--mono);letter-spacing:.12em;color:var(--muted);background:var(--bg);flex:none}
 .ns-hud .ns-x{display:flex;align-items:center;gap:6px;height:32px;padding:0 8px 0 4px;color:var(--fg);border-radius:9px;cursor:pointer}
@@ -8537,7 +8577,7 @@ function tone(v, o) {
   if (!a || a.state !== 'running') return; // 未解锁：静默丢弃，不排队
   var t = a.currentTime + (o.at || 0), dur = o.dur || v.d || 0.12;
   var atk = (o.atk != null) ? o.atk : (v.renv ? Math.min(dur * 0.85, v.a || 0.006) : (v.a || 0.006));
-  var e = adsr(a, o.g == null ? 0.4 : o.g, t, atk, dur, o.rev == null ? v.r : o.rev);
+  var e = adsr(a, (o.g == null ? 0.4 : o.g) * (v.gain || 1), t, atk, dur, o.rev == null ? v.r : o.rev);
   var tail = e;
   if (v.dist) { var ws = a.createWaveShaper(); ws.curve = SND.curve; ws.oversample = '2x'; e.connect(ws); tail = ws; }
   (v.h || [1]).forEach(function (h, i) {
@@ -8559,7 +8599,7 @@ function nz(v, o) { // 噪声类：一律过带通/低通，避免"嘶"的廉价
   var f = a.createBiquadFilter(); f.type = o.ft || v.ft || 'bandpass'; f.Q.value = v.q || 1.2;
   f.frequency.setValueAtTime(o.cut || v.cut || 1200, t);
   f.frequency.exponentialRampToValueAtTime(Math.max(60, o.cut1 || v.cut1 || 300), t + dur);
-  var e = adsr(a, o.g == null ? 0.34 : o.g, t, v.a || 0.004, dur, v.r);
+  var e = adsr(a, (o.g == null ? 0.34 : o.g) * (v.gain || 1), t, v.a || 0.004, dur, v.r);
   s.connect(f); f.connect(e); s.start(t); s.stop(t + dur + 0.05);
   if (o.body) tone({ h: [1], w: ['sine'], a: 0.003, r: 0 }, { f: o.body, f1: o.body * 0.6, dur: dur * 1.3, g: 0.3, at: o.at || 0 });
 }
@@ -8577,9 +8617,9 @@ function lfoGrowl(v, o) { // 桌宠呼噜：低频锯齿 + LFO 频率调制，�
 }
 var VOICES = {
   mirror:  { w: ['sine', 'triangle'], h: [1, 2], hg: [0.5, 0.25], a: 0.16, d: 0.34, r: 0.3, renv: 1 },
-  dragon:  { w: ['square'], h: [1], a: 0.004, d: 0.1, r: 0 },
+  dragon:  { w: ['square'], h: [1], a: 0.004, d: 0.1, r: 0, gain: 2 },
   snake:   { w: ['sine'], h: [1, 2], hg: [0.6, 0.22], a: 0.012, d: 0.13, r: 0.12 },
-  brick:   { cut: 2600, cut1: 900, q: 0.9, a: 0.002, d: 0.07 },
+  brick:   { cut: 2600, cut1: 900, q: 0.9, a: 0.002, d: 0.07, gain: 2 },
   tank:    { w: ['square', 'sawtooth'], h: [1, 0.5], a: 0.003, d: 0.16, dist: 1, r: 0.14 },
   satoshi: { w: ['sine'], h: [1, 3, 5], hg: [0.6, 0.16, 0.06], a: 0.004, d: 0.42, r: 0.26 },
   bitcoin: { w: ['triangle'], h: [1, 2], hg: [0.5, 0.18], a: 0.003, d: 0.2, r: 0.1 },
