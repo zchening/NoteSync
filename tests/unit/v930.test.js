@@ -159,7 +159,8 @@ test('G9 升级 UI 与代理拉取钉（v9.3.1 改同源代理）：/api/latest�
   assert.ok(SRC.includes("fetch('/api/latest?ts='"), '必须打同源 /api/latest——国内容器直连 api.github.com 必挂（用户「检查失败」实锤）');
   assert.ok(!SRC.includes("api.github.com/repos/' + UPD_REPO"), '手机侧直连 GitHub 旧形态禁回潮');
   assert.ok(SRC.includes("cache: 'no-store'"), '每次检查必须实时——留缓存=按钮骗人');
-  assert.ok(SRV.includes('api.github.com/repos/zchening/NoteSync/releases/latest'), 'server.js 必须有代拉');
+  assert.ok(SRV.includes('function latestBuild') && SRV.includes('/releases.atom'), 'server.js 必须走网页域三源拼装（api 域匿名配额被云主机共享出口打满，实测 403）');
+  assert.ok(!SRV.includes('https://api.github.com'), 'https://api.github.com 在 server.js 禁回潮（60/时必挂；注释提及裸域名不算）');
   assert.ok(SRC.includes('.slice(0, 3).map(s => s.length > 34 ? s.slice(0, 33) + \'…\' : s)'), '摘要不是 ≤3 行/34 字（更新主要内容不要太长是拍板）');
   assert.ok(SRC.includes("} else $('#aboutUpdRow').classList.add('hidden');"), '网页版必须隐藏升级行');
   assert.ok(SRC.includes("id=\"aboutUpdRow\"") && SRC.includes('id="updMask"'), '缺关于行/确认弹窗骨架');
