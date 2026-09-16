@@ -19,7 +19,7 @@
 安全：服务器密码只从 C:\\Temp\\new_server_pwd.txt 读，绝不打印；对 paramiko banner 限速退避重试。
 依赖：pip install paramiko；gh 已登录（zchening）。
 """
-import os, sys, json, time, hashlib, shutil, subprocess, tempfile
+import os, sys, json, time, hashlib, shutil, subprocess, tempfile, threading, glob
 
 TAG_DEFAULT_DL = "https://biji.xuyinji.com.cn/dl/latest.apk"
 HOST, USER, REMOTE_DIR = "124.221.92.225", "Administrator", "C:/Services/NoteSync"
@@ -32,31 +32,94 @@ def _run(cmd, **kw):
     return subprocess.run(cmd, shell=isinstance(cmd, str), capture_output=True, text=True, **kw)
 
 
-def gh_release_meta(tag):
-    r = _run("gh api repos/zchening/NoteSync/releases/tags/%s" % tag)
-    if r.returncode != 0:
-        sys.exit("gh api 取 release 失败（tag=%s）：\n%s" % (tag, (r.stderr or "").strip()))
-    return json.loads(r.stdout)
+def gh_release_meta(tag, tries=4):
+    last = ""
+    for i in range(tries):
+        r = _run("gh api repos/zchening/NoteSync/releases/tags/%s" % tag)
+        if r.returncode == 0:
+            return json.loads(r.stdout)
+        last = (r.stderr or "").strip()
+        if i < tries - 1:
+            print("[gh] api 取 release 第 %d 次失败（%s），退避重试…" % (i + 1, last.splitlines()[-1] if last else "?"))
+            time.sleep(3 * (i + 1))
+    sys.exit("gh api 取 release 失败（tag=%s，已重试 %d 次）：\n%s" % (tag, tries, last))
+
+
+def _curl_range(url, s, e, out, retries=6):
+    r = subprocess.run(['curl', '-sSL', '--fail', '--retry', str(retries), '--retry-delay', '3',
+                        '--connect-timeout', '15', '--range', '%d-%d' % (s, e), '-o', out, url],
+                       capture_output=True, text=True)
+    return r.returncode == 0
+
+
+def _fetch_apk_parallel(url, size, dest, nconn=16, rounds=6):
+    parts = os.path.join(APK_CACHE_DIR, 'parts')
+    os.makedirs(parts, exist_ok=True)
+    for f in glob.glob(os.path.join(parts, 'part_*')):
+        try: os.remove(f)
+        except OSError: pass
+    chunk = (size + nconn - 1) // nconn
+    spans = []
+    i = 0
+    while i * chunk < size:
+        s = i * chunk; e = min(s + chunk, size) - 1
+        spans.append((i, s, e)); i += 1
+
+    def partfile(i): return os.path.join(parts, 'part_%02d' % i)
+
+    def grab(sp):
+        k, s, e = sp
+        _curl_range(url, s, e, partfile(k))
+
+    def run_spans(spanset):
+        ths = [threading.Thread(target=grab, args=(sp,)) for sp in spanset]
+        for t in ths: t.start()
+        for t in ths: t.join()
+    run_spans(spans)  # 第一遍：全并行
+
+    def missing():
+        return [sp for sp in spans
+                if (not os.path.exists(partfile(sp[0]))) or os.path.getsize(partfile(sp[0])) != (sp[2] - sp[1] + 1)]
+
+    for _ in range(rounds):
+        miss = missing()
+        if not miss: break
+        print('[apk] 补下缺失块 %d 段…' % len(miss)); run_spans(miss)
+    if missing():
+        raise RuntimeError('并行下载仍未凑齐（缺 %d 段）' % len(missing()))
+
+    tmp = dest + '.part'
+    with open(tmp, 'wb') as w:
+        for k, s, e in spans:
+            with open(partfile(k), 'rb') as r:
+                shutil.copyfileobj(r, w)
+    os.replace(tmp, dest)
+    for f in glob.glob(os.path.join(parts, 'part_*')):
+        try: os.remove(f)
+        except OSError: pass
 
 
 def fetch_apk(tag):
-    """下载该 tag 的 *.apk 到 _apkdl，返回本地路径。带缓存避免重复慢下。"""
+    """下载该 tag 的 *.apk 到 _apkdl，返回本地路径。缓存命中即跳过；否则 16 路并行分段快下。"""
     os.makedirs(APK_CACHE_DIR, exist_ok=True)
     dest = os.path.join(APK_CACHE_DIR, "app-release.apk")
     meta = gh_release_meta(tag)
-    exp = None
+    exp = None; url = None
     for a in meta.get("assets", []):
         if a["name"].lower().endswith(".apk"):
-            exp = a["size"]; break
+            exp = a["size"]; url = a.get("browser_download_url"); break
     if exp is None:
         sys.exit("release %s 里没有 .apk 资源" % tag)
     if os.path.isfile(dest) and os.path.getsize(dest) == exp:
         print("[apk] 缓存命中 _apkdl/app-release.apk（%d bytes，跳过重下）" % exp)
         return dest, exp
-    print("[apk] gh release download %s（GitHub 国内直下较慢，请稍候）..." % tag)
-    r = _run("gh release download %s -R zchening/NoteSync -p '*.apk' -D '%s' --clobber" % (tag, APK_CACHE_DIR))
-    if r.returncode != 0:
-        sys.exit("下载 APK 失败：\n%s" % (r.stderr or r.stdout))
+    if not url:
+        sys.exit("release %s 的 apk 资源缺 browser_download_url" % tag)
+    print("[apk] 16 路并行分段下载 %s（%d bytes）…" % (tag, exp))
+    try:
+        _fetch_apk_parallel(url, exp, dest)
+    except Exception as e:
+        sys.exit("并行下载 APK 失败：%s（可重跑或临时加 --no-upload 只看元数据）" % e)
     if not os.path.isfile(dest) or os.path.getsize(dest) != exp:
         got = os.path.getsize(dest) if os.path.isfile(dest) else "缺文件"
         sys.exit("APK 尺寸不符：本地 %s != release %s（疑似截断，重跑）" % (got, exp))
