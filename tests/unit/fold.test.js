@@ -86,8 +86,8 @@ test('F6 退格护栏锚定执法行（行首 [折叠] 原子整删 + 不吞 pre
   assert.ok(SRC.includes("if (e.key !== 'Backspace') return;"), '护栏必须只拦 Backspace');
   assert.ok(SRC.includes('try { mark = foldMarkTouchedByCaret(sel.getRangeAt(0)); } catch (err) { return; }'),
     '边界判定必须套 try（老内核抛错时退回默认退格，绝不让监听器崩）');
-  // 顺序锚：不在边界→放行；在边界→先 preventDefault 再整删（删掉 preventDefault 必红，防原生退格叠加手动删啃坏）
-  assert.ok(/if \(!mark\) return;[\s\S]{0,40}e\.preventDefault\(\);[\s\S]{0,120}mark\.remove\(\);/.test(SRC),
+  // 顺序锚：命中折叠边界→先 preventDefault 再整删（v9.3.5 #2 把「不在边界→return」扩成「图原子删分支+return」，此锚只钉折叠命中路径的 preventDefault→remove 顺序）
+  assert.ok(/e\.preventDefault\(\);[\s\S]{0,60}const handle = mark\.closest\('\.ns-fold'\);[\s\S]{0,20}mark\.remove\(\);/.test(SRC),
     '命中边界必须先 e.preventDefault() 再整删整个 [折叠]（防逐字啃坏）');
   assert.ok(/function foldMarkTouchedByCaret\(range\)/.test(SRC), '边界判定函数存在');
   assert.ok(!SRC.includes(':scope > .ns-fold-mark'), '护栏不得用 :scope（老内核不支持会抛 SyntaxError 令护栏静默失效）');

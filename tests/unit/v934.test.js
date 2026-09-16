@@ -15,13 +15,15 @@ test('T1 #1 移动拍照上传：二选一菜单 + capture=environment 调相机
   assert.ok(SRC.includes("fileInput.setAttribute('capture', 'environment')"), '拍照须给隐藏 file input 设 capture=environment');
   assert.ok(SRC.includes("if (CHIP_HOVER_OK) { pickUploadFile(false); return; } nsUpMenuOpen();"),
     'uploadBtn 须按 CHIP_HOVER_OK 分支：桌面直开、纯触屏弹二选一（联动门同谓词）');
-  assert.ok(SRC.includes("['拍照', true], ['从相册选择', false]"), '菜单须给出「拍照 / 从相册选择」两项');
-  assert.ok(SRC.includes('id = \'nsUpMenu\'') && SRC.includes('#nsUpMenu{'), '菜单 DOM 与样式须存在（复用令牌、零新色）');
+  assert.ok(SRC.includes("id = 'nsUpModal'") && SRC.includes("mask.className = 'mask'") && SRC.includes("box.className = 'box'"),
+    '上传须为扫码配对同款居中模态（.mask+.box），不再是 #nsUpMenu 底部条');
+  assert.ok(SRC.includes("'拍 照'") && SRC.includes("bAlb.className = 'ghost-btn'") && !SRC.includes("id = 'nsUpMenu'"),
+    '模态含主按钮「拍 照」+ ghost「从相册选择」，旧 #nsUpMenu 已退役');
 });
 
-test('T2 #2 dragon/brick 音量：音色级 gain 乘子，仅这两条 gain:2，其余零变化', () => {
-  assert.ok(SRC.includes("dragon:  { w: ['square'], h: [1], a: 0.004, d: 0.1, r: 0, gain: 2 }"), 'dragon 音色 gain:2');
-  assert.ok(SRC.includes("brick:   { cut: 2600, cut1: 900, q: 0.9, a: 0.002, d: 0.07, gain: 2 }"), 'brick 音色 gain:2');
+test('T2 #2 dragon/brick 音量：音色级 gain 乘子，仅这两条 gain:8（v9.3.5 试听定档），其余零变化', () => {
+  assert.ok(SRC.includes("dragon:  { w: ['square'], h: [1], a: 0.004, d: 0.1, r: 0, gain: 8 }"), 'dragon 音色 gain:8');
+  assert.ok(SRC.includes("brick:   { cut: 2600, cut1: 900, q: 0.9, a: 0.002, d: 0.07, gain: 8 }"), 'brick 音色 gain:8');
   assert.ok(SRC.includes('(o.g == null ? 0.4 : o.g) * (v.gain || 1)'), 'tone() 输出增益须乘音色 gain（缺省 1）');
   assert.ok(SRC.includes('(o.g == null ? 0.34 : o.g) * (v.gain || 1)'), 'nz() 输出增益须乘音色 gain（缺省 1）');
   assert.ok(!/(snake|tank|satoshi|bitcoin|spacex|tesla|mirror|pet):\s*\{[^}]*gain:/.test(SRC), '其余音色不得被加 gain（只动 dragon/brick）');

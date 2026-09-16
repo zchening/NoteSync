@@ -310,9 +310,9 @@
   #nsZoom .nz-bar{position:absolute;left:0;right:0;bottom:0;display:flex;gap:10px;justify-content:center;
     padding:12px 16px calc(20px + env(safe-area-inset-bottom,8px));background:linear-gradient(to top,var(--zoom-bg),transparent);pointer-events:auto} /* v9.3.1（用户真机「保存按钮灰的点不动」）：旧法父 none+子 auto 在国产老内核不回升——整条直接 auto，点击关闭的判定本就只认 z/stage/x，底栏空白不关闭是应有语义 */
   #nsZoom .nz-bar button{pointer-events:auto;flex:1;max-width:220px;min-height:44px;font:600 15px/1 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
-    letter-spacing:.04em;padding:12px 0;border:1px solid transparent;border-radius:12px;
-    background:var(--zoom-ink);color:var(--zoom-bg);cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
-  #nsZoom .nz-bar button.nz-pri{background:var(--foil-gold-hi);color:var(--zoom-bg);border-color:var(--foil-gold-hi)} /* v9.3.4 方案A：亮金实底+深字（底 --foil-gold-hi、字 --zoom-bg 近黑），主操作最突出、日夜都清晰，根治「黑底黑字看不见」；次按钮维持浅实底 */
+    letter-spacing:.04em;padding:12px 0;border:1px solid var(--zoom-line);border-radius:12px;
+    background:var(--zoom-chip);color:var(--zoom-ink);cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent} /* v9.3.5 第4条③：次按钮=描边浅字 */
+  #nsZoom .nz-bar button.nz-pri{background:var(--zoom-ink);color:var(--zoom-bg);border-color:var(--zoom-ink)} /* v9.3.5 第4条③：主按钮=浅实底深字（对齐 .box 主按钮），强制深色/借壳的可读性靠 SHELL_CSS 三板兜 */
   #nsImgMenu{position:fixed;z-index:89;min-width:150px;background:var(--box-bg);border:1px solid var(--line);border-radius:12px;
     box-shadow:0 18px 50px rgba(20,20,18,.22);padding:5px;animation:menuFade .16s ease both}
   /* 入场只动 opacity：通用 rise 的 to 帧是 transform:none，fill:both 下会把镜像补偿的
@@ -321,12 +321,6 @@
   #nsImgMenu button{display:block;width:100%;text-align:left;padding:11px 12px;font:inherit;font-size:13.5px;color:var(--fg);
     background:none;border:0;border-radius:8px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
   #nsImgMenu button:hover{background:var(--hover)}
-  /* v9.3.4 第1条：移动端上传「拍照 / 从相册选择」底部菜单——复用 nsImgMenu 同款令牌与入场，零新色 */
-  #nsUpMenu{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom,8px));z-index:95;
-    min-width:210px;background:var(--box-bg);border:1px solid var(--line);border-radius:14px;box-shadow:0 18px 50px rgba(20,20,18,.22);padding:5px;animation:menuFade .16s ease both}
-  #nsUpMenu button{display:block;width:100%;text-align:left;padding:13px 14px;font:inherit;font-size:14.5px;color:var(--fg);
-    background:none;border:0;border-radius:9px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
-  #nsUpMenu button:hover,#nsUpMenu button:active{background:var(--hover)}
   /* 触屏端自建菜单接管「保存」，iOS 原生 callout 在 contenteditable 里本来只给选择/复制，留着会与自建菜单打架 */
   html.ns-no-callout #editor img{-webkit-touch-callout:none}
   /* 镜像模式：照片必须回到正常朝向。缩放 transform 挂在 img 的 inline 上，所以补偿加在外层 stage，两者不打架 */
@@ -818,7 +812,7 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '9.3.4';
+const APP_VERSION = '9.3.5';
 const BUILD_DATE = '2026-09-16';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
@@ -1047,6 +1041,12 @@ const SHELL_CSS = [
   '.box p,.box .qr-lock-warn{color:#676A75!important;-webkit-text-fill-color:#676A75!important}',
   '.box input{background:#040407!important;color:#E3E3E5!important;border-color:#13151D!important;-webkit-text-fill-color:#E3E3E5!important}',
   '.box button:not(:disabled):not(.box-x){background:#E3E3E5!important;color:#040407!important;-webkit-text-fill-color:#040407!important}',
+  '#nsZoom{background:#000!important}',
+  '#nsZoom .nz-x{background:rgba(255,255,255,.14)!important;color:#F2F1EC!important;-webkit-text-fill-color:#F2F1EC!important}',
+  '#nsZoom .nz-tip{color:rgba(242,241,236,.62)!important;-webkit-text-fill-color:rgba(242,241,236,.62)!important}',
+  '#nsZoom .nz-bar{background:none!important}',
+  '#nsZoom .nz-bar button{background:rgba(255,255,255,.14)!important;color:#F2F1EC!important;border-color:rgba(255,255,255,.22)!important;-webkit-text-fill-color:#F2F1EC!important}',
+  '#nsZoom .nz-bar button.nz-pri{background:#E3E3E5!important;color:#040407!important;border-color:#E3E3E5!important;-webkit-text-fill-color:#040407!important}',
   '#remCard{background:#000000!important;color:#E3E3E5!important;border-color:#13151D!important}',
   '#remCardTitle{color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important}',
   '#remCardList .rem-when{color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important}',
@@ -2339,20 +2339,21 @@ function pickUploadFile(cam) {
   if (cam) fileInput.setAttribute('capture', 'environment'); else fileInput.removeAttribute('capture');
   try { fileInput.click(); } catch (e) {}
 }
-function nsUpMenuClose() { var m = document.getElementById('nsUpMenu'); if (m && m.parentNode) m.parentNode.removeChild(m); if (m && m.__off) { try { document.removeEventListener('click', m.__off, true); } catch (e) {} m.__off = null; } }
+function nsUpMenuClose() { var m = document.getElementById('nsUpModal'); if (m && m.parentNode) m.parentNode.removeChild(m); }
 function nsUpMenuOpen() {
+  // 扫码配对同款居中模态（复用 .mask/.box），不再是左下角裸列表条
   nsUpMenuClose();
-  var m = document.createElement('div'); m.id = 'nsUpMenu';
-  [['拍照', true], ['从相册选择', false]].forEach(function (it) {
-    var b = document.createElement('button'); b.textContent = it[0];
-    b.addEventListener('click', function () { nsUpMenuClose(); pickUploadFile(it[1]); });
-    m.appendChild(b);
-  });
-  document.body.appendChild(m);
-  // 非模态：不加遮罩（遮罩会挡住随后弹出的原生文件/相机选择器），点外部下一帧再挂、由 close 统一摘掉，避免每开一次泄漏一枚 capture 监听
-  var off = function (e) { if (m.parentNode && !m.contains(e.target)) nsUpMenuClose(); };
-  m.__off = off;
-  setTimeout(function () { document.addEventListener('click', off, true); }, 0);
+  var mask = document.createElement('div'); mask.className = 'mask'; mask.id = 'nsUpModal';
+  var box = document.createElement('div'); box.className = 'box'; box.style.textAlign = 'center';
+  var h = document.createElement('h1'); h.textContent = '插入图片';
+  var sub = document.createElement('p'); sub.textContent = '选一种方式，图片会自动压缩上传'; sub.style.cssText = 'font-size:12.5px;line-height:1.7;color:var(--muted);margin:10px 4px 18px';
+  var bCam = document.createElement('button'); bCam.textContent = '拍 照';
+  var bAlb = document.createElement('button'); bAlb.className = 'ghost-btn'; bAlb.textContent = '从相册选择';
+  box.appendChild(h); box.appendChild(sub); box.appendChild(bCam); box.appendChild(bAlb);
+  mask.appendChild(box); document.body.appendChild(mask);
+  bCam.addEventListener('click', function () { nsUpMenuClose(); pickUploadFile(true); });
+  bAlb.addEventListener('click', function () { nsUpMenuClose(); pickUploadFile(false); });
+  mask.addEventListener('click', function (e) { if (e.target === mask) nsUpMenuClose(); }); // 点遮罩空白取消
 }
 uploadBtn.addEventListener('click', () => { if (CHIP_HOVER_OK) { pickUploadFile(false); return; } nsUpMenuOpen(); });
 fileInput.addEventListener('change', e => {
@@ -3409,6 +3410,24 @@ function foldMarkTouchedByCaret(range) {
   }
   return null;
 }
+// v9.3.5 第2条：光标紧邻左侧是否有一枚内联图片（用于退格原子整删该图，修「文字中间插图后光标停在图边删不动」）
+function imgBeforeCaret(range) {
+  try {
+    const node = range.startContainer, off = range.startOffset;
+    if (node.nodeType === 3) {
+      if (off !== 0) return null; // 不在该文本最左 → 正常删字，交给默认退格
+      let p = node.previousSibling;
+      while (p && p.nodeType === 3 && p.nodeValue === '') p = p.previousSibling; // 跳过 linkify 空文本
+      return (p && p.nodeType === 1 && p.tagName === 'IMG' && editor.contains(p)) ? p : null;
+    }
+    if (node.nodeType === 1) {
+      if (off <= 0) return null;
+      const p = node.childNodes[off - 1];
+      return (p && p.nodeType === 1 && p.tagName === 'IMG' && editor.contains(p)) ? p : null;
+    }
+  } catch (e) {}
+  return null;
+}
 editor.addEventListener('keydown', e => {
   if (isComposing) return;
   if (e.key !== 'Backspace') return;
@@ -3416,7 +3435,18 @@ editor.addEventListener('keydown', e => {
   if (!sel || !sel.rangeCount || !sel.getRangeAt(0).collapsed) return;
   let mark = null;
   try { mark = foldMarkTouchedByCaret(sel.getRangeAt(0)); } catch (err) { return; } // 判据异常时退回默认退格，绝不让监听器抛错
-  if (!mark) return; // 不在标记边界 → 交给默认退格
+  if (!mark) {
+    // v9.3.5 第2条：光标紧贴内联图片左侧 → 原子整删该图（修「文字中间插图后光标停在图边删不动」）；否则交默认退格
+    let imgPrev = null; try { imgPrev = imgBeforeCaret(sel.getRangeAt(0)); } catch (err) { return; }
+    if (!imgPrev) return;
+    e.preventDefault();
+    imgPrev.remove();
+    try { applyFolds(); } catch (err) {}
+    try { recordIfChanged('deleteContentBackward'); } catch (err) {}
+    clearTimeout(saveTimer); saveTimer = setTimeout(saveLocal, 800);
+    try { ensureCaret(); } catch (err) {}
+    return;
+  }
   e.preventDefault();
   const handle = mark.closest('.ns-fold');
   mark.remove();
@@ -3494,6 +3524,9 @@ function foldCaretNormalize() {
   if (!editor || !editor.contains(r.startContainer)) return false;
   const mk = caretInsideFoldMark(r);
   if (!mk) return false;
+  const fblock = (mk.closest ? mk.closest('.ns-fold') : null) || mk.parentNode;
+  const hasVisibleTitle = !!fblock && ((fblock.textContent || '').replace(FOLD_MARK, '').trim().length > 0);
+  if (!hasVisibleTitle) { foldJumpToPrevLineEnd(fblock); return true; } // v9.3.5 #7：空标题折叠三角后无可停的可见字 → 归上一可见行尾，光标不消失
   const pos = foldLeftmostPos(mk);
   setCaret(pos.node, pos.off); // 红线3：只走 setCaret，绝不 removeAllRanges+addRange
   return true;
@@ -4096,7 +4129,7 @@ function nsImgOpenZoom(img) {
     var im = document.createElement('img'); im.src = src; im.alt = ''; im.decoding = 'async';
     stage.appendChild(im);
     var tip = document.createElement('div'); tip.className = 'nz-tip';
-    tip.textContent = nsHoverPointer() ? '滚轮缩放 · 双击 1:1 · 点空白关闭' : '双指缩放 · 点空白关闭';
+    tip.textContent = nsHoverPointer() ? '滚轮缩放 · 双击 1:1 · 点空白关闭' : '双指缩放 · 点图片即回笔记';
     var bar = document.createElement('div'); bar.className = 'nz-bar';
     [['复制链接', function () { nsImgCopyLink(im); }], ['保存到相册', function () { nsImgSave(im); }, true]]
       .forEach(function (b) { var e2 = document.createElement('button'); e2.textContent = b[0]; if (b[2]) e2.className = 'nz-pri'; e2.addEventListener('click', b[1]); bar.appendChild(e2); });
@@ -4108,6 +4141,8 @@ function nsImgOpenZoom(img) {
     nsImgApplyT();
     // v9.3.4 第7条：压一条同 URL 历史，让安卓物理返回键/手势（wv.goBack→popstate）关掉大图回正文；重开不同图沿用已压那条、不重复压
     if (!NS_IMG.pushed) { try { history.pushState({ nsZoom: 1 }, ''); NS_IMG.pushed = true; } catch (e) { NS_IMG.pushed = false; } }
+    // v9.3.5 第6条：触屏打开大图收一次输入法，防软键盘遮挡图片；dismissKeyboardForTouch 自带 !CHIP_HOVER_OK/!isComposing/焦点在编辑器 三重守卫（组字期绝不 blur，免吞字），无需再手动 blur
+    try { dismissKeyboardForTouch(); } catch (e) {}
     // 点空白/点 × 关闭；点图片本身不关（它在缩放态还要接受拖拽）
     z.addEventListener('click', function (e) { if (e.target === z || e.target === stage || e.target === x || x.contains(e.target)) nsImgCloseZoom(); });
     x.addEventListener('click', nsImgCloseZoom);
@@ -4118,14 +4153,15 @@ function nsImgOpenZoom(img) {
       if (e.target !== im) return;
       NS_IMG.pts[e.pointerId] = { x: e.clientX, y: e.clientY };
       var ids = Object.keys(NS_IMG.pts);
-      if (ids.length === 2) { var a = NS_IMG.pts[ids[0]], b = NS_IMG.pts[ids[1]]; NS_IMG.pinch = Math.hypot(a.x - b.x, a.y - b.y); NS_IMG.base = NS_IMG.scale; }
-      else if (ids.length === 1) { NS_IMG.dragging = true; NS_IMG.sx = e.clientX; NS_IMG.sy = e.clientY; }
+      if (ids.length === 2) { var a = NS_IMG.pts[ids[0]], b = NS_IMG.pts[ids[1]]; NS_IMG.pinch = Math.hypot(a.x - b.x, a.y - b.y); NS_IMG.base = NS_IMG.scale; NS_IMG.tapId = null; }
+      else if (ids.length === 1) { NS_IMG.dragging = true; NS_IMG.sx = e.clientX; NS_IMG.sy = e.clientY; NS_IMG.tapId = e.pointerId; NS_IMG.tapSX = e.clientX; NS_IMG.tapSY = e.clientY; NS_IMG.tapMoved = false; }
       try { z.setPointerCapture(e.pointerId); } catch (err) {}
       e.preventDefault();
     });
     z.addEventListener('pointermove', function (e) {
       if (!NS_IMG.pts[e.pointerId]) return;
       NS_IMG.pts[e.pointerId] = { x: e.clientX, y: e.clientY };
+      if (NS_IMG.tapId === e.pointerId && !NS_IMG.tapMoved && Math.hypot(e.clientX - NS_IMG.tapSX, e.clientY - NS_IMG.tapSY) > 12) NS_IMG.tapMoved = true;
       var ids = Object.keys(NS_IMG.pts);
       if (ids.length === 2 && NS_IMG.pinch > 0) {
         var a = NS_IMG.pts[ids[0]], b = NS_IMG.pts[ids[1]];
@@ -4137,7 +4173,11 @@ function nsImgOpenZoom(img) {
         NS_IMG.sx = e.clientX; NS_IMG.sy = e.clientY; nsImgApplyT();
       }
     });
-    var up = function (e) { delete NS_IMG.pts[e.pointerId]; if (Object.keys(NS_IMG.pts).length < 2) NS_IMG.pinch = 0; NS_IMG.dragging = false; };
+    var up = function (e) {
+      // v9.3.5 第5条：触屏单指、无位移、非双指 → 单击图片即关窗回正文；拖拽/双指/桌面鼠标不误触
+      if (e.pointerType === 'touch' && NS_IMG.tapId === e.pointerId && !NS_IMG.tapMoved) { NS_IMG.tapId = null; nsImgCloseZoom(); return; }
+      delete NS_IMG.pts[e.pointerId]; if (Object.keys(NS_IMG.pts).length < 2) NS_IMG.pinch = 0; NS_IMG.dragging = false;
+    };
     z.addEventListener('pointerup', up); z.addEventListener('pointercancel', up);
     document.addEventListener('keydown', nsImgEsc, true);
   } catch (e) {}
@@ -8389,7 +8429,6 @@ if ('serviceWorker' in navigator) {
 body.ns-mirror-A .ns-mirror-panel,body.ns-mirror-B .ns-mirror-panel,body.ns-mirror-A #installBar,body.ns-mirror-B #installBar,body.ns-mirror-A #timechip,body.ns-mirror-B #timechip{transform:scaleX(-1)}
 /* #nsAsk 基座带 translateX(-50%)，同理必须叠加而非替换（v9.1 存量同型缺陷，闸 R1b 命中，与本次新增名单一并修） */
 body.ns-mirror-A #nsAsk,body.ns-mirror-B #nsAsk{transform:translateX(-50%) scaleX(-1)}
-body.ns-mirror-A #nsUpMenu,body.ns-mirror-B #nsUpMenu{transform:translateX(-50%) scaleX(-1)} /* v9.3.4 #1 上传菜单同 #nsAsk：基座带 translateX(-50%)，镜像须叠加而非替换 */
 body.ns-in-game{overflow:hidden}
 .ns-hud{display:flex;align-items:center;gap:8px;height:44px;padding:0 10px;border-bottom:1px solid var(--line);font:400 10.5px/1 var(--mono);letter-spacing:.12em;color:var(--muted);background:var(--bg);flex:none}
 .ns-hud .ns-x{display:flex;align-items:center;gap:6px;height:32px;padding:0 8px 0 4px;color:var(--fg);border-radius:9px;cursor:pointer}
@@ -8617,9 +8656,9 @@ function lfoGrowl(v, o) { // 桌宠呼噜：低频锯齿 + LFO 频率调制，�
 }
 var VOICES = {
   mirror:  { w: ['sine', 'triangle'], h: [1, 2], hg: [0.5, 0.25], a: 0.16, d: 0.34, r: 0.3, renv: 1 },
-  dragon:  { w: ['square'], h: [1], a: 0.004, d: 0.1, r: 0, gain: 2 },
+  dragon:  { w: ['square'], h: [1], a: 0.004, d: 0.1, r: 0, gain: 8 },
   snake:   { w: ['sine'], h: [1, 2], hg: [0.6, 0.22], a: 0.012, d: 0.13, r: 0.12 },
-  brick:   { cut: 2600, cut1: 900, q: 0.9, a: 0.002, d: 0.07, gain: 2 },
+  brick:   { cut: 2600, cut1: 900, q: 0.9, a: 0.002, d: 0.07, gain: 8 },
   tank:    { w: ['square', 'sawtooth'], h: [1, 0.5], a: 0.003, d: 0.16, dist: 1, r: 0.14 },
   satoshi: { w: ['sine'], h: [1, 3, 5], hg: [0.6, 0.16, 0.06], a: 0.004, d: 0.42, r: 0.26 },
   bitcoin: { w: ['triangle'], h: [1, 2], hg: [0.5, 0.18], a: 0.003, d: 0.2, r: 0.1 },

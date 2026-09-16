@@ -63,9 +63,13 @@ test('K8 B2 移动端确认弹层 M2：按 CHIP_HOVER_OK 分支，移动挂 .ns-
   assert.ok(SRC.includes('#nsAsk.ns-ask-m .ns-go{border:0;background:var(--accent);color:var(--box-bg)'), 'M2 主按钮吃令牌（无新色字面量）');
 });
 
-test('K9 B1：查看器主按钮金实底+深字（v9.3.4 方案A），旧「透明底金边」与更旧「accent 底/box-bg 字」均禁回潮', () => {
-  assert.ok(SRC.includes('#nsZoom .nz-bar button.nz-pri{background:var(--foil-gold-hi);color:var(--zoom-bg);border-color:var(--foil-gold-hi)}'),
-    '.nz-pri 须为 v9.3.4 方案A：亮金实底 + 深色字（--zoom-bg），日夜都清晰、主操作最突出');
-  assert.ok(!SRC.includes('#nsZoom .nz-bar button.nz-pri{background:transparent;color:var(--foil-gold-hi)'), '9.3.3 透明底金边形态禁回潮');
-  assert.ok(!SRC.includes('.nz-bar button.nz-pri{background:var(--accent);color:var(--box-bg)}'), '旧「金底近黑字=像禁用」禁回潮');
+test('K9 B1：查看器主按钮浅实底深字 + 次描边浅字 + 进 SHELL_CSS 强制深色三板（v9.3.5），旧金实底/透明金边/accent 底禁回潮', () => {
+  assert.ok(SRC.includes('background:var(--zoom-chip);color:var(--zoom-ink);cursor:pointer'), '次按钮须为描边浅字（chip 底 + --zoom-ink 字）');
+  assert.ok(SRC.includes('#nsZoom .nz-bar button.nz-pri{background:var(--zoom-ink);color:var(--zoom-bg);border-color:var(--zoom-ink)}'),
+    '主按钮须为浅实底深字（对齐 .box 主按钮）');
+  assert.ok(SRC.includes("'#nsZoom{background:#000!important}'") && SRC.includes('#nsZoom .nz-bar button.nz-pri{background:#E3E3E5!important;color:#040407!important'),
+    '查看器须进 SHELL_CSS 预反色三板（国产强制深色/借壳下文字不得反白）');
+  assert.ok(!SRC.includes('#nsZoom .nz-bar button.nz-pri{background:var(--foil-gold-hi)'), 'v9.3.4 金实底禁回潮');
+  assert.ok(!SRC.includes('#nsZoom .nz-bar button.nz-pri{background:transparent;color:var(--foil-gold-hi)'), '9.3.3 透明底金边禁回潮');
+  assert.ok(!SRC.includes('.nz-bar button.nz-pri{background:var(--accent);color:var(--box-bg)}'), '更旧「金底近黑字=像禁用」禁回潮');
 });
