@@ -24,11 +24,13 @@ test('V806-A visibilitychange hidden 分支必须 flush+收焦两连，旧裸 fl
     '守卫 helper 本体必须在（仅触屏+非组字+焦点在 editor 才 blur）');
 });
 
-test('V806-B manifest stateHidden 兜底：只加 state 位，禁动 adjust 位', () => {
-  assert.ok(MANIFEST.includes('android:windowSoftInputMode="stateHidden"'),
-    'activity 应声明 windowSoftInputMode=stateHidden');
-  assert.ok(!/android:windowSoftInputMode="[^"]*adjust/i.test(MANIFEST),
-    '禁带 adjust 位——resizes-content 已接管布局让位，加 adjustResize/Pan 会搅 v7.9.1 贴底行');
+test('V806-B manifest 键盘模式（v9.3.0 翻转）：stateHidden 必带 adjustResize，禁回退无 adjust', () => {
+  assert.ok(MANIFEST.includes('android:windowSoftInputMode="stateHidden|adjustResize"'),
+    'v9.3.0：App 内 resizes-content 空转（ADJUST_UNSPECIFIED 落 pan）＝bottom 浮层被键盘推出可视区，/pet 确认条不可见、桌宠领养链断（用户实锤「App 里看不到桌宠」根因）——拍板补 adjustResize');
+  assert.ok(!MANIFEST.includes('android:windowSoftInputMode="stateHidden"'),
+    '无 adjust 的旧形态禁回潮（回到 pan＝领养链再断）');
+  // v8.0.6 旧顾虑「adjust 位搅 v7.9.1 贴底行」已失效：浏览器通道本就是 resizes-content 的布局压缩语义，
+  // adjustResize 只是让原生窗口跟上既有语义，两通道从此同谓词（联动门两律）。
 });
 
 // ── C：www 逐字节同步（APK webDir=www，漂移即线上旧包） ──

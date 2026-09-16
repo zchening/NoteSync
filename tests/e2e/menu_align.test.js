@@ -81,7 +81,7 @@ test('M2 解锁态收藏行注入重写后十行仍三维全等（v8.0.3 回归�
   assert.ok(r.hasFav, '前置：解锁态收藏行必须可见（未到=环境/流程问题）');
   assert.ok(r.favLabel, '收藏行标签必须在 mi-l 内（此红=renderMenu 注入重写又脱定宽列）');
   assert.strictEqual(r.labelsN, r.n, '十行全须有定宽标签列（v8.1.0 含打开链接行）');
-  assert.strictEqual(r.n, 10, '解锁态主菜单 10 行全可见（v8.1.0 含「打开链接」行），实测 ' + r.n);
+  assert.strictEqual(r.n, 11, '解锁态主菜单 11 行全可见（v8.1.0 含「打开链接」；v9.3.0 +「桌宠」行），实测 ' + r.n);
   assert.ok(r.spread <= 1 && r.lspread <= 1, '十行两列 x 全等，实测 svg=' + r.spread.toFixed(2) + ' label=' + r.lspread.toFixed(2));
   assert.ok(r.hspread <= 1, '行高全等，实测 ' + r.hspread.toFixed(2));
   await page.close();

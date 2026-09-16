@@ -27,6 +27,7 @@ import cn.xuyinji.notesync.rem.RemPlugin;
 import cn.xuyinji.notesync.img.ImgClipPlugin;
 import cn.xuyinji.notesync.img.ImgSavePlugin;
 import cn.xuyinji.notesync.link.LinkOpenPlugin;
+import cn.xuyinji.notesync.update.UpdatePlugin;
 
 public class MainActivity extends BridgeActivity {
 
@@ -46,6 +47,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(ImgClipPlugin.class); // v7.7.0：图片写系统剪贴板原生桥
         registerPlugin(ImgSavePlugin.class); // v9.2.0：正文图片保存到相册原生桥（零新权限，壳内 a[download] 是哑弹）
         registerPlugin(LinkOpenPlugin.class); // v8.1.0：链接打开方式（外跳默认浏览器/应用内子 WebView）
+        registerPlugin(UpdatePlugin.class); // v9.3.0：应用内升级原生桥（DownloadManager 下 APK + FileProvider 拉安装）
         super.onCreate(savedInstanceState);
 
         // v5.53：返回键接 WebView 历史——Capacitor 不接管返回键，默认 finish 直接回桌面。

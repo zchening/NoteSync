@@ -206,6 +206,20 @@
   .about-v{width:110px;text-align:left;color:var(--fg);font-variant-numeric:tabular-nums;word-break:break-all;font-weight:600}
   #aboutAuthor{display:flex;justify-content:center;align-items:baseline;gap:10px;margin:6px auto 0}
   #aboutAuthorName{width:110px;text-align:left;font-family:var(--serif);color:var(--accent);font-weight:400;font-size:14px;letter-spacing:.5px}
+  /* ── v9.3.0 App 在线升级：关于页「检查更新」行 + 确认更新弹窗（复用 .box 壳与全局按钮板，零新色）── */
+  #aboutUpd{cursor:pointer;color:var(--accent);text-decoration:underline;text-underline-offset:3px;text-decoration-thickness:1px;-webkit-tap-highlight-color:transparent}
+  #updMask .box{text-align:center}
+  #updMask .upd-cap{font-size:14px;font-weight:500;color:var(--muted);letter-spacing:.12em;margin:2px 0 8px}
+  #updVer{font:600 22px/1.25 var(--serif);color:var(--accent);letter-spacing:.04em}
+  #updMeta{font:400 11px/1.6 var(--mono);color:var(--muted);margin-top:4px}
+  #updNotes{font-size:13px;line-height:1.9;color:var(--fg);text-align:left;margin:12px 2px 2px}
+  #updProg{height:6px;border-radius:3px;background:var(--line);overflow:hidden;margin:12px 0 2px}
+  #updProg.hidden{display:none}
+  #updBar{display:block;height:100%;width:0;background:var(--accent);border-radius:3px;transition:width .3s}
+  #updMsg{min-height:18px;font:400 11.5px/1.6 var(--mono);color:var(--muted);margin-top:6px;text-align:left}
+  .upd-btns{display:flex;gap:10px;margin-top:12px}
+  .upd-btns button.ghost-btn{margin-top:0}
+  .upd-btns button:disabled{opacity:.55}
   /* v5.40：提醒面板升级为扫码配对同款 .mask+.box 模态（复用 .box 输入框/主按钮样式与深色覆盖保护）；
      设置行（时间/事项/添加提醒）永远首行，已设条目列表排后；chip 与模态互斥（遮罩挡正文） */
   #remBoxForm{display:flex;flex-direction:column;gap:12px;margin:2px 0 18px}
@@ -290,9 +304,15 @@
   #nsZoom .nz-x svg{width:16px;height:16px}
   #nsZoom .nz-tip{position:absolute;top:22px;left:50%;transform:translateX(-50%);font:400 10.5px/1 var(--mono);
     letter-spacing:.1em;color:var(--zoom-dim);pointer-events:none;text-align:center}
-  #nsZoom .nz-bar{position:absolute;left:50%;bottom:26px;transform:translateX(-50%);display:flex;gap:8px;flex-wrap:wrap;justify-content:center;max-width:92vw}
-  #nsZoom .nz-bar button{font:400 12px/1 var(--mono);letter-spacing:.06em;padding:11px 16px;border:1px solid var(--zoom-line);
-    border-radius:999px;background:var(--zoom-chip);color:var(--zoom-ink);cursor:pointer;touch-action:manipulation}
+  /* v9.3.0（用户反馈「移动端这三个按钮看不清楚」）：12px mono 半透明小胶囊 → 44px 高大按钮。
+     主按钮（保存到相册）实底 --accent + --zoom-ink 字，次按钮实底 --zoom-ink + --zoom-bg 字——
+     全部吃既有令牌零新色；底栏加同族渐变衬底并避开全面屏手势条（safe-area）。 */
+  #nsZoom .nz-bar{position:absolute;left:0;right:0;bottom:0;display:flex;gap:10px;justify-content:center;
+    padding:12px 16px calc(20px + env(safe-area-inset-bottom,8px));background:linear-gradient(to top,var(--zoom-bg),transparent);pointer-events:none}
+  #nsZoom .nz-bar button{pointer-events:auto;flex:1;max-width:220px;min-height:44px;font:600 15px/1 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+    letter-spacing:.04em;padding:12px 0;border:1px solid transparent;border-radius:12px;
+    background:var(--zoom-ink);color:var(--zoom-bg);cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+  #nsZoom .nz-bar button.nz-pri{background:var(--accent);color:var(--box-bg)} /* 闸R2：主按钮字色用 --box-bg 非 --zoom-ink——夜 accent #D4B068 上米白字仅 2.7:1 又是「看不清」，白(日)/近黑(夜)随主题翻转让两档都拉到 4.5:1+ */
   #nsImgMenu{position:fixed;z-index:89;min-width:150px;background:var(--box-bg);border:1px solid var(--line);border-radius:12px;
     box-shadow:0 18px 50px rgba(20,20,18,.22);padding:5px;animation:menuFade .16s ease both}
   /* 入场只动 opacity：通用 rise 的 to 帧是 transform:none，fill:both 下会把镜像补偿的
@@ -301,7 +321,6 @@
   #nsImgMenu button{display:block;width:100%;text-align:left;padding:11px 12px;font:inherit;font-size:13.5px;color:var(--fg);
     background:none;border:0;border-radius:8px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
   #nsImgMenu button:hover{background:var(--hover)}
-  #nsImgMenu button.nz-del{color:var(--danger)}
   /* 触屏端自建菜单接管「保存」，iOS 原生 callout 在 contenteditable 里本来只给选择/复制，留着会与自建菜单打架 */
   html.ns-no-callout #editor img{-webkit-touch-callout:none}
   /* 镜像模式：照片必须回到正常朝向。缩放 transform 挂在 img 的 inline 上，所以补偿加在外层 stage，两者不打架 */
@@ -319,6 +338,13 @@
   /* v9.1.1：折叠正文往里缩进 1.5em + 左侧引导线（--line 令牌，非新色），层级更清晰；线沿每个正文块画，到空行（非 ns-fold-body）自然断开 */
   #editor .ns-fold-body{margin-left:.5em;padding-left:1em;border-left:2px solid var(--line)}
   #editor .ns-fold-hide{display:none}
+  /* v9.3.0（用户反馈）：移动端三角感应区只有 ≈18×23px 且紧贴标题，手指稍偏即命中正文→落光标弹键盘。
+     窄屏下可见三角 12→16px，感应区用定宽定高+负 margin 撑到 44×44（行盒高度与左缘排版不变），
+     touch-action:manipulation 消掉双击缩放等待；只在 ≤560px 生效，桌面外观零变化。颜色仍只吃令牌。 */
+  @media (max-width:560px){
+    #editor .ns-fold-mark::before{font-size:16px}
+    #editor .ns-fold-mark{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;margin:-11px -6px -11px -8px;padding:0;border-radius:12px;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+  }
   /* v9.1.1：打印时展开全部折叠（浏览器 Ctrl+P 直打活的 #editor，收起态正文会丢）——还原正文、显回 [折叠] 文本、去三角；无新色 */
   @media print{#editor .ns-fold-hide{display:block}#editor .ns-fold-mark{font-size:inherit}#editor .ns-fold-mark::before{content:''}}
   #editor s, #editor strike, #editor del{text-decoration:line-through;text-decoration-color:rgba(152,149,138,.7);color:var(--muted)}
@@ -591,6 +617,7 @@
       <div id="menuHistEntry" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path class="g" d="M12 7.2V12l3.4 2.2"/></svg><span class="mi-l">历史版本</span></div>
       <div id="menuLink" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path class="g" d="M10.4 13.6l3.2-3.2"/><path d="M12.6 8.8l1.4-1.4a3.6 3.6 0 0 1 5.1 5.1l-1.4 1.4"/><path d="M11.4 15.2L10 16.6a3.6 3.6 0 0 1-5.1-5.1l1.4-1.4"/></svg><span class="mi-l">打开链接</span></div>
       <div id="menuBackup" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5V6a3 3 0 0 1 3-3h2.5"/><path d="M15.5 3H18a3 3 0 0 1 3 3v2.5"/><path d="M21 15.5V18a3 3 0 0 1-3 3h-2.5"/><path d="M8.5 21H6a3 3 0 0 1-3-3v-2.5"/><path class="g" d="M12 8.6v6.8"/><path class="g" d="M8.6 12h6.8"/></svg><span class="mi-l">扫码换机</span></div>
+      <div id="menuPet" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6.3" cy="10" r="1.7"/><circle cx="10" cy="7.1" r="1.7"/><circle cx="14" cy="7" r="1.7"/><circle cx="17.6" cy="9.6" r="1.7"/><path class="g" d="M12 11.6c3.2 0 5.4 2.3 5.4 4.8 0 2.3-2 3.7-5.4 3.7s-5.4-1.4-5.4-3.7c0-2.5 2.2-4.8 5.4-4.8Z"/></svg><span class="mi-l">桌宠</span></div>
       <div id="menuTheme" class="menu-item" role="button" tabindex="0"><span id="menuThemeIcon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.6 14.3A8.7 8.7 0 0 1 9.7 3.4a8.7 8.7 0 1 0 10.9 10.9Z"/><path class="gf" d="M17.3 3.2l.6 1.5 1.5.6-1.5.6-.6 1.5-.6-1.5-1.5-.6 1.5-.6Z"/></svg></span><span id="menuThemeLabel">夜间模式</span></div>
       <div id="menuPass" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.2 12.8 20 4"/><path d="M16.4 7.6 19 10.2"/><path d="M13.6 10.4l2.2 2.2"/><circle class="g" cx="8.2" cy="15.8" r="4.2"/></svg><span class="mi-l">修改口令</span></div>
       <div id="menuLock" class="menu-item" role="button" tabindex="0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10" width="16" height="10.5" rx="3"/><path d="M7.8 10V7.6a4.2 4.2 0 0 1 8.2-1.4"/><circle class="gf" cx="12" cy="14.3" r="1.35"/><path class="g" d="M12 15.6v1.7"/></svg><span class="mi-l">退出锁定</span></div>
@@ -692,6 +719,23 @@
       <div class="about-row hidden" id="aboutAppRow"><span class="about-k">App</span><span class="about-v" id="aboutAppVer"></span></div>
     </div>
     <div id="aboutAuthor"><span class="about-k">作者</span><span class="about-v" id="aboutAuthorName">@zchening</span></div>
+    <!-- v9.3.0：App 在线升级入口（仅壳内显示，网页版 F5 即最新不需要） -->
+    <div class="about-row hidden" id="aboutUpdRow"><span class="about-k">更新</span><span class="about-v upd-link" id="aboutUpd">检查更新</span></div>
+  </div>
+</div>
+
+<div class="mask hidden" id="updMask">
+  <div class="box">
+    <h1 class="upd-cap">发现新版本</h1>
+    <div id="updVer">Version —</div>
+    <div id="updMeta"></div>
+    <p id="updNotes"></p>
+    <div id="updProg" class="hidden"><i id="updBar"></i></div>
+    <div id="updMsg"></div>
+    <div class="upd-btns">
+      <button id="updNo" class="ghost-btn">稍后再说</button>
+      <button id="updYes">立即更新</button>
+    </div>
   </div>
 </div>
 
@@ -770,7 +814,7 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '9.2.1';
+const APP_VERSION = '9.3.0';
 const BUILD_DATE = '2026-09-16';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
@@ -2262,6 +2306,13 @@ function openNoteLink(href) {
   if (pref === 'inapp') location.href = href;
   else window.open(href, '_blank', 'noopener,noreferrer');
 }
+// v9.3.0：触屏点三角在 pointerdown 阶段就掐掉聚焦链路（Chromium 取消 pointerdown 默认动作即不派发
+// 后续 mousedown/不聚焦，click 照常到达＝开合不受影响）；v9.1.1 的 mousedown 防聚焦是「先弹再收」，
+// 个别内核 focus 早于 mousedown 仍闪一下。桌面鼠标 pointerType!=='touch' 不拦，行为零变化。
+editor.addEventListener('pointerdown', e => {
+  if (e.pointerType !== 'touch') return;
+  if (e.target && e.target.closest && e.target.closest('span.ns-fold-mark')) e.preventDefault();
+});
 // 点击链接：tel: 拨号，URL 按「打开链接」偏好分流（mousedown 阶段拦截，防止光标落入编辑）
 editor.addEventListener('mousedown', e => {
   // v9.1.1：点折叠三角不聚焦编辑器（移动端 mousedown 聚焦＝软键盘自动弹起，干扰阅读）；开合仍在 click 处理器做
@@ -3285,6 +3336,35 @@ editor.addEventListener('click', e => {
   try { dismissKeyboardForTouch(); } catch (err) {} // 触屏兜底：个别内核 touchstart 早于 mousedown 已聚焦，开合后收一次键盘（桌面/组字期为 no-op）
   try { backfillLastHtmlIfDecorativelyEqual(); } catch (err) {} // 开合只改折叠装饰（与正文装饰等价），回填 lastHtml 防后续「改回原文+残留标记」误判成真实改动多存一版
 });
+// ── v9.3.0：编辑器内选择复制/剪切跨折叠列表不再丢正文 ─────────────────────
+// 根因：收起的折叠正文块挂 .ns-fold-hide（display:none），浏览器序列化剪贴板（text/plain 与
+// text/html）都跳过隐藏文字，选中折叠列表复制或剪切后粘到别处只剩标题行（用户报丢内容）。
+// 顶栏「复制」钮 v9.1.1 已有临时展开，这里是选区复制/剪切的对等补丁：copy/cut 事件在默认
+// 序列化前把与选区相交的隐藏块显形，默认行为完成后 setTimeout(0) 还原——copy 原样折叠回去；
+// cut 已被默认删掉选区节点，按退格护栏同款顺序（applyFolds→persistFoldStates）重建防把手错位。
+function foldHideInSelection() {
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return [];
+  const r = sel.getRangeAt(0);
+  if (!editor.contains(r.commonAncestorContainer)) return [];
+  const hits = [];
+  Array.prototype.forEach.call(editor.querySelectorAll('.ns-fold-hide'), n => {
+    try { if (r.intersectsNode(n)) hits.push(n); } catch (e) {}
+  });
+  return hits;
+}
+editor.addEventListener('copy', () => {
+  const hits = foldHideInSelection();
+  if (!hits.length) return;
+  hits.forEach(n => n.classList.remove('ns-fold-hide'));
+  setTimeout(() => { try { applyFolds(); } catch (err) {} }, 0);
+});
+editor.addEventListener('cut', () => {
+  const hits = foldHideInSelection();
+  if (!hits.length) return;
+  hits.forEach(n => n.classList.remove('ns-fold-hide'));
+  setTimeout(() => { try { applyFolds(); } catch (err) {} try { persistFoldStates(); } catch (err) {} }, 0);
+});
 // 护栏：光标落在 [折叠] 标记内或紧随其后时按退格，整删 [折叠]（原子），绝不一个字一个字啃出 [折叠 半截坏标记
 function foldMarkTouchedByCaret(range) {
   const node = range.startContainer, off = range.startOffset;
@@ -3938,14 +4018,14 @@ function showOfflineBar(ts) {
 // 前置守卫保留：未解锁（重载只会回锁屏页，属自伤）；busy/在途写入（reload 会掐断在途 PUT，
 // 红线15 toast 守卫不动）。脏内容与在途保存的卸载兜底走既有 pagehide→flushDirtySave 链，
 // 密钥/草稿/缓存在 localStorage——重载后 loadStoredKey 自动解锁，与用户手按 F5 行为逐字节相同。
-/* ── v9.2.0 正文图片：点开放大 / 右键·长按统一菜单 / 三端保存阶梯 ──────────
+/* ── v9.2.0 正文图片：点开放大 / 触屏长按菜单 / 三端保存阶梯（v9.3.0 重排）────────
    现状（读码结论）：正文图片是粘贴后压成 JPEG 上传 Cloudinary 得到的 https 直链（端到端加密
-   不覆盖图片），App 壳内 <a download> 是哑弹（v8.0.8 导出图片链路已实锤）。所以保存必须分层：
-     ① 壳内 → ImgSave 原生桥真存进相册（Pictures/NoteSync，零新权限）
-     ② 通用 → fetch 成 blob 再走 a[download]（Cloudinary 带 CORS，导出 PNG 早已依赖这点）
-     ③ 失败 → navigator.share 系统分享面板（用户自己选「存储到文件」）
-     ④ 再失败 → 新标签打开原图 + 提示长按保存
-   单击=放大是用户拍板，代价是「点图选图」这条编辑路没了，所以菜单里必须给删除。
+   不覆盖图片），App 壳内 <a download> 是哑弹（v8.0.8 导出图片链路已实锤）。保存阶梯 v9.3.0 起：
+     ① 壳内 https 直链 → ImgSave.saveImageUrl 原生下载+存相册（不吃页面 CORS，主路径）
+     ② 壳内回退 → fetch→base64→ImgSave.saveImage（旧壳/data: 图）；两桥皆败＝明确报错，
+        壳内绝不 window.open 冒充保存（旧④兜底把「保存」变成「打开链接」，用户实锤）
+     ③ 浏览器 → fetch blob→a[download]；取不到字节才开原图提示长按
+   v9.3.0 用户拍板：PC 右键交还系统原生菜单（自建菜单只留触屏长按）；「删除图片」入口退役。
    镜像模式下照片朝向补偿加在外层 .nz-stage，不碰 img 的 inline 缩放 transform。 */
 var NS_IMG = { cur: null, open: false, scale: 1, tx: 0, ty: 0, pinch: 0, base: 1, pts: {}, dragging: false, sx: 0, sy: 0 };
 // 与 CHIP_HOVER_OK 同一条谓词（联动门两律：JS 判据与 CSS 媒体查询必须同谓词）。
@@ -3980,8 +4060,8 @@ function nsImgOpenZoom(img) {
     var tip = document.createElement('div'); tip.className = 'nz-tip';
     tip.textContent = nsHoverPointer() ? '滚轮缩放 · 双击 1:1 · 点空白关闭' : '双指缩放 · 点空白关闭';
     var bar = document.createElement('div'); bar.className = 'nz-bar';
-    [['保存', function () { nsImgSave(im); }], ['复制链接', function () { nsImgCopyLink(im); }], ['删除图片', function () { nsImgDelete(im); nsImgCloseZoom(); }]]
-      .forEach(function (b) { var e2 = document.createElement('button'); e2.textContent = b[0]; e2.addEventListener('click', b[1]); bar.appendChild(e2); });
+    [['保存到相册', function () { nsImgSave(im); }, true], ['复制链接', function () { nsImgCopyLink(im); }]]
+      .forEach(function (b) { var e2 = document.createElement('button'); e2.textContent = b[0]; if (b[2]) e2.className = 'nz-pri'; e2.addEventListener('click', b[1]); bar.appendChild(e2); });
     var x = document.createElement('div'); x.className = 'nz-x';
     x.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>';
     z.appendChild(stage); z.appendChild(tip); z.appendChild(bar); z.appendChild(x);
@@ -4034,10 +4114,9 @@ function nsImgMenu(img, x, y) {
     nsImgMenuClose();
     var m = document.createElement('div'); m.id = 'nsImgMenu';
     [['放大查看', function () { nsImgOpenZoom(img); }],
-     ['保存图片', function () { nsImgSave(img); }],
-     ['复制图片链接', function () { nsImgCopyLink(img); }],
-     ['删除图片', function () { nsImgDelete(img); }, true]].forEach(function (it) {
-      var b = document.createElement('button'); b.textContent = it[0]; if (it[2]) b.className = 'nz-del';
+     ['保存到相册', function () { nsImgSave(img); }],
+     ['复制图片链接', function () { nsImgCopyLink(img); }]].forEach(function (it) {
+      var b = document.createElement('button'); b.textContent = it[0];
       b.addEventListener('click', function () { nsImgMenuClose(); it[1](); });
       m.appendChild(b);
     });
@@ -4056,18 +4135,8 @@ function nsImgCopyLink(img) {
     setTimeout(function () { if (uploadStatus.textContent === '图片链接已复制') hideUploadStatus(); }, 2000); // 红线15
   } catch (e) {}
 }
-function nsImgDelete(img) {
-  try {
-    var block = blockOf(img, editor);
-    if (!img.parentNode) return;
-    img.parentNode.removeChild(img);
-    if (block && !(block.textContent || '').trim() && !block.querySelector('img,br')) block.appendChild(document.createElement('br')); // 红线5：块不能真空
-    try { recordIfChanged('deleteContentBackward'); } catch (e) {} // 红线6：用户动作压栈
-    clearTimeout(saveTimer); saveTimer = setTimeout(saveLocal, 800);
-    showUploadStatus('图片已删除');
-    setTimeout(function () { if (uploadStatus.textContent === '图片已删除') hideUploadStatus(); }, 2000);
-  } catch (e) {}
-}
+// v9.3.0：「删除图片」按用户令整体退役（查看器底栏传的是放大层克隆节点，旧实现从不在正文的
+// 克隆上删除＝点了没反应的那颗死按钮；正文图删除仍可用退格选中删除，无需专门入口）。
 async function nsImgSave(img) {
   var src = nsImgSrcOf(img);
   if (!src) { showUploadStatus('图片地址取不到'); setTimeout(function () { if (uploadStatus.textContent === '图片地址取不到') hideUploadStatus(); }, 2000); return; }
@@ -4077,36 +4146,36 @@ async function nsImgSave(img) {
     showUploadStatus(msg);
     setTimeout(function () { if (uploadStatus.textContent === msg) hideUploadStatus(); }, 2400);
   };
+  var cap = window.Capacitor;
+  var bridge = (cap && cap.Plugins && cap.Plugins.ImgSave) || null;
+  // v9.3.0 ① 壳内 https 直链 → 原生下载并存相册。旧阶梯先 WebView fetch 再过桥，Cloudinary
+  // 偶发 CORS/缓存失败就一路滑到 ④window.open——用户报的「点保存变成打开链接」正出于此。
+  // 原生 HttpURLConnection 自取字节不吃页面 CORS；saveImageUrl 缺席＝旧壳，落 ②base64 桥。
+  if (isNativeApp() && bridge && typeof bridge.saveImageUrl === 'function' && /^https:/i.test(src)) {
+    try {
+      var ru = await bridge.saveImageUrl({ url: src });
+      if (ru && ru.ok) { done('已存入相册 Pictures/NoteSync'); return; }
+    } catch (e0) {}
+  }
   try {
     var blob;
     if (src.indexOf('data:') === 0) { blob = await (await fetch(src)).blob(); }
     else { const r = await fetch(src); if (!r.ok) throw new Error('http ' + r.status); blob = await r.blob(); }
-    // ① 壳内：原生存相册
-    var cap = window.Capacitor;
-    var bridge = (cap && cap.Plugins && cap.Plugins.ImgSave) || null;
+    // ② 壳内回退：原生存相册（base64 通道，旧壳与 data: 本地图为它保留）
     if (isNativeApp() && bridge && typeof bridge.saveImage === 'function') {
       var res = await bridge.saveImage({ base64: await blobToB64(blob), mime: blob.type || 'image/jpeg' });
       if (res && res.ok) { done('已存入相册 Pictures/NoteSync'); return; }
-      // 原生失败不直接放弃，继续往下走分享面板
     }
-    // ② 通用下载
+    if (isNativeApp()) { done('保存未成功，可长按图片用系统菜单保存'); return; } // ③ 壳内绝不 window.open 冒充保存
+    // ④ 浏览器：blob 下载
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a'); a.href = url;
     a.download = 'notesync-' + Date.now() + '.' + (/png/.test(blob.type) ? 'png' : /gif/.test(blob.type) ? 'gif' : /webp/.test(blob.type) ? 'webp' : 'jpg');
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(function () { try { URL.revokeObjectURL(url); } catch (e) {} }, 8000);
-    if (!isNativeApp()) { done('已开始下载'); return; }
-    // ③ 壳内下载是哑弹 → 分享面板
-    try {
-      var file = new File([blob], a.download, { type: blob.type || 'image/jpeg' });
-      if (navigator.canShare && navigator.canShare({ files: [file] }) && navigator.share) {
-        await navigator.share({ files: [file] }); done('已通过系统分享发出'); return;
-      }
-    } catch (e2) { if (e2 && e2.name === 'AbortError') { hideUploadStatus(); return; } }
-    // ④ 兜底：新标签打开原图，长按可存
-    try { window.open(src, '_blank'); } catch (e3) {}
-    done('已打开原图，长按可保存');
+    done('已开始下载');
   } catch (e) {
+    if (isNativeApp()) { done('保存失败：' + (e && e.message ? e.message : '未知错误')); return; }
     try {
       var w = window.open(src, '_blank');
       if (w) { done('已打开原图，长按可保存'); return; }
@@ -4130,8 +4199,10 @@ async function nsImgSave(img) {
     if (NS_IMG.lp) return; // 长按已弹菜单，别紧接着又放大
     nsImgOpenZoom(im);
   });
-  // PC 右键：自建统一菜单（用户拍板替换原生「图片另存为」）
+  // v9.3.0（用户拍板推翻 v9.2.0 旧案）：PC 右键整幅交还系统原生菜单（另存为/复制图片都顺手），
+  // 自建菜单只保留触屏长按入口。判据用本模块自带的 nsHoverPointer（CHIP_HOVER_OK 同谓词，防 TDZ）。
   editor.addEventListener('contextmenu', function (e) {
+    if (nsHoverPointer()) return; // 桌面不拦不 preventDefault——系统菜单原样弹出
     var im = e.target && e.target.tagName === 'IMG' ? e.target : null;
     if (!im || !editor.contains(im)) return;
     e.preventDefault();
@@ -5401,7 +5472,7 @@ const NS_EGG_LIST = [
   { id: 'mirror', name: '镜像模式', hint: '访问 /mirror', replay: () => nsRouteEgg('mirror') },
   { id: 'snake', name: '贪吃蛇', hint: '访问 /snake 或正文敲 /snake', replay: () => nsRouteEgg('snake') },
   { id: 'dragon', name: '断网恐龙', hint: '访问 /dragon', replay: () => nsRouteEgg('dragon') },
-  { id: 'brick', name: '打砖块', hint: '访问 /brick · 砖是你的收藏', replay: () => nsRouteEgg('brick') },
+  { id: 'brick', name: '打砖块', hint: '访问 /brick · 砖是正文里的词', replay: () => nsRouteEgg('brick') },
   { id: 'satoshi', name: '聪合币', hint: '访问 /satoshi · 合到 1 亿聪', replay: () => nsRouteEgg('satoshi') },
   { id: 'bitcoin', name: '黄金矿工', hint: '访问 /bitcoin · 越深越肥', replay: () => nsRouteEgg('bitcoin') },
   { id: 'tank', name: '坦克大战', hint: '访问 /tank · 保卫记事本', replay: () => nsRouteEgg('tank') },
@@ -6563,12 +6634,110 @@ $('#menuAbout').addEventListener('click', async () => {
       if (rb && typeof rb.getVersion === 'function') {
         const ret = await rb.getVersion();
         const nv = ret && ret.nativeVersion;
-        if (nv) { av.textContent = 'Version ' + nv; avRow.classList.remove('hidden'); }
+        if (nv) { av.textContent = 'Version ' + nv; avRow.classList.remove('hidden'); __updNative = String(nv); }
       }
     } catch (e) {}
-  }
+    // v9.3.0：App 壳内才显示「检查更新」行（网页版 F5 即最新，给按钮只会引困惑）
+    const upRow = $('#aboutUpdRow'), upBtn = $('#aboutUpd');
+    upBtn.textContent = '检查更新';
+    upRow.classList.remove('hidden');
+  } else $('#aboutUpdRow').classList.add('hidden');
   aboutMask.classList.remove('hidden');
 });
+// ── v9.3.0 App 在线升级（用户拍板）：每次点「检查更新」实时拉 GitHub releases/latest（仓库公开、免鉴权、零缓存）
+//    有新版 → 确认弹窗：版本号 + ≤3 行摘要（release 正文掐头）+ 包大小 → 立即更新：原生 DownloadManager 拉 APK、
+//    下完 FileProvider 换 content:// 拉起系统安装器覆盖安装。需一次性授权「安装未知应用」，数据不丢。 ──
+let __updNative = '';
+function nsVerCmp(a, b) { // a 比 b 新返回正数；缺段按 0
+  const pa = String(a || '').split('.').map(Number), pb = String(b || '').split('.').map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length, 3); i++) { const x = pa[i] || 0, y = pb[i] || 0; if (x !== y) return x - y; }
+  return 0;
+}
+function updMsg(t, bad) { const m = $('#updMsg'); m.textContent = t; m.style.color = bad ? 'var(--danger)' : ''; }
+function updReset(url, tag) {
+  $('#updProg').classList.add('hidden'); $('#updBar').style.width = '0';
+  const y = $('#updYes'); y.disabled = false; y.textContent = '立即更新'; y.onclick = () => nsUpdDownload(url, tag);
+}
+async function nsCheckUpdate() {
+  const btn = $('#aboutUpd'); if (!btn) return;
+  btn.textContent = '检查中…'; btn.style.pointerEvents = 'none';
+  const restore = () => { btn.textContent = '检查更新'; btn.style.pointerEvents = ''; };
+  try {
+    const r = await fetch('https://api.github.com/repos/' + UPD_REPO + '/releases/latest', { headers: { 'Accept': 'application/vnd.github+json' }, cache: 'no-store' });
+    if (!r.ok) throw new Error('http ' + r.status);
+    const o = await r.json();
+    const tag = String(o.tag_name || '').replace(/^v/, '');
+    let apk = null; (o.assets || []).forEach(a => { if (!apk && /\.apk$/i.test(a.name || '')) apk = a; });
+    if (!tag || !apk || !apk.browser_download_url) throw new Error('no-apk');
+    if (nsVerCmp(tag, __updNative || APP_VERSION) <= 0) { btn.textContent = '已是最新版本'; setTimeout(restore, 2600); return; }
+    const notes = String(o.body || '').split(/\r?\n/)
+      .map(s => s.replace(/^\s*(?:[-*>#]+\s*|\d+\.\s+)/, '').trim())
+      .filter(s => s && !/^(?:https?:|full changelog|.*\[.*\]\(.*\).*$|compare)/i.test(s))
+      .slice(0, 3).map(s => s.length > 34 ? s.slice(0, 33) + '…' : s);
+    $('#updVer').textContent = 'Version ' + tag;
+    $('#updMeta').textContent = (apk.size ? (apk.size / 1048576).toFixed(1) + ' MB · ' : '') + 'GitHub Releases 官方安装包';
+    $('#updNotes').textContent = notes.length ? notes.join('；') : '详见 GitHub 发布页';
+    updReset(apk.browser_download_url, tag); updMsg('');
+    aboutMask.classList.add('hidden');
+    $('#updMask').classList.remove('hidden');
+    restore();
+  } catch (e) {
+    btn.textContent = (String((e && e.message) || '').indexOf('403') >= 0 ? '更新服务请求太频繁，过会儿再试' : '检查失败，稍后再试'); setTimeout(restore, 2600);
+  }
+}
+let updTimer = null;
+async function nsUpdDownload(url, tag) {
+  const cap = window.Capacitor;
+  const br = (cap && cap.Plugins && cap.Plugins.AppUpdate) || null;
+  if (!br || typeof br.downloadApk !== 'function') { // 旧壳没桥：至少把人送到官方下载页，不装死
+    updMsg('当前版本壳不支持一键升级，正在打开官方下载页', true);
+    try { window.open(url, '_blank'); } catch (e) {}
+    return;
+  }
+  const y = $('#updYes'); y.disabled = true; y.textContent = '准备下载…';
+  $('#updProg').classList.remove('hidden'); $('#updBar').style.width = '0';
+  const res = await br.downloadApk({ url, tag }).catch(() => null);
+  if (!res || !res.ok) { y.disabled = false; y.textContent = '重试'; updMsg('下载启动失败：' + ((res && res.error) || '桥无应答'), true); return; }
+  if (res.reused && res.path) { $('#updBar').style.width = '100%'; nsUpdInstall(br, res.path); return; } // 闸R2-P1：下过的 APK 秒回直通安装，不「撤单从零重下」
+  y.textContent = '下载中…';
+  clearInterval(updTimer);
+  updTimer = setInterval(async () => {
+    const st = await br.downloadState({ id: res.id }).catch(() => null);
+    if (!st || !st.ok) return; // 单次查询失败不打断，下一拍再问
+    if (st.status === 'done') {
+      clearInterval(updTimer); $('#updBar').style.width = '100%';
+      nsUpdInstall(br, st.path || res.path);
+    } else if (st.status === 'failed' || st.status === 'gone') {
+      clearInterval(updTimer); y.disabled = false; y.textContent = '重试下载';
+      y.onclick = () => nsUpdDownload(url, tag);
+      updMsg(st.status === 'gone' ? '下载被取消了，点重试' : '下载失败，点重试', true);
+    } else if (st.total > 0) {
+      const pc = Math.min(99, Math.round(st.downloaded / st.total * 100));
+      $('#updBar').style.width = pc + '%';
+      $('#updMsg').textContent = '下载中 ' + pc + '%（' + (st.downloaded / 1048576).toFixed(1) + ' / ' + (st.total / 1048576).toFixed(1) + ' MB）';
+      $('#updMsg').style.color = '';
+    }
+  }, 400);
+}
+async function nsUpdInstall(br, path) {
+  const y = $('#updYes'); y.textContent = '拉起安装…'; y.disabled = true;
+  const r = await br.install({ path }).catch(() => null);
+  if (r && r.needPermission) {
+    try { await br.requestInstallPermission({}); } catch (e) {}
+    y.disabled = false; y.textContent = '立即更新';
+    updMsg('在设置里允许「安装未知应用」后，回到这里再点一次', true);
+    return;
+  }
+  y.disabled = false; y.textContent = '重新拉起安装';
+  if (!r || !r.ok) { updMsg('安装页没拉起来：' + ((r && r.error) || '未知原因'), true); return; }
+  updMsg('安装页已打开：点「安装」即覆盖升级，笔记数据不会丢');
+}
+const UPD_REPO = 'zchening/NoteSync';
+$('#aboutUpd').addEventListener('click', () => { try { nsCheckUpdate(); } catch (e) {} });
+// 闸R2-P1：关窗不 clearInterval——DownloadManager 还在跑，掐了轮询就是「关窗失联、APK 滞留」；
+// 留着，下完自动 nsUpdInstall 拉起系统安装页（用户拍板原话＝确认更新后自动下载并覆盖安装）
+$('#updNo').addEventListener('click', () => { $('#updMask').classList.add('hidden'); });
+$('#updMask').addEventListener('click', e => { if (e.target === $('#updMask')) $('#updMask').classList.add('hidden'); });
 // 彩蛋：800ms 内连点标题「关于 Note Sync」4 次 → 关闭关于弹窗 → 弹诊断模态（v6.1 用户需求）
 let aboutTaps = 0, aboutTapTimer = null;
 $('#aboutTitle').addEventListener('click', () => {
@@ -6615,6 +6784,13 @@ editor.addEventListener('scroll', () => { if (!diagMask.classList.contains('hidd
 // v5.58：三端菜单/左下角布局统一——扫一扫、日夜间切换、退出锁定全平台可见（平台差异化机制退役），
 // 顶栏 themeBtn/lock 全平台移除（见样式区 #themeBtn, #lock{display:none}）
 $('#menuTheme').addEventListener('click', () => { menuMask.classList.add('hidden'); themeBtn.click(); if (CHIP_HOVER_OK) { try { editor.focus(); ensureCaret(); } catch (e) {} } });
+// v9.3.0：App 内看不到桌宠的根修入口——菜单「桌宠」行直开 /pet 面板（面板挂载即 adopted=true+唤醒+挂出，
+// 顶栏下沿左右爬行不动）。旧链路只有「正文敲 /pet→确认条」，App 里键盘把 bottom 浮层推离可视区，领养不可达。
+$('#menuPet').addEventListener('click', () => {
+  dismissKeyboardForTouch();
+  menuMask.classList.add('hidden');
+  try { window.nsRouteEgg('pet'); } catch (e) {}
+});
 $('#menuLock').addEventListener('click', () => { menuMask.classList.add('hidden'); document.getElementById('lock').click(); });
 
 // ── 修改口令（v6.0，Y 简单式）──
@@ -8233,6 +8409,11 @@ body.ns-mirror-C .brand{flex-direction:row-reverse}
 #nsPet.talk{animation:nsPetNod .5s ease-in-out}
 @keyframes nsPetNod{0%,100%{transform:rotate(0)}40%{transform:rotate(-8deg) translateY(-2px)}}
 #nsPet.asleep{opacity:.42;animation:none}
+/* v9.3.0 桌宠×节日雨：雨在落，骑在顶栏的宠物就抬头张望。旋转只挂内层 svg——
+   外层 #nsPet 的 transform 被左右爬行的 translateX 每 60ms 写值，抢不得；
+   body:has(...) 老内核不支持＝不转，静默降级。 */
+body:has(#nsRain:not(.hidden)) #nsPet svg{transform-origin:50% 90%;animation:nsPetPeek 1.6s ease-in-out infinite}
+@keyframes nsPetPeek{0%,100%{transform:rotate(0)}35%,62%{transform:rotate(-16deg)}}
 @media (max-width:560px){#nsPet{width:22px;height:22px}}
 .ns-pet-top{display:flex;align-items:center;gap:12px;margin-bottom:14px}
 .ns-pet-av{width:44px;height:44px;flex:none;border:1px solid var(--line);border-radius:12px;display:flex;align-items:center;justify-content:center;color:var(--fg);background:var(--box-bg)}
@@ -8246,6 +8427,14 @@ body.ns-mirror-C .brand{flex-direction:row-reverse}
 .ns-pet-btns button{flex:1;font:400 11px/1.3 var(--mono);padding:10px 4px;border:1px solid var(--line);border-radius:10px;background:none;color:var(--fg);cursor:pointer}
 .ns-pet-free{border-color:var(--accent)!important;color:var(--accent)!important;background:var(--accent-soft)!important}
 .ns-pass{border:1px dashed var(--accent);border-radius:10px;background:var(--accent-soft);padding:10px 11px;font:400 10.5px/1.7 var(--mono);color:var(--fg);word-break:break-all;margin-bottom:10px}
+/* v9.3.0 档案页护照换养区：旧认领路（粘正文→敲 /pet）在 App 里被键盘+无地址栏卡死，这里给一条明路 */
+.ns-swap{display:flex;flex-direction:column;gap:8px;margin:2px 0 10px}
+.ns-swap-in{font:400 11px/1.4 var(--mono);padding:10px 11px;border:1px solid var(--ring);border-radius:9px;background:var(--box-bg);color:var(--fg);width:100%}
+.ns-swap-in.bad{border-color:var(--danger)}
+.ns-swap-go{font:600 12px/1.2 var(--mono);letter-spacing:.04em;padding:11px;border:1px solid var(--accent);border-radius:9px;background:var(--accent-soft);color:var(--accent);cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.ns-swap-go:disabled{opacity:.45}
+.ns-swap-msg{font:400 10.5px/1.6 var(--mono);color:var(--muted);margin:0}
+.ns-swap-msg.bad{color:var(--danger)}
 .ns-pnote{font:400 10.5px/1.7 var(--mono)!important;color:var(--muted)!important}
 /* 关于页第四行「彩蛋 N/M FOUND」（方案 A） */
 .ns-egg-entry{cursor:pointer;border-radius:9px;margin:0 -2px;padding:0 2px;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
@@ -8984,7 +9173,12 @@ register({
       '<div class="ns-pet-meta"><b>' + ['幼体', '成体', '胖体', '长老'][p.stage] + '</b><span>吃了 ' + p.ate.toLocaleString('en-US') + ' 字 · 醒着 ' + p.days + ' 天 · 柜子 ' + p.shelf.length + ' / 16</span></div></div>' +
       '<div class="ns-shelf"></div>' +
       '<div class="ns-pass"></div>' +
-      '<p class="ns-pnote">档案只存计数与形态，不含任何笔记原文。护照即钥匙——粘进任意一条笔记存着，重装后打开那条笔记敲 /pet 就能认领回来；护照与本机存储同时丢失则找不回（找回就要账号）。</p>' +
+      '<p class="ns-pnote">档案只存计数与形态，不含任何笔记原文。护照即钥匙——粘进任意一条笔记存着，重装后打开那条笔记敲 /pet 就能认领回来，也可以直接在下面输入框里换养；护照与本机存储同时丢失则找不回（找回就要账号）。</p>' +
+      '<div class="ns-swap">' +
+      '<input class="ns-swap-in" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="粘贴另一只桌宠的护照（ns1:id=…;key=…）">' +
+      '<button class="ns-swap-go" disabled>换养这只</button>' +
+      '<p class="ns-swap-msg" hidden></p>' +
+      '</div>' +
       '</div>' +
       '<div class="ns-pet-dock">' +
       '<div class="ns-pet-btns"><button class="ns-pet-sleep">让它去睡</button><button class="ns-pet-free">放归（档案保留 30 天）</button></div>' +
@@ -9006,6 +9200,31 @@ register({
     var cp = mk('button', '', '复制护照'); cp.className = 'ns-pet-copy';
     cp.addEventListener('click', function () { try { navigator.clipboard.writeText(window.nsArcadePassport()); cp.textContent = '已复制，粘进任意笔记存好'; setTimeout(function () { cp.textContent = '复制护照'; }, 2200); } catch (e) {} });
     root.querySelector('.ns-pet-btns').appendChild(cp);
+    // v9.3.0 护照换养：认领链与「粘进正文敲 /pet」完全同一条（nsTryClaimFromBody 带文本+回调），
+    // 成功后面板会被认领链自己重挂载刷新数字——这里只补一行反馈，不重复关面板
+    var swIn = root.querySelector('.ns-swap-in'), swGo = root.querySelector('.ns-swap-go'), swMsg = root.querySelector('.ns-swap-msg');
+    function swapMsg(bad, msg) {
+      swMsg.hidden = false; swMsg.textContent = msg;
+      swMsg.className = 'ns-swap-msg' + (bad ? ' bad' : '');
+      swIn.classList.toggle('bad', !!bad);
+      swGo.textContent = '换养这只'; swGo.disabled = !String(swIn.value || '').trim();
+    }
+    swIn.addEventListener('input', function () {
+      swGo.disabled = !String(swIn.value || '').trim();
+      swMsg.hidden = true; swMsg.classList.remove('bad'); swIn.classList.remove('bad');
+    });
+    swGo.addEventListener('click', function () {
+      var v = String(swIn.value || '').trim(); if (!v) return;
+      swGo.disabled = true; swGo.textContent = '确认中…';
+      try {
+        nsTryClaimFromBody(v, function (r) {
+          if (r && r.ok && !r.dup) swapMsg(false, '✓ 换养成功：形态、吃字与柜子已按新档案接管');
+          else if (r && r.ok) swapMsg(false, '本机已经养着这只了');
+          else if (r && r.why === 'format') swapMsg(true, '护照格式不对：应为 ns1:id=8位;key=8~16位');
+          else swapMsg(true, '没找到这只桌宠（档案不存在、钥匙抄错或离线，均可稍后重试）');
+        });
+      } catch (e) { swapMsg(true, '换养失败：' + ((e && e.message) || '未知错误')); }
+    });
     root.querySelector('.ns-pet-free').addEventListener('click', function () { // 放归=收起并打 retiredAt（档案保留 30 天可原样认领），不删任何数据
       PET.asleep = true; PET.retiredAt = Date.now(); petSave(PET);
       var el = document.getElementById('nsPet');
@@ -9091,21 +9310,22 @@ window.nsArcadeClaimRe = function () { return ARC_PASS_RE; };
 /* ── 8. 启动：URL 命中门牌则直接进游戏；否则按已领养状态挂桌宠 ───── */
 /* 认领：打开任意笔记时扫一眼正文里的护照，认出 id/key 就换档并从服务端拉回成绩。
    护照即钥匙——丢了不可找回（要做找回就得要账号，那就不再是 NoteSync） */
-function nsTryClaimFromBody() {
+function nsTryClaimFromBody(scanText, cb) {
   try {
     // 不设「本轮已认过」标志：那种标志（无论持久还是会话）都会把第二本护照堵死。
     // 防重复扫描由下面的「本机已是这只」承担；取档失败也自然留待下次再试
-    var txt = (typeof editor !== 'undefined' && editor && editor.textContent) || '';
-    if (!txt) return;
+    // v9.3.0：scanText/cb 为档案页「输入护照换养」新增——默认仍扫正文、不传回调＝旧行为零变化
+    var txt = (typeof scanText === 'string' && scanText) || (typeof editor !== 'undefined' && editor && editor.textContent) || '';
+    if (!txt) { if (cb) cb({ ok: false, why: 'empty' }); return; }
     var m = ARC_PASS_RE.exec(txt);
-    if (!m) return;
-    if (ARC.id === m[1]) return; // 本机已是这只
+    if (!m) { if (cb) cb({ ok: false, why: 'format' }); return; }
+    if (ARC.id === m[1]) { if (cb) cb({ ok: false, why: 'self' }); return; } // 本机已是这只
     var pend = { id: m[1], key: m[2] }; // 先拉后换：拉不到就原样不动（旧写法先换档再 fetch，护照手抄错一位就等于把本机切进不可达档且成绩清零）
     fetch('/api/arcade/' + pend.id, { headers: { 'x-arcade-key': pend.key } }).then(function (r) {
       return r.status === 200 ? r.json() : null;
     }).then(function (o) {
-      if (!o) return; // 无此档/钥匙错/离线：不换档、下次再试
-      if (ARC.id === pend.id) return; // 等待期间本机已换到这只（并发扫描/两次点开面板）
+      if (!o) { if (cb) cb({ ok: false, why: 'notfound' }); return; } // 无此档/钥匙错/离线：不换档、下次再试
+      if (ARC.id === pend.id) { if (cb) cb({ ok: true, dup: true }); return; } // 等待期间本机已换到这只（并发扫描/两次点开面板）
       ARC.id = pend.id; ARC.key = pend.key;
       ARC.counters = o.counters || {}; ARC.shelf = o.shelf || []; ARC.updatedAt = Number(o.updatedAt) || 0;
       try { localStorage.setItem(ARC_KEY, JSON.stringify(ARC)); } catch (e) {}
@@ -9121,10 +9341,11 @@ function nsTryClaimFromBody() {
       if (!PET.asleep) PET.last = Date.now();
       petSave(PET);
       if (!PET.asleep) setTimeout(petMount, 200); // 他端已放归/在睡：照状态还原，绝不复活挂出（boot 同一口径）
+      if (cb) setTimeout(function () { cb({ ok: true }); }, 300);
       // 面板正开着就把数字与柜子刷新（keepHistory 收壳再起新局：认领绝不该动到历史）
       setTimeout(function () { try { if (NSG.cur && NSG.route === 'pet') { closeShell(false, true); launch('pet'); } } catch (e) {} }, 260);
-    }).catch(function () {});
-  } catch (e) {}
+    }).catch(function () { if (cb) cb({ ok: false, why: 'notfound' }); });
+  } catch (e) { if (cb) { try { cb({ ok: false, why: 'notfound' }); } catch (e2) {} } }
 }
 window.nsClaimPassport = nsTryClaimFromBody; // 主脚本在解锁渲染正文后调一次：加密笔记在 boot+2.5s 时正文还是空的
 function boot() {
@@ -9143,6 +9364,12 @@ function boot() {
   mo.observe(document.body, { childList: true, subtree: true });
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else setTimeout(boot, 0);
+// v9.3.0 桌宠×彩蛋互动桥：游戏层（独立 <script>）够不着 PET/fx，经 window 暴露最小判据——
+// on()＝已领养且醒着（才画局内小宠）；burp()＝借用桌宠吃字音色（打碎砖＝吃掉词）。全程兜底 false/no-op。
+window.nsPetGame = {
+  on: function () { try { return !!PET.adopted && !PET.asleep; } catch (e) { return false; } },
+  burp: function () { try { NSG.voice = 'pet'; fx('burp'); } catch (e) {} }
+};
 })();
 </script>
 <script>
@@ -9190,7 +9417,39 @@ function clipTo(c, txt, max) {
   while (s.length > 1 && c.measureText(s + '…').width > max) s = s.slice(0, -1);
   return s + '…';
 }
+// v9.3.0 桌宠×彩蛋：迷你桌宠剪影（与 #nsPet 同款体型：圆身、双耳、两点眼），
+// 锚点＝脚底中心 (x, y)。只吃 pal 令牌、零新色；bob 为触地/点头下沉量。
+function petMini(c, P, x, y, bob) {
+  var oy = y - (bob || 0);
+  c.lineWidth = 1.7; c.lineJoin = 'round'; c.strokeStyle = P.ac; c.fillStyle = P.soft;
+  c.beginPath(); c.arc(x, oy - 7, 7, 0, 7); c.fill(); c.stroke();
+  c.beginPath(); c.moveTo(x - 5, oy - 11); c.lineTo(x - 6.5, oy - 17); c.lineTo(x - 1, oy - 13); c.stroke();
+  c.beginPath(); c.moveTo(x + 5, oy - 11); c.lineTo(x + 6.5, oy - 17); c.lineTo(x + 1, oy - 13); c.stroke();
+  c.fillStyle = P.fg;
+  c.beginPath(); c.arc(x - 2.4, oy - 8, 1, 0, 7); c.fill();
+  c.beginPath(); c.arc(x + 2.4, oy - 8, 1, 0, 7); c.fill();
+}
+// v9.3.0（用户令）：「吃正文」词源——/brick 的砖面与 /dragon 的障碍牌优先取当前笔记正文里的词。
+// 按标点切块；长中文串每 3 字一切保证砖面可读；纯只读快照（游戏全程零写入红线不变）；
+// 词数不足 8 或正文为空 → 回退旧词源（收藏/待办/笔记名），游戏永远有词可用。
+function bodyWords() {
+  var out = [], seen = {};
+  function add(w) { w = w.trim(); if (w.length < 2 || w.length > 6) return; if (seen[w]) return; seen[w] = 1; out.push(w); }
+  try {
+    var t = (editor && editor.textContent) || '';
+    t = t.replace(/[​]/g, '').replace(/\[折叠\]/g, ' ').replace(/\s+/g, ' ');
+    var parts = t.split(/[^0-9A-Za-z一-鿿%.\-]+/);
+    for (var i = 0; i < parts.length && out.length < 40; i++) {
+      var p = parts[i].replace(/^[.\-]+|[.\-]+$/g, '');
+      if (!p) continue;
+      if (/^[0-9A-Za-z%.\-]+$/.test(p)) { add(p); continue; }
+      for (var k = 0; k < p.length && out.length < 40; k += 3) add(p.substr(k, 3));
+    }
+  } catch (e) {}
+  return out;
+}
 function names(kind) { // 素材：只读拷贝，与笔记本体无引用关系（游戏全程零写入）
+  if (kind === 'brick' || kind === 'dragon') { var bw = bodyWords(); if (bw.length >= 8) return bw; }
   var out = [];
   try { // 收藏夹真身 = localStorage notesync_favs，元素为笔记名字符串（index.html:5712）
     var favs = JSON.parse(localStorage.getItem('notesync_favs') || '[]');
@@ -9296,10 +9555,10 @@ R(function () {
   function jump() { if (phase === 'run' && ground && !dead) { vy = 330; ground = false; FX('jump'); } } // y 是离地高度，起跳必须给正初速（与 vy -= g 同向才跳得起来）
   function poly(c, pts, u) { c.beginPath(); pts.forEach(function (p, i) { i ? c.lineTo(p[0] * u, p[1] * u) : c.moveTo(p[0] * u, p[1] * u); }); c.closePath(); c.fill(); }
   return {
-    id: 'dragon', tip: '点屏幕 / 空格 = 跳 · ↓ 或下半屏按住 = 低头 · 撞上"会议"就结束',
+    id: 'dragon', tip: '点屏幕 / 空格 = 跳 · ↓ 或下半屏按住 = 低头 · 撞上牌子就结束',
     probe: function () { return { phase: phase, y: y, vy: vy, ground: ground, duck: duck, obs: obs.length, pass: pass, dead: dead }; }, // y=离地高度：跳不起来这种物理反号只有真状态能抓
-    start: function () { words = names('obs'); reset(); },
-    reset: function () { words = names('obs'); reset(); },
+    start: function () { words = names('dragon'); reset(); },
+    reset: function () { words = names('dragon'); reset(); },
     resize: function (w, h) { GY = h - 26; },
     key: function (e) {
       if (e.code === 'Space' || e.code === 'ArrowUp') { e.preventDefault(); if (phase === 'intro') { phase = 'run'; return; } jump(); }
@@ -9345,6 +9604,8 @@ R(function () {
       c.strokeStyle = P.fg; c.lineWidth = 1.7; c.lineCap = 'round'; c.beginPath(); c.moveTo(19 * u, 14 * u); c.lineTo(22.6 * u, 15 * u); c.stroke();
       c.fillStyle = P.bg; rr(c, 20 * u, 6.3 * u, 4 * u, 1.7 * u, .4 * u); c.fill(); rr(c, 21 * u, 4 * u, 1.9 * u, 1.9 * u, .5 * u); c.fill();
       c.restore();
+      // v9.3.0 桌宠×dragon：小宠蹲恐龙头顶同行——起跳一起离地，恐龙低头闪障时它跳起来躲（纯装饰，零碰撞判定）
+      if (window.nsPetGame && nsPetGame.on() && phase !== 'intro') petMini(c, P, dx + 24, GY - y - s + 2 - (duck ? 18 : 0), 0);
       if (phase === 'intro') {
         c.fillStyle = P.mu; c.font = '10px ui-monospace,Consolas,monospace';
         c.fillText('NO NETWORK · 那就跑会儿步', W / 2 - 84, 22);
@@ -9368,17 +9629,20 @@ R(function () {
   };
 }());
 
-/* ═══ /brick 打砖块：砖是收藏条目与待办，打掉只计分不改数据 ═════════ */
+/* ═══ /brick 打砖块：砖面优先取正文词（v9.3.0），词不足回退收藏/待办；打掉只计分不改数据 ═════════ */
 R(function () {
   var COLS = 6, ROWS = 3, bw = 58, bh = 24, gap = 3, bricks = [], ball = null, pad = { x: 0, w: 74 }, score = 0, combo = 0, best = 0, t0 = 0, dead = false;
+  // v9.3.0 桌宠×brick：小宠蹲在球拍右端观战，球打碎砖它点头；约 18% 概率冒一句「吃掉这个词」并借桌宠打嗝音
+  var petBob = 0, petTalk = '', talkT = 0;
   function reset() {
-    var nm = names(); bricks = [];
+    var nm = names('brick'); bricks = [];
     for (var r = 0; r < ROWS; r++) for (var c = 0; c < COLS; c++) {
       var kind = (r === 1 && c % 2 === 0) ? 'hard' : (r === 0 && c === 3 ? 'steel' : 'norm');
       bricks.push({ x: 6 + c * (bw + gap), y: 26 + r * (bh + gap), w: bw, h: bh, name: nm[(r * COLS + c) % nm.length], kind: kind, hp: kind === 'hard' ? 2 : 1, alive: true });
     }
     ball = { x: SH().W / 2, y: SH().H - 70, vx: 118, vy: -196, r: 5 }; pad.x = SH().W / 2 - pad.w / 2;
     score = 0; combo = 0; best = 0; t0 = 0; dead = false;
+    petBob = 0; petTalk = ''; talkT = 0;
   }
   function end(win) {
     dead = true; SH().scoreVal = score;
@@ -9386,7 +9650,7 @@ R(function () {
     FX(win ? 'win' : 'fail');
   }
   return {
-    id: 'brick', tip: '单指横拖 / 鼠标移动 = 挡板 · 砖面是你的收藏与待办标题 · 打掉只计分，不改一条数据',
+    id: 'brick', tip: '单指横拖 / 鼠标移动 = 挡板 · 砖面是你正文里的词 · 打掉只计分，不改一条数据',
     start: function () { reset(); }, reset: function () { reset(); },
     resize: function (w) { bw = Math.floor((w - 12 - gap * (COLS - 1)) / COLS); },
     move: function (x) { pad.x = Math.max(0, Math.min(SH().W - pad.w, x - pad.w / 2)); },
@@ -9408,11 +9672,15 @@ R(function () {
           if (b.kind === 'steel') { ball.vy *= -1; FX('hit'); break; }
           b.hp--; ball.vy *= -1;
           if (b.hp <= 0) { b.alive = false; score++; combo++; best = Math.max(best, combo); FX('brick'); SC(score + ' / ' + bricks.length);
+            petBob = 0.35; // 桌宠蹲在拍上观战：碎一块点一次头
+            if (window.nsPetGame && nsPetGame.on() && !talkT && Math.random() < 0.18) { petTalk = '「' + String(b.name).slice(0, 2) + '」好消化'; talkT = 1.6; nsPetGame.burp(); }
             if (bricks.every(function (x) { return !x.alive || x.kind === 'steel'; })) return end(true);
           } else FX('hit');
           break;
         }
       }
+      if (petBob > 0) petBob = Math.max(0, petBob - dt);
+      if (talkT > 0) talkT = Math.max(0, talkT - dt);
       LV('连击 ' + combo);
     },
     draw: function () {
@@ -9433,6 +9701,10 @@ R(function () {
       c.lineWidth = 1.7; c.strokeStyle = P.ac; c.fillStyle = P.soft;
       rr(c, pad.x, H - 24, pad.w, 8, 4); c.fill(); c.stroke();
       c.strokeStyle = P.fg; c.fillStyle = P.bx; c.beginPath(); c.arc(ball.x, ball.y, ball.r, 0, 7); c.fill(); c.stroke();
+      if (window.nsPetGame && nsPetGame.on()) { // v9.3.0 桌宠蹲拍沿观战（纯装饰，零碰撞参与）
+        petMini(c, P, pad.x + pad.w - 11, H - 24, petBob > 0 ? Math.sin((0.35 - petBob) / 0.35 * Math.PI) * 2.5 : 0);
+        if (talkT > 0) { c.fillStyle = P.mu; c.font = '9.5px ui-monospace,Consolas,monospace'; c.textAlign = 'right'; c.fillText(petTalk, pad.x + pad.w - 22, H - 38); c.textAlign = 'left'; }
+      }
     }
   };
 }());
@@ -9443,31 +9715,48 @@ R(function () {
   // （此前出生 2/4 聪，上限只有 2^17=131,072 聪 = 目标的 0.13%，won 与「1 ₿」永不触发、/bitcoin 解锁链是死内容）
   var SPAWN = 65536, SPAWN2 = 131072, BIG = 8388608, MID = 524288;
   var GOAL = 1e8, b = [], score = 0, moves = 0, won = false, nm = [], ghost = 0;
+  // v9.3.0（用户令）：移动/合并加动画——纯表现层。SA.map 键「i_j」记 {oi,oj 来格, m 是否合并}，
+  // draw 按时间插值滑入 + 合并 pop；棋盘数据仍同步更新（probe/守卫链零感知），动画过期自动清。
+  var SA = { anim: null, t0: 0, SM: 120, PM: 170 };
+  function saNow() { return (window.performance && performance.now) ? performance.now() : Date.now(); }
   function fmt(n) { return n >= GOAL ? '1 ₿' : n.toLocaleString('en-US'); }
   function add() {
     var e = []; b.forEach(function (r, i) { r.forEach(function (v, j) { if (!v) e.push([i, j]); }); });
     if (!e.length) return; var p = pick(e); b[p[0]][p[1]] = Math.random() < 0.9 ? SPAWN : SPAWN2;
   }
   function reset() { b = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]; score = 0; moves = 0; won = false; add(); add(); }
-  function slide(row) { var a = row.filter(Boolean), g = 0;
+  function slide(row) { var a = [], g = 0;
+    for (var k0 = 0; k0 < 4; k0++) if (row[k0]) a.push({ v: row[k0], f: k0 });
     // i++ 跳过刚合出来的块：否则 [2,2,4] 会连合两次变 8（违反 2048 规则，闸 R2 命中）
-    for (var i = 0; i < a.length - 1; i++) if (a[i] === a[i + 1]) { a[i] *= 2; g += a[i]; if (a[i] >= GOAL) won = true; a.splice(i + 1, 1); i++; }
-    while (a.length < 4) a.push(0); return { row: a, g: g }; }
+    // v9.3.0：a 元素对象化 {v,f 来格行内索引,m 合出来的}——行值行为与旧版逐位等价，mv 供 move 采集滑位动画
+    for (var i = 0; i < a.length - 1; i++) if (a[i].v === a[i + 1].v) { a[i].v *= 2; a[i].m = true; g += a[i].v; if (a[i].v >= GOAL) won = true; a.splice(i + 1, 1); i++; }
+    var out = []; for (var t0 = 0; t0 < a.length; t0++) out.push(a[t0].v); while (out.length < 4) out.push(0);
+    return { row: out, g: g, mv: a }; }
   function canMove() {
     for (var i = 0; i < 4; i++) for (var j = 0; j < 4; j++) { if (!b[i][j]) return true;
       if (j < 3 && b[i][j] === b[i][j + 1]) return true; if (i < 3 && b[i][j] === b[i + 1][j]) return true; } return false; }
   function move(d) {
-    var before = JSON.stringify(b), g = 0;
-    if (d === 'L') b = b.map(function (r) { var s = slide(r); g += s.g; return s.row; });
-    if (d === 'R') b = b.map(function (r) { var s = slide(r.slice().reverse()); g += s.g; return s.row.reverse(); });
-    if (d === 'U') for (var c = 0; c < 4; c++) { var s1 = slide(b.map(function (r) { return r[c]; })); g += s1.g; for (var r1 = 0; r1 < 4; r1++) b[r1][c] = s1.row[r1]; }
-    if (d === 'D') for (var c2 = 0; c2 < 4; c2++) { var s2 = slide(b.map(function (r) { return r[c2]; }).reverse()); g += s2.g; var rr2 = s2.row.reverse(); for (var r2 = 0; r2 < 4; r2++) b[r2][c2] = rr2[r2]; }
+    var before = JSON.stringify(b), g = 0, anims = [];
+    // v9.3.0：四向统一「线条迭代」——cells[0] 恒是块堆积方向的靠边格，slide 语义与旧 reverse 版逐值等价
+    for (var t2 = 0; t2 < 4; t2++) {
+      var L = [];
+      for (var q = 0; q < 4; q++) L.push(d === 'L' ? [t2, q] : d === 'R' ? [t2, 3 - q] : d === 'U' ? [q, t2] : [3 - q, t2]);
+      var s = slide(L.map(function (c) { return b[c[0]][c[1]]; }));
+      g += s.g;
+      for (var k1 = 0; k1 < 4; k1++) b[L[k1][0]][L[k1][1]] = s.row[k1];
+      s.mv.forEach(function (o, k2) {
+        var f = L[o.f], tt = L[k2];
+        if (o.m) anims.push({ ni: tt[0], nj: tt[1], oi: f[0], oj: f[1], m: true });
+        else if (f[0] !== tt[0] || f[1] !== tt[1]) anims.push({ ni: tt[0], nj: tt[1], oi: f[0], oj: f[1] });
+      });
+    }
     if (JSON.stringify(b) === before) return;
     score += g; moves++; add(); FX('merge', Math.min(4, Math.round(Math.log2(Math.max(2, (g || SPAWN) / SPAWN)) / 2.5)));
+    if (anims.length) { SA.anim = anims; SA.t0 = saNow(); } // 纯表现层记账，逻辑链零感知
     if (moves % 20 === 0) { // 每 20 步一个剪影跑过棋盘撞乱一格：纯随机小破坏，制造「啊？」的瞬间
       ghost = 1;
       var cells = []; for (var i2 = 0; i2 < 4; i2++) for (var j2 = 0; j2 < 4; j2++) if (b[i2][j2]) cells.push([i2, j2]);
-      if (cells.length > 1) { var pc = pick(cells), qc = pick(cells); var tv = b[pc[0]][pc[1]]; b[pc[0]][pc[1]] = b[qc[0]][qc[1]]; b[qc[0]][qc[1]] = tv; }
+      if (cells.length > 1) { var pc = pick(cells), qc = pick(cells); var tv = b[pc[0]][pc[1]]; b[pc[0]][pc[1]] = b[qc[0]][qc[1]]; b[qc[0]][qc[1]] = tv; SA.anim = null; } // 换格让动画坐标失效，清
     }
     if (won) { won = false; FX('win'); SH().scoreVal = score; END('合成了 1 个币', [['本局得分', score.toLocaleString('en-US')], ['步数', moves + ' 步'], ['解锁', '/bitcoin 更深一层']]); return; }
     if (!canMove()) { FX('fail'); SH().scoreVal = score; END('无路可走', [['本局得分', score.toLocaleString('en-US')], ['最大格', fmt(Math.max.apply(null, b.flat()))], ['步数', moves + ' 步']]); }
@@ -9482,6 +9771,15 @@ R(function () {
     draw: function () {
       var c = SH().ctx, P = pal(), W = SH().W, H = SH().H, side = Math.min(W, H) * 0.92, g = side / 4, ox = (W - side) / 2, oy = (H - side) / 2;
       c.clearRect(0, 0, W, H);
+      // v9.3.0 动画帧参数：滑位 120ms ease-out、合并到位后 pop（数据早已同步落定，这里纯画插值；过期自清）
+      var AD = null, ep = 1, popP = 0;
+      if (SA.anim) {
+        var el = saNow() - SA.t0;
+        if (el > SA.SM + SA.PM + 60) SA.anim = null;
+        else { var ap = Math.min(1, el / SA.SM); ep = 1 - Math.pow(1 - ap, 3);
+          popP = Math.max(0, Math.min(1, (el - SA.SM * 0.4) / SA.PM));
+          AD = {}; for (var za = 0; za < SA.anim.length; za++) { var ae0 = SA.anim[za]; AD[ae0.ni + '_' + ae0.nj] = ae0; } }
+      }
       c.strokeStyle = P.ln; c.lineWidth = 1; c.setLineDash([4, 5]);
       c.beginPath(); c.moveTo(ox, oy + side + 14); c.lineTo(ox + side, oy + side + 14); c.stroke();
       c.beginPath(); c.moveTo(ox + side * .62, oy + side + 14); c.lineTo(ox + side * .78, oy + side + 30); c.stroke(); c.setLineDash([]);
@@ -9489,6 +9787,12 @@ R(function () {
         var v = b[i][j], x = ox + j * g + 5, y = oy + i * g + 5, s = g - 10;
         c.lineWidth = 1.7; c.lineJoin = 'round';
         if (!v) { c.strokeStyle = P.ln; c.fillStyle = 'transparent'; rr(c, x, y, s, s, 9); c.stroke(); continue; }
+        var sc = 1, ae = AD ? AD[i + '_' + j] : null;
+        if (ae) {
+          if (ae.m) { if (popP > 0 && popP < 1) sc = 1 + 0.13 * Math.sin(Math.PI * popP); }
+          else { var fx0 = ox + ae.oj * g + 5, fy0 = oy + ae.oi * g + 5; x = fx0 + (x - fx0) * ep; y = fy0 + (y - fy0) * ep; }
+        }
+        if (sc !== 1) { c.save(); c.translate(x + s / 2, y + s / 2); c.scale(sc, sc); c.translate(-x - s / 2, -y - s / 2); }
         var big = v >= BIG;
         c.fillStyle = big ? P.ac : P.bx; c.strokeStyle = v > SPAWN ? P.ac : P.ln;
         rr(c, x, y, s, s, 9); c.fill(); c.stroke();
@@ -9496,13 +9800,15 @@ R(function () {
         // v9.2.0：格内千分位逗号是会下伸的字符，旧排版把「聪」压在它正下方（fs*.55 → fs*.95 只差 .4 个字高），
         // 六位以上必重叠。两处一起修：① 格内数字的分节符换 thin space（读位数不受影响、且不下伸）；
         // ② 数字与单位的行距改按**格宽**定死，不再随字号缩放——字越大旧版两行反而越近，方向是反的。
-        var txt = fmt(v).replace(/,/g, '\u2009'), fs = txt.length > 8 ? s * .2 : txt.length > 5 ? s * .26 : s * .34;
+        // v9.3.0（用户令「缩小数字大小」）：字号三档整体再降一档 .34/.26/.20 → .27/.21/.16。
+        var txt = fmt(v).replace(/,/g, '\u2009'), fs = txt.length > 8 ? s * .16 : txt.length > 5 ? s * .21 : s * .27;
         c.font = '600 ' + Math.round(fs) + 'px ui-monospace,Consolas,monospace'; c.textAlign = 'center'; c.textBaseline = 'middle';
-        if (v >= GOAL) { c.fillText(txt, x + s / 2, y + s / 2); continue; }
+        if (v >= GOAL) { c.fillText(txt, x + s / 2, y + s / 2); if (sc !== 1) c.restore(); continue; }
         var lh = s * .30;
         c.fillText(txt, x + s / 2, y + s / 2 - lh * .42);
         c.font = Math.round(fs * .5) + 'px ui-monospace,Consolas,monospace';
         c.fillText('聪', x + s / 2, y + s / 2 + lh * .58);
+        if (sc !== 1) c.restore();
       }
       if (ghost > 0) { ghost -= 0.02; // 线稿小人横穿棋盘一次，不做真寻路
         var gxp = ox + side * Math.max(0, Math.min(1, ghost)), gyp = oy + side * 0.5;
@@ -9889,6 +10195,7 @@ R(function () {
     destroy: function () { ENG(false); }
   };
 }());
+window.nsBodyWords = bodyWords; // v9.3.0：守护/诊断纯读口（正文词源），不供产品代码外使用
 })();
 </script>
 </body>

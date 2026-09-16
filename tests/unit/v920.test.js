@@ -223,10 +223,13 @@ test('V7d 让位守卫：节日雨/问候/冲突条/局内 一律不弹（坏消
     assert.ok(fn.includes(k), '让位判据缺 ' + k));
 });
 
-/* ══ V8 正文图片：放大 / 菜单 / 保存阶梯 ══════════════════════════ */
-test('V8 单击放大接管，mousedown 与 contextmenu 都拦默认', () => {
+/* ══ V8 正文图片：放大 / 菜单 / 保存阶梯（v9.3.0 翻转）══════════════ */
+test('V8 单击放大接管；v9.3.0 桌面右键交还系统菜单、自建只留触屏长按', () => {
   assert.ok(SRC.includes("editor.addEventListener('mousedown'"), '必须拦 mousedown 默认（否则点图会挪光标、清选区）');
-  assert.ok(SRC.includes("editor.addEventListener('contextmenu'"), 'PC 右键必须走自建菜单');
+  const ci = SRC.indexOf("editor.addEventListener('contextmenu'");
+  assert.ok(ci > 0, 'contextmenu 监听必须在（触屏拦截走它）');
+  const cbody = SRC.slice(ci, ci + 260);
+  assert.ok(cbody.includes('if (nsHoverPointer()) return;'), 'v9.3.0：桌面必须提前 return 不拦不 preventDefault——交还系统原生菜单（防回潮钉）');
   assert.ok(SRC.includes("editor.addEventListener('click'"), '单击必须开放大层');
   assert.ok(SRC.includes("editor.addEventListener('touchstart'"), '移动长按必须有计时器');
   assert.ok(SRC.includes('}, 520);'), '长按阈值必须钉住（短于系统 callout、长于误触）');
@@ -238,28 +241,30 @@ test('V8b 查看器与菜单的 z 序都在图鉴 z90 之下', () => {
   assert.ok(+z[1] < 90 && +m[1] < 90, '"图鉴最高"是钉住的口径，实得 zoom=' + z[1] + ' menu=' + m[1]);
   assert.ok(+m[1] > +z[1], '菜单必须浮在查看器之上（查看器里也要能弹菜单）');
 });
-test('V8c 保存阶梯四层齐，且每层 toast 都配了守卫式自收（红线15）', () => {
+test('V8c 保存阶梯 v9.3.0 重排：壳内直链原生主路径、share 退役、壳内绝不 window.open（红线15 数面齐）', () => {
   const i = SRC.indexOf('async function nsImgSave(img)');
   // 边界必须走正则：index.html 是 CRLF，裸 '\n}\n' 锚永不命中，indexOf 返回 -1 会让 slice 吞掉整段尾部变成假红
   const rel = /\r?\n\}\r?\n/.exec(SRC.slice(i));
   const fn = SRC.slice(i, i + rel.index + rel[0].length);
-  assert.ok(fn.includes('Plugins.ImgSave'), '① 壳内原生存相册');
-  assert.ok(fn.includes("a.download = 'notesync-'"), '② 通用 blob 下载');
-  assert.ok(fn.includes('navigator.share'), '③ 系统分享面板');
-  assert.ok(fn.includes("window.open(src, '_blank')"), '④ 兜底打开原图');
+  assert.ok(fn.includes('typeof bridge.saveImageUrl'), '① 壳内 https 直链原生下载必须是最前主路径');
+  assert.ok(fn.includes('Plugins.ImgSave'), '② 旧壳/data: 回退 base64 桥仍在');
+  assert.ok(!fn.includes('navigator.share'), 'v9.3.0：系统分享面板一层退役');
+  assert.ok(fn.includes("a.download = 'notesync-'"), '③ 浏览器 blob 下载');
+  assert.ok(fn.includes("window.open(src, '_blank')"), '④ 浏览器兜底打开原图');
+  const woIdx = fn.indexOf("window.open(src, '_blank')");
+  const nativeGuard = fn.lastIndexOf('isNativeApp()', woIdx);
+  assert.ok(woIdx > fn.indexOf('if (isNativeApp()) { done'), '壳内失败必须先于 window.open 明确报错——绝不允许拿打开链接冒充保存（用户实锤 bug 钉）');
+  assert.ok(nativeGuard < woIdx, 'window.open 只能在 isNativeApp 判据之后的 catch 分支里');
   // 红线15 正向钉：每个 showUploadStatus 都要配「仍是它才清」的守卫式自收。
-  // （旧写法拿末行去匹配裸调是恒假——末行在 done() 体内，守卫在下一行，测不到东西。）
   assert.strictEqual((fn.match(/showUploadStatus\(/g) || []).length, 3, '调用点数面必须钉住（多了必漏配自收）');
   assert.strictEqual((fn.match(/uploadStatus\.textContent === /g) || []).length, 3, '每个调用点都必须配守卫式 setTimeout 自收');
   assert.ok(fn.includes('if (uploadStatus.textContent === msg) hideUploadStatus()'), 'done() 通道的守卫');
   assert.ok(fn.includes("if (uploadStatus.textContent === '图片地址取不到') hideUploadStatus()"), '早退通道的守卫');
 });
-test('V8d 删除图片走撤销栈与落库链，不留空块（红线5/6）', () => {
-  const i = SRC.indexOf('function nsImgDelete(img)');
-  const fn = SRC.slice(i, SRC.indexOf('\n}', i) + 2);
-  assert.ok(fn.includes("recordIfChanged('deleteContentBackward')"), '用户动作必须压撤销栈');
-  assert.ok(fn.includes('saveTimer = setTimeout(saveLocal, 800)'), '必须照常落库');
-  assert.ok(fn.includes("createElement('br')"), '删空后必须补 br，块不许真空（红线5）');
+test('V8d 删除图片入口整体退役（v9.3.0 用户令），不得回潮', () => {
+  assert.ok(!SRC.includes('function nsImgDelete'), 'nsImgDelete 函数必须整体退役，不留僵尸入口');
+  assert.ok(!SRC.includes("['删除图片'"), '菜单/底栏的删除项数组字面量不得回潮（正文图删除走退格，无需专门按钮）');
+  assert.ok(!SRC.includes('nz-del'), '红色删除项样式随功能同退');
 });
 test('V8e Android 原生桥在位：零新权限、分区存储 + 预 Q 走扫描器', () => {
   assert.ok(MAIN.includes('@CapacitorPlugin(name = "ImgSave")'), '插件声明必须在');
@@ -311,7 +316,7 @@ test('V11 --mono 令牌必须定义（曾被 19 处 font 简写引用却从未�
   const day = cssBlock(':root{', '  }\n  body.dark{');
   assert.ok(/--mono:/.test(day), ':root 必须声明 --mono');
   assert.ok(/ui-monospace/.test(tokVar(day, '--mono') || ''), '--mono 必须以 ui-monospace 起头');
-  assert.ok((SRC.match(/var\(--mono\)/g) || []).length >= 19, '引用面仍应有 19+ 处');
+  assert.ok((SRC.match(/var\(--mono\)/g) || []).length >= 18, '引用面仍应有 18+ 处（v9.3.0：放大查看器底栏按用户「看不清」改 15px sans，mono 引用 19→18）');
 });
 test('V11b 开奖卡入场必须自带居中帧，绝不复用通用 rise（to 帧 transform:none 会抹掉 translateX(-50%)）', () => {
   assert.ok(SRC.includes('@keyframes drawRise{from{opacity:0;transform:translate(-50%,10px)}to{opacity:1;transform:translate(-50%,0)}}'),

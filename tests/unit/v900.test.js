@@ -304,8 +304,8 @@ test('A14 彩蛋层两段位于主脚本之后、</body> 之前；样式块紧�
 });
 
 /* ── A15 三 bump 与壳字节一致 ── */
-test('A15 版本 9.2.1；www 与 android 壳与根 index 逐字节一致', () => {
-  assert.ok(SRC.includes("const APP_VERSION = '9.2.1';"), 'APP_VERSION 应随彩蛋十门牌与音效层升到 9.2.1');
+test('A15 版本 9.3.0；www 与 android 壳与根 index 逐字节一致', () => {
+  assert.ok(SRC.includes("const APP_VERSION = '9.3.0';"), 'APP_VERSION 应随彩蛋十门牌与音效层升到 9.3.0');
   assert.strictEqual(SRC, WWW, 'www 壳必须逐字节同步（本仓 brand W3/D5 同源钉）');
   assert.strictEqual(SRC, APK, 'android assets 壳必须逐字节同步');
 });
@@ -446,7 +446,7 @@ test('A25 2048 单次移动每块最多合一次', t => {
   w.eval("(function(){ var b=window.NSG.cur; })()");
   const body = layerSrc().b;
   const at = body.indexOf('function slide(row)');
-  assert.ok(body.slice(at, at + 420).includes('a.splice(i + 1, 1); i++;'), 'slide 必须跳过刚合出来的块（否则 [2,2,4] 连合两次变 8）');
+  assert.ok(body.slice(at, at + 560).includes('a.splice(i + 1, 1); i++;'), 'slide 必须跳过刚合出来的块（否则 [2,2,4] 连合两次变 8）'); // v9.3.0：窗口 420→560，slide 对象化在锚前多两行注释，语义零变
 });
 
 /* A26 蛇满格 do-while 死循环会冻页 */

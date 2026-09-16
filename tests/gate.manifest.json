@@ -42,8 +42,8 @@
       "probes": ["user_bugs", "review_bugs", "v520_blind"]
     },
     "version-regression": {
-      "unit": ["v553.test.js", "v554.test.js", "v555.test.js", "v556.test.js", "v557.test.js", "v558.test.js", "v60.test.js", "v61.test.js", "v61_behavior.test.js", "v62.test.js", "v63.test.js", "v71.test.js", "v711.test.js", "v72.test.js", "v73.test.js", "v732.test.js", "v734.test.js", "v734_mod.test.js", "v74.test.js", "v740.test.js", "v751.test.js", "v770.test.js", "v780.test.js", "v781.test.js", "v790.test.js", "v800.test.js", "v801.test.js", "v804.test.js", "v805.test.js", "v806.test.js", "v807.test.js", "v810.test.js", "v816.test.js", "v817.test.js", "v818.test.js", "v820.test.js", "v830.test.js", "v900.test.js", "v920.test.js", "version_pins.test.js"],
-      "e2e": ["v63.test.js", "v71.test.js", "v732.test.js", "v74.test.js", "v809_k_routes.test.js", "v810_link_open.test.js", "v818.test.js", "v820.test.js", "v900.test.js", "v920.test.js", "_verify_v544.test.js", "_verify_v545.test.js", "_verify_v72.test.js"],
+      "unit": ["v553.test.js", "v554.test.js", "v555.test.js", "v556.test.js", "v557.test.js", "v558.test.js", "v60.test.js", "v61.test.js", "v61_behavior.test.js", "v62.test.js", "v63.test.js", "v71.test.js", "v711.test.js", "v72.test.js", "v73.test.js", "v732.test.js", "v734.test.js", "v734_mod.test.js", "v74.test.js", "v740.test.js", "v751.test.js", "v770.test.js", "v780.test.js", "v781.test.js", "v790.test.js", "v800.test.js", "v801.test.js", "v804.test.js", "v805.test.js", "v806.test.js", "v807.test.js", "v810.test.js", "v816.test.js", "v817.test.js", "v818.test.js", "v820.test.js", "v830.test.js", "v900.test.js", "v920.test.js", "v930.test.js", "version_pins.test.js"],
+      "e2e": ["v63.test.js", "v71.test.js", "v732.test.js", "v74.test.js", "v809_k_routes.test.js", "v810_link_open.test.js", "v818.test.js", "v820.test.js", "v900.test.js", "v920.test.js", "v930.test.js", "_verify_v544.test.js", "_verify_v545.test.js", "_verify_v72.test.js"],
       "probes": ["c1", "v734_full"]
     },
     "shell-mcp": {

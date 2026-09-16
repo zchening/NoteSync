@@ -63,6 +63,76 @@ class ImgSavePlugin : Plugin() {
         call.resolve(ret)
     }
 
+    // v9.3.0：JS 侧「保存到相册」主路径改走本方法——App 内 https 直链由原生下载字节再存，
+    // 不再依赖 WebView fetch（Cloudinary 偶发 CORS/缓存失败正是「点保存变打开链接」的根因）。
+    // 与 saveImage 共用落盘通道；64MB 上限防空转；全程 resolve 不 reject，失败原因进 error。
+    @PluginMethod
+    fun saveImageUrl(call: PluginCall) {
+        val ret = JSObject()
+        try {
+            val raw = call.getString("url") ?: ""
+            if (!raw.startsWith("https://")) {
+                ret.put("ok", false); ret.put("error", "not-https")
+                call.resolve(ret); return
+            }
+            var bytes: ByteArray? = null
+            var mime = "image/jpeg"
+            var conn: java.net.HttpURLConnection? = null
+            try {
+                conn = java.net.URL(raw).openConnection() as java.net.HttpURLConnection
+                conn.instanceFollowRedirects = true
+                conn.connectTimeout = 15000
+                conn.readTimeout = 30000
+                conn.setRequestProperty("User-Agent", "NoteSyncApp")
+                val code = conn.responseCode
+                if (code in 200..299) {
+                    val headerMime = conn.contentType ?: ""
+                    if (headerMime.isNotBlank()) mime = headerMime
+                    val max = 64L * 1024 * 1024
+                    conn.inputStream.use { ins ->
+                        val bos = java.io.ByteArrayOutputStream()
+                        val buf = ByteArray(16 * 1024)
+                        var n = ins.read(buf)
+                        while (n > 0) {
+                            if (bos.size.toLong() + n > max) throw IllegalStateException("too-large")
+                            bos.write(buf, 0, n); n = ins.read(buf)
+                        }
+                        bytes = bos.toByteArray()
+                    }
+                }
+            } finally {
+                try { conn?.disconnect() } catch (e: Exception) {}
+            }
+            val data = bytes
+            if (data == null || data.isEmpty()) {
+                ret.put("ok", false); ret.put("error", "download-failed")
+                call.resolve(ret); return
+            }
+            // URL 扩展名优先于响应头（Cloudinary 有时回 octet-stream）
+            val tail = raw.substringAfterLast('/', raw).substringBefore('?').toLowerCase()
+            val ext = when {
+                tail.endsWith(".png") -> "png"; tail.endsWith(".gif") -> "gif"
+                tail.endsWith(".webp") -> "webp"; tail.endsWith(".jpg") || tail.endsWith(".jpeg") -> "jpg"
+                mime.contains("png") -> "png"; mime.contains("gif") -> "gif"
+                mime.contains("webp") -> "webp"; else -> "jpg"
+            }
+            val realMime = when (ext) { "png" -> "image/png"; "gif" -> "image/gif"; "webp" -> "image/webp"; else -> "image/jpeg" }
+            val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
+            val name = "notesync-$stamp.$ext"
+            val saved = if (Build.VERSION.SDK_INT >= 29) viaMediaStore(name, realMime, data)
+                        else viaExternalFile(name, data)
+            if (saved == null) {
+                ret.put("ok", false); ret.put("error", "save-failed")
+            } else {
+                ret.put("ok", true); ret.put("path", saved); ret.put("bytes", data.size)
+            }
+        } catch (e: Exception) {
+            ret.put("ok", false)
+            ret.put("error", e.message ?: e.javaClass.simpleName)
+        }
+        call.resolve(ret)
+    }
+
     // API 29+：分区存储，落到公开的 Pictures/NoteSync，无需任何权限
     private fun viaMediaStore(name: String, mime: String, bytes: ByteArray): String? {
         val resolver = context.contentResolver

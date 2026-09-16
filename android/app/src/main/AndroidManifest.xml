@@ -10,15 +10,18 @@
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="false">
 
-        <!-- v8.0.6：stateHidden=回前台强制隐藏软键盘（防「Home 再点开键盘自己弹回」；
-             只加 state 位不动 adjust 位——布局让位已由 viewport interactive-widget=resizes-content 接管） -->
+        <!-- v9.3.0：stateHidden 保留（回前台不自动弹键盘），补 adjustResize——此前只靠 viewport
+             interactive-widget=resizes-content，但原生窗口不缩（ADJUST_UNSPECIFIED 在部分内核落到 pan）
+             时 CSS 那条完全空转：正文敲 /pet 的确认浮层 fixed bottom:76px 被推出可视区，App 内
+             桌宠领养链实际不可达（用户实锤「App 里看不到桌宠」）。adjustResize 后键盘弹出布局视口
+             真实压缩，底部浮层（确认条/开奖卡/问候卡）一律贴键盘上沿。 -->
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation"
             android:name=".MainActivity"
             android:label="@string/title_activity_main"
             android:theme="@style/AppTheme.NoActionBarLaunch"
             android:launchMode="singleTop"
-            android:windowSoftInputMode="stateHidden"
+            android:windowSoftInputMode="stateHidden|adjustResize"
             android:exported="true">
 
             <intent-filter>
@@ -85,6 +88,9 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- v9.3.0：应用内升级——仅覆盖安装用（UpdatePlugin.install 拉系统安装器）。
+         下载走 DownloadManager 落应用私有外部目录，不需要任何存储/网络新权限。 -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- v7.7.0：扫一扫——ML Kit BarcodeScanner 插件自带 manifest 为空，CAMERA 必须 app 声明；
          原生 requestPermissions() 与 WebView 扫码层 getUserMedia 两条路径都依赖它 -->
     <uses-permission android:name="android.permission.CAMERA" />

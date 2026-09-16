@@ -262,8 +262,8 @@ test('F3 折叠标题最左位按←跳到上一行末尾；标记内不驻留�
   await ctx.close();
 }));
 
-/* ── F4 正文图片：放大 / 右键菜单 / 删除 ── */
-test('F4 点图开放大层，右键弹自建菜单，菜单删除真生效', guard(async () => {
+/* ── F4 正文图片：放大 / 桌面右键交还 / 触屏菜单（v9.3.0 翻转） ── */
+test('F4 点图开放大层（底栏两钮）；桌面右键不出自建菜单；菜单「放大查看」进查看器且自收', guard(async () => {
   const { ctx, page } = await openEditor('V920Img');
   await page.evaluate(() => {
     const ed = document.getElementById('editor');
@@ -279,21 +279,23 @@ test('F4 点图开放大层，右键弹自建菜单，菜单删除真生效', gu
     const el = document.getElementById('nsZoom');
     return { btns: [].map.call(el.querySelectorAll('.nz-bar button'), b => b.textContent).join('/'), z: getComputedStyle(el).zIndex };
   });
-  assert.strictEqual(z.btns, '保存/复制链接/删除图片');
+  assert.strictEqual(z.btns, '保存到相册/复制链接');
   assert.ok(+z.z < 90, '图鉴 z90 是钉住的天花板');
   await page.click('#nsZoom .nz-x');
   await page.waitForFunction(() => !document.getElementById('nsZoom'), null, { timeout: 5000 });
+  // 桌面右键：Playwright headless 有 fine 指针 → contextmenu 提前 return，自建菜单绝不出现
   await page.click('#v920img', { button: 'right' });
-  await page.waitForFunction(() => !!document.getElementById('nsImgMenu'), null, { timeout: 5000 });
+  await page.waitForTimeout(350);
+  assert.strictEqual(await page.evaluate(() => !!document.getElementById('nsImgMenu')), false,
+    'v9.3.0：桌面右键必须交还系统菜单，自建菜单不得出现');
+  // 触屏菜单内容与自收：直调触屏入口（长按计时器由 unit V8 钉阈值）
+  await page.evaluate(() => window.nsImgMenu(document.getElementById('v920img'), 60, 60));
   const m = await page.evaluate(() => [].map.call(document.querySelectorAll('#nsImgMenu button'), b => b.textContent).join('/'));
-  assert.strictEqual(m, '放大查看/保存图片/复制图片链接/删除图片');
-  await page.click('#nsImgMenu button:nth-child(4)');
-  await page.waitForFunction(() => !document.querySelector('#v920img'), null, { timeout: 5000 });
+  assert.strictEqual(m, '放大查看/保存到相册/复制图片链接');
+  await page.click('#nsImgMenu button:nth-child(1)');
+  await page.waitForFunction(() => !!document.getElementById('nsZoom'), null, { timeout: 5000 });
   assert.strictEqual(await page.evaluate(() => !!document.getElementById('nsImgMenu')), false, '动作后菜单必须自收');
-  assert.strictEqual(await page.evaluate(() => {
-    const last = document.getElementById('editor').lastElementChild;
-    return !!last && !!last.querySelector('br');
-  }), true, '删空后必须补 br，块不许真空（红线5）');
+  assert.strictEqual(await page.evaluate(() => !!document.getElementById('v920img')), true, 'v9.3.0：菜单任何一项都不得删正文图（删除入口已退役）');
   assert.strictEqual(page.__errors.length, 0, 'pageerror: ' + page.__errors.slice(0, 2).join('|'));
   await ctx.close();
 }));
