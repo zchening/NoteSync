@@ -94,7 +94,7 @@ class ImgSavePlugin : Plugin() {
                         val buf = ByteArray(16 * 1024)
                         var n = ins.read(buf)
                         while (n > 0) {
-                            if (bos.size.toLong() + n > max) throw IllegalStateException("too-large")
+                            if (bos.size().toLong() + n > max) throw IllegalStateException("too-large") // ByteArrayOutputStream.size 是方法非属性（CI 编译实锤）
                             bos.write(buf, 0, n); n = ins.read(buf)
                         }
                         bytes = bos.toByteArray()

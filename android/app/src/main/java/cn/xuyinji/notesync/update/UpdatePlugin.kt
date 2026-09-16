@@ -123,7 +123,7 @@ class UpdatePlugin : Plugin() {
             }
             var cur: Cursor? = null
             try {
-                cur = dm.query(Uri.withAppendedPath(DownloadManager.CONTENT_URI, id.toString()))
+                cur = dm.query(DownloadManager.Query().setFilterById(id))  // DownloadManager.query 吃 Query 过滤器；CONTENT_URI 拼法不存在（CI 编译实锤）
                 if (cur == null || !cur.moveToFirst()) {
                     // 查无此单：被 remove/系统清理/进程换代后 DownloadManager 侧记录没了
                     ret.put("ok", true); ret.put("status", "gone")
