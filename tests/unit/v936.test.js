@@ -29,7 +29,7 @@ test('V3 B web：冷启动静默预下载钩子 + wifiOnly + 仅一次', () => {
 });
 
 test('V4 B kotlin：downloadApk 支持 wifiOnly（非 Wi-Fi 跳过 + 仅 Wi-Fi 网络类型）+ isOnWifi', () => {
-  assert.ok(KT.includes('val wifiOnly = call.getBoolean("wifiOnly", false)'), 'downloadApk 读 wifiOnly 参数');
+  assert.ok(KT.includes('val wifiOnly = call.getBoolean("wifiOnly") ?: false'), 'downloadApk 读 wifiOnly 参数');
   assert.ok(KT.includes('if (wifiOnly && !isOnWifi())'), 'wifiOnly 且非 Wi-Fi → 跳过（不偷跑蜂窝、不留排队通知）');
   assert.ok(KT.includes('if (wifiOnly) DownloadManager.Request.NETWORK_WIFI'), '预下载网络类型收窄为仅 Wi-Fi');
   assert.ok(KT.includes('private fun isOnWifi(): Boolean') && KT.includes('NetworkCapabilities.TRANSPORT_WIFI'), 'isOnWifi 用 ConnectivityManager/NetworkCapabilities 判定');

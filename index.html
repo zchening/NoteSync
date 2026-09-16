@@ -35,6 +35,8 @@
     --foil-silver:#A9ACB4; --foil-gold:#8F7126; --foil-gold-hi:#C9A24B; --foil-sheen:rgba(255,255,255,.5);
     /* v9.2.0 图片查看器：底色压深到近黑（照片要看清必须暗背景），日间也暗——与 .mask 的深色遮罩同族。 */
     --zoom-bg:rgba(20,20,18,.94); --zoom-ink:#F2F1EC; --zoom-chip:rgba(255,255,255,.12); --zoom-line:rgba(255,255,255,.22); --zoom-dim:rgba(242,241,236,.62);
+    /* v9.3.7 问题4：亮图铺到底栏后面时，半透明 --zoom-bg/--zoom-chip 被冲淡→按钮文字看不清。加既有近黑的不透明实底版（同色去 alpha，非新色相），底栏与主按钮文字吃它锁死对比度。 */
+    --zoom-solid:#141412;
     --danger:#C0453E;
     --serif:Georgia,"Times New Roman","Songti SC","STSong",serif;
     /* v9.2.0 补既有缺陷：--mono 被 19 处 font 简写引用却从未定义，var() 解析失败会让整条
@@ -54,6 +56,7 @@
     --g-line:#45454E; --g-fill:#1F1F25; --g-mute:#B4B0A6;
     --foil-silver:#8E9199; --foil-gold:#D4B068; --foil-gold-hi:#F0D89A; --foil-sheen:rgba(255,255,255,.42);
     --zoom-bg:rgba(0,0,0,.95); --zoom-ink:#F2F1EC; --zoom-chip:rgba(255,255,255,.1); --zoom-line:rgba(255,255,255,.18); --zoom-dim:rgba(242,241,236,.55);
+    --zoom-solid:#000000; /* v9.3.7 问题4：夜间不透明实底（同 rgba(0,0,0,.95) 去 alpha） */
     color-scheme:dark;
   }
   *{box-sizing:border-box}
@@ -308,11 +311,11 @@
      主按钮（保存到相册）实底 --accent + --zoom-ink 字，次按钮实底 --zoom-ink + --zoom-bg 字——
      全部吃既有令牌零新色；底栏加同族渐变衬底并避开全面屏手势条（safe-area）。 */
   #nsZoom .nz-bar{position:absolute;left:0;right:0;bottom:0;display:flex;gap:10px;justify-content:center;
-    padding:12px 16px calc(20px + env(safe-area-inset-bottom,8px));background:linear-gradient(to top,var(--zoom-bg),transparent);pointer-events:auto} /* v9.3.1（用户真机「保存按钮灰的点不动」）：旧法父 none+子 auto 在国产老内核不回升——整条直接 auto，点击关闭的判定本就只认 z/stage/x，底栏空白不关闭是应有语义 */
+    padding:12px 16px calc(20px + env(safe-area-inset-bottom,8px));background:var(--zoom-solid);pointer-events:auto} /* v9.3.7 问题4：底栏由半透明渐变换成不透明实底，亮图压底不再透光；v9.3.1 底栏整条 auto 的点击修复保留 */
   #nsZoom .nz-bar button{pointer-events:auto;flex:1;max-width:220px;min-height:44px;font:600 15px/1 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
     letter-spacing:.04em;padding:12px 0;border:1px solid var(--zoom-line);border-radius:12px;
     background:var(--zoom-chip);color:var(--zoom-ink);cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent} /* v9.3.5 第4条③：次按钮=描边浅字 */
-  #nsZoom .nz-bar button.nz-pri{background:var(--zoom-ink);color:var(--zoom-bg);border-color:var(--zoom-ink)} /* v9.3.5 第4条③：主按钮=浅实底深字（对齐 .box 主按钮），强制深色/借壳的可读性靠 SHELL_CSS 三板兜 */
+  #nsZoom .nz-bar button.nz-pri{background:var(--zoom-ink);color:var(--zoom-solid);border-color:var(--zoom-ink)} /* v9.3.7 问题4：主按钮文字由半透明 --zoom-bg 换成不透明 --zoom-solid，浅实底深字恒定清晰；强制深色/借壳可读性仍靠 SHELL_CSS 三板兜 */
   #nsImgMenu{position:fixed;z-index:89;min-width:150px;background:var(--box-bg);border:1px solid var(--line);border-radius:12px;
     box-shadow:0 18px 50px rgba(20,20,18,.22);padding:5px;animation:menuFade .16s ease both}
   /* 入场只动 opacity：通用 rise 的 to 帧是 transform:none，fill:both 下会把镜像补偿的
@@ -812,7 +815,7 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '9.3.6';
+const APP_VERSION = '9.3.7';
 const BUILD_DATE = '2026-09-16';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
@@ -1946,6 +1949,7 @@ async function handleImageUpload(file) {
     showUploadStatus('正在上传…');
     const url = await uploadToCloudinary(blob);
     insertImageAtCursor(url);
+    try { dismissKeyboardForTouch(); } catch (eKb) {} // v9.3.7 问题5：insertImageAtCursor 内 editor.focus() 会在移动端弹软键盘，图片插入完成后收一次（拍照/从相册两条路都走这里；桌面/组字期 no-op）
     showUploadStatus('上传成功');
   } catch (e) {
     showUploadStatus('上传失败：' + e.message);
@@ -2339,6 +2343,7 @@ function nsUpMenuClose() { var m = document.getElementById('nsUpModal'); if (m &
 function nsUpMenuOpen() {
   // 扫码配对同款居中模态（复用 .mask/.box），不再是左下角裸列表条
   nsUpMenuClose();
+  try { dismissKeyboardForTouch(); } catch (e0) {} // v9.3.7 问题1：开模态前收一次软键盘，防键盘压在「拍照/从相册」框底下（桌面/组字期为 no-op）
   var mask = document.createElement('div'); mask.className = 'mask'; mask.id = 'nsUpModal';
   var box = document.createElement('div'); box.className = 'box'; box.style.textAlign = 'center';
   var h = document.createElement('h1'); h.textContent = '插入图片';
@@ -3934,6 +3939,41 @@ function flattenSplitLink() {
 editor.addEventListener('keydown', e => {
   if (e.key !== 'Enter' || e.isComposing || e.metaKey || e.ctrlKey) return;
   if (e.shiftKey) return; // 软换行 <br>，交给浏览器
+  // v9.3.7 问题2：光标停在「收起态折叠标题」可见文字末尾按回车时，默认 insertParagraph 会把新空段
+  // 插进标题与其隐藏正文之间、搅乱折叠边界（用户见「折叠列表内的内容被换行」）。改为跳过整组折叠
+  // （所有 ns-fold-body 兄弟块，含 display:none 的隐藏正文），在折叠组之后另起一块并把光标落进去，
+  // 隐藏正文与折叠结构一律不动。展开态、光标在标题中间等仍走原逻辑。
+  {
+    const sel0 = window.getSelection();
+    if (sel0 && sel0.rangeCount && sel0.isCollapsed) {
+      const r0 = sel0.getRangeAt(0);
+      if (editor.contains(r0.startContainer)) {
+        const blk = currentBlock(r0.startContainer);
+        if (blk && blk !== editor && blk.classList && blk.classList.contains('ns-fold') && blk.classList.contains('ns-fold-collapsed')) {
+          const tailRng = document.createRange();
+          tailRng.selectNodeContents(blk);
+          let atEnd = false;
+          try {
+            tailRng.setStart(r0.startContainer, r0.startOffset);
+            const tail = tailRng.toString();
+            let vis = 0;
+            for (let k = 0; k < tail.length; k++) { const cc = tail.charCodeAt(k); if (cc !== 0x200B && cc !== 0x200C && cc !== 0xFEFF && cc !== 0x2060) vis++; }
+            atEnd = vis === 0;
+          } catch (e0) { atEnd = false; }
+          if (atEnd) {
+            e.preventDefault();
+            let last = blk, nx = blk.nextElementSibling;
+            while (nx && nx.classList && nx.classList.contains('ns-fold-body')) { last = nx; nx = nx.nextElementSibling; }
+            const nb = document.createElement('div'); nb.innerHTML = '<br>';
+            last.after(nb);
+            placeCaretInBlock(nb);
+            editor.dispatchEvent(new Event('input'));
+            return;
+          }
+        }
+      }
+    }
+  }
   e.preventDefault();
   // 用 insertParagraph 可靠换行：contenteditable 内部换行本就走它，能正确处理
   // 空行、行内元素(<a>/<s>)拆分、跨块边界，避免"空编辑器/行尾按回车无反应"(bug 4)。
@@ -9104,6 +9144,43 @@ if (CHIP_HOVER_OK) {
     if (t && !asked[t]) { try { nsAskConfirm(t); } catch (x) {} } // 触屏点中彩蛋词即问（点过「不了」的本次会话不再打扰）
   });
 }
+
+/* v9.3.7 问题3：光标「定位」到正文里已有的彩蛋词上也进入提示。现有通道只覆盖「正在敲字」
+   （beforeinput/compositionend）与「鼠标悬停 / 触屏点」（按坐标 nsEggAtPoint）；用键盘方向键或
+   点选把光标挪到 /dragon 上时既无输入事件、坐标路径又不覆盖 → 不弹。这里加 selectionchange 防抖，
+   从光标所在文本节点按词边界取整词、命中保留字才弹。asked[] 与敲字通道同表去重（一次会话每词最多
+   问一次，绝不每次挪光标都骚扰）；组字期 / 有选区 / 确认层已在 / 焦点不在编辑器 一律跳过。 */
+function nsEggTokenAtCaret() {
+  var sel = window.getSelection();
+  if (!sel || !sel.rangeCount || !sel.isCollapsed) return ''; // 有选区或无光标不判
+  var r = sel.getRangeAt(0);
+  var node = r.startContainer;
+  if (!node || node.nodeType !== 3 || !editor.contains(node)) return '';
+  var data = node.data, off = Math.max(0, Math.min(r.startOffset, data.length));
+  function isWs(cc) { return cc === 32 || cc === 9 || cc === 10 || cc === 13 || cc === 12288; } // 空格/制表/换行/全角空格，不用反斜杠正则
+  var i = off; while (i > 0 && !isWs(data.charCodeAt(i - 1))) i--;
+  var j = off; while (j < data.length && !isWs(data.charCodeAt(j))) j++;
+  var m = NS_EGG_HOVER_RE.exec(nsStripZW(data.slice(i, j)));
+  return m ? m[2] : '';
+}
+var _eggCaretTimer = 0;
+document.addEventListener('selectionchange', function () {
+  if (typeof isComposing !== 'undefined' && isComposing) return; // 红线9：组字期绝不打扰
+  clearTimeout(_eggCaretTimer);
+  _eggCaretTimer = setTimeout(function () {
+    try {
+      if (typeof isComposing !== 'undefined' && isComposing) return; // 红线9：防抖窗口内若进入组字，回调内复检，绝不在组字期弹
+      if (document.activeElement !== editor) return; // 只在编辑器真持焦时判，别从别处输入框抢弹
+      if (document.getElementById('nsAsk')) return; // 确认层已在，不叠第二层
+      var t = nsEggTokenAtCaret();
+      if (!t) return;
+      var id = t.toLowerCase();
+      if (asked[id]) return; // 尊重「不了」/本会话已问过，防挪光标反复骚扰
+      asked[id] = 1;
+      nsAskConfirm(id);
+    } catch (e) {}
+  }, 260);
+}, true);
 
 /* 关于页入口行（方案 A：第四行「彩蛋 N/M FOUND」）*/
 function nsEggGot() { // 必须与图鉴同一口径：只数在册条目。位图里可能有已退役彩蛋的残键（v8.3.1 拍板「残按不清」），

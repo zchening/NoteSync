@@ -65,8 +65,16 @@ test('K8 B2 确认弹层统一金胶囊 pill（v9.3.6 A：PC 也复用移动端�
 
 test('K9 B1：查看器主按钮浅实底深字 + 次描边浅字 + 进 SHELL_CSS 强制深色三板（v9.3.5），旧金实底/透明金边/accent 底禁回潮', () => {
   assert.ok(SRC.includes('background:var(--zoom-chip);color:var(--zoom-ink);cursor:pointer'), '次按钮须为描边浅字（chip 底 + --zoom-ink 字）');
-  assert.ok(SRC.includes('#nsZoom .nz-bar button.nz-pri{background:var(--zoom-ink);color:var(--zoom-bg);border-color:var(--zoom-ink)}'),
-    '主按钮须为浅实底深字（对齐 .box 主按钮）');
+  assert.ok(SRC.includes('#nsZoom .nz-bar button.nz-pri{background:var(--zoom-ink);color:var(--zoom-solid);border-color:var(--zoom-ink)}'),
+    '主按钮须为浅实底深字，文字用不透明 --zoom-solid（v9.3.7 问题4，旧半透明 --zoom-bg 亮图压底发灰禁回潮）');
+  assert.ok(!SRC.includes('#nsZoom .nz-bar button.nz-pri{background:var(--zoom-ink);color:var(--zoom-bg);border-color:var(--zoom-ink)}'),
+    'v9.3.7 问题4：主按钮文字旧半透明 --zoom-bg 禁回潮');
+  assert.ok(SRC.includes('background:var(--zoom-solid);pointer-events:auto'),
+    'v9.3.7 问题4：底栏须为不透明实底 --zoom-solid（亮图压底不再透光）');
+  assert.ok(!SRC.includes('background:linear-gradient(to top,var(--zoom-bg),transparent)'),
+    'v9.3.7 问题4：旧底栏半透明渐变禁回潮');
+  assert.ok(SRC.includes('--zoom-solid:#141412') && SRC.includes('--zoom-solid:#000000'),
+    'v9.3.7 问题4：--zoom-solid 须在日间(#141412)与夜间(#000000)都声明');
   assert.ok(SRC.includes("'#nsZoom{filter:invert(1)!important}'"),
     '借壳/强制深色下查看器再 invert(1) 抵消整页反色（三板豁免法）→ 底/按钮/照片回自身暗底设计，不再逐元素预反色致浅字糊');
   assert.ok(SRC.includes("'#nsZoom img{filter:none!important}'"),
