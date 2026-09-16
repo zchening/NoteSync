@@ -3,63 +3,15 @@
 // 只做一件事：按 URL 路径存/取多段密文。所有加解密都在浏览器完成，服务器从不见明文、不见口令、不见密钥。
 
 const http = require('http');
-const https = require('https');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
 const PORT = process.env.PORT || 8080;
 const APP_DIR = __dirname;
-// v9.3.1：App 在线升级改为「手机 fetch 同源 /api/latest → 服务器代拉 GitHub」——国内容器直连
-// api.github.com 常失败（用户报「检查失败，稍后再试」），服务器出网稳定。10 分钟缓存 + 在途合并。
-const LATEST = { t: 0, data: null, errT: 0, inflight: null };
-// v9.3.1 /api/latest 实现：三源全部走 github.com 网页域（零 API 配额、零 token，服务器真机实测）
-const GH_WEB = 'https://github.com/zchening/NoteSync';
-function latestBuild() {
-  const H = { 'User-Agent': 'Mozilla/5.0 (compatible; NoteSyncServer)' };
-  // family:4 必须钉死 IPv4：服务器 IPv6 到 github 半断（node 默认族走 v6 → socket hang up，
-  // 而 curl 自动回落 v4 所以手测通——服务器实测 v4 三源全绿），开发机代理环境同理。
-  const head = u => new Promise((resolve, reject) => {
-    const rq = https.request(u, { method: 'HEAD', family: 4, headers: H, timeout: 8000 }, r => {
-      r.resume(); r.on('end', () => resolve({ code: r.statusCode, loc: r.headers.location, len: Number(r.headers['content-length'] || 0) }));
-    });
-    rq.on('error', reject); rq.on('timeout', () => rq.destroy(new Error('timeout')));
-  });
-  const getText = u => new Promise((resolve, reject) => {
-    const rq = https.get(u, { family: 4, headers: H, timeout: 8000 }, r => {
-      let b = ''; r.setEncoding('utf8'); r.on('data', d => { b += d; });
-      r.on('end', () => resolve({ code: r.statusCode, b }));
-    });
-    rq.on('error', reject); rq.on('timeout', () => rq.destroy(new Error('timeout')));
-  });
-  const strip = s => String(s || '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&amp;/g, '&').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-  const follow = (u, n) => head(u).then(h => { // APK 直链 302 跟到 CDN 才拿得到最终 content-length
-    if (h.code === 301 || h.code === 302) {
-      const loc = /^https:\/\//.test(h.loc || '') ? h.loc : (h.loc && h.loc.startsWith('/') ? 'https://github.com' + h.loc : '');
-      if (loc && n > 0) return follow(loc, n - 1);
-    }
-    return h;
-  });
-  return head(GH_WEB + '/releases/latest').then(h => {
-    const m = String(h.loc || '').match(/\/releases\/tag\/([^/?#]+)/);
-    if (!m) throw new Error('no-tag ' + h.code);
-    const tag = m[1];
-    const apk = { name: 'app-release.apk', browser_download_url: GH_WEB + '/releases/download/' + tag + '/app-release.apk' };
-    return Promise.all([
-      getText(GH_WEB + '/releases.atom').catch(() => ({ code: 0, b: '' })),
-      follow(apk.browser_download_url, 5).catch(() => ({ len: 0 })),
-    ]).then(([atom, apkHead]) => {
-      let pub = '', body = '';
-      const seg = String(atom.b).split('<entry>')[1] || '';
-      const tu = seg.match(/<updated>([^<]+)<\/updated>/); if (tu) pub = tu[1];
-      body = strip((seg.match(/<content[^>]*>([\s\S]*?)<\/content>/) || [])[1] || '').slice(0, 220);
-      LATEST.t = Date.now(); LATEST.errT = 0;
-      LATEST.data = JSON.stringify({ tag_name: tag, published_at: pub, body,
-        assets: [Object.assign({ size: apkHead.len || 0 }, apk)] });
-    });
-  }).catch(e => { LATEST.errT = Date.now(); throw e; })
-    .then(() => { LATEST.inflight = null; });
-}
+// v9.3.1：App 在线升级元数据 = 发布时随部署落地的 latest_app.json（见 /api/latest 路由）。
+// 手机与服务器到 GitHub 的连接在实测环境均间歇失败（容器直连必挂；服务器侧 api 域配额被共享出口耗尽、
+// 网页域 TLS 又间歇断）——升级查询因此零外网依赖，GitHub 只作为 APK 的下载源出现在元数据里。
 // 数据目录允许用环境变量改址：唯一目的是让 e2e 能起真服务器做接口测试而不污染仓库 data/
 const DATA_DIR = process.env.NOTESYNC_DATA_DIR || path.join(APP_DIR, 'data');
 const NOTES_DIR = path.join(DATA_DIR, 'notes');
@@ -462,26 +414,59 @@ const server = http.createServer((req, res) => {
     return sendJSON(res, 200, { locked: false, count: rec ? rec.count : 0 });
   }
 
-  // --- API: 最新 release 代理（v9.3.1）——App「检查更新」不再让手机直连 api.github.com（国内容器常挂），
-  // 同源打这里。数据源不用 api.github.com：云服务器共享出口 IP 的匿名配额（60/时）实测被同机
-  // 租户打满（X-RateLimit-Remaining:0 → 403 连 ETag 复检都被拒）——改走 github.com 网页域三源拼装，
-  // 全部不占 API 配额、零 token（服务器真机实测）：
-  //   ① /releases/latest 不跟随取 302 Location → 最新 tag；
-  //   ② APK 直链 HEAD 跟 302 到 CDN → content-length 包大小；
-  //   ③ /releases.atom 首 entry → 标题+发布时间+剥 HTML 的正文摘要。
-  // 组装成与 GitHub API 同形的 JSON（tag_name/published_at/body/assets[].{name,browser_download_url,size}），前端零感知。
+  // --- API: 最新 release 元数据（v9.3.1 二修）——不做任何外网请求：读发布五件套随部署上传的
+  // latest_app.json（本机 gh api releases/latest 生成）。字段与 GitHub API 同形：
+  // {tag_name, published_at, body, assets:[{name, browser_download_url, size}]}。缺文件回 502（未发布过）。
   if (url.startsWith('/api/latest') && req.method === 'GET') {
-    const reply = (code, payload) => {
-      res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-      res.end(payload);
+    try {
+      const o = fs.readFileSync(path.join(APP_DIR, 'latest_app.json'), 'utf8');
+      JSON.parse(o); // 校验再回吐：半截坏文件宁可 502 也不喂前端将错就错
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(o);
+    } catch (e) {
+      res.writeHead(502, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      res.end('{"error":"no release metadata"}');
+    }
+    return;
+  }
+
+  // --- v9.3.2：APK 走国内域名直下（用户拍板：GitHub releases CDN 国内慢/需翻墙）---
+  // biji 域已把非 /api 请求整体反代到本服务，故这里直出、无需改 Caddy。已装旧壳原生 downloadApk 只校验
+  // https:// 不锁域名，翻本路由即生效、无需重编 APK。固定文件名覆盖式：只服务 APP_DIR/apk/latest.apk
+  // 这一个文件，发版覆盖 = 永远只留最新、不堆旧副本（服务器 C 盘仅 ~8G 余量）。精确 url 匹配无穿越面；
+  // 支持 HTTP Range 断点续传（安卓 DownloadManager 在 3Mbps 低带宽下续传/分段必备）。
+  if (url === '/dl/latest.apk' && (req.method === 'GET' || req.method === 'HEAD')) {
+    const f = path.join(APP_DIR, 'apk', 'latest.apk');
+    let st; try { st = fs.statSync(f); } catch (e) { return sendJSON(res, 404, { error: 'no apk' }); }
+    const total = st.size;
+    const baseHdr = {
+      'Content-Type': 'application/vnd.android.package-archive',
+      'Content-Disposition': 'attachment; filename="NoteSync-latest.apk"',
+      'Accept-Ranges': 'bytes',
+      'Cache-Control': 'no-cache',
+      'Last-Modified': st.mtime.toUTCString(),
     };
-    const NOWL = Date.now();
-    if (LATEST.data && NOWL - LATEST.t < 6 * 60 * 1000) return reply(200, LATEST.data);
-    if (LATEST.data && NOWL - LATEST.errT < 60000) return reply(200, LATEST.data); // 上游挂了：60s 退避回陈旧
-    if (!LATEST.inflight) LATEST.inflight = latestBuild();
-    LATEST.inflight.then(
-      () => reply(200, LATEST.data),
-      () => reply(LATEST.data ? 200 : 502, LATEST.data || '{"error":"upstream"}'));
+    const rm = req.headers.range && /^bytes=(\d*)-(\d*)$/.exec(req.headers.range);
+    if (rm) {
+      let start = rm[1] === '' ? null : parseInt(rm[1], 10);
+      let end = rm[2] === '' ? null : parseInt(rm[2], 10);
+      if (start === null && end !== null) { start = Math.max(0, total - end); end = total - 1; }
+      if (start === null) start = 0;
+      if (end === null || end >= total) end = total - 1;
+      if (start > end || start >= total) {
+        res.writeHead(416, Object.assign({ 'Content-Range': 'bytes */' + total }, baseHdr));
+        return res.end();
+      }
+      res.writeHead(206, Object.assign({
+        'Content-Range': 'bytes ' + start + '-' + end + '/' + total,
+        'Content-Length': String(end - start + 1),
+      }, baseHdr));
+      if (req.method === 'HEAD') return res.end();
+      return fs.createReadStream(f, { start, end }).pipe(res);
+    }
+    res.writeHead(200, Object.assign({ 'Content-Length': String(total) }, baseHdr));
+    if (req.method === 'HEAD') return res.end();
+    fs.createReadStream(f).pipe(res);
     return;
   }
 

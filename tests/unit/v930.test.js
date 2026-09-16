@@ -159,11 +159,43 @@ test('G9 升级 UI 与代理拉取钉（v9.3.1 改同源代理）：/api/latest�
   assert.ok(SRC.includes("fetch('/api/latest?ts='"), '必须打同源 /api/latest——国内容器直连 api.github.com 必挂（用户「检查失败」实锤）');
   assert.ok(!SRC.includes("api.github.com/repos/' + UPD_REPO"), '手机侧直连 GitHub 旧形态禁回潮');
   assert.ok(SRC.includes("cache: 'no-store'"), '每次检查必须实时——留缓存=按钮骗人');
-  assert.ok(SRV.includes('function latestBuild') && SRV.includes('/releases.atom'), 'server.js 必须走网页域三源拼装（api 域匿名配额被云主机共享出口打满，实测 403）');
-  assert.ok(!SRV.includes('https://api.github.com'), 'https://api.github.com 在 server.js 禁回潮（60/时必挂；注释提及裸域名不算）');
-  assert.ok(SRC.includes('.slice(0, 3).map(s => s.length > 34 ? s.slice(0, 33) + \'…\' : s)'), '摘要不是 ≤3 行/34 字（更新主要内容不要太长是拍板）');
+  assert.ok(SRV.includes("latest_app.json") && SRV.includes("no release metadata"), 'server.js 必须读部署落地的 latest_app.json（云服务器到 GitHub 的 TLS 实测间歇断，任何代拉不可靠）');
+  assert.ok(!SRV.includes('https://api.github.com') && !SRV.includes('releases.atom'), '服务器出网代拉的旧形态禁回潮（升级查询零外网依赖）');
+  assert.ok(SRC.includes("Array.isArray(o.summary)"), '更新要点优先读 summary（人工浓缩分行，非自动掐 3 行）');
+  assert.ok(SRC.includes("document.createTextNode('新版本：v' + tag)"), '顶部必须「新版本：vX」');
+  assert.ok(SRC.includes("sz.className = 'sz'"), '大小要弱成 .sz 小字跟在版本后');
+  assert.ok(!SRC.includes('GitHub Releases 官方安装包') && !SRC.includes("$('#updMeta')"), 'meta 行（GitHub/官方安装包）必须删净，禁回潮');
+  assert.ok(SRC.includes(".box .upd-btns button.ghost-btn{margin-top:0}"), '两按钮错位修复：清零选择器必须提到 .box .upd-btns 权重（压过 .box button.ghost-btn 的 margin-top:10px）');
   assert.ok(SRC.includes("} else $('#aboutUpdRow').classList.add('hidden');"), '网页版必须隐藏升级行');
   assert.ok(SRC.includes("id=\"aboutUpdRow\"") && SRC.includes('id="updMask"'), '缺关于行/确认弹窗骨架');
+});
+/* ── G9e v9.3.2 交互三改（用户拍板）：彩蛋词 hover 即问可重复 / 恐龙点跳按住低头 / 桌宠天数按 born 现算 ── */
+test('G9e v9.3.2 交互三改：彩蛋词只读命中弹层、恐龙点=跳按住=低头、桌宠天数现算、nsAsk 方案1 新样式', () => {
+  // 彩蛋 hover：全部锚到新增块独有串（旧文件别处也有 editor mousemove/click，泛串会恒真）
+  assert.ok(SRC.includes('function nsEggAtPoint') && SRC.includes('caretRangeFromPoint'), '须用只读指针命中（不注入 span 污染存档）');
+  assert.ok(SRC.includes('_hoverTok = t;') && SRC.includes("if (e.buttons) return;"), '桌面 hover：边沿触发 _hoverTok + 按住/拖拽中(e.buttons)不打扰');
+  assert.ok((SRC.match(/if \(t && !asked\[t\]\) \{ try \{ nsAskConfirm\(t\)/g) || []).length >= 2, 'hover 与触屏两路都须尊重 asked（点过不了不再弹）');
+  assert.ok(SRC.includes('try { asked[id] = 1; }'), '「不了」必须真写 asked，否则移上去仍复弹（违不再打扰红线）');
+  assert.ok(SRC.includes('#nsAsk .ns-dot') && SRC.includes('-apple-system,"PingFang SC",sans-serif'), '确认层方案1：无衬线 + 金色小圆点，去等宽小字');
+  // 恐龙：点=跳/按住=低头 + 首点不补跳
+  assert.ok(SRC.includes('heldDuck') && SRC.includes("if (phase === 'run' && !dead) jump()"), '恐龙：短按=跳、按住(heldDuck)=低头');
+  assert.ok(SRC.includes('introTap') && SRC.includes('if (introTap) { introTap = false; return; }'), '恐龙首点只起跑、抬手不补跳');
+  assert.ok(!SRC.includes('y0 > SH().H * 0.55'), '恐龙旧的「按 y 分上下半屏」判据必须退役');
+  assert.ok(SRC.includes("tip: '点屏幕 = 跳 · 按住屏幕 = 低头"), '恐龙提示语随新操作更新');
+  // 桌宠天数：按 born 现算且 clamp≥1
+  assert.ok(SRC.includes('Math.max(1, 1 + Math.floor((Date.now() - p.born) / 864e5))'), '桌宠天数须每次按 born 现算并 clamp≥1（多端一致、时钟超前不显示 0/负）');
+});
+/* ── G9d APK 国内域名直下（v9.3.2：GitHub releases CDN 国内慢/需翻墙，改服务器固定名覆盖式直出）── */
+test('G9d APK 国内直下：server.js 服务 /dl/latest.apk（固定覆盖文件+Range 续传）且 latest_app.json 指向 biji 不回潮 GitHub', () => {
+  const SRV = fs.readFileSync(path.resolve(ROOT, 'server.js'), 'utf8');
+  const LATEST = JSON.parse(fs.readFileSync(path.resolve(ROOT, 'latest_app.json'), 'utf8'));
+  assert.ok(SRV.includes("url === '/dl/latest.apk'"), 'server.js 必须有 /dl/latest.apk 精确路由（国内直下入口）');
+  assert.ok(SRV.includes("'apk', 'latest.apk'"), 'APK 必须走 APP_DIR/apk/latest.apk 固定覆盖名（磁盘只留最新，不堆旧副本）');
+  assert.ok(SRV.includes("'Accept-Ranges': 'bytes'") && SRV.includes('206'), '/dl 必须支持 Range 断点续传（低带宽 DownloadManager 必备）');
+  const u = LATEST.assets[0].browser_download_url;
+  assert.ok(u === 'https://biji.xuyinji.com.cn/dl/latest.apk', 'latest_app.json 下载地址必须是国内 biji 域，实得 ' + u);
+  assert.ok(!/github\.com\/.*\/releases\/download\//.test(u), '禁回潮 GitHub releases 直链（国内翻墙/慢根因）');
+  assert.ok(/\.apk$/i.test(LATEST.assets[0].name), 'asset.name 仍以 .apk 结尾（App 端 /\\.apk$/ 过滤依赖）');
 });
 test('H1 护照换养：从笔记复制带零宽空格的护照必须能解析（用户报「格式不对」根因=linkify 插 U+200B）', t => {
   const app = loadApp(); t.after(() => app.window.close());

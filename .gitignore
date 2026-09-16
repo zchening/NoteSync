@@ -39,3 +39,4 @@ capacitor-cordova-android-plugins/
 *.jks
 *.p12
 *.keystore
+latest_app.json

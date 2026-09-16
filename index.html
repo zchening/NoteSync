@@ -211,14 +211,15 @@
   #updMask .box{text-align:center}
   #updMask .upd-cap{font-size:14px;font-weight:500;color:var(--muted);letter-spacing:.12em;margin:2px 0 8px}
   #updVer{font:600 22px/1.25 var(--serif);color:var(--accent);letter-spacing:.04em}
-  #updMeta{font:400 11px/1.6 var(--mono);color:var(--muted);margin-top:4px}
-  #updNotes{font-size:13px;line-height:1.9;color:var(--fg);text-align:left;margin:12px 2px 2px}
+  #updVer .sz{font:400 12px/1 var(--mono);color:var(--muted);letter-spacing:0;margin-left:5px}
+  #updNotes{font-size:13.5px;line-height:1.95;color:var(--fg);text-align:left;margin:14px 22px 2px}
+  #updNotes i{font-style:normal;color:var(--accent);margin-right:5px}
   #updProg{height:6px;border-radius:3px;background:var(--line);overflow:hidden;margin:12px 0 2px}
   #updProg.hidden{display:none}
   #updBar{display:block;height:100%;width:0;background:var(--accent);border-radius:3px;transition:width .3s}
   #updMsg{min-height:18px;font:400 11.5px/1.6 var(--mono);color:var(--muted);margin-top:6px;text-align:left}
-  .upd-btns{display:flex;gap:10px;margin-top:12px}
-  .upd-btns button.ghost-btn{margin-top:0}
+  .upd-btns{display:flex;gap:10px;align-items:center;margin-top:12px}
+  .box .upd-btns button.ghost-btn{margin-top:0}
   .upd-btns button:disabled{opacity:.55}
   /* v5.40：提醒面板升级为扫码配对同款 .mask+.box 模态（复用 .box 输入框/主按钮样式与深色覆盖保护）；
      设置行（时间/事项/添加提醒）永远首行，已设条目列表排后；chip 与模态互斥（遮罩挡正文） */
@@ -727,8 +728,7 @@
 <div class="mask hidden" id="updMask">
   <div class="box">
     <h1 class="upd-cap">发现新版本</h1>
-    <div id="updVer">Version —</div>
-    <div id="updMeta"></div>
+    <div id="updVer">新版本 —</div>
     <p id="updNotes"></p>
     <div id="updProg" class="hidden"><i id="updBar"></i></div>
     <div id="updMsg"></div>
@@ -814,7 +814,7 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '9.3.1';
+const APP_VERSION = '9.3.2';
 const BUILD_DATE = '2026-09-16';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
@@ -6672,13 +6672,19 @@ async function nsCheckUpdate() {
     let apk = null; (o.assets || []).forEach(a => { if (!apk && /\.apk$/i.test(a.name || '')) apk = a; });
     if (!tag || !apk || !apk.browser_download_url) throw new Error('no-apk');
     if (nsVerCmp(tag, __updNative || APP_VERSION) <= 0) { btn.textContent = '已是最新版本'; setTimeout(restore, 2600); return; }
-    const notes = String(o.body || '').split(/\r?\n/)
-      .map(s => s.replace(/^\s*(?:[-*>#]+\s*|\d+\.\s+)/, '').trim())
-      .filter(s => s && !/^(?:https?:|full changelog|.*\[.*\]\(.*\).*$|compare)/i.test(s))
-      .slice(0, 3).map(s => s.length > 34 ? s.slice(0, 33) + '…' : s);
-    $('#updVer').textContent = 'Version ' + tag;
-    $('#updMeta').textContent = (apk.size ? (apk.size / 1048576).toFixed(1) + ' MB · ' : '') + 'GitHub Releases 官方安装包';
-    $('#updNotes').textContent = notes.length ? notes.join('；') : '详见 GitHub 发布页';
+    // 更新要点：优先 summary（每条一句、整段 ≤40 字，人工浓缩非自动掐），退回 body 前几条
+    var sum = Array.isArray(o.summary) ? o.summary : (typeof o.summary === 'string' ? o.summary.split(/\r?\n/) : null);
+    var lines = (sum || []).map(s => String(s).replace(/^\s*(?:[-*>#\s]+|\d+\.\s*)/, '').trim()).filter(Boolean).slice(0, 4);
+    if (!lines.length) lines = String(o.body || '').split(/\r?\n/).map(s => s.replace(/^\s*(?:[-*>#]+\s*|\d+\.\s+)/, '').trim()).filter(s => s && !/^(?:v\d|.*完整更新详情|https?:|full changelog|.*\[.*\]\(.*\).*$|compare)/i.test(s)).slice(0, 4);
+    // 顶部「新版本：vX」+ 大小弱成等宽小字；全部 DOM 拼装不拼 innerHTML（防注入）
+    var ve = $('#updVer'); ve.textContent = ''; ve.appendChild(document.createTextNode('新版本：v' + tag));
+    if (apk.size) { var sz = document.createElement('span'); sz.className = 'sz'; sz.textContent = '（' + (apk.size / 1048576).toFixed(1) + 'M）'; ve.appendChild(sz); }
+    var ne = $('#updNotes'); ne.textContent = '';
+    (lines.length ? lines : ['详见发布页']).forEach(function (ln, idx) {
+      if (idx > 0) ne.appendChild(document.createElement('br'));
+      var b = document.createElement('i'); b.textContent = '·'; ne.appendChild(b);
+      ne.appendChild(document.createTextNode(ln));
+    });
     updReset(apk.browser_download_url, tag); updMsg('');
     aboutMask.classList.add('hidden');
     $('#updMask').classList.remove('hidden');
@@ -8449,9 +8455,10 @@ body:has(#nsRain:not(.hidden)) #nsPet svg{transform-origin:50% 90%;animation:nsP
 .ns-egg-entry .ns-chev{width:11px;height:11px;color:var(--accent);flex:none}
 /* 词表触发确认浮层：不点就当没发生，字留在正文 */
 /* z 序：确认浮层必须低于图鉴 z90（"图鉴最高"是钉住的口径），投影沿用 .box 既有先例（禁投影只约束精灵） */
-#nsAsk{position:fixed;left:50%;bottom:76px;transform:translateX(-50%);z-index:85;display:flex;align-items:center;gap:9px;padding:9px 11px;border:1px solid var(--line);border-radius:14px;background:var(--box-bg);box-shadow:0 10px 30px rgba(20,20,18,.14);font:400 11.5px/1 var(--mono);color:var(--muted)}
-#nsAsk button{font:400 11.5px/1 var(--mono);padding:8px 11px;border:1px solid var(--line);border-radius:9px;background:none;color:var(--fg);cursor:pointer}
-#nsAsk .ns-go{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+#nsAsk{position:fixed;left:50%;bottom:76px;transform:translateX(-50%);z-index:85;display:flex;align-items:center;gap:12px;padding:11px 14px;border:1px solid var(--line);border-radius:14px;background:var(--box-bg);box-shadow:0 10px 30px rgba(20,20,18,.14);font:400 13.5px/1 -apple-system,"PingFang SC",sans-serif;color:var(--fg)}
+#nsAsk .ns-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex:none}
+#nsAsk button{font:400 13px/1 -apple-system,"PingFang SC",sans-serif;padding:8px 12px;border:1px solid var(--line);border-radius:9px;background:none;color:var(--muted);cursor:pointer}
+#nsAsk .ns-go{border-color:var(--accent);color:var(--accent);background:var(--accent-soft);font-weight:600}
 /* 桌宠三件（偷字贴片／嘴里叼的字／说话气泡）：JS 按视口坐标写 inline left/top，缺 position:fixed
    就是 static 流元素——left/top 不吃，贴片盖不住字、气泡坠到正文末尾（闸 R2 P1：CSS 零定义实锤）。
    层级：正文之上、确认浮层 #nsAsk(85) 与图鉴(90) 之下；零新色，只吃令牌 */
@@ -8936,11 +8943,11 @@ function nsAskConfirm(id) {
   try { var dc = document.getElementById('nsDraw'); if (dc && dc.parentNode) dc.parentNode.removeChild(dc); } catch (e0) {} // 同泳道让位：确认层是用户刚敲出来的，优先
   var old = document.getElementById('nsAsk'); if (old && old.parentNode) old.parentNode.removeChild(old);
   var b = mk('div'); b.id = 'nsAsk';
-  b.innerHTML = '<span>要开始吗？</span><button class="ns-go">进入 /' + id + '</button><button class="ns-no">不了</button>';
+  b.innerHTML = '<span class="ns-dot"></span><span>要开始吗？</span><button class="ns-go">进入 /' + id + '</button><button class="ns-no">不了</button>';
   document.body.appendChild(b);
   function askReturnFocus() { if (typeof CHIP_HOVER_OK !== 'undefined' && CHIP_HOVER_OK) { try { editor.focus(); ensureCaret(); } catch (e) {} } }
   b.querySelector('.ns-go').addEventListener('click', function () { b.remove(); try { delete asked[id]; } catch (e) {} /* v9.3.1（用户报）：进过一次即 re-arm，同会话再敲 /pet /brick /dragon 还能弹——旧的「一次会话只问一次」把第二次永久堵死；「不了」仍保持不再打扰 */ launch(id); });
-  b.querySelector('.ns-no').addEventListener('click', function () { b.remove(); askReturnFocus(); }); // 红线10：点浮层必 blur 编辑器，不收口=光标消失
+  b.querySelector('.ns-no').addEventListener('click', function () { b.remove(); try { asked[id] = 1; } catch (e) {} /* v9.3.2：不了须真置 asked，否则 hover/触屏点过「不了」再移上去仍会复弹（打扰） */ askReturnFocus(); }); // 红线10：点浮层必 blur 编辑器，不收口=光标消失
   setTimeout(function () { if (b.parentNode) { b.remove(); askReturnFocus(); } }, 6000);
 }
 document.addEventListener('beforeinput', function (e) {
@@ -8956,6 +8963,39 @@ document.addEventListener('beforeinput', function (e) {
 editor.addEventListener('compositionend', function () {
   setTimeout(function () { try { nsWordTriggerAtCaret(); } catch (x) {} }, 0);
 });
+/* v9.3.2（用户拍板）：彩蛋入口扩成「鼠标移到正文里已有的 /pet /dragon … 上就问、且每次都能进」。
+   不往 contenteditable 注入 span（否则污染存档）——只读地用 caretRange/PositionFromPoint 命中指针下的整词，
+   命中保留字才弹 nsAskConfirm（其自身无一次性锁 → 可重复）。桌面 mousemove 边沿触发、组字中不打扰；触屏点中即弹。 */
+var _hoverTok = '';
+function nsEggAtPoint(x, y) {
+  if (!editor) return '';
+  var hit = null;
+  if (document.caretRangeFromPoint) hit = document.caretRangeFromPoint(x, y);
+  else if (document.caretPositionFromPoint) { var pp = document.caretPositionFromPoint(x, y); if (pp) { var rr = document.createRange(); rr.setStart(pp.offsetNode, pp.offset); rr.collapse(true); hit = rr; } }
+  if (!hit) return '';
+  var node = hit.startContainer; if (!node || node.nodeType !== 3 || !editor.contains(node)) return '';
+  var data = node.data, off = Math.max(0, Math.min(hit.startOffset, data.length));
+  var i = off; while (i > 0 && !/\s/.test(data[i - 1])) i--;
+  var j = off; while (j < data.length && !/\s/.test(data[j])) j++;
+  var m = NS_EGG_RE.exec(nsStripZW(data.slice(i, j)));
+  return m ? m[2] : '';
+}
+if (CHIP_HOVER_OK) {
+  editor.addEventListener('mousemove', function (e) {
+    if (typeof isComposing !== 'undefined' && isComposing) return;
+    if (e.buttons) return; // 按住/拖拽选区中不打扰、不误弹
+    var t = nsEggAtPoint(e.clientX, e.clientY);
+    if (t === _hoverTok) return;
+    _hoverTok = t;
+    if (t && !asked[t]) { try { nsAskConfirm(t); } catch (x) {} } // 尊重「不了」压制；未压制的词每次移入仍会问
+  });
+  editor.addEventListener('mouseleave', function () { _hoverTok = ''; });
+} else {
+  editor.addEventListener('click', function (e) {
+    var t = nsEggAtPoint(e.clientX, e.clientY);
+    if (t && !asked[t]) { try { nsAskConfirm(t); } catch (x) {} } // 触屏点中彩蛋词即问（点过「不了」的本次会话不再打扰）
+  });
+}
 
 /* 关于页入口行（方案 A：第四行「彩蛋 N/M FOUND」）*/
 function nsEggGot() { // 必须与图鉴同一口径：只数在册条目。位图里可能有已退役彩蛋的残键（v8.3.1 拍板「残按不清」），
@@ -9165,6 +9205,7 @@ register({
   dom: function () {
     try { nsTryClaimFromBody(); } catch (e) {} // 面板可能就在本会话里刚粘好护照：不补扫一次等于按文案做了却认不回来
     var p = PET;
+    if (p.born) { try { p.days = Math.max(1, 1 + Math.floor((Date.now() - p.born) / 864e5)); } catch (e) {} } // v9.3.2：天数按同步好的 born 现算（多端一致）；clamp≥1 防某端时钟超前算出 0/负
     var root = mk('div'); root.id = 'nsGame'; root.className = 'ns-game ns-dom';
     root.innerHTML = '<div class="ns-hud"><span class="ns-x"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg><b>退出</b></span>' +
       '<span class="ns-gate">/pet</span><span class="ns-sp"></span><span class="ns-mute' + (SND.muted ? ' off' : '') + '"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 9.5v5h3.2L12 18.6V5.4L7.2 9.5H4Z"/><path d="M16 9.4a3.6 3.6 0 0 1 0 5.2M18.4 7a7 7 0 0 1 0 10"/></svg></span></div>' +
@@ -9558,8 +9599,9 @@ R(function () {
   }
   function jump() { if (phase === 'run' && ground && !dead) { vy = 330; ground = false; FX('jump'); } } // y 是离地高度，起跳必须给正初速（与 vy -= g 同向才跳得起来）
   function poly(c, pts, u) { c.beginPath(); pts.forEach(function (p, i) { i ? c.lineTo(p[0] * u, p[1] * u) : c.moveTo(p[0] * u, p[1] * u); }); c.closePath(); c.fill(); }
+  var holdT = null, heldDuck = false, introTap = false; // v9.3.2：点=跳、按住=低头（改自旧「按 y 分上下半屏」）；introTap=首点只起跑不补跳
   return {
-    id: 'dragon', tip: '点屏幕 / 空格 = 跳 · ↓ 或下半屏按住 = 低头 · 撞上牌子就结束',
+    id: 'dragon', tip: '点屏幕 = 跳 · 按住屏幕 = 低头 · 撞上牌子就结束',
     probe: function () { return { phase: phase, y: y, vy: vy, ground: ground, duck: duck, obs: obs.length, pass: pass, dead: dead }; }, // y=离地高度：跳不起来这种物理反号只有真状态能抓
     start: function () { words = names('dragon'); reset(); },
     reset: function () { words = names('dragon'); reset(); },
@@ -9569,8 +9611,8 @@ R(function () {
       if (e.code === 'ArrowDown') { e.preventDefault(); duck = true; FX('land'); }
     },
     keyup: function (e) { if (e.code === 'ArrowDown') duck = false; },
-    down: function (x, y0) { if (phase === 'intro') { phase = 'run'; return; } if (y0 > SH().H * 0.55) { duck = true; } else jump(); },
-    up: function () { duck = false; },
+    down: function (x, y0) { if (phase === 'intro') { phase = 'run'; introTap = true; return; } if (dead) return; if (holdT) clearTimeout(holdT); heldDuck = false; holdT = setTimeout(function () { if (phase === 'run' && !dead) { duck = true; heldDuck = true; FX('land'); } }, 150); },
+    up: function () { if (holdT) { clearTimeout(holdT); holdT = null; } if (introTap) { introTap = false; return; } if (heldDuck) { duck = false; heldDuck = false; return; } if (phase === 'run' && !dead) jump(); },
     frame: function (dt) {
       if (phase === 'intro') { it += dt; if (it > 3) { phase = 'run'; FX('start'); } return; }
       if (dead) return;
