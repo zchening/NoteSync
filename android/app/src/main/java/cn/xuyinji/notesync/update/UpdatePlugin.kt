@@ -43,7 +43,7 @@ class UpdatePlugin : Plugin() {
         val ret = JSObject()
         try {
             val url = call.getString("url") ?: ""
-            val wifiOnly = call.getBoolean("wifiOnly", false) // v9.3.6：后台预下载仅走 Wi-Fi，非 Wi-Fi 直接跳过不耗流量
+            val wifiOnly = call.getBoolean("wifiOnly") ?: false // v9.3.6：后台预下载仅走 Wi-Fi，非 Wi-Fi 直接跳过不耗流量（getBoolean 单参返回可空，?:false 兜底）
             if (!url.startsWith("https://")) {
                 // 明文 http 装 APK 等于把 root 递给中间人，闸都不进
                 ret.put("ok", false); ret.put("error", "not-https")
@@ -109,12 +109,14 @@ class UpdatePlugin : Plugin() {
     }
 
     /** 当前活动网络是否 Wi‑Fi（v9.3.6 仅 Wi‑Fi 预下载用）。取不到一律 false，宁可不预下也不偷跑蜂窝流量。 */
-    private fun isOnWifi(): Boolean = try {
-        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return false
-        val net = cm.activeNetwork ?: return false
-        val cap = cm.getNetworkCapabilities(net) ?: return false
-        cap.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
-    } catch (e: Exception) { false }
+    private fun isOnWifi(): Boolean {
+        return try {
+            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return false
+            val net = cm.activeNetwork ?: return false
+            val cap = cm.getNetworkCapabilities(net) ?: return false
+            cap.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+        } catch (e: Exception) { false }
+    }
 
     /** downloadState({id}) → {ok, status:'pending'|'running'|'done'|'failed'|'gone', downloaded, total, path}
      *  done 必校验文件存在且 >1e6 字节：下载器偶发「状态成功但文件截断」的哑弹，不校验就是安装器报错。 */
