@@ -54,7 +54,7 @@ def fetch_apk(tag):
         print("[apk] 缓存命中 _apkdl/app-release.apk（%d bytes，跳过重下）" % exp)
         return dest, exp
     print("[apk] gh release download %s（GitHub 国内直下较慢，请稍候）..." % tag)
-    r = _run("gh release download %s -R zchening/NoteSync -p '*.apk' -D '%s' -c" % (tag, APK_CACHE_DIR))
+    r = _run("gh release download %s -R zchening/NoteSync -p '*.apk' -D '%s' --clobber" % (tag, APK_CACHE_DIR))
     if r.returncode != 0:
         sys.exit("下载 APK 失败：\n%s" % (r.stderr or r.stdout))
     if not os.path.isfile(dest) or os.path.getsize(dest) != exp:
