@@ -154,13 +154,36 @@ test('G8b jsdom 行为：手动通道喂乱文→同步回调 format 错且不�
 });
 
 /* ── G9 在线升级（关于页 + UpdatePlugin） ─────────────────────────── */
-test('G9 升级 UI 与实时拉取钉：仓库常量、no-store、≤3 行摘要、壳外隐藏', () => {
-  assert.ok(SRC.includes("const UPD_REPO = 'zchening/NoteSync';"), '缺仓库常量（改名 release 即哑）');
-  assert.ok(SRC.includes('/releases/latest'), '未打 releases/latest');
+test('G9 升级 UI 与代理拉取钉（v9.3.1 改同源代理）：/api/latest、no-store、≤3 行摘要、壳外隐藏、server 代拉', () => {
+  const SRV = fs.readFileSync(path.resolve(ROOT, 'server.js'), 'utf8');
+  assert.ok(SRC.includes("fetch('/api/latest?ts='"), '必须打同源 /api/latest——国内容器直连 api.github.com 必挂（用户「检查失败」实锤）');
+  assert.ok(!SRC.includes("api.github.com/repos/' + UPD_REPO"), '手机侧直连 GitHub 旧形态禁回潮');
   assert.ok(SRC.includes("cache: 'no-store'"), '每次检查必须实时——留缓存=按钮骗人');
+  assert.ok(SRV.includes('api.github.com/repos/zchening/NoteSync/releases/latest'), 'server.js 必须有代拉');
   assert.ok(SRC.includes('.slice(0, 3).map(s => s.length > 34 ? s.slice(0, 33) + \'…\' : s)'), '摘要不是 ≤3 行/34 字（更新主要内容不要太长是拍板）');
   assert.ok(SRC.includes("} else $('#aboutUpdRow').classList.add('hidden');"), '网页版必须隐藏升级行');
   assert.ok(SRC.includes("id=\"aboutUpdRow\"") && SRC.includes('id="updMask"'), '缺关于行/确认弹窗骨架');
+});
+test('H1 护照换养：从笔记复制带零宽空格的护照必须能解析（用户报「格式不对」根因=linkify 插 U+200B）', t => {
+  const app = loadApp(); t.after(() => app.window.close());
+  const w = app.window;
+  const of = w.fetch; let hitId = ''; w.fetch = function (u) { hitId = String(u); return of.apply(this, arguments); };
+  // 构造被 linkify 长词断行毒化的护照：ns1:​id=... 中间塞零宽
+  const zw = String.fromCharCode(0x200B);
+  const dirty = 'ns1:' + zw + 'id=ABC23456' + zw + ';key=' + zw + 'DEFG2345';
+  const ok = w.eval("(function(){var g=null;window.nsClaimPassport(" + JSON.stringify(dirty) + ",function(r){g=r});return g})()");
+  assert.ok(!ok || ok.why !== 'format', '带零宽的合法护照不得判「格式不对」（应剥零宽后正常发起认领）：' + JSON.stringify(ok));
+  assert.ok(/\/api\/arcade\/ABC23456/.test(hitId), '剥零宽后必须按真 id 打认领请求，实得 ' + hitId);
+});
+test('H2 词表触发进过一次后同会话可再进（用户报第二次进不去），但点「不了」仍不再打扰', () => {
+  assert.ok(SRC.includes('b.remove(); try { delete asked[id]; } catch (e) {}'), '点「进入」必须清 asked[id] re-arm');
+  assert.ok(SRC.includes("if (asked[id]) return;"), 'asked 判据仍在（防重复弹）');
+});
+test('H3 图片底栏按钮可点+顺序：容器 pointer-events 不得为 none（老内核父 none 子 auto 不回升），保存到右', () => {
+  const bar = SRC.slice(SRC.indexOf('#nsZoom .nz-bar{position'));
+  const blk = bar.slice(0, bar.indexOf('}', bar.indexOf('padding:12px')));
+  assert.ok(/pointer-events:auto/.test(blk), '底栏容器必须 auto——父 none 下按钮在国产老内核点不动（用户真机「保存灰的点不动」）');
+  assert.ok(SRC.includes("[['复制链接', function () { nsImgCopyLink(im); }], ['保存到相册', function () { nsImgSave(im); }, true]]"), '顺序：复制链接左、保存到相册右（用户指定）');
 });
 test('G9b UpdatePlugin：三方法+FileProvider authority+权限注册', () => {
   assert.ok(KT_UPD.includes('fun downloadApk(call: PluginCall)') && KT_UPD.includes('fun downloadState(call: PluginCall)') && KT_UPD.includes('fun install(call: PluginCall)'), '三方法缺位');

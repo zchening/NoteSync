@@ -308,7 +308,7 @@
      主按钮（保存到相册）实底 --accent + --zoom-ink 字，次按钮实底 --zoom-ink + --zoom-bg 字——
      全部吃既有令牌零新色；底栏加同族渐变衬底并避开全面屏手势条（safe-area）。 */
   #nsZoom .nz-bar{position:absolute;left:0;right:0;bottom:0;display:flex;gap:10px;justify-content:center;
-    padding:12px 16px calc(20px + env(safe-area-inset-bottom,8px));background:linear-gradient(to top,var(--zoom-bg),transparent);pointer-events:none}
+    padding:12px 16px calc(20px + env(safe-area-inset-bottom,8px));background:linear-gradient(to top,var(--zoom-bg),transparent);pointer-events:auto} /* v9.3.1（用户真机「保存按钮灰的点不动」）：旧法父 none+子 auto 在国产老内核不回升——整条直接 auto，点击关闭的判定本就只认 z/stage/x，底栏空白不关闭是应有语义 */
   #nsZoom .nz-bar button{pointer-events:auto;flex:1;max-width:220px;min-height:44px;font:600 15px/1 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
     letter-spacing:.04em;padding:12px 0;border:1px solid transparent;border-radius:12px;
     background:var(--zoom-ink);color:var(--zoom-bg);cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
@@ -814,7 +814,7 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '9.3.0';
+const APP_VERSION = '9.3.1';
 const BUILD_DATE = '2026-09-16';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
@@ -4060,7 +4060,7 @@ function nsImgOpenZoom(img) {
     var tip = document.createElement('div'); tip.className = 'nz-tip';
     tip.textContent = nsHoverPointer() ? '滚轮缩放 · 双击 1:1 · 点空白关闭' : '双指缩放 · 点空白关闭';
     var bar = document.createElement('div'); bar.className = 'nz-bar';
-    [['保存到相册', function () { nsImgSave(im); }, true], ['复制链接', function () { nsImgCopyLink(im); }]]
+    [['复制链接', function () { nsImgCopyLink(im); }], ['保存到相册', function () { nsImgSave(im); }, true]]
       .forEach(function (b) { var e2 = document.createElement('button'); e2.textContent = b[0]; if (b[2]) e2.className = 'nz-pri'; e2.addEventListener('click', b[1]); bar.appendChild(e2); });
     var x = document.createElement('div'); x.className = 'nz-x';
     x.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>';
@@ -6663,7 +6663,9 @@ async function nsCheckUpdate() {
   btn.textContent = '检查中…'; btn.style.pointerEvents = 'none';
   const restore = () => { btn.textContent = '检查更新'; btn.style.pointerEvents = ''; };
   try {
-    const r = await fetch('https://api.github.com/repos/' + UPD_REPO + '/releases/latest', { headers: { 'Accept': 'application/vnd.github+json' }, cache: 'no-store' });
+    // v9.3.1（用户真机「检查失败，稍后再试」）：手机直连 api.github.com 在国内容器基本必挂——
+    // 改打同源 /api/latest，由服务器代拉 GitHub（10 分钟缓存），字段协议与 GitHub 一致。
+    const r = await fetch('/api/latest?ts=' + Date.now(), { cache: 'no-store' });
     if (!r.ok) throw new Error('http ' + r.status);
     const o = await r.json();
     const tag = String(o.tag_name || '').replace(/^v/, '');
@@ -6732,7 +6734,6 @@ async function nsUpdInstall(br, path) {
   if (!r || !r.ok) { updMsg('安装页没拉起来：' + ((r && r.error) || '未知原因'), true); return; }
   updMsg('安装页已打开：点「安装」即覆盖升级，笔记数据不会丢');
 }
-const UPD_REPO = 'zchening/NoteSync';
 $('#aboutUpd').addEventListener('click', () => { try { nsCheckUpdate(); } catch (e) {} });
 // 闸R2-P1：关窗不 clearInterval——DownloadManager 还在跑，掐了轮询就是「关窗失联、APK 滞留」；
 // 留着，下完自动 nsUpdInstall 拉起系统安装页（用户拍板原话＝确认更新后自动下载并覆盖安装）
@@ -8938,7 +8939,7 @@ function nsAskConfirm(id) {
   b.innerHTML = '<span>要开始吗？</span><button class="ns-go">进入 /' + id + '</button><button class="ns-no">不了</button>';
   document.body.appendChild(b);
   function askReturnFocus() { if (typeof CHIP_HOVER_OK !== 'undefined' && CHIP_HOVER_OK) { try { editor.focus(); ensureCaret(); } catch (e) {} } }
-  b.querySelector('.ns-go').addEventListener('click', function () { b.remove(); launch(id); });
+  b.querySelector('.ns-go').addEventListener('click', function () { b.remove(); try { delete asked[id]; } catch (e) {} /* v9.3.1（用户报）：进过一次即 re-arm，同会话再敲 /pet /brick /dragon 还能弹——旧的「一次会话只问一次」把第二次永久堵死；「不了」仍保持不再打扰 */ launch(id); });
   b.querySelector('.ns-no').addEventListener('click', function () { b.remove(); askReturnFocus(); }); // 红线10：点浮层必 blur 编辑器，不收口=光标消失
   setTimeout(function () { if (b.parentNode) { b.remove(); askReturnFocus(); } }, 6000);
 }
@@ -9315,7 +9316,10 @@ function nsTryClaimFromBody(scanText, cb) {
     // 不设「本轮已认过」标志：那种标志（无论持久还是会话）都会把第二本护照堵死。
     // 防重复扫描由下面的「本机已是这只」承担；取档失败也自然留待下次再试
     // v9.3.0：scanText/cb 为档案页「输入护照换养」新增——默认仍扫正文、不传回调＝旧行为零变化
-    var txt = (typeof scanText === 'string' && scanText) || (typeof editor !== 'undefined' && editor && editor.textContent) || '';
+    // v9.3.1（用户真机实锤）：护照粘进笔记保存后，linkify 长词断行会在串里插零宽空格（U+200B），
+    // 再从笔记复制来换养/认领就永远「格式不对」。解析前统一剥零宽/BOM，两条通道同受护。
+    var raw = (typeof scanText === 'string' && scanText) || (typeof editor !== 'undefined' && editor && editor.textContent) || '';
+    var txt = raw.replace(/[​﻿]/g, '');
     if (!txt) { if (cb) cb({ ok: false, why: 'empty' }); return; }
     var m = ARC_PASS_RE.exec(txt);
     if (!m) { if (cb) cb({ ok: false, why: 'format' }); return; }

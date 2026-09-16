@@ -279,7 +279,7 @@ test('F4 点图开放大层（底栏两钮）；桌面右键不出自建菜单�
     const el = document.getElementById('nsZoom');
     return { btns: [].map.call(el.querySelectorAll('.nz-bar button'), b => b.textContent).join('/'), z: getComputedStyle(el).zIndex };
   });
-  assert.strictEqual(z.btns, '保存到相册/复制链接');
+  assert.strictEqual(z.btns, '复制链接/保存到相册'); // v9.3.1 用户指定保存换右（本版翻转此钉；v9.3.0 时为「保存到相册/复制链接」）
   assert.ok(+z.z < 90, '图鉴 z90 是钉住的天花板');
   await page.click('#nsZoom .nz-x');
   await page.waitForFunction(() => !document.getElementById('nsZoom'), null, { timeout: 5000 });

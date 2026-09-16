@@ -3,12 +3,16 @@
 // 只做一件事：按 URL 路径存/取多段密文。所有加解密都在浏览器完成，服务器从不见明文、不见口令、不见密钥。
 
 const http = require('http');
+const https = require('https');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
 const PORT = process.env.PORT || 8080;
 const APP_DIR = __dirname;
+// v9.3.1：App 在线升级改为「手机 fetch 同源 /api/latest → 服务器代拉 GitHub」——国内容器直连
+// api.github.com 常失败（用户报「检查失败，稍后再试」），服务器出网稳定。10 分钟缓存 + 在途合并。
+const LATEST = { t: 0, data: null, etag: '', errT: 0, inflight: null };
 // 数据目录允许用环境变量改址：唯一目的是让 e2e 能起真服务器做接口测试而不污染仓库 data/
 const DATA_DIR = process.env.NOTESYNC_DATA_DIR || path.join(APP_DIR, 'data');
 const NOTES_DIR = path.join(DATA_DIR, 'notes');
@@ -409,6 +413,50 @@ const server = http.createServer((req, res) => {
     if (limit.locked) return sendJSON(res, 429, { locked: true, retryAfter: limit.retryAfter });
     const rec = failMap.get(ip + ':' + id);
     return sendJSON(res, 200, { locked: false, count: rec ? rec.count : 0 });
+  }
+
+  // --- API: 最新 release 代理（v9.3.1）——App「检查更新」不再让手机直连 api.github.com（国内容器常挂），
+  // 同源打这里；服务器代拉并缓存 10 分钟，在途合并防连点打穿；上游挂了宁可回陈旧缓存也不报死。
+  // 真机二轮（本机冒烟实锤）：数据中心/共享出口 IP 的匿名配额常被陌生流量打满回 403——
+  // ①带 ETag 条件请求（GitHub 对 304 不计配额，缓存过期后的复检近乎免费）；
+  // ②失败后 60 秒退避（不给打满的配额继续递刀，也让回复稳定落在陈旧缓存上）；
+  // ③服务环境若配 GITHUB_TOKEN 则带 Authorization（5000/时，彻底根治；缺省零依赖）。
+  if (url.startsWith('/api/latest') && req.method === 'GET') {
+    const reply = (code, payload) => {
+      res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(payload);
+    };
+    const NOWL = Date.now();
+    if (LATEST.data && NOWL - LATEST.t < 10 * 60 * 1000) return reply(200, LATEST.data);
+    if (LATEST.data && NOWL - LATEST.errT < 60000) return reply(200, LATEST.data); // 配额没恢复：宁回陈旧
+    if (!LATEST.inflight) {
+      LATEST.inflight = new Promise((resolve, reject) => {
+        const headers = { 'User-Agent': 'NoteSync-Server', 'Accept': 'application/vnd.github+json' };
+        if (process.env.GITHUB_TOKEN) headers.Authorization = 'Bearer ' + process.env.GITHUB_TOKEN;
+        if (LATEST.etag) headers['If-None-Match'] = LATEST.etag;
+        const rq = https.get('https://api.github.com/repos/zchening/NoteSync/releases/latest', { headers, timeout: 8000 },
+          up => {
+            let buf = ''; up.setEncoding('utf8');
+            up.on('data', d => { buf += d; });
+            up.on('end', () => {
+              if (up.statusCode === 304 && LATEST.data) { LATEST.t = Date.now(); resolve(); return; } // 未变：续期陈旧即最新
+              if (up.statusCode === 200 && buf) {
+                LATEST.t = Date.now(); LATEST.data = buf;
+                if (up.headers.etag) LATEST.etag = up.headers.etag;
+                resolve();
+              } else reject(new Error('upstream ' + up.statusCode));
+            });
+          });
+        rq.on('error', reject);
+        rq.on('timeout', () => { rq.destroy(new Error('timeout')); });
+      });
+      LATEST.inflight.then(() => { LATEST.errT = 0; }, () => { LATEST.errT = Date.now(); });
+      LATEST.inflight.catch(() => {}).then(() => { LATEST.inflight = null; });
+    }
+    LATEST.inflight.then(
+      () => reply(200, LATEST.data),
+      () => reply(LATEST.data ? 200 : 502, LATEST.data || '{"error":"upstream"}'));
+    return;
   }
 
   // --- API: 街机档案（彩蛋成绩 / 桌宠）v9.0.0 ---
