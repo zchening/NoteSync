@@ -56,10 +56,10 @@ test('K7 图片键盘：触屏点正文 IMG 在 pointerdown 阶段 preventDefaul
     'pointerdown 触屏分支须含 IMG preventDefault（旧 mousedown 拦截在触屏来不及挡聚焦）');
 });
 
-test('K8 B2 移动端确认弹层 M2：按 CHIP_HOVER_OK 分支，移动挂 .ns-ask-m 金胶囊，桌面方案1「要开始吗？」保留', () => {
-  assert.ok(SRC.includes("b.className = 'ns-ask-m'"), '移动端须挂 .ns-ask-m');
-  assert.ok(SRC.includes("进入 <b class=\"ns-w\">/' + id + '</b>？"), '移动端 M2 文案「进入 /x？」');
-  assert.ok(SRC.includes('<span>要开始吗？</span>') && SRC.includes('CHIP_HOVER_OK'), '桌面方案1（要开始吗？/不了）保留、按设备分支');
+test('K8 B2 确认弹层统一金胶囊 pill（v9.3.6 A：PC 也复用移动端样式，桌面方案1 退役）', () => {
+  assert.ok(SRC.includes("b.className = 'ns-ask-m'"), '确认弹层须挂 .ns-ask-m 金胶囊');
+  assert.ok(SRC.includes("进入 <b class=\"ns-w\">/' + id + '</b>？"), 'pill 文案「进入 /x？」');
+  assert.ok(!SRC.includes('<span>要开始吗？</span>'), 'v9.3.6 A：桌面「方案1 细条（要开始吗？）」已退役，PC/移动同款 pill');
   assert.ok(SRC.includes('#nsAsk.ns-ask-m .ns-go{border:0;background:var(--accent);color:var(--box-bg)'), 'M2 主按钮吃令牌（无新色字面量）');
 });
 
@@ -67,8 +67,11 @@ test('K9 B1：查看器主按钮浅实底深字 + 次描边浅字 + 进 SHELL_CS
   assert.ok(SRC.includes('background:var(--zoom-chip);color:var(--zoom-ink);cursor:pointer'), '次按钮须为描边浅字（chip 底 + --zoom-ink 字）');
   assert.ok(SRC.includes('#nsZoom .nz-bar button.nz-pri{background:var(--zoom-ink);color:var(--zoom-bg);border-color:var(--zoom-ink)}'),
     '主按钮须为浅实底深字（对齐 .box 主按钮）');
-  assert.ok(SRC.includes("'#nsZoom{background:#000!important}'") && SRC.includes('#nsZoom .nz-bar button.nz-pri{background:#E3E3E5!important;color:#040407!important'),
-    '查看器须进 SHELL_CSS 预反色三板（国产强制深色/借壳下文字不得反白）');
+  assert.ok(SRC.includes("'#nsZoom{filter:invert(1)!important}'"),
+    '借壳/强制深色下查看器再 invert(1) 抵消整页反色（三板豁免法）→ 底/按钮/照片回自身暗底设计，不再逐元素预反色致浅字糊');
+  assert.ok(SRC.includes("'#nsZoom img{filter:none!important}'"),
+    '放大照片须豁免末尾 img,canvas{invert} 那条，否则 html+nsZoom+img 三重反色→照片变负片（R1/R2/R3 P1）');
+  assert.ok(!SRC.includes("'#nsZoom{background:#000!important}'"), '旧逐元素三板（把 overlay 反成近白）禁回潮');
   assert.ok(!SRC.includes('#nsZoom .nz-bar button.nz-pri{background:var(--foil-gold-hi)'), 'v9.3.4 金实底禁回潮');
   assert.ok(!SRC.includes('#nsZoom .nz-bar button.nz-pri{background:transparent;color:var(--foil-gold-hi)'), '9.3.3 透明底金边禁回潮');
   assert.ok(!SRC.includes('.nz-bar button.nz-pri{background:var(--accent);color:var(--box-bg)}'), '更旧「金底近黑字=像禁用」禁回潮');

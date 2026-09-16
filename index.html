@@ -812,7 +812,7 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '9.3.5';
+const APP_VERSION = '9.3.6';
 const BUILD_DATE = '2026-09-16';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
@@ -1041,12 +1041,8 @@ const SHELL_CSS = [
   '.box p,.box .qr-lock-warn{color:#676A75!important;-webkit-text-fill-color:#676A75!important}',
   '.box input{background:#040407!important;color:#E3E3E5!important;border-color:#13151D!important;-webkit-text-fill-color:#E3E3E5!important}',
   '.box button:not(:disabled):not(.box-x){background:#E3E3E5!important;color:#040407!important;-webkit-text-fill-color:#040407!important}',
-  '#nsZoom{background:#000!important}',
-  '#nsZoom .nz-x{background:rgba(255,255,255,.14)!important;color:#F2F1EC!important;-webkit-text-fill-color:#F2F1EC!important}',
-  '#nsZoom .nz-tip{color:rgba(242,241,236,.62)!important;-webkit-text-fill-color:rgba(242,241,236,.62)!important}',
-  '#nsZoom .nz-bar{background:none!important}',
-  '#nsZoom .nz-bar button{background:rgba(255,255,255,.14)!important;color:#F2F1EC!important;border-color:rgba(255,255,255,.22)!important;-webkit-text-fill-color:#F2F1EC!important}',
-  '#nsZoom .nz-bar button.nz-pri{background:#E3E3E5!important;color:#040407!important;border-color:#E3E3E5!important;-webkit-text-fill-color:#040407!important}',
+  '#nsZoom{filter:invert(1)!important}', /* v9.3.6：借壳整页 invert(1) 时，查看器再 invert(1) 抵消 → 底/按钮/照片回到自身暗底设计，不再逐元素预反色（旧写法把 overlay 反成近白致浅字糊） */
+  '#nsZoom img{filter:none!important}', /* 关键：末尾 img,canvas{invert(1)} 会连带命中放大照片→三重反色变负片；此条更高特异性豁免，照片只吃 html+nsZoom 两重=复原 */
   '#remCard{background:#000000!important;color:#E3E3E5!important;border-color:#13151D!important}',
   '#remCardTitle{color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important}',
   '#remCardList .rem-when{color:#E3E3E5!important;-webkit-text-fill-color:#E3E3E5!important}',
@@ -4105,6 +4101,7 @@ function nsImgRemoveZoom() { // 纯同步拆除，绝不碰历史：重开清旧
   try { document.removeEventListener('keydown', nsImgEsc, true); } catch (e) {} // P2：关闭必须摘 Esc 监听，否则每开一次叠一份
   if (!z || !z.parentNode) return false; // 本来就没有查看器在场：绝不归还焦点（红线10 只对"真的关掉了浮层"成立）
   z.parentNode.removeChild(z);
+  NS_IMG.closedAt = Date.now(); // v9.3.6 #4：关窗时间戳，供编辑器图片 click 吞掉同一次手势的幽灵重开
   nsImgGiveFocusBack();
   return true;
 }
@@ -4277,6 +4274,7 @@ async function nsImgSave(img) {
     if (!im || !editor.contains(im)) return;
     e.preventDefault();
     if (NS_IMG.lp) return; // 长按已弹菜单，别紧接着又放大
+    if (NS_IMG.closedAt && Date.now() - NS_IMG.closedAt < 500) return; // v9.3.6 #4：关窗后同一次手势的幽灵 click 不得立刻重开
     nsImgOpenZoom(im);
   });
   // v9.3.0（用户拍板推翻 v9.2.0 旧案）：PC 右键整幅交还系统原生菜单（另存为/复制图片都顺手），
@@ -6773,6 +6771,30 @@ async function nsCheckUpdate() {
     btn.textContent = (String((e && e.message) || '').indexOf('403') >= 0 ? '更新服务请求太频繁，过会儿再试' : '检查失败，稍后再试'); setTimeout(restore, 2600);
   }
 }
+// v9.3.6 B：App 冷启动后台静默预下载（仅 Wi‑Fi、不弹界面、失败不扰），让「检查更新→立即更新」命中 reused 秒装。
+async function nsPrefetchUpdate() {
+  try {
+    if (!isNativeApp()) return;
+    const cap = window.Capacitor;
+    const br = (cap && cap.Plugins && cap.Plugins.AppUpdate) || null;
+    if (!br || typeof br.downloadApk !== 'function') return; // 旧壳没桥，不预下
+    let base = __updNative || APP_VERSION;
+    try {
+      const rb = (cap && cap.Plugins && cap.Plugins.RemBridge);
+      if (rb && typeof rb.getVersion === 'function') { const ret = await rb.getVersion(); if (ret && ret.nativeVersion) { base = String(ret.nativeVersion); __updNative = base; } }
+    } catch (e) {}
+    const r = await fetch('/api/latest?ts=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) return;
+    const o = await r.json();
+    const tag = String(o.tag_name || '').replace(/^v/, '');
+    let apk = null; (o.assets || []).forEach(a => { if (!apk && /\.apk$/i.test(a.name || '')) apk = a; });
+    if (!tag || !apk || !apk.browser_download_url) return;
+    if (nsVerCmp(tag, base) <= 0) return;                     // 无新版
+    if (window.__prefetchTag === tag) return; window.__prefetchTag = tag; // 本会话该版本只预下一次，避免重复撤单重下
+    await br.downloadApk({ url: apk.browser_download_url, tag, wifiOnly: true }).catch(() => null); // 静默、仅 Wi‑Fi、失败不提示
+  } catch (e) {}
+}
+setTimeout(nsPrefetchUpdate, 6000);
 let updTimer = null;
 async function nsUpdDownload(url, tag) {
   const cap = window.Capacitor;
@@ -9027,13 +9049,8 @@ function nsWordTriggerAtCaret() {
 function nsAskConfirm(id) {
   try { var dc = document.getElementById('nsDraw'); if (dc && dc.parentNode) dc.parentNode.removeChild(dc); } catch (e0) {} // 同泳道让位：确认层是用户刚敲出来的，优先
   var old = document.getElementById('nsAsk'); if (old && old.parentNode) old.parentNode.removeChild(old);
-  var b = mk('div'); b.id = 'nsAsk';
-  if (typeof CHIP_HOVER_OK !== 'undefined' && CHIP_HOVER_OK) {
-    b.innerHTML = '<span class="ns-dot"></span><span>要开始吗？</span><button class="ns-go">进入 /' + id + '</button><button class="ns-no">不了</button>';
-  } else { // v9.3.3 B2：移动端 M2 金胶囊 pill
-    b.className = 'ns-ask-m';
-    b.innerHTML = '进入 <b class="ns-w">/' + id + '</b>？<button class="ns-go">进入</button><button class="ns-no">✕</button>';
-  }
+  var b = mk('div'); b.id = 'nsAsk'; b.className = 'ns-ask-m'; // v9.3.6 A：PC/移动统一金胶囊 pill（用户拍板与移动端一致），桌面「方案1 细条」退役
+  b.innerHTML = '进入 <b class="ns-w">/' + id + '</b>？<button class="ns-go">进入</button><button class="ns-no">✕</button>';
   document.body.appendChild(b);
   function askReturnFocus() { if (typeof CHIP_HOVER_OK !== 'undefined' && CHIP_HOVER_OK) { try { editor.focus(); ensureCaret(); } catch (e) {} } }
   b.querySelector('.ns-go').addEventListener('click', function () { b.remove(); try { delete asked[id]; } catch (e) {} /* v9.3.1（用户报）：进过一次即 re-arm，同会话再敲 /pet /brick /dragon 还能弹——旧的「一次会话只问一次」把第二次永久堵死；「不了」仍保持不再打扰 */ launch(id); });

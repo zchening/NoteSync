@@ -97,6 +97,8 @@ test('H2 点菜单「桌宠」→ 面板开+adopted 落库；退出后面板宠�
   assert.strictEqual(await page.evaluate(() => document.querySelector('.ns-swap-go').disabled), false, '有内容必须解锁');
   await page.click('#nsGame .ns-x'); // 收面板
   await page.waitForFunction(() => !document.getElementById('nsGame'), null, { timeout: 5000 });
+  // 深夜/节日徽章按设计让桌宠让位（petBadgeOn 读 #nsBadge[data-ns]）→ 本用例随时钟漂红（HEAD 亦如此）。清徽章 + 触发一次 body 变更让 observer 重挂 #nsPet，使断言不依赖真实时间。
+  await page.evaluate(() => { const b = document.getElementById('nsBadge'); if (b) b.removeAttribute('data-ns'); const t = document.createElement('i'); document.body.appendChild(t); t.remove(); });
   await page.waitForSelector('#nsPet', { timeout: 5000 });
   const geom = await page.evaluate(() => {
     const hr = document.querySelector('header').getBoundingClientRect();

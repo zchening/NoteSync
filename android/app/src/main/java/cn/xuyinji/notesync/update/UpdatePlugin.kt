@@ -4,6 +4,8 @@ import android.app.DownloadManager
 import android.content.Context
 import android.content.Intent
 import android.database.Cursor
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -41,6 +43,7 @@ class UpdatePlugin : Plugin() {
         val ret = JSObject()
         try {
             val url = call.getString("url") ?: ""
+            val wifiOnly = call.getBoolean("wifiOnly", false) // v9.3.6：后台预下载仅走 Wi-Fi，非 Wi-Fi 直接跳过不耗流量
             if (!url.startsWith("https://")) {
                 // 明文 http 装 APK 等于把 root 递给中间人，闸都不进
                 ret.put("ok", false); ret.put("error", "not-https")
@@ -73,6 +76,10 @@ class UpdatePlugin : Plugin() {
                 ret.put("ok", true); ret.put("reused", true); ret.put("path", f.absolutePath); ret.put("bytes", f.length())
                 call.resolve(ret); return
             }
+            if (wifiOnly && !isOnWifi()) { // v9.3.6：仅 Wi-Fi 预下载——非 Wi-Fi 静默跳过，绝不偷跑蜂窝流量、也不留排队通知
+                ret.put("ok", false); ret.put("wifi", false); ret.put("error", "not-wifi")
+                call.resolve(ret); return
+            }
             // 半成品残留：撤旧任务 + 删截断文件，再重下
             urlToId[url]?.let { oldId ->
                 try { dm.remove(oldId) } catch (e: Exception) { /* 旧任务已终态，撤不掉也不碍事 */ }
@@ -81,7 +88,8 @@ class UpdatePlugin : Plugin() {
             val req = DownloadManager.Request(Uri.parse(url))
             req.setDestinationUri(Uri.fromFile(f))
             req.setAllowedNetworkTypes(
-                DownloadManager.Request.NETWORK_WIFI or DownloadManager.Request.NETWORK_MOBILE)
+                if (wifiOnly) DownloadManager.Request.NETWORK_WIFI
+                else DownloadManager.Request.NETWORK_WIFI or DownloadManager.Request.NETWORK_MOBILE)
             req.setVisibleInDownloadsUi(false)              // 不混进系统下载列表
             // v9.3.4：VISIBILITY_HIDDEN(=2) 是已废弃常量，setNotificationVisibility 只接受 0/1/3，传 2 会抛
             // 「Invalid value for visibility: 2」→ enqueue 前即崩、下载启动失败（用户 9.3.2 实测「立即更新」报错）。
@@ -99,6 +107,14 @@ class UpdatePlugin : Plugin() {
         }
         call.resolve(ret)
     }
+
+    /** 当前活动网络是否 Wi‑Fi（v9.3.6 仅 Wi‑Fi 预下载用）。取不到一律 false，宁可不预下也不偷跑蜂窝流量。 */
+    private fun isOnWifi(): Boolean = try {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return false
+        val net = cm.activeNetwork ?: return false
+        val cap = cm.getNetworkCapabilities(net) ?: return false
+        cap.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+    } catch (e: Exception) { false }
 
     /** downloadState({id}) → {ok, status:'pending'|'running'|'done'|'failed'|'gone', downloaded, total, path}
      *  done 必校验文件存在且 >1e6 字节：下载器偶发「状态成功但文件截断」的哑弹，不校验就是安装器报错。 */
