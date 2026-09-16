@@ -313,7 +313,7 @@
   #nsZoom .nz-bar button{pointer-events:auto;flex:1;max-width:220px;min-height:44px;font:600 15px/1 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
     letter-spacing:.04em;padding:12px 0;border:1px solid transparent;border-radius:12px;
     background:var(--zoom-ink);color:var(--zoom-bg);cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
-  #nsZoom .nz-bar button.nz-pri{background:var(--accent);color:var(--box-bg)} /* 闸R2：主按钮字色用 --box-bg 非 --zoom-ink——夜 accent #D4B068 上米白字仅 2.7:1 又是「看不清」，白(日)/近黑(夜)随主题翻转让两档都拉到 4.5:1+ */
+  #nsZoom .nz-bar button.nz-pri{background:transparent;color:var(--foil-gold-hi);border-color:var(--foil-gold-hi)} /* v9.3.3 B1(V3)：金边金字替代旧「金底近黑字=像禁用」；亮金 --foil-gold-hi 日夜都清晰，次按钮维持实底 */
   #nsImgMenu{position:fixed;z-index:89;min-width:150px;background:var(--box-bg);border:1px solid var(--line);border-radius:12px;
     box-shadow:0 18px 50px rgba(20,20,18,.22);padding:5px;animation:menuFade .16s ease both}
   /* 入场只动 opacity：通用 rise 的 to 帧是 transform:none，fill:both 下会把镜像补偿的
@@ -333,7 +333,7 @@
      用 ::before 画三角替代；折叠正文用 .ns-fold-hide 隐藏。全部作用域锁在 #editor 下，
      故 renderNotePng 的离屏 tmp（不在 #editor 内）自动按全文 + 原样 [折叠] 渲染。颜色只吃令牌。 */
   #editor .ns-fold-mark{font-size:0;cursor:pointer;user-select:none;-webkit-user-select:none;white-space:nowrap;padding:0 3px;margin-right:2px;border-radius:6px;color:var(--muted)}
-  #editor .ns-fold-mark::before{content:'▶';font-size:12px;line-height:1.9;vertical-align:baseline}
+  #editor .ns-fold-mark::before{content:'\25B6\FE0E';font-size:12px;line-height:1.9;vertical-align:baseline}
   #editor .ns-fold-open>.ns-fold-mark::before{content:'▼'}
   #editor .ns-fold-mark:hover{background:var(--hover)}
   /* v9.1.1：折叠正文往里缩进 1.5em + 左侧引导线（--line 令牌，非新色），层级更清晰；线沿每个正文块画，到空行（非 ns-fold-body）自然断开 */
@@ -522,7 +522,7 @@
   @keyframes chipRise{from{opacity:0;transform:translateX(-50%) translateY(-8px)}to{opacity:1;transform:translateX(-50%)}}
 
   /* ── 提示气泡 / 加载 ────────────────── */
-  .upload-status{position:fixed;bottom:44px;left:50%;transform:translateX(-50%);background:var(--upload-bg);color:var(--bg);padding:10px 20px;border-radius:999px;font-size:13px;letter-spacing:.03em;z-index:20;opacity:0;transition:opacity .3s;pointer-events:none;box-shadow:0 10px 30px rgba(20,20,18,.2)}
+  .upload-status{position:fixed;bottom:44px;left:50%;transform:translateX(-50%);background:var(--upload-bg);color:var(--bg);padding:10px 20px;border-radius:999px;font-size:13px;letter-spacing:.03em;z-index:89;opacity:0;transition:opacity .3s;pointer-events:none;box-shadow:0 10px 30px rgba(20,20,18,.2)}
   /* v5.58：离线条移入页脚状态栏——原本是底部悬浮胶囊条（独立于状态栏、还要给上传提示让位），
      用户要求并入状态栏；v6.0 再定稿为「· 最后同步：MM-DD hh:mm」并与状态文字同款样式。
      id 不变（offlineBar/offlineTime），
@@ -814,7 +814,7 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '9.3.2';
+const APP_VERSION = '9.3.3';
 const BUILD_DATE = '2026-09-16';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
@@ -2312,6 +2312,7 @@ function openNoteLink(href) {
 editor.addEventListener('pointerdown', e => {
   if (e.pointerType !== 'touch') return;
   if (e.target && e.target.closest && e.target.closest('span.ns-fold-mark')) e.preventDefault();
+  else if (e.target && e.target.tagName === 'IMG' && editor.contains(e.target)) e.preventDefault(); // 触屏点正文图片别聚焦编辑器弹键盘；click 仍到→放大照开
 });
 // 点击链接：tel: 拨号，URL 按「打开链接」偏好分流（mousedown 阶段拦截，防止光标落入编辑）
 editor.addEventListener('mousedown', e => {
@@ -3544,7 +3545,7 @@ function isBlankBlock(n) {
   if (n.nodeType === 3) return n.nodeValue.length > 0 && n.nodeValue.replace(/\s/g, '').length === 0;
   if (n.nodeType === 1) {
     if (n.tagName === 'BR') return true;
-    if (n.tagName === 'DIV') return (n.textContent || '').replace(/\s/g, '').length === 0;
+    if (n.tagName === 'DIV') return (n.textContent || '').replace(/\s/g, '').length === 0 && !n.querySelector('img,iframe,video,audio,canvas,svg,object,embed,input,hr,table'); // 含图片/媒体/嵌入的块即便无文字也不是空块，防被首尾清理误删（v9.3.3 图片丢失根因）
   }
   return false;
 }
@@ -8459,6 +8460,11 @@ body:has(#nsRain:not(.hidden)) #nsPet svg{transform-origin:50% 90%;animation:nsP
 #nsAsk .ns-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex:none}
 #nsAsk button{font:400 13px/1 -apple-system,"PingFang SC",sans-serif;padding:8px 12px;border:1px solid var(--line);border-radius:9px;background:none;color:var(--muted);cursor:pointer}
 #nsAsk .ns-go{border-color:var(--accent);color:var(--accent);background:var(--accent-soft);font-weight:600}
+/* v9.3.3 B2(M2)：移动端确认弹层改单行金胶囊 pill（桌面方案1 细条不动），由 nsAskConfirm 按 !CHIP_HOVER_OK 挂 .ns-ask-m */
+#nsAsk.ns-ask-m{gap:10px;padding:9px 10px 9px 16px;border-radius:999px;bottom:calc(76px + env(safe-area-inset-bottom,0px));font-size:13.5px;white-space:nowrap}
+#nsAsk.ns-ask-m .ns-w{font-family:var(--serif);color:var(--accent);font-weight:600;letter-spacing:.02em}
+#nsAsk.ns-ask-m .ns-go{border:0;background:var(--accent);color:var(--box-bg);border-radius:999px;padding:9px 15px;font-weight:600}
+#nsAsk.ns-ask-m .ns-no{width:30px;height:30px;padding:0;border:1px solid var(--line);border-radius:50%;background:none;color:var(--muted);font-size:15px;line-height:1;display:flex;align-items:center;justify-content:center}
 /* 桌宠三件（偷字贴片／嘴里叼的字／说话气泡）：JS 按视口坐标写 inline left/top，缺 position:fixed
    就是 static 流元素——left/top 不吃，贴片盖不住字、气泡坠到正文末尾（闸 R2 P1：CSS 零定义实锤）。
    层级：正文之上、确认浮层 #nsAsk(85) 与图鉴(90) 之下；零新色，只吃令牌 */
@@ -8700,7 +8706,7 @@ function shell(g) {
   hud.querySelector('.ns-mute').addEventListener('click', function (e) { e.stopPropagation(); window.nsSndToggle(); });
   card.querySelector('.ns-again').addEventListener('click', function () { fx('tap'); restart(g); });
   card.querySelector('.ns-back').addEventListener('click', function () { closeShell(false); });
-  card.addEventListener('click', function (e) { if (e.target === card) closeShell(); });
+  card.addEventListener('click', function (e) { if (e.target === card) { fx('tap'); restart(g); } }); // v9.3.3：死亡卡背景点=重开，不再误触退回笔记（退出走「回到笔记」/X）
   bindInput(root, cv, g);
   fit(g);
   NSG.onResize = function () { fit(g); }; // 旋转屏后必须重算，否则绘制与命中错位
@@ -8943,7 +8949,12 @@ function nsAskConfirm(id) {
   try { var dc = document.getElementById('nsDraw'); if (dc && dc.parentNode) dc.parentNode.removeChild(dc); } catch (e0) {} // 同泳道让位：确认层是用户刚敲出来的，优先
   var old = document.getElementById('nsAsk'); if (old && old.parentNode) old.parentNode.removeChild(old);
   var b = mk('div'); b.id = 'nsAsk';
-  b.innerHTML = '<span class="ns-dot"></span><span>要开始吗？</span><button class="ns-go">进入 /' + id + '</button><button class="ns-no">不了</button>';
+  if (typeof CHIP_HOVER_OK !== 'undefined' && CHIP_HOVER_OK) {
+    b.innerHTML = '<span class="ns-dot"></span><span>要开始吗？</span><button class="ns-go">进入 /' + id + '</button><button class="ns-no">不了</button>';
+  } else { // v9.3.3 B2：移动端 M2 金胶囊 pill
+    b.className = 'ns-ask-m';
+    b.innerHTML = '进入 <b class="ns-w">/' + id + '</b>？<button class="ns-go">进入</button><button class="ns-no">✕</button>';
+  }
   document.body.appendChild(b);
   function askReturnFocus() { if (typeof CHIP_HOVER_OK !== 'undefined' && CHIP_HOVER_OK) { try { editor.focus(); ensureCaret(); } catch (e) {} } }
   b.querySelector('.ns-go').addEventListener('click', function () { b.remove(); try { delete asked[id]; } catch (e) {} /* v9.3.1（用户报）：进过一次即 re-arm，同会话再敲 /pet /brick /dragon 还能弹——旧的「一次会话只问一次」把第二次永久堵死；「不了」仍保持不再打扰 */ launch(id); });
@@ -8967,6 +8978,7 @@ editor.addEventListener('compositionend', function () {
    不往 contenteditable 注入 span（否则污染存档）——只读地用 caretRange/PositionFromPoint 命中指针下的整词，
    命中保留字才弹 nsAskConfirm（其自身无一次性锁 → 可重复）。桌面 mousemove 边沿触发、组字中不打扰；触屏点中即弹。 */
 var _hoverTok = '';
+var NS_EGG_HOVER_RE = /(^|[^A-Za-z0-9_])\/(mirror|snake|dragon|brick|satoshi|bitcoin|tank|spacex|tesla|pet)(?![A-Za-z0-9])/; // 尾随标点/括号/句读仍算命中；(?![A-Za-z0-9]) 防 /peter
 function nsEggAtPoint(x, y) {
   if (!editor) return '';
   var hit = null;
@@ -8977,7 +8989,7 @@ function nsEggAtPoint(x, y) {
   var data = node.data, off = Math.max(0, Math.min(hit.startOffset, data.length));
   var i = off; while (i > 0 && !/\s/.test(data[i - 1])) i--;
   var j = off; while (j < data.length && !/\s/.test(data[j])) j++;
-  var m = NS_EGG_RE.exec(nsStripZW(data.slice(i, j)));
+  var m = NS_EGG_HOVER_RE.exec(nsStripZW(data.slice(i, j)));
   return m ? m[2] : '';
 }
 if (CHIP_HOVER_OK) {
@@ -9590,7 +9602,7 @@ R(function () {
   var DINO = [[1, 7], [9, 10], [9, 17], [3, 14]], BODY = [[7, 10], [20, 10], [18, 18], [9, 18]];
   var phase = 'intro', it = 0, y = 0, vy = 0, ground = true, duck = false, sp = 132, dist = 0, obs = [], pass = 0, dead = false, shake = 0, words = [];
   var GY = 0;
-  function reset() { phase = 'intro'; it = 0; y = 0; vy = 0; ground = true; sp = 132; dist = 0; obs = []; pass = 0; dead = false; shake = 0; }
+  function reset() { phase = 'intro'; it = 0; y = 0; vy = 0; ground = true; duck = false; sp = 132; dist = 0; obs = []; pass = 0; dead = false; shake = 0; heldDuck = false; introTap = false; if (holdT) { clearTimeout(holdT); holdT = null; } }
   function spawn() {
     var last = obs[obs.length - 1];
     var gap = Math.max(150, 215 - sp * 0.35) + rf(0, 90); // 保证最小间距够跳一次

@@ -116,7 +116,7 @@ test('A5 nsRouteEgg 启动游戏：#nsGame 挂出 + HUD 齐 + 入图鉴 + 路径
 });
 
 /* ── A6 退出四路径 + 路径还原 + 镜像互斥 ── */
-test('A6 Esc / 点 × / 点遮罩空白 / popstate 四条退出路径都能收壳并还原路径', t => {
+test('A6 退出路径（× / Esc / popstate）收壳还原 + 结束卡空白=重开不退壳', t => {
   const app = loadApp(); t.after(() => app.window.close());
   const w = app.window;
   // App 内启动确实压了一条历史（见 A29 反证），UI 退出必走 back()；jsdom 的 history.back 是
@@ -132,15 +132,18 @@ test('A6 Esc / 点 × / 点遮罩空白 / popstate 四条退出路径都能收�
   w.nsRouteEgg('brick');
   w.document.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   assert.ok(!w.document.getElementById('nsGame'), 'Esc 应收壳');
-  // 「点遮罩空白退出」必须真点遮罩本体：原写法再点一次 × 且带 || !nsGame 兜底，等于恒真
+  // v9.3.3：点结束卡遮罩空白不再退出收壳（旧「点空白→closeShell→back 回笔记」正是用户报「跳着跳着回笔记页」根因），
+  // 改为重开、壳保持、历史不动。必须真点遮罩本体（target===card 才触发重开分支）。
   w.nsRouteEgg('brick');
+  const pathAtGame = w.eval("location.pathname");
   w.eval("window.nsGameEnd('全清了', [['打掉', '1 块']])");
   const over2 = w.document.querySelector('.ns-over');
   assert.ok(over2 && !over2.classList.contains('hidden'), '结束卡应可被唤出');
   const ev = new w.MouseEvent('click', { bubbles: true });
   Object.defineProperty(ev, 'target', { value: over2 });
   over2.dispatchEvent(ev);
-  assert.ok(!w.document.getElementById('nsGame'), '点结束卡遮罩空白必须收壳');
+  assert.ok(w.document.getElementById('nsGame'), '点结束卡空白=重开，不得收壳退回笔记（v9.3.3 用户报障）');
+  assert.strictEqual(w.eval("location.pathname"), pathAtGame, '结束卡空白点击不得动历史路径');
 });
 
 /* ── A7 红线：游戏全程不触正文 DOM、不改数据 ── */
@@ -304,8 +307,8 @@ test('A14 彩蛋层两段位于主脚本之后、</body> 之前；样式块紧�
 });
 
 /* ── A15 三 bump 与壳字节一致 ── */
-test('A15 版本 9.3.2；www 与 android 壳与根 index 逐字节一致', () => {
-  assert.ok(SRC.includes("const APP_VERSION = '9.3.2';"), 'APP_VERSION 应随彩蛋十门牌与音效层升到 9.3.1');
+test('A15 版本 9.3.3；www 与 android 壳与根 index 逐字节一致', () => {
+  assert.ok(SRC.includes("const APP_VERSION = '9.3.3';"), 'APP_VERSION 应随彩蛋十门牌与音效层升到 9.3.1');
   assert.strictEqual(SRC, WWW, 'www 壳必须逐字节同步（本仓 brand W3/D5 同源钉）');
   assert.strictEqual(SRC, APK, 'android assets 壳必须逐字节同步');
 });
