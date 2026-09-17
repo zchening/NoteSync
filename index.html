@@ -818,7 +818,7 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '9.4.0';
+const APP_VERSION = '9.4.1';
 const BUILD_DATE = '2026-09-16';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
@@ -9243,17 +9243,8 @@ function nsEggHit(x, y) { // 指针命中彩蛋词 → {id, rect}；未命中 {i
 }
 function nsEggAtPoint(x, y) { return nsEggHit(x, y).id; } // 兼容旧名
 if (CHIP_HOVER_OK) {
-  editor.addEventListener('mousemove', function (e) {
-    if (typeof isComposing !== 'undefined' && isComposing) return;
-    if (e.buttons) return; // 按住/拖拽选区中不打扰、不误弹
-    var h = nsEggHit(e.clientX, e.clientY);
-    if (h.id === _hoverTok) return; // 同一词内微动不重弹（边缘触发）
-    if (h.id && _askFrom === 'caret' && _eggCaretTok === h.id) { _hoverTok = h.id; return; } // 光标路正持有同词弹窗：鼠标扫过不抢所有权（否则扫开就把光标停着的弹窗收了）
-    _hoverTok = h.id;
-    if (h.id) { _askFrom = 'hover'; clearTimeout(_askHideT); try { nsAskConfirm(h.id, h.rect); } catch (x) {} } // 移进词 → 弹在词旁
-    else if (_askFrom === 'hover') scheduleAskHide(); // 移开词 → 收（140ms 宽限给移进弹窗）
-  });
-  editor.addEventListener('mouseleave', function () { _hoverTok = ''; if (_askFrom === 'hover') scheduleAskHide(); });
+  // v9.4.1（用户拍板）：PC 去掉「鼠标悬停即弹彩蛋确认层」——扫过 /pet /dragon 等词不再弹；
+  // 只有光标真正定位到词上（点选/方向键，走下方 selectionchange 落位通道）或打字上屏才弹，仍锚在词旁、光标离开即收。触屏（else 分支）点词弹/点空白收不变。
 } else {
   editor.addEventListener('click', function (e) {
     e.stopPropagation(); // v9.3.9 闸 P0：点中彩蛋词弹出的那次 click 不得冒泡到 document 的「点空白收」把刚弹的又秒删（触屏弹闪一下）

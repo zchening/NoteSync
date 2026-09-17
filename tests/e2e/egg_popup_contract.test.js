@@ -70,21 +70,24 @@ async function openWithPet(name, mobile) {
 }
 const hasAsk = () => (pg) => pg.evaluate(() => !!document.getElementById('nsAsk'));
 
-test('EP-1 桌面：鼠标移进 /pet 弹在词旁、移开自动收（锚定非底部、非赖 6 秒）', guard(async () => {
+test('EP-1 桌面：鼠标悬停不弹、光标落到 /pet 才弹（v9.4.1 去悬停）', guard(async () => {
   const { ctx, page, box } = await openWithPet('EggHoverPc', false);
   const hoverOk = await page.evaluate(() => !!(window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches));
   if (!hoverOk) { console.log('EP-1 SKIP: headless 无 hover:fine'); assert.ok(true); await ctx.close(); return; }
+  // 1) 纯悬停（不落光标）：v9.4.1 起 PC 不再弹
   await page.mouse.move(box.x, box.y);
+  await page.waitForTimeout(450);
+  assert.ok(!(await page.evaluate(() => !!document.getElementById('nsAsk'))), 'v9.4.1：PC 鼠标仅悬停不应弹彩蛋确认层');
+  // 2) 点选把光标落进词里 → 弹，锚在词旁（inline top，非底部细条）
+  await page.mouse.click(box.x, box.y);
   await page.waitForFunction(() => !!document.getElementById('nsAsk'), undefined, { timeout: 4000 });
-  // 锚定：弹窗带 inline top（贴词旁），而不是旧的 bottom:76px 细条
-  const anchored = await page.evaluate(() => {
-    const b = document.getElementById('nsAsk');
-    return b.style.top !== '' && (b.textContent.indexOf('/pet') >= 0);
-  });
-  assert.ok(anchored, '弹窗应锚定在 /pet 词旁（inline top + 含 /pet 文案）');
-  await page.mouse.move(20, 760); // 移到远离词的空白
+  const anchored = await page.evaluate(() => { const b = document.getElementById('nsAsk'); return b.style.top !== '' && b.textContent.indexOf('/pet') >= 0; });
+  assert.ok(anchored, '光标落到 /pet 应弹且锚在词旁（inline top + 含 /pet 文案）');
+  // 3) 光标移开词（右移越过 /pet）→ 自动收
+  await page.keyboard.press('ArrowRight'); await page.keyboard.press('ArrowRight'); await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight'); await page.keyboard.press('ArrowRight'); await page.keyboard.press('ArrowRight');
   await page.waitForFunction(() => !document.getElementById('nsAsk'), undefined, { timeout: 4000 });
-  assert.ok(!(await page.evaluate(() => !!document.getElementById('nsAsk'))), '移开词后弹窗应自动消失');
+  assert.ok(!(await page.evaluate(() => !!document.getElementById('nsAsk'))), '光标移开后弹窗应自动收');
   assert.strictEqual(page.__errors.length, 0, '不应有页面错误: ' + page.__errors.join(' | '));
   await ctx.close();
 }));

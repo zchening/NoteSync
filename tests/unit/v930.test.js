@@ -177,13 +177,13 @@ test('G9 升级 UI 与代理拉取钉（v9.3.1 改同源代理）：/api/latest�
   assert.ok(SRC.includes("} else $('#aboutUpdRow').classList.add('hidden');"), '网页版必须隐藏升级行');
   assert.ok(SRC.includes("id=\"aboutUpdRow\"") && SRC.includes('id="updMask"'), '缺关于行/确认弹窗骨架');
 });
-/* ── G9e v9.3.2 交互三改（用户拍板）：彩蛋词 hover 即问可重复 / 恐龙点跳按住低头 / 桌宠天数按 born 现算 ── */
-test('G9e v9.3.2→v9.3.9 交互：彩蛋词锚定词旁弹层（进弹/移开收）、恐龙点=跳按住=低头、桌宠天数现算', () => {
+/* ── G9e v9.3.2 交互 / v9.4.1 PC 摘悬停：彩蛋词光标落位才弹、恐龙点跳按住低头、桌宠天数按 born 现算 ── */
+test('G9e v9.4.1：PC 去悬停即弹（光标落位/打字才弹、触屏不变）、恐龙点=跳按住=低头、桌宠天数现算', () => {
   // 彩蛋命中：全部锚到新增块独有串（旧文件别处也有 editor mousemove/click，泛串会恒真）
   assert.ok(SRC.includes('function nsEggAtPoint') && SRC.includes('caretRangeFromPoint'), '须用只读指针命中（不注入 span 污染存档）');
-  assert.ok(SRC.includes('_hoverTok = h.id;') && SRC.includes("if (e.buttons) return;"), '桌面 hover：边沿触发 _hoverTok + 按住/拖拽中(e.buttons)不打扰');
-  assert.ok((SRC.match(/nsAskConfirm\(h\.id, h\.rect\)/g) || []).length >= 2, 'v9.3.9：hover 与触屏两路每次移进/点中都把弹窗锚在词旁（弹在命中词 rect 处）');
-  assert.ok(SRC.includes("else if (_askFrom === 'hover') scheduleAskHide();"), 'v9.3.9：鼠标移开彩蛋词即自动收弹窗（照提醒 chip 模型，不再赖 6 秒）');
+  assert.ok(!SRC.includes("_askFrom = 'hover'"), 'v9.4.1：PC「悬停即弹」通道必须已摘（桌面鼠标扫过彩蛋词不再弹）');
+  assert.ok(SRC.includes("_askFrom = 'caret';") && SRC.includes('nsAskConfirm(id, h.rect);'), 'v9.4.1：桌面靠光标落位通道弹（selectionchange，锚在光标所在词 rect 旁）');
+  assert.ok(SRC.includes("_askFrom = 'tap'") && SRC.includes('nsAskConfirm(h.id, h.rect)'), '触屏点词弹、锚在命中词 rect 旁（不变）');
   assert.ok(SRC.includes('try { asked[id] = 1; }'), '「不了」仍写 asked[]（仅敲字通道尊重；悬停/点击/光标落位三通道每次重新定位都重弹）');
   assert.ok(SRC.includes('#nsAsk .ns-dot') && SRC.includes('-apple-system,"PingFang SC",sans-serif'), '确认层方案1：无衬线 + 金色小圆点，去等宽小字');
   // 恐龙：点=跳/按住=低头 + 首点不补跳
