@@ -21,9 +21,10 @@ test('T1 #1 移动拍照上传：二选一菜单 + capture=environment 调相机
     '模态含主按钮「拍 照」+ ghost「从相册选择」，旧 #nsUpMenu 已退役');
 });
 
-test('T2 #2 dragon/brick 音量：音色级 gain 乘子，仅这两条 gain:8（v9.3.5 试听定档），其余零变化', () => {
-  assert.ok(SRC.includes("dragon:  { w: ['square'], h: [1], a: 0.004, d: 0.1, r: 0, gain: 8 }"), 'dragon 音色 gain:8');
-  assert.ok(SRC.includes("brick:   { cut: 2600, cut1: 900, q: 0.9, a: 0.002, d: 0.07, gain: 8 }"), 'brick 音色 gain:8');
+test('T2 #2 dragon/brick 音量：总闸 0.2 + 音色级 gain:11（v9.3.9 用户报太轻加档），其余音色零 gain', () => {
+  assert.ok(SRC.includes('vol: 0.2'), 'SND.vol 主音量闸须 0.2（v9.3.9 由 0.12 提档）');
+  assert.ok(SRC.includes("dragon:  { w: ['square'], h: [1], a: 0.004, d: 0.1, r: 0, gain: 11 }"), 'dragon 音色 gain:11');
+  assert.ok(SRC.includes("brick:   { cut: 2600, cut1: 900, q: 0.9, a: 0.002, d: 0.07, gain: 11 }"), 'brick 音色 gain:11');
   assert.ok(SRC.includes('(o.g == null ? 0.4 : o.g) * (v.gain || 1)'), 'tone() 输出增益须乘音色 gain（缺省 1）');
   assert.ok(SRC.includes('(o.g == null ? 0.34 : o.g) * (v.gain || 1)'), 'nz() 输出增益须乘音色 gain（缺省 1）');
   assert.ok(!/(snake|tank|satoshi|bitcoin|spacex|tesla|mirror|pet):\s*\{[^}]*gain:/.test(SRC), '其余音色不得被加 gain（只动 dragon/brick）');

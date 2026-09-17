@@ -78,6 +78,9 @@
   header button svg{width:17px;height:17px;pointer-events:none}
   #versionToast{position:fixed;top:54px;left:50%;transform:translateX(-50%);z-index:60;padding:7px 14px;font-size:12px;letter-spacing:.04em;color:var(--fg);background:var(--box-bg);border:1px solid var(--line);border-radius:20px;opacity:0;pointer-events:none;transition:opacity .35s;box-shadow:0 4px 16px rgba(0,0,0,.12)}
   #versionToast.show{opacity:1}
+  /* v9.3.9 每日一句话：进入笔记时递一句问候的 toast（顶层 z54，低于草稿/冲突条 z55，永不盖住它们；零新色，仅吃令牌 + 与 #versionToast 同类阴影）*/
+  #nsDayToast{position:fixed;top:54px;left:50%;transform:translateX(-50%) translateY(-8px);z-index:54;max-width:min(86vw,360px);padding:10px 16px;border:1px solid var(--line);border-radius:999px;background:var(--box-bg);color:var(--fg);font:400 13px/1.5 var(--serif);letter-spacing:.01em;box-shadow:0 10px 30px rgba(20,20,18,.14);opacity:0;pointer-events:none;transition:opacity .32s,transform .32s;text-align:center;white-space:normal}
+  #nsDayToast.show{opacity:1;transform:translateX(-50%) translateY(0)}
   /* ── v9.2.0 刷新开奖卡（方案 A 角标式）──────────────────────────────
      刷新钮语义零改动（仍是字面 location.reload()），点击时先把「这次要说的话」落 sessionStorage，
      页面重建后浮出来——于是白送「按下 → 转圈 → 开奖」的节奏。
@@ -815,7 +818,7 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '9.3.8';
+const APP_VERSION = '9.3.9';
 const BUILD_DATE = '2026-09-16';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
@@ -2737,6 +2740,7 @@ async function applyUnlocked(key, note) {
   try { nsFestWelcome(); } catch (e) {} // v8.2.0：节日雨——每次打开 App 那一刻放一轮（非节日静默）
   try { nsDrawConsume(); } catch (e) {} // v9.2.0：刷新开奖——节日雨/问候在场时 nsDrawBusy 自动让位
   try { if (window.nsClaimPassport) window.nsClaimPassport(); } catch (e) {} // v9.0.0：护照认领必须在正文真渲染出来之后（boot 那一枪对加密笔记必然扫空）
+  setTimeout(function () { try { nsDayGreet(); } catch (e) {} }, 1000); // v9.3.9：进入笔记的每日一句话（延一拍，避开节日气泡再决定是否弹）
 }
 
 async function unlock(pass) {
@@ -2767,6 +2771,7 @@ async function unlock(pass) {
             startSync();
             try { nsFestWelcome(); } catch (e3) {} // v8.2.0：离线解锁也是「打开 App」，节日雨同等触发
             try { nsDrawConsume(); } catch (e4) {} // v9.2.0：离线解锁同样兑现上一拍的开奖
+            setTimeout(function () { try { nsDayGreet(); } catch (e5) {} }, 1000); // v9.3.9：离线进入笔记也递「每日一句话」
             return;
           }
         } catch (e2) { err.textContent = '口令与本地缓存不符'; return; }
@@ -7083,6 +7088,48 @@ function toast(msg) {
   showUploadStatus(msg);
   setTimeout(() => { if (uploadStatus.textContent === msg) hideUploadStatus(); }, 2200);
 }
+/* v9.3.9 每日一句话 toast（B·老友随口，待用户划勾定稿；池子可直接增删）：
+   进入某篇笔记时随机递一句，每天第一篇 + 每次换到不同笔记各算一次；同一天刷同一篇不打扰。 */
+var DAILY_LINES = [
+  '来啦，今天整点啥？', '又打开我，谢了啊。', '早，先把脑子里的事倒出来。', '想到啥写啥，别憋着。',
+  '走你，记一笔。', '我在呢，说吧。', '脑子空了？写下来就满了。', '今天也别硬记。',
+  '边想边写，别求一次到位。', '记两笔，比记一天稳。', '你负责想，我负责记。', '先把待办掏空。',
+  '来都来了，记一下。', '想到就做，做到就记。', '别怕字少，够用就行。', '一句话也是进度。',
+  '脑子里那摊我帮你盯着。', '先记上，回头再说。', '你忙你的，笔给你递着。', '这会儿的事，趁热记。',
+  '别跟我客气，随便写。', '记完就踏实了。', '灵感这东西，落纸才算数。', '今天想记住点啥？',
+  '交给我，你接着忙。', '写下来，就忘不掉了。', '想到哪记到哪。', '有事儿就说，我记着呢。'
+];
+function nsDayGreet() {
+  try {
+    if (!noteId) return; // 首页不弹，只在真进某篇笔记时
+    var now = new Date();
+    var ymd = now.getFullYear() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0');
+    var lastDay = '', lastNote = '', lastLine = '';
+    try { lastDay = localStorage.getItem('notesync_greet_day') || ''; lastNote = localStorage.getItem('notesync_greet_last_note') || ''; lastLine = localStorage.getItem('notesync_greet_last_line') || ''; } catch (e) {}
+    var firstToday = lastDay !== ymd;
+    var diffNote = lastNote !== noteId;
+    if (!(firstToday || diffNote)) return; // 当天弹过且还是这篇（刷新）→ 不打扰
+    var g = document.getElementById('nsGreet'); // 节日问候气泡在场时错峰、不叠两层
+    if (g && g.classList.contains('show')) return;
+    var vt = document.getElementById('versionToast'); // 更新提示 pill 同占 top:54，避让（不消耗当天/切篇记账，下次开笔记再试）
+    if (vt && vt.classList.contains('show')) return;
+    var db = document.getElementById('draftBar'); // 草稿/冲突条同位 top:54，让位
+    if (db && db.classList && !db.classList.contains('hidden')) return;
+    var pool = DAILY_LINES.filter(function (s) { return s && s !== lastLine; });
+    if (!pool.length) pool = DAILY_LINES;
+    var line = pool[Math.floor(Math.random() * pool.length)];
+    try {
+      localStorage.setItem('notesync_greet_last_note', noteId);
+      localStorage.setItem('notesync_greet_last_line', line);
+      if (firstToday) localStorage.setItem('notesync_greet_day', ymd);
+    } catch (e) {}
+    var el = document.getElementById('nsDayToast');
+    if (!el) { el = document.createElement('div'); el.id = 'nsDayToast'; document.body.appendChild(el); }
+    el.textContent = line;
+    el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+    clearTimeout(el._t); el._t = setTimeout(function () { el.classList.remove('show'); }, 4200);
+  } catch (e) {}
+}
 // v6.3：标识失效版本——置灰 + 禁按钮 + 元信息后缀，不再静默失败也误导「预览失败」
 function markHistBad(row, pv, rs) {
   try {
@@ -8464,6 +8511,7 @@ if (noteId && (isNativeApp() || !CHIP_HOVER_OK)) {
     undoStack = []; redoStack = []; lastState = captureState(); // 新笔记会话：清空并重置撤销栈基线
     startSync();
     consumeBackupImportMsg(); // v7.7.0：首页扫备份码跳转解锁后的一次性成功提示
+    setTimeout(function () { try { nsDayGreet(); } catch (e) {} }, 1000); // v9.3.9：记住密钥的自动解锁路径同样递「每日一句话」
   } else {
     loadingEl.classList.add('hidden');
     mask.classList.remove('hidden');
@@ -8518,6 +8566,8 @@ body.dark .ns-over{background:rgba(0,0,0,.6)}
 .ns-rows{margin:12px 0 0;display:flex;flex-direction:column;gap:6px;font:400 11px/1.6 var(--mono);color:var(--muted)}
 .ns-rows div{display:flex;justify-content:space-between;gap:10px}
 .ns-rows b{color:var(--fg);font-weight:600}
+.ns-pet-echo{margin:11px 2px 0;padding-top:10px;border-top:1px solid var(--line);font:400 11.5px/1.6 var(--mono);color:var(--muted);text-align:center}
+.ns-pet-echo::before{content:'';display:inline-block;width:4px;height:4px;border-radius:50%;background:var(--accent);margin-right:7px;vertical-align:2px}
 .ns-btns{display:flex;gap:8px;margin-top:14px}
 .ns-btns button{flex:1;font:inherit;font-size:12.5px;letter-spacing:.06em;padding:10px 0;border-radius:10px;border:1px solid var(--line);background:none;color:var(--fg);cursor:pointer}
 .ns-btns .ns-again{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
@@ -8633,7 +8683,7 @@ function nsIsRouteName(s) { return NS_ROUTES.indexOf(String(s || '').toLowerCase
 window.nsIsRouteName = nsIsRouteName;
 
 /* ── 2. 音色引擎：一套合成器，十个蛋十种性格，共用五声音阶基因 ────── */
-var SND = { muted: true, vol: 0.12, nb: null, nbCtx: null, curve: null, wet: null, cont: null };
+var SND = { muted: true, vol: 0.2, nb: null, nbCtx: null, curve: null, wet: null, cont: null }; // v9.3.9：总音量 0.12→0.2（用户报 dragon/brick 太轻，OUT() 是唯一音量闸、waveshaper 软限幅防爆音）
 try { SND.muted = (localStorage.getItem('notesync_snd') !== 'on'); } catch (e) {}
 function sndPersist() { try { localStorage.setItem('notesync_snd', SND.muted ? 'off' : 'on'); } catch (e) {} }
 function actx() {
@@ -8651,8 +8701,20 @@ function actx() {
   }
   return a;
 }
-function OUT() { // 主增益：全局音量与静音的唯一出口
-  if (!SND.out) { SND.out = remAudioCtx.createGain(); SND.out.gain.value = SND.vol; SND.out.connect(remAudioCtx.destination); }
+function OUT() { // 主增益：全局音量与静音的唯一出口；v9.3.9 出料口补限幅器（tone 的 waveshaper 只对 v.dist 生效且从不接回 OUT()，dragon/brick 无 dist 等于走裸线，FX.win 五音叠 0.2×gain11 会硬削顶）
+  if (!SND.out) {
+    SND.out = remAudioCtx.createGain(); SND.out.gain.value = SND.vol;
+    var dest = remAudioCtx.destination;
+    var comp = null;
+    try {
+      if (typeof remAudioCtx.createDynamicsCompressor === 'function') comp = remAudioCtx.createDynamicsCompressor();
+      if (comp) {
+        try { comp.threshold.value = -14; comp.knee.value = 8; comp.ratio.value = 4; comp.attack.value = 0.003; comp.release.value = 0.18; } catch (e) {}
+      }
+    } catch (e) { comp = null; }
+    if (comp) { try { SND.out.connect(comp); comp.connect(dest); } catch (e) { try { SND.out.connect(dest); } catch (x) {} } }
+    else { try { SND.out.connect(dest); } catch (e) {} }
+  }
   return SND.out;
 }
 function noiseBuf(a) {
@@ -8718,9 +8780,9 @@ function lfoGrowl(v, o) { // 桌宠呼噜：低频锯齿 + LFO 频率调制，�
 }
 var VOICES = {
   mirror:  { w: ['sine', 'triangle'], h: [1, 2], hg: [0.5, 0.25], a: 0.16, d: 0.34, r: 0.3, renv: 1 },
-  dragon:  { w: ['square'], h: [1], a: 0.004, d: 0.1, r: 0, gain: 8 },
+  dragon:  { w: ['square'], h: [1], a: 0.004, d: 0.1, r: 0, gain: 11 },
   snake:   { w: ['sine'], h: [1, 2], hg: [0.6, 0.22], a: 0.012, d: 0.13, r: 0.12 },
-  brick:   { cut: 2600, cut1: 900, q: 0.9, a: 0.002, d: 0.07, gain: 8 },
+  brick:   { cut: 2600, cut1: 900, q: 0.9, a: 0.002, d: 0.07, gain: 11 },
   tank:    { w: ['square', 'sawtooth'], h: [1, 0.5], a: 0.003, d: 0.16, dist: 1, r: 0.14 },
   satoshi: { w: ['sine'], h: [1, 3, 5], hg: [0.6, 0.16, 0.06], a: 0.004, d: 0.42, r: 0.26 },
   bitcoin: { w: ['triangle'], h: [1, 2], hg: [0.5, 0.18], a: 0.003, d: 0.2, r: 0.1 },
@@ -8866,15 +8928,28 @@ function fit(g) {
 }
 function setScore(t) { var e = NSG.hud && NSG.hud.querySelector('.ns-sc'); if (e) e.textContent = t; }
 function setLevel(t) { var e = NSG && NSG.lv; if (e) e.textContent = t || ''; }
+var PET_ECHO = { // v9.3.9：桌宠「一局结束后才客串」的一句话（≤12字，俏皮，替换方便）
+  dragon: '桌宠叼回一根草', brick: '桌宠打了个砖味儿嗝', snake: '桌宠盯上蛇身了',
+  satoshi: '桌宠把金币拱跑了', bitcoin: '桌宠抱着币不撒手', tank: '桌宠从炮口探头',
+  spacex: '桌宠扒着火箭想上', tesla: '桌宠被甩进了后备箱'
+};
 function showEnd(title, rows) {
   NSG.over = true; stopVoice();
   var c = NSG.card.querySelector('.ns-card');
   c.querySelector('h2').textContent = title;
   var box = c.querySelector('.ns-rows'); box.textContent = '';
   (rows || []).forEach(function (r) { var d = mk('div'); d.innerHTML = '<span></span><b></b>'; d.firstChild.textContent = r[0]; d.lastChild.textContent = r[1]; box.appendChild(d); });
+  var prev = c.querySelector('.ns-pet-echo'); if (prev && prev.parentNode) prev.parentNode.removeChild(prev); // 重开一局不叠加客串行
+  try { // v9.3.9：桌宠改为「一局结束后才客串」一句小呼应（游戏进行中不再常驻乱入），零碰撞、纯装饰
+    if (window.nsPetGame && nsPetGame.on() && NSG.route && PET_ECHO[NSG.route]) {
+      var echo = mk('div', 'ns-pet-echo'); echo.textContent = PET_ECHO[NSG.route];
+      c.insertBefore(echo, c.querySelector('.ns-btns'));
+      NSG.voice = 'pet'; fx('burp'); NSG.voice = NSG.route; // 借桌宠音色后必须还原，否则「再来一局」整局跑成桌宠叫（fx 同步排音，紧接还原安全）
+    }
+  } catch (e) {}
   NSG.card.classList.remove('hidden');
 }
-function hideEnd() { NSG.card.classList.add('hidden'); NSG.over = false; }
+function hideEnd() { NSG.card.classList.add('hidden'); NSG.over = false; var e = NSG.card.querySelector('.ns-pet-echo'); if (e && e.parentNode) e.parentNode.removeChild(e); }
 
 function bindInput(root, cv, g) {
   var sx = 0, sy = 0, tracking = false, moved = false, t0 = 0;
@@ -9084,19 +9159,50 @@ function nsWordTriggerAtCaret() {
   var id = m[2].toLowerCase();
   if (asked[id]) return;
   asked[id] = 1;
+  _askFrom = 'type'; // v9.3.9：打字通道弹出的确认层不被「鼠标移开」误收（仅 hover 路移开才 scheduleAskHide）
   nsAskConfirm(id);
 }
-function nsAskConfirm(id) {
-  try { var dc = document.getElementById('nsDraw'); if (dc && dc.parentNode) dc.parentNode.removeChild(dc); } catch (e0) {} // 同泳道让位：确认层是用户刚敲出来的，优先
+var _askHideT = 0, _askShowing = '', _askFrom = ''; // v9.3.9：弹窗锚定词旁 + 移开即收（照提醒 chip 模型），_askFrom=hover/caret/tap 谁持有弹窗
+function _askCaretRect() { // 无坐标时退到光标所在矩形（打字通道用）
+  try {
+    var sel = window.getSelection(); if (!sel || !sel.rangeCount) return null;
+    var r = sel.getRangeAt(0), rs = r.getClientRects();
+    if (rs && rs.length) return rs[rs.length - 1];
+    try { var r2 = r.cloneRange(); r2.collapse(false); var rs2 = r2.getClientRects(); if (rs2 && rs2.length) return rs2[rs2.length - 1]; } catch (e) {}
+    var bb = r.getBoundingClientRect(); return (bb && (bb.width || bb.height || bb.left || bb.top)) ? bb : null;
+  } catch (e) { return null; }
+}
+function _askPlace(b, rect) { // 弹在词上方，放不下翻到下方；水平夹在视口内（fixed 用视口坐标）
+  b.style.transform = 'none'; b.style.bottom = 'auto';
+  var bw = b.offsetWidth || 200, bh = b.offsetHeight || 40, vw = window.innerWidth || 800, vh = window.innerHeight || 600;
+  var top, left;
+  if (rect && (rect.width || rect.height || rect.left || rect.top)) {
+    var cx = rect.left + rect.width / 2;
+    left = cx - bw / 2; top = rect.top - bh - 8;
+    if (top < 8) top = rect.bottom + 8;
+    if (top + bh > vh - 8) top = Math.max(8, vh - bh - 8);
+  } else { left = vw / 2 - bw / 2; top = vh - bh - 76; } // 拿不到坐标（jsdom 守护）退到旧底部位
+  left = Math.max(8, Math.min(left, vw - bw - 8));
+  b.style.left = left + 'px'; b.style.top = top + 'px';
+}
+function nsAskConfirm(id, rect) {
+  try { var dc = document.getElementById('nsDraw'); if (dc && dc.parentNode) dc.parentNode.removeChild(dc); } catch (e0) {} // 同泳道让位：确认层是用户刚敲/移到的，优先
   var old = document.getElementById('nsAsk'); if (old && old.parentNode) old.parentNode.removeChild(old);
-  var b = mk('div'); b.id = 'nsAsk'; b.className = 'ns-ask-m'; // v9.3.6 A：PC/移动统一金胶囊 pill（用户拍板与移动端一致），桌面「方案1 细条」退役
-  b.innerHTML = '进入 <b class="ns-w">/' + id + '</b>？<button class="ns-go">进入</button><button class="ns-no">✕</button>';
+  clearTimeout(_askHideT); // v9.3.9 闸：撤销任何在途的 140ms 收起，防「刚移开的 hover」把这次新弹的吞掉
+  var b = mk('div'); b.id = 'nsAsk'; b.className = 'ns-ask-m'; // v9.3.6 A：PC/移动统一金胶囊 pill
+  b.innerHTML = '进入 <b class="ns-w">/' + id + '</b>？<button class="ns-go" type="button">进入</button><button class="ns-no" type="button">✕</button>';
   document.body.appendChild(b);
   function askReturnFocus() { if (typeof CHIP_HOVER_OK !== 'undefined' && CHIP_HOVER_OK) { try { editor.focus(); ensureCaret(); } catch (e) {} } }
-  b.querySelector('.ns-go').addEventListener('click', function () { b.remove(); try { delete asked[id]; } catch (e) {} /* v9.3.1（用户报）：进过一次即 re-arm，同会话再敲 /pet /brick /dragon 还能弹——旧的「一次会话只问一次」把第二次永久堵死；「不了」仍保持不再打扰 */ launch(id); });
-  b.querySelector('.ns-no').addEventListener('click', function () { b.remove(); try { asked[id] = 1; } catch (e) {} /* v9.3.2：不了须真置 asked，否则 hover/触屏点过「不了」再移上去仍会复弹（打扰） */ askReturnFocus(); }); // 红线10：点浮层必 blur 编辑器，不收口=光标消失
-  setTimeout(function () { if (b.parentNode) { b.remove(); askReturnFocus(); } }, 6000);
+  b.addEventListener('mousedown', function (e) { e.preventDefault(); }); // 红线10：点浮层不抢编辑器焦点（与工具栏按钮同套路），否则光标消失、且 caret/type 持有的弹窗会被判「编辑器已失焦」永不收
+  b.addEventListener('mouseenter', function () { clearTimeout(_askHideT); }); // 从词移到弹窗上不误收
+  b.addEventListener('mouseleave', function () { if (_askFrom === 'hover') scheduleAskHide(); }); // 悬停路：从弹窗再移开才收
+  b.querySelector('.ns-go').addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); try { delete asked[id]; } catch (x) {} hideAsk(); try { editor.blur(); } catch (x) {} launch(id); }); // 进过一次即 re-arm（v9.3.1）；v9.3.9 先 blur 编辑器再启动，防游戏方向键把字打进正文（红线③）
+  b.querySelector('.ns-no').addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); try { asked[id] = 1; } catch (x) {} hideAsk(); askReturnFocus(); }); // 「不了」真置 asked（只抑打字通道，A12 依赖）；红线10：点浮层必收口
+  _askShowing = id;
+  _askPlace(b, rect || _askCaretRect()); // 锚定命中/光标所在词旁
 }
+function scheduleAskHide() { clearTimeout(_askHideT); _askHideT = setTimeout(hideAsk, 140); } // 移开词→收，留 140ms 宽限给移进弹窗
+function hideAsk() { clearTimeout(_askHideT); var b = document.getElementById('nsAsk'); if (b && b.parentNode) b.parentNode.removeChild(b); _askShowing = ''; _askFrom = ''; } // v9.3.9：收起即清所有权（防 ✕ 后光标/鼠标仍在词上把某通道永久挡死），但保留 _hoverTok/_eggCaretTok 边缘态——✕ 后同词内微动不立刻复弹，移开再回来才弹
 document.addEventListener('beforeinput', function (e) {
   if (e.isComposing || (e.inputType && e.inputType.indexOf('insertComposition') === 0)) return;
   if (e.inputType === 'insertFromPaste' || e.inputType === 'insertReplacementText') return;
@@ -9110,59 +9216,71 @@ document.addEventListener('beforeinput', function (e) {
 editor.addEventListener('compositionend', function () {
   setTimeout(function () { try { nsWordTriggerAtCaret(); } catch (x) {} }, 0);
 });
-/* v9.3.2（用户拍板）：彩蛋入口扩成「鼠标移到正文里已有的 /pet /dragon … 上就问、且每次都能进」。
-   不往 contenteditable 注入 span（否则污染存档）——只读地用 caretRange/PositionFromPoint 命中指针下的整词，
-   命中保留字才弹 nsAskConfirm（其自身无一次性锁 → 可重复）。桌面 mousemove 边沿触发、组字中不打扰；触屏点中即弹。 */
+/* v9.3.9（用户拍板）：彩蛋入口弹窗改与正文「添加提醒」chip 同一模型——
+   鼠标移到正文里的 /pet /dragon … 上就弹在词旁边、移开就自动收；触屏点词弹、点空白收。
+   命中靠 caretRange/PositionFromPoint 落到可见文本节点，展开态折叠正文块照样能命中（收起态本就 display:none、看不见也不该弹）。
+   不往 contenteditable 注入 span（否则污染存档）。 */
 var _hoverTok = '';
 var NS_EGG_HOVER_RE = /(^|[^A-Za-z0-9_])\/(mirror|snake|dragon|brick|satoshi|bitcoin|tank|spacex|tesla|pet)(?![A-Za-z0-9])/; // 尾随标点/括号/句读仍算命中；(?![A-Za-z0-9]) 防 /peter
-function nsEggAtPoint(x, y) {
-  if (!editor) return '';
+function nsEggHit(x, y) { // 指针命中彩蛋词 → {id, rect}；未命中 {id:'', rect:null}（rect 供弹窗锚定在词旁）
+  var empty = { id: '', rect: null };
+  if (!editor) return empty;
   var hit = null;
   if (document.caretRangeFromPoint) hit = document.caretRangeFromPoint(x, y);
   else if (document.caretPositionFromPoint) { var pp = document.caretPositionFromPoint(x, y); if (pp) { var rr = document.createRange(); rr.setStart(pp.offsetNode, pp.offset); rr.collapse(true); hit = rr; } }
-  if (!hit) return '';
-  var node = hit.startContainer; if (!node || node.nodeType !== 3 || !editor.contains(node)) return '';
+  if (!hit) return empty;
+  var node = hit.startContainer; if (!node || node.nodeType !== 3 || !editor.contains(node)) return empty;
   var data = node.data, off = Math.max(0, Math.min(hit.startOffset, data.length));
   var i = off; while (i > 0 && !/\s/.test(data[i - 1])) i--;
   var j = off; while (j < data.length && !/\s/.test(data[j])) j++;
   var m = NS_EGG_HOVER_RE.exec(nsStripZW(data.slice(i, j)));
-  return m ? m[2] : '';
+  if (!m) return empty;
+  var rect = null;
+  try { var rg = document.createRange(); rg.setStart(node, i); rg.setEnd(node, Math.min(j, data.length)); rect = rg.getBoundingClientRect(); } catch (e) {}
+  return { id: m[2].toLowerCase(), rect: rect };
 }
+function nsEggAtPoint(x, y) { return nsEggHit(x, y).id; } // 兼容旧名
 if (CHIP_HOVER_OK) {
   editor.addEventListener('mousemove', function (e) {
     if (typeof isComposing !== 'undefined' && isComposing) return;
     if (e.buttons) return; // 按住/拖拽选区中不打扰、不误弹
-    var t = nsEggAtPoint(e.clientX, e.clientY);
-    if (t === _hoverTok) return;
-    _hoverTok = t;
-    if (t) { try { nsAskConfirm(t); } catch (x) {} } // v9.3.8：每次鼠标移进彩蛋词都问（去 asked[] 抑制，与光标落位通道一致；_hoverTok 边缘触发防同词内重复）
+    var h = nsEggHit(e.clientX, e.clientY);
+    if (h.id === _hoverTok) return; // 同一词内微动不重弹（边缘触发）
+    if (h.id && _askFrom === 'caret' && _eggCaretTok === h.id) { _hoverTok = h.id; return; } // 光标路正持有同词弹窗：鼠标扫过不抢所有权（否则扫开就把光标停着的弹窗收了）
+    _hoverTok = h.id;
+    if (h.id) { _askFrom = 'hover'; clearTimeout(_askHideT); try { nsAskConfirm(h.id, h.rect); } catch (x) {} } // 移进词 → 弹在词旁
+    else if (_askFrom === 'hover') scheduleAskHide(); // 移开词 → 收（140ms 宽限给移进弹窗）
   });
-  editor.addEventListener('mouseleave', function () { _hoverTok = ''; });
+  editor.addEventListener('mouseleave', function () { _hoverTok = ''; if (_askFrom === 'hover') scheduleAskHide(); });
 } else {
   editor.addEventListener('click', function (e) {
-    var t = nsEggAtPoint(e.clientX, e.clientY);
-    if (t) { try { nsAskConfirm(t); } catch (x) {} } // v9.3.8：每次点中彩蛋词都问（去 asked[] 抑制，用户拍板点✕后再点仍弹）
+    e.stopPropagation(); // v9.3.9 闸 P0：点中彩蛋词弹出的那次 click 不得冒泡到 document 的「点空白收」把刚弹的又秒删（触屏弹闪一下）
+    var h = nsEggHit(e.clientX, e.clientY);
+    if (h.id) { _askFrom = 'tap'; clearTimeout(_askHideT); try { nsAskConfirm(h.id, h.rect); } catch (x) {} } // 每次点中彩蛋词都弹、弹在词旁
+    else hideAsk(); // 点空白 → 收
+  });
+  document.addEventListener('click', function (e) { // 触屏：点编辑器以外（弹窗、其它控件）收（.ns-go/.ns-no 已 stopPropagation；编辑器内点词已在上面 stopPropagation，不到这里）
+    try { var b = document.getElementById('nsAsk'); if (b && !b.contains(e.target)) hideAsk(); } catch (x) {}
   });
 }
 
-/* v9.3.7 问题3（v9.3.8 改重弹）：光标「定位」到正文里已有的彩蛋词上也进入提示。现有通道只覆盖「正在敲字」
-   （beforeinput/compositionend）与「鼠标悬停 / 触屏点」（按坐标 nsEggAtPoint）；用键盘方向键或
-   点选把光标挪到 /dragon 上时既无输入事件、坐标路径又不覆盖 → 不弹。这里加 selectionchange 防抖，
-   从光标所在文本节点按词边界取整词、命中保留字才弹。用 _eggCaretTok 做落位边缘触发：每次把光标重新
-   移到彩蛋词上都弹（点✕关闭后移开再移回来仍弹，用户拍板），同一词内光标微动不重复弹；
-   组字期 / 有选区 / 确认层已在 / 焦点不在编辑器 一律跳过。 */
+/* 光标落位通道（键盘方向键/点选把光标移到已有彩蛋词上）：与悬停共用「弹在词旁、离开即收」。
+   悬停正持有弹窗时光标路不越权接管（对齐 chip 的 chipFromHover）。组字期 / 有选区 / 非编辑器持焦一律跳过。 */
 function nsEggTokenAtCaret() {
   var sel = window.getSelection();
-  if (!sel || !sel.rangeCount || !sel.isCollapsed) return ''; // 有选区或无光标不判
+  if (!sel || !sel.rangeCount || !sel.isCollapsed) return { id: '', rect: null }; // 有选区或无光标不判
   var r = sel.getRangeAt(0);
   var node = r.startContainer;
-  if (!node || node.nodeType !== 3 || !editor.contains(node)) return '';
+  if (!node || node.nodeType !== 3 || !editor.contains(node)) return { id: '', rect: null };
   var data = node.data, off = Math.max(0, Math.min(r.startOffset, data.length));
   function isWs(cc) { return cc === 32 || cc === 9 || cc === 10 || cc === 13 || cc === 12288; } // 空格/制表/换行/全角空格，不用反斜杠正则
   var i = off; while (i > 0 && !isWs(data.charCodeAt(i - 1))) i--;
   var j = off; while (j < data.length && !isWs(data.charCodeAt(j))) j++;
   var m = NS_EGG_HOVER_RE.exec(nsStripZW(data.slice(i, j)));
-  return m ? m[2] : '';
+  if (!m) return { id: '', rect: null };
+  var rect = null;
+  try { var rg = document.createRange(); rg.setStart(node, i); rg.setEnd(node, Math.min(j, data.length)); rect = rg.getBoundingClientRect(); } catch (e) {}
+  return { id: m[2].toLowerCase(), rect: rect };
 }
 var _eggCaretTimer = 0, _eggCaretTok = '';
 document.addEventListener('selectionchange', function () {
@@ -9170,17 +9288,18 @@ document.addEventListener('selectionchange', function () {
   clearTimeout(_eggCaretTimer);
   _eggCaretTimer = setTimeout(function () {
     try {
-      if (typeof isComposing !== 'undefined' && isComposing) return; // 红线9：防抖窗口内若进入组字，回调内复检，绝不在组字期弹
+      if (typeof isComposing !== 'undefined' && isComposing) return; // 红线9：防抖窗口内若进入组字，回调内复检
       if (document.activeElement !== editor) return; // 只在编辑器真持焦时判，别从别处输入框抢弹
-      var t = nsEggTokenAtCaret();
-      var id = t ? t.toLowerCase() : '';
+      var h = nsEggTokenAtCaret();
+      var id = h.id;
       if (id === _eggCaretTok) return; // 光标停在同一个彩蛋词内微动不重复弹；离开词会置空，下次再进来才弹
       _eggCaretTok = id;
-      if (!id) return; // 光标离开了彩蛋词
-      if (document.getElementById('nsAsk')) return; // 确认层已在，不叠第二层
-      nsAskConfirm(id); // 每次把光标重新定位到彩蛋词都弹（用户拍板：点✕关闭后移开再移回来仍要弹），不受 asked[] 会话抑制
+      if (CHIP_HOVER_OK && _askFrom === 'hover' && _hoverTok) return; // 悬停持有弹窗时，光标路不越权收/抢
+      if (!id) { if (_askFrom === 'caret') hideAsk(); return; } // 光标离开词 → 收（仅当弹窗由光标路弹起）
+      _askFrom = 'caret'; clearTimeout(_askHideT);
+      nsAskConfirm(id, h.rect); // 每次把光标重新定位到彩蛋词都弹、弹在词旁（用户拍板移开再移回来仍弹，不受 asked[] 会话抑制）
     } catch (e) {}
-  }, 260);
+  }, 200);
 }, true);
 
 /* 关于页入口行（方案 A：第四行「彩蛋 N/M FOUND」）*/
@@ -9596,7 +9715,7 @@ function boot() {
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else setTimeout(boot, 0);
 // v9.3.0 桌宠×彩蛋互动桥：游戏层（独立 <script>）够不着 PET/fx，经 window 暴露最小判据——
-// on()＝已领养且醒着（才画局内小宠）；burp()＝借用桌宠吃字音色（打碎砖＝吃掉词）。全程兜底 false/no-op。
+// on()＝已领养且醒着（v9.3.9 起用于「一局结束后」在结算卡客串一句，不再局内常驻乱入）；burp()＝桌宠吃字音色。全程兜底 false/no-op。
 window.nsPetGame = {
   on: function () { try { return !!PET.adopted && !PET.asleep; } catch (e) { return false; } },
   burp: function () { try { NSG.voice = 'pet'; fx('burp'); } catch (e) {} }
@@ -9647,18 +9766,6 @@ function clipTo(c, txt, max) {
   if (c.measureText(s).width <= max) return s;
   while (s.length > 1 && c.measureText(s + '…').width > max) s = s.slice(0, -1);
   return s + '…';
-}
-// v9.3.0 桌宠×彩蛋：迷你桌宠剪影（与 #nsPet 同款体型：圆身、双耳、两点眼），
-// 锚点＝脚底中心 (x, y)。只吃 pal 令牌、零新色；bob 为触地/点头下沉量。
-function petMini(c, P, x, y, bob) {
-  var oy = y - (bob || 0);
-  c.lineWidth = 1.7; c.lineJoin = 'round'; c.strokeStyle = P.ac; c.fillStyle = P.soft;
-  c.beginPath(); c.arc(x, oy - 7, 7, 0, 7); c.fill(); c.stroke();
-  c.beginPath(); c.moveTo(x - 5, oy - 11); c.lineTo(x - 6.5, oy - 17); c.lineTo(x - 1, oy - 13); c.stroke();
-  c.beginPath(); c.moveTo(x + 5, oy - 11); c.lineTo(x + 6.5, oy - 17); c.lineTo(x + 1, oy - 13); c.stroke();
-  c.fillStyle = P.fg;
-  c.beginPath(); c.arc(x - 2.4, oy - 8, 1, 0, 7); c.fill();
-  c.beginPath(); c.arc(x + 2.4, oy - 8, 1, 0, 7); c.fill();
 }
 // v9.3.0（用户令）：「吃正文」词源——/brick 的砖面与 /dragon 的障碍牌优先取当前笔记正文里的词。
 // 按标点切块；长中文串每 3 字一切保证砖面可读；纯只读快照（游戏全程零写入红线不变）；
@@ -9836,8 +9943,6 @@ R(function () {
       c.strokeStyle = P.fg; c.lineWidth = 1.7; c.lineCap = 'round'; c.beginPath(); c.moveTo(19 * u, 14 * u); c.lineTo(22.6 * u, 15 * u); c.stroke();
       c.fillStyle = P.bg; rr(c, 20 * u, 6.3 * u, 4 * u, 1.7 * u, .4 * u); c.fill(); rr(c, 21 * u, 4 * u, 1.9 * u, 1.9 * u, .5 * u); c.fill();
       c.restore();
-      // v9.3.0 桌宠×dragon：小宠蹲恐龙头顶同行——起跳一起离地，恐龙低头闪障时它跳起来躲（纯装饰，零碰撞判定）
-      if (window.nsPetGame && nsPetGame.on() && phase !== 'intro') petMini(c, P, dx + 24, GY - y - s + 2 - (duck ? 18 : 0), 0);
       if (phase === 'intro') {
         c.fillStyle = P.mu; c.font = '10px ui-monospace,Consolas,monospace';
         c.fillText('NO NETWORK · 那就跑会儿步', W / 2 - 84, 22);
@@ -9864,8 +9969,6 @@ R(function () {
 /* ═══ /brick 打砖块：砖面优先取正文词（v9.3.0），词不足回退收藏/待办；打掉只计分不改数据 ═════════ */
 R(function () {
   var COLS = 6, ROWS = 3, bw = 58, bh = 24, gap = 3, bricks = [], ball = null, pad = { x: 0, w: 74 }, score = 0, combo = 0, best = 0, t0 = 0, dead = false;
-  // v9.3.0 桌宠×brick：小宠蹲在球拍右端观战，球打碎砖它点头；约 18% 概率冒一句「吃掉这个词」并借桌宠打嗝音
-  var petBob = 0, petTalk = '', talkT = 0;
   function reset() {
     var nm = names('brick'); bricks = [];
     for (var r = 0; r < ROWS; r++) for (var c = 0; c < COLS; c++) {
@@ -9874,7 +9977,6 @@ R(function () {
     }
     ball = { x: SH().W / 2, y: SH().H - 70, vx: 118, vy: -196, r: 5 }; pad.x = SH().W / 2 - pad.w / 2;
     score = 0; combo = 0; best = 0; t0 = 0; dead = false;
-    petBob = 0; petTalk = ''; talkT = 0;
   }
   function end(win) {
     dead = true; SH().scoreVal = score;
@@ -9904,15 +10006,11 @@ R(function () {
           if (b.kind === 'steel') { ball.vy *= -1; FX('hit'); break; }
           b.hp--; ball.vy *= -1;
           if (b.hp <= 0) { b.alive = false; score++; combo++; best = Math.max(best, combo); FX('brick'); SC(score + ' / ' + bricks.length);
-            petBob = 0.35; // 桌宠蹲在拍上观战：碎一块点一次头
-            if (window.nsPetGame && nsPetGame.on() && !talkT && Math.random() < 0.18) { petTalk = '「' + String(b.name).slice(0, 2) + '」好消化'; talkT = 1.6; nsPetGame.burp(); }
             if (bricks.every(function (x) { return !x.alive || x.kind === 'steel'; })) return end(true);
           } else FX('hit');
           break;
         }
       }
-      if (petBob > 0) petBob = Math.max(0, petBob - dt);
-      if (talkT > 0) talkT = Math.max(0, talkT - dt);
       LV('连击 ' + combo);
     },
     draw: function () {
@@ -9933,10 +10031,6 @@ R(function () {
       c.lineWidth = 1.7; c.strokeStyle = P.ac; c.fillStyle = P.soft;
       rr(c, pad.x, H - 24, pad.w, 8, 4); c.fill(); c.stroke();
       c.strokeStyle = P.fg; c.fillStyle = P.bx; c.beginPath(); c.arc(ball.x, ball.y, ball.r, 0, 7); c.fill(); c.stroke();
-      if (window.nsPetGame && nsPetGame.on()) { // v9.3.0 桌宠蹲拍沿观战（纯装饰，零碰撞参与）
-        petMini(c, P, pad.x + pad.w - 11, H - 24, petBob > 0 ? Math.sin((0.35 - petBob) / 0.35 * Math.PI) * 2.5 : 0);
-        if (talkT > 0) { c.fillStyle = P.mu; c.font = '9.5px ui-monospace,Consolas,monospace'; c.textAlign = 'right'; c.fillText(petTalk, pad.x + pad.w - 22, H - 38); c.textAlign = 'left'; }
-      }
     }
   };
 }());

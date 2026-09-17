@@ -91,14 +91,15 @@ test('G4b jsdom 行为：点菜单桌宠行 → 领养落库且打开桌宠档�
 });
 
 /* ── G5 桌宠×彩蛋互动桥与三局内钩子 ───────────────────────────────── */
-test('G5 nsPetGame 桥 + brick/dragon 局内小宠 + 雨张望，全部带 on() 门禁', () => {
-  const la = layerSrc().a;
+test('G5 v9.3.9 桌宠×彩蛋改「结束后才客串」：局内常驻剪影退役、结算卡客串行带 on() 门禁、雨天张望保留', () => {
+  const la = layerSrc().a, lb = layerSrc().b;
   assert.ok(la.includes('window.nsPetGame = {'), '缺互动桥（游戏层独立脚本够不着 PET）');
   assert.ok(la.includes("on: function () { try { return !!PET.adopted && !PET.asleep;"), '桥 on() 必须「已领养且醒着」双判据');
-  const lb = layerSrc().b;
-  assert.strictEqual((lb.match(/nsPetGame && nsPetGame\.on\(\)/g) || []).length >= 3, true,
-    'brick 碎砖+draw、dragon draw 至少三处消费方');
-  assert.ok(lb.includes('function petMini(c, P, x, y, bob)'), '缺共用小宠剪影');
+  assert.ok(la.includes("window.nsPetGame && nsPetGame.on() && NSG.route && PET_ECHO[NSG.route]"), '结算卡客串须走 on() 门禁 + 按局路由取词');
+  assert.ok(la.includes("mk('div', 'ns-pet-echo')") && la.includes('var PET_ECHO = {'), '须建 .ns-pet-echo 客串行且有 PET_ECHO 词表');
+  assert.ok(!lb.includes('petMini('), '局内不得再渲染小宠剪影（改结束后客串）');
+  assert.ok(!/nsPetGame && nsPetGame\.on\(\)/.test(lb), 'canvas 层游戏进行中不得再引用桌宠');
+  assert.ok(!SRC.includes('function petMini('), 'petMini 剪影函数须随局内常驻一并删除');
   assert.ok(SRC.includes('body:has(#nsRain:not(.hidden)) #nsPet svg'), '缺雨天张望 CSS（挂 svg 不抢爬行 translateX）');
 });
 
@@ -171,12 +172,13 @@ test('G9 升级 UI 与代理拉取钉（v9.3.1 改同源代理）：/api/latest�
   assert.ok(SRC.includes("id=\"aboutUpdRow\"") && SRC.includes('id="updMask"'), '缺关于行/确认弹窗骨架');
 });
 /* ── G9e v9.3.2 交互三改（用户拍板）：彩蛋词 hover 即问可重复 / 恐龙点跳按住低头 / 桌宠天数按 born 现算 ── */
-test('G9e v9.3.2 交互三改：彩蛋词只读命中弹层、恐龙点=跳按住=低头、桌宠天数现算、nsAsk 方案1 新样式', () => {
-  // 彩蛋 hover：全部锚到新增块独有串（旧文件别处也有 editor mousemove/click，泛串会恒真）
+test('G9e v9.3.2→v9.3.9 交互：彩蛋词锚定词旁弹层（进弹/移开收）、恐龙点=跳按住=低头、桌宠天数现算', () => {
+  // 彩蛋命中：全部锚到新增块独有串（旧文件别处也有 editor mousemove/click，泛串会恒真）
   assert.ok(SRC.includes('function nsEggAtPoint') && SRC.includes('caretRangeFromPoint'), '须用只读指针命中（不注入 span 污染存档）');
-  assert.ok(SRC.includes('_hoverTok = t;') && SRC.includes("if (e.buttons) return;"), '桌面 hover：边沿触发 _hoverTok + 按住/拖拽中(e.buttons)不打扰');
-  assert.ok((SRC.match(/if \(t\) \{ try \{ nsAskConfirm\(t\); \} catch \(x\) \{\} \}/g) || []).length >= 2, 'v9.3.8：hover 与触屏两路每次移进/点中都重弹（去 asked[] 抑制，用户拍板点✕后再来仍弹）');
-  assert.ok(SRC.includes('try { asked[id] = 1; }'), '「不了」仍写 asked[]（v9.3.8 起仅敲字通道尊重；悬停/点击/光标落位三通道改为每次重新定位都重弹）');
+  assert.ok(SRC.includes('_hoverTok = h.id;') && SRC.includes("if (e.buttons) return;"), '桌面 hover：边沿触发 _hoverTok + 按住/拖拽中(e.buttons)不打扰');
+  assert.ok((SRC.match(/nsAskConfirm\(h\.id, h\.rect\)/g) || []).length >= 2, 'v9.3.9：hover 与触屏两路每次移进/点中都把弹窗锚在词旁（弹在命中词 rect 处）');
+  assert.ok(SRC.includes("else if (_askFrom === 'hover') scheduleAskHide();"), 'v9.3.9：鼠标移开彩蛋词即自动收弹窗（照提醒 chip 模型，不再赖 6 秒）');
+  assert.ok(SRC.includes('try { asked[id] = 1; }'), '「不了」仍写 asked[]（仅敲字通道尊重；悬停/点击/光标落位三通道每次重新定位都重弹）');
   assert.ok(SRC.includes('#nsAsk .ns-dot') && SRC.includes('-apple-system,"PingFang SC",sans-serif'), '确认层方案1：无衬线 + 金色小圆点，去等宽小字');
   // 恐龙：点=跳/按住=低头 + 首点不补跳
   assert.ok(SRC.includes('heldDuck') && SRC.includes("if (phase === 'run' && !dead) jump()"), '恐龙：短按=跳、按住(heldDuck)=低头');
@@ -210,8 +212,8 @@ test('H1 护照换养：从笔记复制带零宽空格的护照必须能解析�
   assert.ok(/\/api\/arcade\/ABC23456/.test(hitId), '剥零宽后必须按真 id 打认领请求，实得 ' + hitId);
 });
 test('H2 词表触发进过一次后同会话可再进（用户报第二次进不去），但点「不了」仍不再打扰', () => {
-  assert.ok(SRC.includes('b.remove(); try { delete asked[id]; } catch (e) {}'), '点「进入」必须清 asked[id] re-arm');
-  assert.ok(SRC.includes("if (asked[id]) return;"), 'asked 判据仍在（防重复弹）');
+  assert.ok(SRC.includes('try { delete asked[id]; } catch (x) {} hideAsk(); try { editor.blur(); } catch (x) {} launch(id);'), '点「进入」须清 asked[id] re-arm + 先 blur 编辑器再启动（防游戏键改正文）');
+  assert.ok(SRC.includes("if (asked[id]) return;"), 'asked 判据仍在（打字通道防重复弹）');
 });
 test('H3 图片底栏按钮可点+顺序：容器 pointer-events 不得为 none（老内核父 none 子 auto 不回升），保存到右', () => {
   const bar = SRC.slice(SRC.indexOf('#nsZoom .nz-bar{position'));
