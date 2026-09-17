@@ -91,16 +91,22 @@ test('G4b jsdom 行为：点菜单桌宠行 → 领养落库且打开桌宠档�
 });
 
 /* ── G5 桌宠×彩蛋互动桥与三局内钩子 ───────────────────────────────── */
-test('G5 v9.3.9 桌宠×彩蛋改「结束后才客串」：局内常驻剪影退役、结算卡客串行带 on() 门禁、雨天张望保留', () => {
+test('G5 v9.4.0 桌宠×彩蛋改「融入各蛋本体」：brick顶砖/snake叼字/spacex落点/tank躲砖 局内 petFig + dragon 结算卡攀爬，纯文字客串退役', () => {
   const la = layerSrc().a, lb = layerSrc().b;
-  assert.ok(la.includes('window.nsPetGame = {'), '缺互动桥（游戏层独立脚本够不着 PET）');
-  assert.ok(la.includes("on: function () { try { return !!PET.adopted && !PET.asleep;"), '桥 on() 必须「已领养且醒着」双判据');
-  assert.ok(la.includes("window.nsPetGame && nsPetGame.on() && NSG.route && PET_ECHO[NSG.route]"), '结算卡客串须走 on() 门禁 + 按局路由取词');
-  assert.ok(la.includes("mk('div', 'ns-pet-echo')") && la.includes('var PET_ECHO = {'), '须建 .ns-pet-echo 客串行且有 PET_ECHO 词表');
-  assert.ok(!lb.includes('petMini('), '局内不得再渲染小宠剪影（改结束后客串）');
-  assert.ok(!/nsPetGame && nsPetGame\.on\(\)/.test(lb), 'canvas 层游戏进行中不得再引用桌宠');
-  assert.ok(!SRC.includes('function petMini('), 'petMini 剪影函数须随局内常驻一并删除');
-  assert.ok(SRC.includes('body:has(#nsRain:not(.hidden)) #nsPet svg'), '缺雨天张望 CSS（挂 svg 不抢爬行 translateX）');
+  assert.ok(la.includes('window.nsPetGame = {'), '缺互动桥');
+  assert.ok(la.includes("on: function () { try { return !!PET.adopted && !PET.asleep;"), '桥 on() 双判据仍在');
+  assert.ok(la.includes("if (NSG.route === 'dragon')") && la.includes("mk('div', 'ns-pet-climb')") && la.includes('var NS_PET_CLIMB_SVG ='), 'dragon 结束须把桌宠爬进结算卡（DOM+CSS），非纯文字');
+  assert.ok(lb.includes('function petFig('), '缺共用桌宠剪影 petFig');
+  assert.ok((lb.match(/petFig\(c, P/g) || []).length >= 4, 'brick/snake/spacex/tank 至少四处局内渲染桌宠');
+  assert.ok(lb.includes('petBrick') && lb.includes('petFall'), 'brick 须有顶砖桌宠 + 抱砖滚落状态');
+  assert.ok(lb.includes('petPuff'), 'snake 须有吃颗粒鼓腮态');
+  assert.ok(lb.includes("st = 'cheer'"), 'spacex 稳落须让桌宠欢呼');
+  assert.ok(lb.includes('updatePet(dt)') && lb.includes("pet.st === 'scare'"), 'tank 桌宠躲砖→被拆现形串块状态机');
+  assert.ok(!SRC.includes('var PET_ECHO'), 'v9.3.9 纯文字客串词表须退役');
+  assert.ok(!SRC.includes('ns-pet-echo'), '.ns-pet-echo 文字行须退役');
+  assert.ok(!SRC.includes('function petMini('), '旧 petMini 剪影函数不得回潮');
+  assert.ok(!lb.includes('petMini('), '局内不得再调 petMini（改 petFig）');
+  assert.ok(SRC.includes('body:has(#nsRain:not(.hidden)) #nsPet svg'), '雨天张望 CSS 保留');
 });
 
 /* ── G6 brick/dragon 词源吃正文（其余游戏与 tank 种子零变化） ─────── */

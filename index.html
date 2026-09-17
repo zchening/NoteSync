@@ -818,7 +818,7 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '9.3.9';
+const APP_VERSION = '9.4.0';
 const BUILD_DATE = '2026-09-16';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
@@ -8566,8 +8566,13 @@ body.dark .ns-over{background:rgba(0,0,0,.6)}
 .ns-rows{margin:12px 0 0;display:flex;flex-direction:column;gap:6px;font:400 11px/1.6 var(--mono);color:var(--muted)}
 .ns-rows div{display:flex;justify-content:space-between;gap:10px}
 .ns-rows b{color:var(--fg);font-weight:600}
-.ns-pet-echo{margin:11px 2px 0;padding-top:10px;border-top:1px solid var(--line);font:400 11.5px/1.6 var(--mono);color:var(--muted);text-align:center}
-.ns-pet-echo::before{content:'';display:inline-block;width:4px;height:4px;border-radius:50%;background:var(--accent);margin-right:7px;vertical-align:2px}
+/* v9.4.0：/dragon 撞停后桌宠爬上结算卡（替代 v9.3.9 的一行纯文字客串）。零新色、只吃令牌 */
+.ns-card{position:relative;overflow:visible}
+.ns-pet-climb{position:absolute;left:10px;bottom:8px;width:26px;height:26px;color:var(--accent);pointer-events:none;opacity:0;z-index:2}
+.ns-pet-climb.go{opacity:1;animation:petClimb 2.4s cubic-bezier(.4,.05,.5,.95) .3s both}
+.ns-pet-climb svg{width:100%;height:100%;overflow:visible;display:block}
+@keyframes petClimb{0%{transform:translate(0,12px) rotate(0)}22%{transform:translate(3px,-24px) rotate(-7deg)}48%{transform:translate(8px,-66px) rotate(7deg)}72%{transform:translate(5px,-104px) rotate(-4deg)}100%{transform:translate(3px,-112px) rotate(0)}}
+@media (prefers-reduced-motion:reduce){.ns-pet-climb.go{animation:none;opacity:1;transform:translate(3px,-112px)}}
 .ns-btns{display:flex;gap:8px;margin-top:14px}
 .ns-btns button{flex:1;font:inherit;font-size:12.5px;letter-spacing:.06em;padding:10px 0;border-radius:10px;border:1px solid var(--line);background:none;color:var(--fg);cursor:pointer}
 .ns-btns .ns-again{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
@@ -8928,28 +8933,25 @@ function fit(g) {
 }
 function setScore(t) { var e = NSG.hud && NSG.hud.querySelector('.ns-sc'); if (e) e.textContent = t; }
 function setLevel(t) { var e = NSG && NSG.lv; if (e) e.textContent = t || ''; }
-var PET_ECHO = { // v9.3.9：桌宠「一局结束后才客串」的一句话（≤12字，俏皮，替换方便）
-  dragon: '桌宠叼回一根草', brick: '桌宠打了个砖味儿嗝', snake: '桌宠盯上蛇身了',
-  satoshi: '桌宠把金币拱跑了', bitcoin: '桌宠抱着币不撒手', tank: '桌宠从炮口探头',
-  spacex: '桌宠扒着火箭想上', tesla: '桌宠被甩进了后备箱'
-};
+var NS_PET_CLIMB_SVG = '<svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="13" cy="15" r="7.5" fill="var(--accent-soft)"/><path d="M6.5 10.5 L4.5 4 L11 8.5"/><path d="M19.5 10.5 L21.5 4 L15 8.5"/><path d="M5 15 L1 11"/><path d="M21 15 L25 11"/><circle cx="10.6" cy="14" r="1.1" fill="var(--fg)" stroke="none"/><circle cx="15.4" cy="14" r="1.1" fill="var(--fg)" stroke="none"/></svg>';
 function showEnd(title, rows) {
   NSG.over = true; stopVoice();
   var c = NSG.card.querySelector('.ns-card');
   c.querySelector('h2').textContent = title;
   var box = c.querySelector('.ns-rows'); box.textContent = '';
   (rows || []).forEach(function (r) { var d = mk('div'); d.innerHTML = '<span></span><b></b>'; d.firstChild.textContent = r[0]; d.lastChild.textContent = r[1]; box.appendChild(d); });
-  var prev = c.querySelector('.ns-pet-echo'); if (prev && prev.parentNode) prev.parentNode.removeChild(prev); // 重开一局不叠加客串行
-  try { // v9.3.9：桌宠改为「一局结束后才客串」一句小呼应（游戏进行中不再常驻乱入），零碰撞、纯装饰
-    if (window.nsPetGame && nsPetGame.on() && NSG.route && PET_ECHO[NSG.route]) {
-      var echo = mk('div', 'ns-pet-echo'); echo.textContent = PET_ECHO[NSG.route];
-      c.insertBefore(echo, c.querySelector('.ns-btns'));
-      NSG.voice = 'pet'; fx('burp'); NSG.voice = NSG.route; // 借桌宠音色后必须还原，否则「再来一局」整局跑成桌宠叫（fx 同步排音，紧接还原安全）
+  var prevC = c.querySelector('.ns-pet-climb'); if (prevC && prevC.parentNode) prevC.parentNode.removeChild(prevC); // 重开一局不叠加攀爬
+  try { // v9.4.0：仅 /dragon 撞停后，桌宠从结算卡左下往上爬、扒住卡顶来「看你摔了」（别蛋在局内已各有一次融入，卡片不再重复）
+    if (NSG.route === 'dragon') {
+      var climb = mk('div', 'ns-pet-climb'); climb.innerHTML = NS_PET_CLIMB_SVG;
+      c.appendChild(climb);
+      void climb.offsetWidth; climb.classList.add('go');
+      NSG.voice = 'pet'; fx('burp'); NSG.voice = NSG.route; // 借桌宠音色后还原，防「再来一局」跑成桌宠叫
     }
   } catch (e) {}
   NSG.card.classList.remove('hidden');
 }
-function hideEnd() { NSG.card.classList.add('hidden'); NSG.over = false; var e = NSG.card.querySelector('.ns-pet-echo'); if (e && e.parentNode) e.parentNode.removeChild(e); }
+function hideEnd() { NSG.card.classList.add('hidden'); NSG.over = false; var e = NSG.card.querySelector('.ns-pet-climb'); if (e && e.parentNode) e.parentNode.removeChild(e); }
 
 function bindInput(root, cv, g) {
   var sx = 0, sy = 0, tracking = false, moved = false, t0 = 0;
@@ -9803,10 +9805,28 @@ function names(kind) { // 素材：只读拷贝，与笔记本体无引用关系
   return out.length ? out : fb;
 }
 function title() { try { return noteId || '未命名笔记'; } catch (e) { return '未命名笔记'; } }
+// v9.4.0 桌宠×彩蛋（局内融入）：各 canvas 蛋共用的小桌宠剪影——圆身双耳两点眼，脚底锚点 (x,y)。
+// 只吃 pal() 令牌、零新色；opts: s 缩放 / rot 翻滚 / puff 鼓腮 / scare 瞪眼+! / cheer 举双手+!。
+// 只在各游戏 draw() 内被调（jsdom 不跑 draw，零影响）。
+function petFig(c, P, x, y, opts) {
+  opts = opts || {};
+  var s = opts.s || 1, rot = opts.rot || 0, puff = opts.puff || 0, scare = opts.scare || 0, cheer = opts.cheer || 0;
+  c.save(); c.translate(x, y); if (rot) c.rotate(rot); if (s !== 1) c.scale(s, s);
+  c.lineJoin = 'round'; c.lineWidth = 1.7; c.strokeStyle = P.ac; c.fillStyle = P.soft;
+  c.beginPath(); if (c.ellipse) c.ellipse(0, -8, 8 + puff * 2.5, 8 - puff * 1.2, 0, 0, 7); else c.arc(0, -8, 8, 0, 7); c.fill(); c.stroke();
+  c.beginPath(); c.moveTo(-5, -12); c.lineTo(-6.5, -19); c.lineTo(-1, -14); c.stroke();
+  c.beginPath(); c.moveTo(5, -12); c.lineTo(6.5, -19); c.lineTo(1, -14); c.stroke();
+  c.fillStyle = P.fg; var er = 1 + scare * 0.7;
+  c.beginPath(); c.arc(-2.6, -9, er, 0, 7); c.fill(); c.beginPath(); c.arc(2.6, -9, er, 0, 7); c.fill();
+  if (cheer) { var sw = Math.sin(cheer * 8) * 4; c.strokeStyle = P.ac;
+    c.beginPath(); c.moveTo(-7, -6); c.lineTo(-13, -15 - sw); c.stroke(); c.beginPath(); c.moveTo(7, -6); c.lineTo(13, -15 + sw); c.stroke(); }
+  if (scare || cheer) { c.fillStyle = P.ac; c.font = '12px ui-monospace,Consolas,monospace'; c.fillText('!', 9, -18); }
+  c.restore();
+}
 
 /* ═══ /snake 贪吃蛇：蛇身由笔记名接成，蛇头是当前笔记 ═══════════════ */
 R(function () {
-  var N = 15, cell = 24, sn = [], dir = 'R', q = [], food = null, score = 0, step = 0.19, acc = 0, dead = false, nm = [];
+  var N = 15, cell = 24, sn = [], dir = 'R', q = [], food = null, score = 0, step = 0.19, acc = 0, dead = false, nm = [], petPuff = 0, flies = []; // v9.4.0：吃颗粒→角落桌宠叼字鼓腮
   function place() { // 满格时 do-while 会死循环冻页：先取空格集合，空了就判通关
     var free = [];
     for (var y = 0; y < N; y++) for (var x = 0; x < N; x++) if (!sn.some(function (s) { return s.x === x && s.y === y; })) free.push({ x: x, y: y });
@@ -9815,7 +9835,7 @@ R(function () {
   }
   function reset() {
     sn = [{ x: 7, y: 7 }, { x: 6, y: 7 }, { x: 5, y: 7 }].map(function (s, i) { return { x: s.x, y: s.y, n: i === 0 ? title() : pick(nm) }; });
-    dir = 'R'; q = []; score = 0; step = 0.19; acc = 0; dead = false; food = place();
+    dir = 'R'; q = []; score = 0; step = 0.19; acc = 0; dead = false; food = place(); petPuff = 0; flies.length = 0; // v9.4.0：重开清鼓腮/飞字残留
   }
   function turn(nd) {
     var cur = q.length ? q[q.length - 1] : dir;
@@ -9832,6 +9852,9 @@ R(function () {
     sn.unshift(h);
     if (food && h.x === food.x && h.y === food.y) {
       score += food.v; FX('eat', sn.length); if (sn.length % 10 === 0) FX('grow');
+      var ox0 = Math.floor((SH().W - cell * N) / 2), oy0 = Math.floor((SH().H - cell * N) / 2); // v9.4.0：桌宠叼走这格 +字数、鼓一下腮
+      petPuff = 0.6;
+      flies.push({ px: ox0 + food.x * cell + cell / 2, py: oy0 + food.y * cell + cell / 2, tx: ox0 + cell * 0.5, ty: oy0 + cell * 1.05, t: 0, v: food.v });
       step = Math.max(0.11, step - 0.004); // 触屏端下限放宽到 0.11
       if (sn.length >= N * N - 1) { return die('盘满了，你赢了'); }
       var last = sn[sn.length - 1];
@@ -9853,7 +9876,10 @@ R(function () {
     swipe: function (d) { turn(d); },
     tap: function () { SH().paused = !SH().paused; },
     probe: function () { return { dir: dir, len: sn.length, score: score, dead: dead, queued: q.length }; },
-    frame: function (dt) { acc += dt; while (acc >= step) { acc -= step; move(); if (dead) break; } SC(score + ' 字'); LV('蛇身 ' + sn.length); },
+    frame: function (dt) { acc += dt; while (acc >= step) { acc -= step; move(); if (dead) break; }
+      if (petPuff > 0) petPuff = Math.max(0, petPuff - dt); // v9.4.0：鼓腮衰减 + 飞字入嘴
+      for (var fi = flies.length - 1; fi >= 0; fi--) { flies[fi].t += dt * 1.7; if (flies[fi].t >= 1) flies.splice(fi, 1); }
+      SC(score + ' 字'); LV('蛇身 ' + sn.length); },
     draw: function () {
       var c = SH().ctx, P = pal(), W = SH().W, H = SH().H, ox = Math.floor((W - cell * N) / 2), oy = Math.floor((H - cell * N) / 2);
       c.clearRect(0, 0, W, H);
@@ -9873,6 +9899,11 @@ R(function () {
         if (i === 0) { c.fillStyle = P.bg; c.beginPath(); c.arc(x + cell * .34, y + cell * .38, 1.6, 0, 7); c.arc(x + cell * .66, y + cell * .38, 1.6, 0, 7); c.fill(); }
         if (i % 3 === 0 && cell >= 20) { c.fillStyle = i === 0 ? P.bg : P.mu; c.font = Math.round(cell * .34) + 'px -apple-system,"PingFang SC",sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(String(s.n).slice(0, 2), x + cell / 2, y + cell / 2 + .5); }
       });
+      c.textAlign = 'left'; c.textBaseline = 'alphabetic';
+      petFig(c, P, ox + cell * 0.5, oy + cell * 1.18, { puff: petPuff > 0 ? petPuff * 1.6 : 0 }); // v9.4.0：角落桌宠，吃颗粒时鼓腮
+      for (var fi = 0; fi < flies.length; fi++) { var fl = flies[fi], e2 = Math.min(1, fl.t), ee = 1 - Math.pow(1 - e2, 3);
+        c.globalAlpha = 1 - e2 * 0.8; c.fillStyle = P.ac; c.font = '600 ' + Math.round(cell * 0.4) + 'px ui-monospace,Consolas,monospace'; c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.fillText('+' + fl.v, fl.px + (fl.tx - fl.px) * ee, fl.py + (fl.ty - fl.py) * ee - Math.sin(ee * Math.PI) * cell); c.globalAlpha = 1; }
       c.textAlign = 'left'; c.textBaseline = 'alphabetic';
     }
   };
@@ -9968,18 +9999,21 @@ R(function () {
 
 /* ═══ /brick 打砖块：砖面优先取正文词（v9.3.0），词不足回退收藏/待办；打掉只计分不改数据 ═════════ */
 R(function () {
-  var COLS = 6, ROWS = 3, bw = 58, bh = 24, gap = 3, bricks = [], ball = null, pad = { x: 0, w: 74 }, score = 0, combo = 0, best = 0, t0 = 0, dead = false;
+  var COLS = 6, ROWS = 3, bw = 58, bh = 24, gap = 3, bricks = [], ball = null, pad = { x: 0, w: 74 }, score = 0, combo = 0, best = 0, t0 = 0, dead = false, petBrick = null, petFall = null; // v9.4.0：桌宠顶一块普通砖，被击中即抱砖滚落
   function reset() {
     var nm = names('brick'); bricks = [];
     for (var r = 0; r < ROWS; r++) for (var c = 0; c < COLS; c++) {
       var kind = (r === 1 && c % 2 === 0) ? 'hard' : (r === 0 && c === 3 ? 'steel' : 'norm');
       bricks.push({ x: 6 + c * (bw + gap), y: 26 + r * (bh + gap), w: bw, h: bh, name: nm[(r * COLS + c) % nm.length], kind: kind, hp: kind === 'hard' ? 2 : 1, alive: true });
     }
+    petBrick = null; petFall = null;
+    var norms = bricks.filter(function (bb) { return bb.kind === 'norm'; });
+    if (norms.length) { petBrick = norms[Math.floor(Math.random() * norms.length)]; petBrick.pet = true; }
     ball = { x: SH().W / 2, y: SH().H - 70, vx: 118, vy: -196, r: 5 }; pad.x = SH().W / 2 - pad.w / 2;
     score = 0; combo = 0; best = 0; t0 = 0; dead = false;
   }
   function end(win) {
-    dead = true; SH().scoreVal = score;
+    dead = true; petFall = null; SH().scoreVal = score; // 结束时清掉落中的桌宠，别在结算卡下冻成一个僵影
     END(win ? '全清了' : '球掉了', [['打掉', score + ' 块'], ['最长连击', best], ['用时', Math.round(t0) + 's']]);
     FX(win ? 'win' : 'fail');
   }
@@ -9990,7 +10024,7 @@ R(function () {
     move: function (x) { pad.x = Math.max(0, Math.min(SH().W - pad.w, x - pad.w / 2)); },
     down: function (x, y) { pad.x = Math.max(0, Math.min(SH().W - pad.w, x - pad.w / 2)); },
     key: function (e) { if (e.key === 'ArrowLeft') { pad.x = Math.max(0, pad.x - 22); e.preventDefault(); } if (e.key === 'ArrowRight') { pad.x = Math.min(SH().W - pad.w, pad.x + 22); e.preventDefault(); } },
-    probe: function () { return { padX: pad.x, ballY: ball.y, alive: bricks.filter(function (x) { return x.alive; }).length, score: score }; },
+    probe: function () { return { padX: pad.x, ballY: ball.y, alive: bricks.filter(function (x) { return x.alive; }).length, score: score, pet: petFall ? 'fall' : (petBrick && petBrick.alive ? 'sit' : 'gone') }; },
     frame: function (dt) {
       if (dead) return; t0 += dt;
       ball.x += ball.vx * dt; ball.y += ball.vy * dt;
@@ -10006,11 +10040,15 @@ R(function () {
           if (b.kind === 'steel') { ball.vy *= -1; FX('hit'); break; }
           b.hp--; ball.vy *= -1;
           if (b.hp <= 0) { b.alive = false; score++; combo++; best = Math.max(best, combo); FX('brick'); SC(score + ' / ' + bricks.length);
+            if (b.pet && !petFall) { petFall = { x: b.x + b.w / 2, y: b.y + 2, vx: (Math.random() * 2 - 1) * 46, vy: -40, rot: 0, vr: (Math.random() < .5 ? -3 : 3), t: 0 }; FX('bonk'); }
             if (bricks.every(function (x) { return !x.alive || x.kind === 'steel'; })) return end(true);
           } else FX('hit');
           break;
         }
       }
+      if (petFall) { var Hb = SH().H; petFall.t += dt; petFall.vy += 900 * dt; petFall.x += petFall.vx * dt; petFall.y += petFall.vy * dt; petFall.rot += petFall.vr * dt;
+        if (petFall.y >= Hb - 16) { petFall.y = Hb - 16; petFall.vy *= -0.4; petFall.vx *= 0.55; petFall.vr *= 0.4; }
+        if (petFall.t > 1.8) petFall = null; }
       LV('连击 ' + combo);
     },
     draw: function () {
@@ -10028,6 +10066,8 @@ R(function () {
         c.fillStyle = b.kind === 'hard' ? P.ac : P.mu; c.font = '10px ui-monospace,Consolas,monospace'; c.textBaseline = 'middle';
         c.fillText(String(b.name).slice(0, 4), b.x + 6, b.y + b.h / 2 + .5); c.textBaseline = 'alphabetic';
       });
+      if (petFall) { var fa = petFall.t > 1.3 ? Math.max(0, 1 - (petFall.t - 1.3) / 0.5) : 1; c.globalAlpha = fa; petFig(c, P, petFall.x, petFall.y, { rot: petFall.rot, scare: 0.6 }); c.globalAlpha = 1; }
+      else if (petBrick && petBrick.alive) { petFig(c, P, petBrick.x + petBrick.w / 2, petBrick.y + 1, {}); }
       c.lineWidth = 1.7; c.strokeStyle = P.ac; c.fillStyle = P.soft;
       rr(c, pad.x, H - 24, pad.w, 8, 4); c.fill(); c.stroke();
       c.strokeStyle = P.fg; c.fillStyle = P.bx; c.beginPath(); c.arc(ball.x, ball.y, ball.r, 0, 7); c.fill(); c.stroke();
@@ -10239,7 +10279,17 @@ R(function () {
 
 /* ═══ /tank 单屏 13×13 四向三关：基地是写着你笔记名的记事本 ═════════ */
 R(function () {
-  var N = 13, u = 26, map = [], me = null, foes = [], bullets = [], items = [], level = 1, left = 0, killT = 0, base = null, lives = 3, t = 0, shield = 0, freeze = 0, fireCd = .32;
+  var N = 13, u = 26, map = [], me = null, foes = [], bullets = [], items = [], level = 1, left = 0, killT = 0, base = null, lives = 3, t = 0, shield = 0, freeze = 0, fireCd = .32, pet = null; // v9.4.0：桌宠躲某块可碎砖后，被拆即现形串下一块
+  function brickCells() { var a = []; for (var yy = 0; yy < N; yy++) for (var xx = 0; xx < N; xx++) if (map[yy] && map[yy][xx] === 1) a.push({ x: xx, y: yy }); return a; }
+  function mkPet() { var bc = brickCells(); if (!bc.length) return null; var p = bc[Math.floor(Math.random() * bc.length)]; return { x: p.x, y: p.y, st: 'hide', scare: 0, dashT: 0, fx: 0, fy: 0, tx: 0, ty: 0 }; }
+  function updatePet(dt) {
+    if (!pet) return;
+    if (pet.st === 'hide' && (!map[pet.y] || map[pet.y][pet.x] !== 1)) { pet.st = 'scare'; pet.scare = 0; }
+    if (pet.st === 'scare') { pet.scare += dt; if (pet.scare > 0.5) { var bc = brickCells(); if (bc.length) { var tg = bc[Math.floor(Math.random() * bc.length)]; pet.st = 'dash'; pet.dashT = 0; pet.fx = pet.x; pet.fy = pet.y; pet.tx = tg.x; pet.ty = tg.y; } else pet.st = 'gone'; } }
+    if (pet.st === 'dash') { pet.dashT += dt * 2.6; var e = Math.min(1, pet.dashT), ee = e < .5 ? 2 * e * e : 1 - Math.pow(-2 * e + 2, 2) / 2;
+      pet.x = pet.fx + (pet.tx - pet.fx) * ee; pet.y = pet.fy + (pet.ty - pet.fy) * ee;
+      if (e >= 1) { pet.x = pet.tx; pet.y = pet.ty; pet.st = (map[pet.y] && map[pet.y][pet.x] === 1) ? 'hide' : 'scare'; } }
+  }
   function buildMap() { // 地形种子取自收藏/待办字数：每个人的第一关都是自己笔记长出来的
     var src = names('obs').join('|') + title(); var h = 0;
     for (var i = 0; i < src.length; i++) h = (h * 31 + src.charCodeAt(i)) >>> 0;
@@ -10265,6 +10315,7 @@ R(function () {
     me = { x: 6, y: 9, d: 'U', cd: .3 }; bullets = []; items = []; t = 0; shield = 0; freeze = 0; fireCd = .32;
     left = 5 + level * 2; killT = 0; foes = []; spawnFoe();
     base = { x: 6, y: 12, alive: true };
+    pet = mkPet(); // v9.4.0：开一局挑一块砖藏桌宠
   }
   function move(o, d) {
     var v = { L: [-1, 0], R: [1, 0], U: [0, -1], D: [0, 1] }[d]; o.d = d;
@@ -10318,7 +10369,7 @@ R(function () {
       bullets = bullets.filter(function (b) {
         if (b.x < 0 || b.y < 0 || b.x > N || b.y > N) return false;
         var cx = Math.floor(b.x), cy = Math.floor(b.y), m2 = map[cy] && map[cy][cx];
-        if (m2 === 1) { map[cy][cx] = 0; FX('hit'); return false; }
+        if (m2 === 1) { map[cy][cx] = 0; if (pet && pet.st === 'hide' && Math.round(pet.x) === cx && Math.round(pet.y) === cy) { pet.st = 'scare'; pet.scare = 0; } FX('hit'); return false; }
         if (m2 === 2) { FX('hit'); return false; } // 钢墙挡弹不碎
         if (m2 === 3 || m2 === 4) return true; // 河与草不拦弹——子弹照飞（原作语义）
         if (m2 === 9) { base.alive = false; FX('boom'); return end('你的笔记被擦了', false); }
@@ -10332,16 +10383,19 @@ R(function () {
       if (!foes.length && left <= 0) {
         if (level >= 3) return end('三关全通', true);
         level++; left = 5 + level * 2; buildMap(); foes = []; spawnFoe(); FX('confirm');
+        if (!pet || pet.st === 'gone') pet = mkPet(); // 换关重铺掩体，桌宠跟去新砖
       }
+      updatePet(dt); // v9.4.0：桌宠现形→串下一块掩体的状态机
       SC('敌 ' + (left + foes.length)); LV('第 ' + level + ' / 3 关 · 命 ' + lives);
     },
-    probe: function () { return { level: level, lives: lives, foes: foes.length, left: left, items: items.length, shield: shield, freeze: freeze }; },
+    probe: function () { return { level: level, lives: lives, foes: foes.length, left: left, items: items.length, shield: shield, freeze: freeze, petSt: pet ? pet.st : 'none' }; },
     draw: function () {
       var c = SH().ctx, P = pal(), W = SH().W, H = SH().H, ox = (W - N * u) / 2, oy = (H - N * u) / 2;
       c.clearRect(0, 0, W, H);
       c.strokeStyle = P.ln; c.lineWidth = 1; c.globalAlpha = gA(.5); // v9.2.0：夜间装饰 alpha 下限，令牌已暗再乘 .5 等于看不见
       for (var i = 1; i < N; i++) { c.beginPath(); c.moveTo(ox, oy + i * u + .5); c.lineTo(ox + N * u, oy + i * u + .5); c.stroke(); c.beginPath(); c.moveTo(ox + i * u + .5, oy); c.lineTo(ox + i * u + .5, oy + N * u); c.stroke(); }
       c.globalAlpha = 1;
+      if (pet && pet.st === 'hide') petFig(c, P, ox + (pet.x + .5) * u, oy + (pet.y + 1) * u, { s: 1.7 }); // 藏在砖后：砖随后盖住身子，只露头耳
       for (var y = 0; y < N; y++) for (var x = 0; x < N; x++) {
         var v = map[y][x]; if (!v) continue;
         var px = ox + x * u, py = oy + y * u;
@@ -10378,17 +10432,19 @@ R(function () {
         var qx = ox + gx * u, qy = oy + gy * u; c.strokeStyle = P.mu; c.globalAlpha = gA(.55); c.lineWidth = 1.4; c.beginPath();
         for (var k2 = 0; k2 < 3; k2++) { c.moveTo(qx + 4 + k2 * 7, qy + u - 4); c.lineTo(qx + 7 + k2 * 7, qy + 5); } c.stroke(); c.globalAlpha = 1; }
       bullets.forEach(function (b) { c.fillStyle = b.own ? P.ac : P.fg; c.beginPath(); c.arc(ox + b.x * u, oy + b.y * u, 2.6, 0, 7); c.fill(); });
+      if (pet && (pet.st === 'scare' || pet.st === 'dash')) petFig(c, P, ox + (pet.x + .5) * u, oy + (pet.y + 1) * u - 1, { s: 1, scare: pet.st === 'scare' ? 1 : 0.45 }); // 被拆现形/窜动时全形置顶层
     },
   };
 }());
 
 /* ═══ /spacex 一级垂直着陆：按住=推力，落稳在驳船中线 ══════════════ */
 R(function () {
-  var y, vy, vx, rot, rotV, fuel, thrust, t, done, PADX, GY, mx = 0;
+  var y, vy, vx, rot, rotV, fuel, thrust, t, done, PADX, GY, mx = 0, pet = null, lastPetTs = 0; // v9.4.0：落点旁桌宠，稳落挥手、摔了掀跟头
   function reset() { y = SH().H * 0.16; vy = 0; vx = rf(-8, 8); rot = rf(-.12, .12); rotV = 0; fuel = 100; thrust = false; t = 0; done = false;
-    PADX = SH().W * 0.5; GY = SH().H - 34; }
+    PADX = SH().W * 0.5; GY = SH().H - 34; pet = { x: PADX + 46, y: GY, st: 'idle', vx: 0, vy: 0, rot: 0, ct: 0 }; } // v9.4.0：桌宠立于落点右侧（±26 落窗之外，绝不挡降落）
   function end(win) {
     done = true; thrust = false; ENG(false);
+    if (pet) { if (win) pet.st = 'cheer'; else { pet.st = 'tumble'; pet.vx = (mx < PADX ? -1 : 1) * (170 + Math.random() * 70); pet.vy = -320; pet.rot = 0; } } // 摔→被气浪掀飞，稳→欢呼
     if (win) { FX('confirm'); SH().scoreVal = Math.round(fuel); } else FX('fail');
     SH().scoreVal = win ? Math.round(fuel + 100) : 0;
     END(win ? '稳稳落在船上' : (t > 3 ? '姿态歪了' : '摔了'), [['剩余燃料', Math.round(fuel) + '%'], ['落地速度', Math.abs(vy).toFixed(1) + ' m/s'], ['倾角', (Math.abs(rot) * 57.3).toFixed(1) + '°']]);
@@ -10426,6 +10482,9 @@ R(function () {
     draw: function () {
       var c = SH().ctx, P = pal(), W = SH().W, H = SH().H;
       c.clearRect(0, 0, W, H);
+      var now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now(); var pdt = Math.min(0.05, (now - lastPetTs) / 1000 || 0); lastPetTs = now; // 落地后 frame 停、draw 仍在，桌宠靠墙钟自走
+      if (pet) { if (pet.st === 'cheer') pet.ct += pdt; else if (pet.st === 'tumble') { pet.vy += 900 * pdt; pet.x += pet.vx * pdt; pet.y += pet.vy * pdt; pet.rot += 4 * pdt;
+        if (pet.y >= GY) { pet.y = GY; pet.vy *= -0.4; pet.vx *= 0.6; if (Math.abs(pet.vy) < 40) { pet.vy = 0; pet.vx = 0; pet.rot = Math.round(pet.rot / (Math.PI / 2)) * (Math.PI / 2); pet.st = 'flat'; } } } }
       c.strokeStyle = P.ln; c.lineWidth = 1;
       for (var i = 1; i < 12; i++) { c.beginPath(); c.moveTo(0, i * 26 + .5); c.lineTo(W, i * 26 + .5); c.stroke(); }
       c.fillStyle = P.mu;
@@ -10436,6 +10495,7 @@ R(function () {
       c.strokeStyle = P.mu; c.beginPath();
       for (var k = 0; k < W; k += 14) c.lineTo(k, GY + 10 + Math.sin((k + t * 30) / 22) * 2.2);
       c.stroke();
+      if (pet) petFig(c, P, pet.x, pet.y, pet.st === 'cheer' ? { cheer: pet.ct } : (pet.st === 'tumble' || pet.st === 'flat' ? { rot: pet.rot, scare: 0.5 } : {}));
       c.save(); c.translate(mx || W / 2, y); c.rotate(rot);
       c.strokeStyle = P.fg; c.lineWidth = 1.7; c.lineJoin = 'round';
       c.beginPath(); c.moveTo(0, -30); c.bezierCurveTo(7, -20, 9, -10, 9, 0); c.lineTo(9, 22); c.lineTo(-9, 22); c.lineTo(-9, 0); c.bezierCurveTo(-9, -10, -7, -20, 0, -30); c.closePath(); c.stroke();
