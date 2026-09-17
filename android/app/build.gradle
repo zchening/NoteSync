@@ -8,8 +8,8 @@ android {
         applicationId "cn.xuyinji.notesync"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 937 // v9.3.1（发版必随 APP_VERSION 双 bump；CI 另从 tag 自动注入兜底——v5.55 APK 自报 5.54 的教训）
-        versionName "9.3.7" // v9.3.1
+        versionCode 938 // v9.3.1（发版必随 APP_VERSION 双 bump；CI 另从 tag 自动注入兜底——v5.55 APK 自报 5.54 的教训）
+        versionName "9.3.8" // v9.3.1
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -37,6 +37,7 @@ dependencies {
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation "androidx.webkit:webkit:$androidxWebkitVersion" // v9.3.8：WebSettingsCompat 关 WebView 强制/算法深色（国产 ROM 浅色检测型反色会把查看器浅色按钮单独翻色致文字看不清）
     implementation project(':capacitor-android')
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"

@@ -64,9 +64,12 @@ test('K8 B2 确认弹层统一金胶囊 pill（v9.3.6 A：PC 也复用移动端�
 });
 
 test('K9 B1：查看器主按钮浅实底深字 + 次描边浅字 + 进 SHELL_CSS 强制深色三板（v9.3.5），旧金实底/透明金边/accent 底禁回潮', () => {
-  assert.ok(SRC.includes('background:var(--zoom-chip);color:var(--zoom-ink);cursor:pointer'), '次按钮须为描边浅字（chip 底 + --zoom-ink 字）');
-  assert.ok(SRC.includes('#nsZoom .nz-bar button.nz-pri{background:var(--zoom-ink);color:var(--zoom-solid);border-color:var(--zoom-ink)}'),
-    '主按钮须为浅实底深字，文字用不透明 --zoom-solid（v9.3.7 问题4，旧半透明 --zoom-bg 亮图压底发灰禁回潮）');
+  assert.ok(SRC.includes('background:var(--zoom-chip);color:#FFFFFF;cursor:pointer'), '次按钮文字须为纯白 #FFFFFF（v9.3.8，近白 --zoom-ink 手机上仍发灰）');
+  assert.ok(!SRC.includes('background:var(--zoom-chip);color:var(--zoom-ink);cursor:pointer;touch-action'), 'v9.3.8：次按钮旧近白 --zoom-ink 文字禁回潮（锚 touch-action 避开右上角 × 的 nz-x）');
+  assert.ok(SRC.includes('#nsZoom .nz-bar button.nz-pri{background:#FFFFFF;color:#000000;border-color:#FFFFFF}'),
+    '主按钮须纯白底 + 纯黑字（v9.3.8，用户拍板；近白底/近黑字手机上仍发灰）');
+  assert.ok(!SRC.includes('#nsZoom .nz-bar button.nz-pri{background:var(--zoom-ink);color:var(--zoom-solid);border-color:var(--zoom-ink)}'),
+    'v9.3.8：主按钮 v9.3.7 中间态（--zoom-ink 底 / --zoom-solid 字）禁回潮');
   assert.ok(!SRC.includes('#nsZoom .nz-bar button.nz-pri{background:var(--zoom-ink);color:var(--zoom-bg);border-color:var(--zoom-ink)}'),
     'v9.3.7 问题4：主按钮文字旧半透明 --zoom-bg 禁回潮');
   assert.ok(SRC.includes('background:var(--zoom-solid);pointer-events:auto'),

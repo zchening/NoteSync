@@ -175,8 +175,8 @@ test('G9e v9.3.2 交互三改：彩蛋词只读命中弹层、恐龙点=跳按�
   // 彩蛋 hover：全部锚到新增块独有串（旧文件别处也有 editor mousemove/click，泛串会恒真）
   assert.ok(SRC.includes('function nsEggAtPoint') && SRC.includes('caretRangeFromPoint'), '须用只读指针命中（不注入 span 污染存档）');
   assert.ok(SRC.includes('_hoverTok = t;') && SRC.includes("if (e.buttons) return;"), '桌面 hover：边沿触发 _hoverTok + 按住/拖拽中(e.buttons)不打扰');
-  assert.ok((SRC.match(/if \(t && !asked\[t\]\) \{ try \{ nsAskConfirm\(t\)/g) || []).length >= 2, 'hover 与触屏两路都须尊重 asked（点过不了不再弹）');
-  assert.ok(SRC.includes('try { asked[id] = 1; }'), '「不了」必须真写 asked，否则移上去仍复弹（违不再打扰红线）');
+  assert.ok((SRC.match(/if \(t\) \{ try \{ nsAskConfirm\(t\); \} catch \(x\) \{\} \}/g) || []).length >= 2, 'v9.3.8：hover 与触屏两路每次移进/点中都重弹（去 asked[] 抑制，用户拍板点✕后再来仍弹）');
+  assert.ok(SRC.includes('try { asked[id] = 1; }'), '「不了」仍写 asked[]（v9.3.8 起仅敲字通道尊重；悬停/点击/光标落位三通道改为每次重新定位都重弹）');
   assert.ok(SRC.includes('#nsAsk .ns-dot') && SRC.includes('-apple-system,"PingFang SC",sans-serif'), '确认层方案1：无衬线 + 金色小圆点，去等宽小字');
   // 恐龙：点=跳/按住=低头 + 首点不补跳
   assert.ok(SRC.includes('heldDuck') && SRC.includes("if (phase === 'run' && !dead) jump()"), '恐龙：短按=跳、按住(heldDuck)=低头');

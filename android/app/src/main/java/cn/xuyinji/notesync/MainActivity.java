@@ -68,6 +68,20 @@ public class MainActivity extends BridgeActivity {
         if (bridge == null) return;
         WebView wv = bridge.getWebView();
         if (wv == null) return;
+
+        // v9.3.8：关闭 WebView 强制/算法深色——国产 ROM「浅色检测型反色」会把图片查看器里的浅色按钮
+        // （保存到相册）单独翻色，导致浅底配浅字/黑底配黑字看不清。关掉后 WebView 按作者 CSS 原样渲染，
+        // App 自带日夜由 JS 的 body.dark 管，系统强制深色不再作用于本 App。整段 try/catch(Throwable)：
+        // 缺类/缺 API 时静默降级，绝不崩启动。
+        try {
+            android.webkit.WebSettings ws = wv.getSettings();
+            if (android.os.Build.VERSION.SDK_INT >= 33) {
+                androidx.webkit.WebSettingsCompat.setAlgorithmicDarkeningAllowed(ws, false);
+            } else if (android.os.Build.VERSION.SDK_INT >= 29) {
+                androidx.webkit.WebSettingsCompat.setForceDark(ws, androidx.webkit.WebSettingsCompat.FORCE_DARK_OFF);
+            }
+        } catch (Throwable ignored) { }
+
         ViewGroup parent = (ViewGroup) wv.getParent();
         if (parent == null) return;
         final View fallback = getLayoutInflater().inflate(R.layout.activity_offline, parent, false);

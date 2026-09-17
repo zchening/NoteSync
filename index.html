@@ -314,8 +314,8 @@
     padding:12px 16px calc(20px + env(safe-area-inset-bottom,8px));background:var(--zoom-solid);pointer-events:auto} /* v9.3.7 问题4：底栏由半透明渐变换成不透明实底，亮图压底不再透光；v9.3.1 底栏整条 auto 的点击修复保留 */
   #nsZoom .nz-bar button{pointer-events:auto;flex:1;max-width:220px;min-height:44px;font:600 15px/1 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
     letter-spacing:.04em;padding:12px 0;border:1px solid var(--zoom-line);border-radius:12px;
-    background:var(--zoom-chip);color:var(--zoom-ink);cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent} /* v9.3.5 第4条③：次按钮=描边浅字 */
-  #nsZoom .nz-bar button.nz-pri{background:var(--zoom-ink);color:var(--zoom-solid);border-color:var(--zoom-ink)} /* v9.3.7 问题4：主按钮文字由半透明 --zoom-bg 换成不透明 --zoom-solid，浅实底深字恒定清晰；强制深色/借壳可读性仍靠 SHELL_CSS 三板兜 */
+    background:var(--zoom-chip);color:#FFFFFF;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent} /* v9.3.8：次按钮文字改纯白 #FFFFFF（近白 --zoom-ink 在手机上仍发灰看不清，用户拍板纯白） */
+  #nsZoom .nz-bar button.nz-pri{background:#FFFFFF;color:#000000;border-color:#FFFFFF} /* v9.3.8：主按钮纯白底 + 纯黑字（近白底/近黑字在手机上仍发灰，用户拍板纯黑字）；强制深色/借壳可读性仍靠 SHELL_CSS 三板兜 */
   #nsImgMenu{position:fixed;z-index:89;min-width:150px;background:var(--box-bg);border:1px solid var(--line);border-radius:12px;
     box-shadow:0 18px 50px rgba(20,20,18,.22);padding:5px;animation:menuFade .16s ease both}
   /* 入场只动 opacity：通用 rise 的 to 帧是 transform:none，fill:both 下会把镜像补偿的
@@ -815,7 +815,7 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '9.3.7';
+const APP_VERSION = '9.3.8';
 const BUILD_DATE = '2026-09-16';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
@@ -9135,21 +9135,22 @@ if (CHIP_HOVER_OK) {
     var t = nsEggAtPoint(e.clientX, e.clientY);
     if (t === _hoverTok) return;
     _hoverTok = t;
-    if (t && !asked[t]) { try { nsAskConfirm(t); } catch (x) {} } // 尊重「不了」压制；未压制的词每次移入仍会问
+    if (t) { try { nsAskConfirm(t); } catch (x) {} } // v9.3.8：每次鼠标移进彩蛋词都问（去 asked[] 抑制，与光标落位通道一致；_hoverTok 边缘触发防同词内重复）
   });
   editor.addEventListener('mouseleave', function () { _hoverTok = ''; });
 } else {
   editor.addEventListener('click', function (e) {
     var t = nsEggAtPoint(e.clientX, e.clientY);
-    if (t && !asked[t]) { try { nsAskConfirm(t); } catch (x) {} } // 触屏点中彩蛋词即问（点过「不了」的本次会话不再打扰）
+    if (t) { try { nsAskConfirm(t); } catch (x) {} } // v9.3.8：每次点中彩蛋词都问（去 asked[] 抑制，用户拍板点✕后再点仍弹）
   });
 }
 
-/* v9.3.7 问题3：光标「定位」到正文里已有的彩蛋词上也进入提示。现有通道只覆盖「正在敲字」
+/* v9.3.7 问题3（v9.3.8 改重弹）：光标「定位」到正文里已有的彩蛋词上也进入提示。现有通道只覆盖「正在敲字」
    （beforeinput/compositionend）与「鼠标悬停 / 触屏点」（按坐标 nsEggAtPoint）；用键盘方向键或
    点选把光标挪到 /dragon 上时既无输入事件、坐标路径又不覆盖 → 不弹。这里加 selectionchange 防抖，
-   从光标所在文本节点按词边界取整词、命中保留字才弹。asked[] 与敲字通道同表去重（一次会话每词最多
-   问一次，绝不每次挪光标都骚扰）；组字期 / 有选区 / 确认层已在 / 焦点不在编辑器 一律跳过。 */
+   从光标所在文本节点按词边界取整词、命中保留字才弹。用 _eggCaretTok 做落位边缘触发：每次把光标重新
+   移到彩蛋词上都弹（点✕关闭后移开再移回来仍弹，用户拍板），同一词内光标微动不重复弹；
+   组字期 / 有选区 / 确认层已在 / 焦点不在编辑器 一律跳过。 */
 function nsEggTokenAtCaret() {
   var sel = window.getSelection();
   if (!sel || !sel.rangeCount || !sel.isCollapsed) return ''; // 有选区或无光标不判
@@ -9163,7 +9164,7 @@ function nsEggTokenAtCaret() {
   var m = NS_EGG_HOVER_RE.exec(nsStripZW(data.slice(i, j)));
   return m ? m[2] : '';
 }
-var _eggCaretTimer = 0;
+var _eggCaretTimer = 0, _eggCaretTok = '';
 document.addEventListener('selectionchange', function () {
   if (typeof isComposing !== 'undefined' && isComposing) return; // 红线9：组字期绝不打扰
   clearTimeout(_eggCaretTimer);
@@ -9171,13 +9172,13 @@ document.addEventListener('selectionchange', function () {
     try {
       if (typeof isComposing !== 'undefined' && isComposing) return; // 红线9：防抖窗口内若进入组字，回调内复检，绝不在组字期弹
       if (document.activeElement !== editor) return; // 只在编辑器真持焦时判，别从别处输入框抢弹
-      if (document.getElementById('nsAsk')) return; // 确认层已在，不叠第二层
       var t = nsEggTokenAtCaret();
-      if (!t) return;
-      var id = t.toLowerCase();
-      if (asked[id]) return; // 尊重「不了」/本会话已问过，防挪光标反复骚扰
-      asked[id] = 1;
-      nsAskConfirm(id);
+      var id = t ? t.toLowerCase() : '';
+      if (id === _eggCaretTok) return; // 光标停在同一个彩蛋词内微动不重复弹；离开词会置空，下次再进来才弹
+      _eggCaretTok = id;
+      if (!id) return; // 光标离开了彩蛋词
+      if (document.getElementById('nsAsk')) return; // 确认层已在，不叠第二层
+      nsAskConfirm(id); // 每次把光标重新定位到彩蛋词都弹（用户拍板：点✕关闭后移开再移回来仍要弹），不受 asked[] 会话抑制
     } catch (e) {}
   }, 260);
 }, true);
