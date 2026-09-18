@@ -187,7 +187,7 @@ public class MainActivity extends BridgeActivity {
                     try { recreate(); return true; } catch (Throwable ignored) { }
                 }
                 // v9.5.5：进程内已重建过一次仍再死（渲染进程被反复查杀的极端机型）→ 静默 finish 像闪退，补一条提示
-                try { android.widget.Toast.makeText(this, "界面渲染异常，请重新打开", android.widget.Toast.LENGTH_LONG).show(); } catch (Throwable ignored) { }
+                try { android.widget.Toast.makeText(MainActivity.this, "界面渲染异常，请重新打开", android.widget.Toast.LENGTH_LONG).show(); } catch (Throwable ignored) { }
                 try { finish(); } catch (Throwable ignored) { }
                 return true;
             }
@@ -410,7 +410,7 @@ public class MainActivity extends BridgeActivity {
                             long gap = Long.MAX_VALUE; // 取不到/非数字＝当死页处理
                             try { gap = Long.parseLong(String.valueOf(value).replace("\"", "")); } catch (Exception ignored) { }
                             if (gap > 15000) {
-                                try { if (!wvResume.isFinishing()) { wvResume.stopLoading(); wvResume.reload(); } } catch (Throwable ignored) { }
+                                try { if (!isFinishing() && !isDestroyed()) { wvResume.stopLoading(); wvResume.reload(); } } catch (Throwable ignored) { }
                             }
                         }
                     });

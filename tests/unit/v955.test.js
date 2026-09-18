@@ -68,6 +68,8 @@ test('v9.5.5 原生⑧⑨⑩⑪：首载 watchdog、心跳探活 reload、背景
   assert.ok(ACT.includes('String(Date.now()-(window.__nsBeat||0))') && ACT.includes('gap > 15000'), 'onResume 心跳探活（只 reload 真死页）');
   assert.ok(ACT.includes('wv.setBackgroundColor(bootNight ? 0xFF0F0F11 : 0xFFFBFBF8);'), 'WebView 背景按时间规则预置');
   assert.ok(ACT.includes('界面渲染异常，请重新打开'), '二次渲染死亡 toast 不静默闪退');
+  assert.ok(ACT.includes('Toast.makeText(MainActivity.this'), 'Toast 的 Context 必须限定 MainActivity.this（匿名 client 内裸 this 指 client，CI 编译终裁）');
+  assert.ok(ACT.includes('!isFinishing() && !isDestroyed()') && !ACT.includes('wvResume.isFinishing()'), '探活回调用 Activity 级 isFinishing/isDestroyed（WebView 无此方法）');
   // 闸 R1/R2-P1：ETag 必须落到 App 链路——拦截器自抓 fetchMainDoc 带条件头，304 吐磁盘缓存
   assert.ok(ACT.includes('private static final String MAIN_DOC_ETAG'), 'ETag 存文常量在位');
   assert.ok(ACT.includes('setRequestProperty("If-None-Match", savedEtag)'), 'fetchMainDoc 带 If-None-Match');
