@@ -230,7 +230,7 @@ def deploy_to_server(latest_json_local, apk_local, tag=None):
     got = json.loads(o)["assets"][0]["browser_download_url"]
     exp_url = versioned_dl_url(tag)
     assert got == exp_url, "线上 /api/latest 未指向 %s：%s" % (exp_url, got)
-    o2, _ = run('curl -s -o NUL -w "%{http_code}" http://localhost:8080%s' % exp_url.split("com.cn", 1)[1])
+    o2, _ = run('curl -s -o NUL -w "%{http_code}" http://localhost:8080' + exp_url.split("com.cn", 1)[1])
     o, _ = run('curl -s -o NUL -w "%{http_code}" http://localhost:8080/dl/latest.apk')
     print("[verify] /api/latest -> %s；版本副本 HEAD=%s；/dl/latest.apk HEAD=%s" % (got, o2, o))
     chk_file = ("%s.apk" % tag) if (tag and _re.match(r"^v\d+(?:\.\d+)*$", tag)) else "latest.apk"
