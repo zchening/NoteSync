@@ -80,9 +80,9 @@ test('V732-S6 修复c：compositionend 补调 scheduleRemMarkRefresh（守卫拦
     'compositionend 应补调 scheduleRemMarkRefresh');
 });
 
-test('V732-S7 修复d：insertRemLine 末尾调用 placeCaretAfterReminderLine（新提醒后自动换行）', () => {
-  assert.ok(/function insertRemLine\(at, item\) \{[\s\S]{0,1200}placeCaretAfterReminderLine\(\);\r?\n\}/.test(SRC),
-    'insertRemLine 末尾应调用 placeCaretAfterReminderLine');
+test('V732-S7 修复d：insertRemLine 末尾调用 placeCaretAfterReminderLine（新提醒后自动换行）；v9.5.1 其后补 dismiss 收键盘', () => {
+  assert.ok(/function insertRemLine\(at, item\) \{[\s\S]{0,1200}placeCaretAfterReminderLine\(\);[\s\S]{0,400}dismissKeyboardForTouch\(\);\r?\n\}/.test(SRC),
+    'insertRemLine 末尾应 placeCaretAfterReminderLine() 后接 dismissKeyboardForTouch()（v9.5.1 触屏收键盘）');
 });
 
 test('V732-S8 修复d：placeCaretAfterReminderLine 定义——提醒行后插含 br 的空块并落光标', () => {

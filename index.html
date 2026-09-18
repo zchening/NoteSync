@@ -818,8 +818,8 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '9.5.0';
-const BUILD_DATE = '2026-09-18';
+const APP_VERSION = '9.5.1';
+const BUILD_DATE = '2026-09-19';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
 let nsSkin = 0;
@@ -862,7 +862,10 @@ const copyBtn = $('#copyBtn'), exportImgBtn = $('#exportImgBtn');
 // 行为零变化（其关闭路径本就按 CHIP_HOVER_OK 归位光标），故只在 !CHIP_HOVER_OK 时执行。
 function dismissKeyboardForTouch() {
   // 组字中绝不 blur（iOS/部分 WebView 在 composition 期 blur 会吞字；对齐"组字期禁程序化干预"红线）
-  if (!CHIP_HOVER_OK && !isComposing && document.activeElement === editor) { try { editor.blur(); } catch (e) {} }
+  // v9.5.1 闸 R1/R2 双路命中必修：App 壳内强制收——国产 WebView 可把触屏误报成 hover/fine
+  // （CHIP_HOVER_OK=true，v9.3.x「触屏误报 fine」先例），原 !CHIP_HOVER_OK 单判据在该类机型恒 no-op、
+  // 键盘永不收；Capacitor 壳内（isNativeApp）身份即触屏，直接放行 blur。纯 Web 端 isNativeApp=false，逐字节行为不变。
+  if ((!CHIP_HOVER_OK || isNativeApp()) && !isComposing && document.activeElement === editor) { try { editor.blur(); } catch (e) {} }
 }
 
 // 输入法组字状态：组字期间（拼音未上屏）任何对选区/caret 的程序化干预都会吞字，一律跳过。
@@ -1205,6 +1208,7 @@ setInterval(() => {
   applyTheme(themeWantsDark);
 }, 60000);
 themeBtn.addEventListener('click', () => {
+  dismissKeyboardForTouch(); // v9.5.1：切主题非编辑动作，与同排钮对齐收键盘（桌面/组字期 no-op）
   // 手动切换只改内存态：刷新或重新解锁后一律回到时间规则（刻意设计，不写 localStorage）
   themeWantsDark = !themeWantsDark;
   themeAutoMode = false; // 用户手动切换后本次会话不再自动
@@ -2413,6 +2417,7 @@ function loadHtml2Canvas() {
   });
 }
 async function exportImage() {
+  dismissKeyboardForTouch(); // v9.5.1 移动端报障根修：导出钮原是全排唯一不收键盘的顶栏动作——光标在正文时点导出，pointerdown 的 preventDefault 令编辑器不失焦、渲染几秒键盘一直挂着（观感=「导出把键盘打开」）。入口同步 blur 收一次，桌面/组字期 no-op。
   if (typeof window.html2canvas !== 'function' && !(await loadHtml2Canvas())) {
     showUploadStatus('图片导出组件加载失败，请检查网络后重试');
     setTimeout(hideUploadStatus, 2400);
@@ -6643,6 +6648,9 @@ function insertRemLine(at, item) {
   // v7.3.2 需求：提醒写回后光标自动换行——连续添加多个提醒文字不会连在一起
   //（用户拍板：新提醒行之后紧跟一个空行，光标落在空行行首可直接继续输入）
   placeCaretAfterReminderLine();
+  // v9.5.1：上面 editor.focus()/insertNodeAtCaret 无条件聚焦，移动端存完提醒会弹软键盘（用户在面板操作、非正文打字）。
+  // 收一次——桌面 no-op，v7.3.2「光标留正文续输入」语义不变；仅触屏关键盘。
+  dismissKeyboardForTouch();
 }
 // v7.3.2：在提醒行之后插入一个空块并落光标。空块必须带 <br>（contenteditable 空块
 // 无 <br> 则零高且光标无法绘制）；块结构（<div>）与回车处理/currentBlock 的预期一致；

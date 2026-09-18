@@ -206,8 +206,12 @@ test('V732-B6 bug c 行为：PC 端浮层关闭后焦点归还编辑器（toggle
   assert.equal(window.document.activeElement, editor, 'PC 端菜单关闭后焦点必须归还编辑器');
 });
 
-test('V732-B7 需求 d 行为：添加提醒成功路径回写后光标自动换行到新空块', t => {
-  const app = freshApp();
+test('V732-B7 需求 d 行为：添加提醒成功路径回写后光标自动换行到新空块（PC 态契约；v9.5.1 触屏收键盘行为归 unit/v951 覆盖）', t => {
+  const app = freshApp(w => {
+    // v9.5.1 随版翻转：本测断言 PC「光标留空块续输入」契约。jsdom 默认 matchMedia 恒 false＝触屏态，
+    // insertRemLine 末尾 dismissKeyboardForTouch 会 blur 清选区（设计如此）；按 B6 先例 stub PC 指针环境。
+    w.matchMedia = () => ({ matches: true });
+  });
   t.after(() => app.dom.window.close());
   const { window, editor } = app;
   window.eval('cryptoKey = {};'); // insertRemLine 需要 cryptoKey 放行
