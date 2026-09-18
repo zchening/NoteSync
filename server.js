@@ -435,13 +435,18 @@ const server = http.createServer((req, res) => {
   // https:// 不锁域名，翻本路由即生效、无需重编 APK。固定文件名覆盖式：只服务 APP_DIR/apk/latest.apk
   // 这一个文件，发版覆盖 = 永远只留最新、不堆旧副本（服务器 C 盘仅 ~8G 余量）。精确 url 匹配无穿越面；
   // 支持 HTTP Range 断点续传（安卓 DownloadManager 在 3Mbps 低带宽下续传/分段必备）。
-  if (url === '/dl/latest.apk' && (req.method === 'GET' || req.method === 'HEAD')) {
-    const f = path.join(APP_DIR, 'apk', 'latest.apk');
+  // v9.5.4：新增版本固定名 /dl/vX.Y.Z.apk（发版时上传、永不覆盖），latest_app.json 的下载 URL 指向它——
+  // 该 URL 内容不可变，根除「手机 Range 续传跨发版读到新旧混装字节」的 packageInfo is null。
+  // 同时保留 /dl/latest.apk（覆盖式）兼容旧壳与手输链接。文件名走严格白名单正则，无路径穿越面。
+  const dlMatch = /^\/dl\/(latest|v\d+(?:\.\d+)*)\.apk$/.exec(url);
+  if (dlMatch && (req.method === 'GET' || req.method === 'HEAD')) {
+    const fname = dlMatch[1] + '.apk';
+    const f = path.join(APP_DIR, 'apk', fname);
     let st; try { st = fs.statSync(f); } catch (e) { return sendJSON(res, 404, { error: 'no apk' }); }
     const total = st.size;
     const baseHdr = {
       'Content-Type': 'application/vnd.android.package-archive',
-      'Content-Disposition': 'attachment; filename="NoteSync-latest.apk"',
+      'Content-Disposition': 'attachment; filename="NoteSync-' + fname + '"',
       'Accept-Ranges': 'bytes',
       'Cache-Control': 'no-cache',
       'Last-Modified': st.mtime.toUTCString(),

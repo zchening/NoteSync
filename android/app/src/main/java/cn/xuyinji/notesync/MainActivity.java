@@ -10,6 +10,7 @@ import android.view.ViewGroup;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
+import android.webkit.WebRenderProcessGoneDetail;
 import android.webkit.WebView;
 
 import com.getcapacitor.BridgeActivity;
@@ -33,6 +34,13 @@ public class MainActivity extends BridgeActivity {
 
     private boolean pendingRemNotifyClick = false;
     private static final String MAIN_DOC_CACHE = "cached_index.html";
+    // v9.5.4 启动自愈：①WebView 渲染进程被 MIUI 幻影进程查杀/系统冻结杀死后画布全白全黑不自复——
+    // 零 onRenderProcessGone 处理是根因，进程内只允许一次 recreate 防重建循环；
+    // ②后台超 10 分钟回前台主动 reload，兜「冻而未死」（JS 定时器停摆、keep-alive socket 半死）灰区。
+    // 闸 R1/R2 双路命中：必须 static——recreate() 后新实例字段归零，实例旗标的「进程内一次」不成立，
+    // 渲染进程慢性被杀会变成 recreate 死循环；static 才是真·进程级一次。
+    private static boolean didRendererGoneRecreate = false;
+    private long pausedAt = 0;
 
     // v5.56：离线兜底诊断计数（JS 端 ?diag 经 RemPlugin.cacheInfo 只读——定位兜底断在哪一环）
     public static volatile int interceptCount = 0;
@@ -137,6 +145,25 @@ public class MainActivity extends BridgeActivity {
                 super.onReceivedError(view, request, error);
                 // 走到这里 = 联网失败且本地也无缓存（仅首次安装从未联网过的极端场景）
                 if (request.isForMainFrame()) fallback.setVisibility(View.VISIBLE);
+            }
+
+            // v9.5.4 启动自愈：MIUI 幻影进程查杀/系统冻结会杀掉 WebView 渲染进程，画布留全白/全黑死屏。
+            // 不消费此回调＝某些版本按未处理直接杀整 App，处理了不重建也永远白屏。
+            @Override
+            public boolean onRenderProcessGone(WebView view, WebRenderProcessGoneDetail detail) {
+                if (!didRendererGoneRecreate) {
+                    didRendererGoneRecreate = true;
+                    try {
+                        if (view != null) {
+                            android.view.ViewParent vp = view.getParent();
+                            if (vp instanceof ViewGroup) ((ViewGroup) vp).removeView(view);
+                            view.destroy();
+                        }
+                    } catch (Throwable ignored) { }
+                    try { recreate(); return true; } catch (Throwable ignored) { }
+                }
+                try { finish(); } catch (Throwable ignored) { }
+                return true;
             }
         });
 
@@ -292,6 +319,13 @@ public class MainActivity extends BridgeActivity {
         super.onResume();
         // v5.55：前台标志——前台时 JS 提醒卡+声音已负责，RemReceiver 不重复推通知
         RemPlugin.isForeground = true;
+        // v9.5.4 启动自愈：后台躺超 10 分钟回前台，页面多半「冻而未死」（JS 定时器停摆、keep-alive socket 半死，
+        // 正是「加载中挂半天」的温床）——主动 reload 一次；冷启动 pausedAt=0 不误触；reload 走 native 三级兜底拦截器，代价仅一屏刷新。
+        if (pausedAt > 0 && System.currentTimeMillis() - pausedAt > 10 * 60_000L) {
+            WebView wvResume = (bridge != null) ? bridge.getWebView() : null;
+            pausedAt = 0;
+            if (wvResume != null) { try { wvResume.reload(); } catch (Throwable ignored) { } }
+        }
         if (pendingRemNotifyClick) {
             dispatchRemNotifyClick();
         }
@@ -302,6 +336,7 @@ public class MainActivity extends BridgeActivity {
         super.onPause();
         // v5.55：非前台（后台/被杀/冷启）一律推通知栏——正是用户要的语义
         RemPlugin.isForeground = false;
+        pausedAt = System.currentTimeMillis(); // v9.5.4：onResume 陈旧守卫时间戳
     }
 
     private void dispatchRemNotifyClick() {

@@ -23,7 +23,7 @@ test('V2 A PC/移动统一金胶囊 pill：nsAskConfirm 不再按 CHIP_HOVER_OK 
 
 test('V3 B web：冷启动静默预下载钩子 + wifiOnly + 仅一次', () => {
   assert.ok(SRC.includes('async function nsPrefetchUpdate()'), '须有 nsPrefetchUpdate 预下载函数');
-  assert.ok(SRC.includes('br.downloadApk({ url: apk.browser_download_url, tag, wifiOnly: true })'), '预下须带 wifiOnly:true');
+  assert.ok(SRC.includes('br.downloadApk({ url: apk.browser_download_url, tag, expectedBytes: apk.size || 0, wifiOnly: true })'), '预下须带 wifiOnly:true + v9.5.4 expectedBytes 精确校验');
   assert.ok(SRC.includes('window.__prefetchTag === tag') && SRC.includes('setTimeout(nsPrefetchUpdate,'), '本会话同版本只预下一次 + 冷启动延时触发');
   assert.ok(SRC.includes('if (nsVerCmp(tag, base) <= 0) return;'), '无新版须直接返回，不预下');
 });

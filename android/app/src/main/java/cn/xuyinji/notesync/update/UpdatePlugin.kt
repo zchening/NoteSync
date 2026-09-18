@@ -44,6 +44,11 @@ class UpdatePlugin : Plugin() {
         try {
             val url = call.getString("url") ?: ""
             val wifiOnly = call.getBoolean("wifiOnly") ?: false // v9.3.6：后台预下载仅走 Wi-Fi，非 Wi-Fi 直接跳过不耗流量（getBoolean 单参返回可空，?:false 兜底）
+            // v9.5.4：JS 从 /api/latest 的 asset.size 带下预期字节（APK ~26MB，Int 足够）。>0 时启用精确校验；
+            // 0/未给＝兼容旧 JS，退回旧「>1MB 即复用」。坏/截断 APK 死循环复用是「packageInfo is null」根因。
+            // 闸 R2-P0：Capacitor getInt 缺 key 返回可空 Integer，直接 takeIf 会拆箱 NPE 被外层 try 吞成 ok:false
+            // ——旧 JS（离线缓存页）不传参时下载必坏；先 ?: 0 收敛再判定。
+            val expectedBytes = (call.getInt("expectedBytes") ?: 0).coerceAtLeast(0).toLong()
             if (!url.startsWith("https://")) {
                 // 明文 http 装 APK 等于把 root 递给中间人，闸都不进
                 ret.put("ok", false); ret.put("error", "not-https")
@@ -72,9 +77,18 @@ class UpdatePlugin : Plugin() {
                 .ifEmpty { SimpleDateFormat("yyyyMMddHHmmss", Locale.US).format(Date()) }
             val f = File(dir, "notesync-$safeTag.apk")
             // R2 闸 P1：同 url 重复调用不再「撤单+删文件+从零重下」——已下完的 APK 直接复用秒回（重进弹窗点更新不再是哑弹重跑）。
-            if (f.exists() && f.length() > 1_000_000L) {
-                ret.put("ok", true); ret.put("reused", true); ret.put("path", f.absolutePath); ret.put("bytes", f.length())
-                call.resolve(ret); return
+            // v9.5.4：带 expectedBytes 时精确相等才复用；大小不符＝截断/混装坏文件，删掉重下（旧「>1MB 即复用」会把坏文件永占缓存致 packageInfo is null 死循环）。
+            if (f.exists()) {
+                if (expectedBytes > 0L) {
+                    if (f.length() == expectedBytes) {
+                        ret.put("ok", true); ret.put("reused", true); ret.put("path", f.absolutePath); ret.put("bytes", f.length())
+                        call.resolve(ret); return
+                    }
+                    try { f.delete() } catch (e: Exception) {} // 坏文件即删，下面走全新下载
+                } else if (f.length() > 1_000_000L) {
+                    ret.put("ok", true); ret.put("reused", true); ret.put("path", f.absolutePath); ret.put("bytes", f.length())
+                    call.resolve(ret); return
+                }
             }
             if (wifiOnly && !isOnWifi()) { // v9.3.6：仅 Wi-Fi 预下载——非 Wi-Fi 静默跳过，绝不偷跑蜂窝流量、也不留排队通知
                 ret.put("ok", false); ret.put("wifi", false); ret.put("error", "not-wifi")
@@ -171,8 +185,13 @@ class UpdatePlugin : Plugin() {
                 }
                 if (st == "done") {
                     val f = path?.let { File(it) }
-                    if (f == null || !f.exists() || f.length() <= 1_000_000L) {
+                    // v9.5.4：total 已知（DownloadManager 报了 Content-Length）就精确比对——状态说成功但字节不足＝截断/混装哑弹，
+                    // 删文件（防下轮 downloadApk 复用）并判 failed 走重试；total 未知退回旧「>1MB」粗判。
+                    val sizeOk = if (total > 0) (f != null && f.exists() && f.length() == total)
+                                 else (f != null && f.exists() && f.length() > 1_000_000L)
+                    if (!sizeOk) {
                         st = "failed" // 截断哑弹：状态说成功，文件系统说了算
+                        try { f?.delete() } catch (e: Exception) {}
                     }
                 }
                 ret.put("ok", true)

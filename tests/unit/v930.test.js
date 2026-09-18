@@ -198,11 +198,12 @@ test('G9e v9.4.1：PC 去悬停即弹（光标落位/打字才弹、触屏不变
 test('G9d APK 国内直下：server.js 服务 /dl/latest.apk（固定覆盖文件+Range 续传）且 latest_app.json 指向 biji 不回潮 GitHub', () => {
   const SRV = fs.readFileSync(path.resolve(ROOT, 'server.js'), 'utf8');
   const LATEST = JSON.parse(fs.readFileSync(path.resolve(ROOT, 'latest_app.json'), 'utf8'));
-  assert.ok(SRV.includes("url === '/dl/latest.apk'"), 'server.js 必须有 /dl/latest.apk 精确路由（国内直下入口）');
-  assert.ok(SRV.includes("'apk', 'latest.apk'"), 'APK 必须走 APP_DIR/apk/latest.apk 固定覆盖名（磁盘只留最新，不堆旧副本）');
+  // v9.5.4：/dl 从精确 url 匹配升级为白名单正则——同时服务覆盖式 latest.apk（旧壳兼容）与不可变版本固定名 v<semver>.apk（根除下载中途覆盖混装致 packageInfo is null）。
+  assert.ok(SRV.includes('const dlMatch') && SRV.includes('latest|v') && SRV.includes('.exec(url)'), 'server.js 必须有 /dl 白名单正则路由（latest + 版本固定名，无穿越面）');
+  assert.ok(SRV.includes("path.join(APP_DIR, 'apk', fname)"), 'APK 走 APP_DIR/apk/<白名单捕获名> 映射（fname 来自正则，无 .. 面）');
   assert.ok(SRV.includes("'Accept-Ranges': 'bytes'") && SRV.includes('206'), '/dl 必须支持 Range 断点续传（低带宽 DownloadManager 必备）');
   const u = LATEST.assets[0].browser_download_url;
-  assert.ok(u === 'https://biji.xuyinji.com.cn/dl/latest.apk', 'latest_app.json 下载地址必须是国内 biji 域，实得 ' + u);
+  assert.ok(/^https:\/\/biji\.xuyinji\.com\.cn\/dl\/(latest|v\d+(?:\.\d+)*)\.apk$/.test(u), 'latest_app.json 下载地址必须是 biji 域 /dl/（固定名或版本固定名），实得 ' + u);
   assert.ok(!/github\.com\/.*\/releases\/download\//.test(u), '禁回潮 GitHub releases 直链（国内翻墙/慢根因）');
   assert.ok(/\.apk$/i.test(LATEST.assets[0].name), 'asset.name 仍以 .apk 结尾（App 端 /\\.apk$/ 过滤依赖）');
 });

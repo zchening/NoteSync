@@ -818,7 +818,7 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '9.5.3';
+const APP_VERSION = '9.5.4';
 const BUILD_DATE = '2026-09-19';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
@@ -1879,6 +1879,12 @@ async function apiGet() {
   const r = await fetchRetry(NOTE_API, { cache: 'no-store' }, 2);
   return r.json();
 }
+// v9.5.4：启动/解锁首拉防挂——半死 keep-alive socket 上 fetch 可挂 1~2 分钟（「加载中挂半天」根因），
+// 8 秒超时 reject 落既有 catch：自动解锁路径→离线缓存渲染，手动解锁→明确报「无法连接服务器」。
+// 只包首拉调用点，后台同步/保存等 apiGet 不动（挂了在后台无感知，激进超时反而误伤）。
+function withTimeout(p, ms) {
+  return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout-' + ms)), ms))]);
+}
 // v6.0：在途写入计数。PUT 已发出但响应未回的窗口里，服务端 v 已递增而本机 localVer 尚未回写；
 // 此刻 SSE（onmessage → poll）拿到的 note.v 必然大于 localVer，若再有未保存输入就会被判成
 // 「远端有更新」弹冲突条——新建笔记落盐时 100% 命中（见 BUG_CHECKLIST T1）。
@@ -2816,7 +2822,7 @@ async function unlock(pass) {
   err.textContent = '';
   if (!pass) { err.textContent = '请输入口令'; return; }
   let note;
-  try { note = await apiGet(); }
+  try { note = await withTimeout(apiGet(), 8000); }
   catch (e) {
     if (e.locked) { err.textContent = '尝试过多，请 ' + fmtRetry(e.retryAfter) + ' 后再试'; return; }
     if (e.status === 400) { err.textContent = '笔记名不合法（仅英文、数字、下划线、短横线）'; return; }
@@ -6849,9 +6855,9 @@ function nsVerCmp(a, b) { // a 比 b 新返回正数；缺段按 0
   return 0;
 }
 function updMsg(t, bad) { const m = $('#updMsg'); m.textContent = t; m.style.color = bad ? 'var(--danger)' : ''; }
-function updReset(url, tag) {
+function updReset(url, tag, size) {
   $('#updProg').classList.add('hidden'); $('#updBar').style.width = '0';
-  const y = $('#updYes'); y.disabled = false; y.textContent = '立即更新'; y.onclick = () => nsUpdDownload(url, tag);
+  const y = $('#updYes'); y.disabled = false; y.textContent = '立即更新'; y.onclick = () => nsUpdDownload(url, tag, size);
 }
 async function nsCheckUpdate() {
   const btn = $('#aboutUpd'); if (!btn) return;
@@ -6880,7 +6886,7 @@ async function nsCheckUpdate() {
       var b = document.createElement('i'); b.textContent = '·'; ne.appendChild(b);
       ne.appendChild(document.createTextNode(ln));
     });
-    updReset(apk.browser_download_url, tag); updMsg('');
+    updReset(apk.browser_download_url, tag, apk.size || 0); updMsg('');
     aboutMask.classList.add('hidden');
     $('#updMask').classList.remove('hidden');
     restore();
@@ -6908,12 +6914,12 @@ async function nsPrefetchUpdate() {
     if (!tag || !apk || !apk.browser_download_url) return;
     if (nsVerCmp(tag, base) <= 0) return;                     // 无新版
     if (window.__prefetchTag === tag) return; window.__prefetchTag = tag; // 本会话该版本只预下一次，避免重复撤单重下
-    await br.downloadApk({ url: apk.browser_download_url, tag, wifiOnly: true }).catch(() => null); // 静默、仅 Wi‑Fi、失败不提示
+    await br.downloadApk({ url: apk.browser_download_url, tag, expectedBytes: apk.size || 0, wifiOnly: true }).catch(() => null); // 静默、仅 Wi‑Fi、失败不提示；v9.5.4 带精确字节
   } catch (e) {}
 }
 setTimeout(nsPrefetchUpdate, 6000);
 let updTimer = null;
-async function nsUpdDownload(url, tag) {
+async function nsUpdDownload(url, tag, size) {
   const cap = window.Capacitor;
   const br = (cap && cap.Plugins && cap.Plugins.AppUpdate) || null;
   if (!br || typeof br.downloadApk !== 'function') { // 旧壳没桥：至少把人送到官方下载页，不装死
@@ -6923,7 +6929,7 @@ async function nsUpdDownload(url, tag) {
   }
   const y = $('#updYes'); y.disabled = true; y.textContent = '准备下载…';
   $('#updProg').classList.remove('hidden'); $('#updBar').style.width = '0';
-  const res = await br.downloadApk({ url, tag }).catch(() => null);
+  const res = await br.downloadApk({ url, tag, expectedBytes: size || 0 }).catch(() => null); // v9.5.4：expectedBytes 精确校验，坏缓存文件不再被复用
   if (!res || !res.ok) { y.disabled = false; y.textContent = '重试'; updMsg('下载启动失败：' + ((res && res.error) || '桥无应答'), true); return; }
   if (res.reused && res.path) { $('#updBar').style.width = '100%'; nsUpdInstall(br, res.path); return; } // 闸R2-P1：下过的 APK 秒回直通安装，不「撤单从零重下」
   y.textContent = '下载中…';
@@ -8532,7 +8538,7 @@ if (noteId && (isNativeApp() || !CHIP_HOVER_OK)) {
   catch (e) { /* 锁定/非法名/断网：继续走下方正常流程显示对应提示 */ }
   if (await loadStoredKey()) {
     let note;
-    try { note = await apiGet(); }
+    try { note = await withTimeout(apiGet(), 8000); }
     catch (e) {
       loadingEl.classList.add('hidden');
       if (e.locked) {

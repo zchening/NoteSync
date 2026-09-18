@@ -12,9 +12,9 @@
 流程：
     1) gh api 取该 release 元数据（免鉴权走本机已登录的 gh）
     2) gh release download 取该 release 的 *.apk（带缓存：_apkdl 下已存在且尺寸吻合则跳过重下）
-    3) 重写 latest_app.json：browser_download_url 固定成 biji /dl/latest.apk、size=实际字节、name 保 .apk 后缀
-    4) 上传 latest_app.json（备份旧版）+ apk/latest.apk（固定名直接覆盖，服务器永远只留一个 APK）
-    5) 线上校验：/api/latest 返 biji URL、/dl HEAD 200、服务器 APK sha256 与本地一致
+    3) 重写 latest_app.json：browser_download_url 指版本固定名 biji /dl/vX.Y.Z.apk（不可变副本，v9.5.4）、size=实际字节、name 保 .apk 后缀
+    4) 上传（v9.5.4 倒装，杜绝 URL 指向未上传文件的 404 窗口）：先 apk/latest.apk（覆盖式，旧壳兼容）+ apk/vX.Y.Z.apk（不可变副本，只留最近 2 份），最后落 latest_app.json（备份旧版）
+    5) 线上校验：/api/latest 返版本 URL、版本副本与 /dl/latest.apk HEAD 200、服务器 APK sha256 与本地一致
 
 安全：服务器密码只从 C:\\Temp\\new_server_pwd.txt 读，绝不打印；对 paramiko banner 限速退避重试。
 依赖：pip install paramiko；gh 已登录（zchening）。
@@ -22,6 +22,14 @@
 import os, sys, json, time, hashlib, shutil, subprocess, tempfile, threading, glob
 
 TAG_DEFAULT_DL = "https://biji.xuyinji.com.cn/dl/latest.apk"
+
+def versioned_dl_url(tag):
+    # v9.5.4：版本固定名下载 URL——apk/<tag>.apk 一经上传永不覆盖，「下载中途被新发版覆盖」的混装/截断
+    # （packageInfo is null 根因）从源头掐死。tag 必须形如 v9.5.4，否则回退固定名（不拼脏文件名）。
+    import re as _re
+    if tag and _re.match(r"^v\d+(?:\.\d+)*$", tag):
+        return "https://biji.xuyinji.com.cn/dl/%s.apk" % tag
+    return TAG_DEFAULT_DL
 HOST, USER, REMOTE_DIR = "124.221.92.225", "Administrator", "C:/Services/NoteSync"
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PWD_FILE = r"C:\Temp\new_server_pwd.txt"
@@ -137,7 +145,7 @@ def sha256(path):
 def build_latest_json(meta, apk_size, summary=None):
     o = {
         "assets": [{
-            "browser_download_url": TAG_DEFAULT_DL,
+            "browser_download_url": versioned_dl_url(meta.get("tag_name", "")),  # v9.5.4：指向不可变版本副本
             "name": "app-release.apk",
             "size": apk_size,
         }],
@@ -149,7 +157,7 @@ def build_latest_json(meta, apk_size, summary=None):
     return o
 
 
-def deploy_to_server(latest_json_local, apk_local):
+def deploy_to_server(latest_json_local, apk_local, tag=None):
     import paramiko, io
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace") if hasattr(sys.stdout, "buffer") else sys.stdout
     with open(PWD_FILE, "r", encoding="utf-8") as f:
@@ -178,13 +186,8 @@ def deploy_to_server(latest_json_local, apk_local):
                 try: sftp.mkdir(cur)
                 except Exception: pass
 
-    # latest_app.json：备份再覆盖
-    rj = REMOTE_DIR + "/latest_app.json"
-    try: sftp.stat(rj); sftp.rename(rj, rj + ".bak_" + ts); print("[srv] latest_app.json 已备份 -> .bak_%s" % ts)
-    except Exception: print("[srv] latest_app.json 无旧文件")
-    sftp.put(latest_json_local, rj)
-    assert sftp.stat(rj).st_size == os.path.getsize(latest_json_local), "latest_app.json 上传尺寸不符"
-
+    # 闸 R1-P1：上传顺序倒装——两个 APK 文件先就位、latest_app.json 最后落。
+    # 旧序（json→apk）在两次 put 之间，/api/latest 已指向还不存在的 /dl/vX.Y.Z.apk，全网手机点更新必 404。
     # apk/latest.apk：固定名直接覆盖（不备份，服务器只留最新一个）
     ra = REMOTE_DIR + "/apk/latest.apk"
     ensure_parents(ra)
@@ -194,6 +197,30 @@ def deploy_to_server(latest_json_local, apk_local):
     print("[srv] apk/latest.apk local=%d remote=%d %s" % (local_size, remote_size, "OK" if remote_size == local_size else "MISMATCH!!"))
     assert remote_size == local_size, "APK 上传尺寸不符"
 
+    # v9.5.4：不可变版本副本——latest_app.json 的下载 URL 指它，杜绝「下载中途 latest.apk 被覆盖」混装。
+    import re as _re
+    if tag and _re.match(r"^v\d+(?:\.\d+)*$", tag):
+        rv = REMOTE_DIR + "/apk/%s.apk" % tag
+        sftp.put(apk_local, rv)
+        assert sftp.stat(rv).st_size == local_size, "版本副本 %s 上传尺寸不符" % rv
+        print("[srv] apk/%s.apk 已上传（不可变副本）" % tag)
+        try:
+            vers = sorted([a for a in sftp.listdir_attr(REMOTE_DIR + "/apk")
+                           if _re.match(r"^v\d+(?:\.\d+)*\.apk$", a.filename)],
+                          key=lambda a: (a.st_mtime or 0), reverse=True)
+            for old in vers[2:]:  # 只留最近 2 份版本副本（C 盘仅 ~8G）
+                try: sftp.remove(REMOTE_DIR + "/apk/" + old.filename); print("[srv] 清理旧副本 %s" % old.filename)
+                except Exception: pass
+        except Exception as e:
+            print("[srv] 旧副本清理跳过（非致命）：%s" % e)
+
+    # latest_app.json 最后落（备份再覆盖）：此刻 latest.apk 与版本副本都已在位，URL 切换零 404 窗口。
+    rj = REMOTE_DIR + "/latest_app.json"
+    try: sftp.stat(rj); sftp.rename(rj, rj + ".bak_" + ts); print("[srv] latest_app.json 已备份 -> .bak_%s" % ts)
+    except Exception: print("[srv] latest_app.json 无旧文件")
+    sftp.put(latest_json_local, rj)
+    assert sftp.stat(rj).st_size == os.path.getsize(latest_json_local), "latest_app.json 上传尺寸不符"
+
     def run(cmd):
         _, o, e = ssh.exec_command(cmd); o.channel.recv_exit_status()
         return o.read().decode("utf-8", "replace").strip(), e.read().decode("utf-8", "replace").strip()
@@ -201,12 +228,15 @@ def deploy_to_server(latest_json_local, apk_local):
     # latest_app.json 每次请求实时读，无需重启；仅校验
     o, _ = run('curl -s http://localhost:8080/api/latest')
     got = json.loads(o)["assets"][0]["browser_download_url"]
-    assert got == TAG_DEFAULT_DL, "线上 /api/latest 未指向 biji：%s" % got
+    exp_url = versioned_dl_url(tag)
+    assert got == exp_url, "线上 /api/latest 未指向 %s：%s" % (exp_url, got)
+    o2, _ = run('curl -s -o NUL -w "%{http_code}" http://localhost:8080%s' % exp_url.split("com.cn", 1)[1])
     o, _ = run('curl -s -o NUL -w "%{http_code}" http://localhost:8080/dl/latest.apk')
-    print("[verify] /api/latest -> %s；/dl HEAD=%s" % (got, o))
-    o, _ = run('certutil -hashfile C:\\Services\\NoteSync\\apk\\latest.apk SHA256')
+    print("[verify] /api/latest -> %s；版本副本 HEAD=%s；/dl/latest.apk HEAD=%s" % (got, o2, o))
+    chk_file = ("%s.apk" % tag) if (tag and _re.match(r"^v\d+(?:\.\d+)*$", tag)) else "latest.apk"
+    o, _ = run('certutil -hashfile C:\\Services\\NoteSync\\apk\\' + chk_file + ' SHA256')
     remote_sha = "".join(ch for ch in o if ch in "0123456789abcdefABCDEF")
-    print("[verify] 服务器 APK sha256=%s" % remote_sha[-64:])
+    print("[verify] 服务器 %s sha256=%s" % (chk_file, remote_sha[-64:]))
     sftp.close(); ssh.close()
 
 
@@ -244,7 +274,7 @@ def main():
     if no_up:
         print("[done] --no-upload：仅本地生成，未推服务器。")
         return
-    deploy_to_server(out_local, apk_local)
+    deploy_to_server(out_local, apk_local, tag)
     print("\n完成：下次 App 点「检查更新」将从 biji 域直下该 APK。若本版的 server.js /dl 路由有变更，另走正常部署重启 NoteSync。")
 
 
