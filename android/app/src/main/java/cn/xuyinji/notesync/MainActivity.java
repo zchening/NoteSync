@@ -47,6 +47,36 @@ public class MainActivity extends BridgeActivity {
     // 装完 client 后 postDelayed 探测，若首载迟迟不落地则 stopLoading+loadUrl 重走带超时的拦截器三级兜底。
     private volatile boolean mainFrameDone = false;
 
+    // v9.5.6 启动页②：原生 A2 幕布（纸底+品牌环+字标+金细线+slogan），盖住 WebView 加载期，
+    // 主文档落地 250ms 后 300ms 淡出移除；15s 硬超时兜底（覆盖 v9.5.5 watchdog 6s 重载 + 拦截器 3+6s 最坏路径）。
+    private View splashCurtain;
+    private volatile boolean splashCurtainUp = false;
+
+    // v9.5.6：掀幕（幂等）——落地/失败/超时三方共用，淡出后必 remove，绝不吞异常卡启动链。
+    // 仅可在主线程调用（三处调用点均已在主线程 Handler/WebView 回调上）。
+    private void dropSplashCurtain() {
+        if (!splashCurtainUp) return;
+        splashCurtainUp = false;
+        final View c = splashCurtain;
+        splashCurtain = null;
+        if (c == null) return;
+        try {
+            c.animate().alpha(0f).setDuration(300).withEndAction(new Runnable() {
+                @Override public void run() {
+                    try {
+                        android.view.ViewGroup vg = (android.view.ViewGroup) c.getParent();
+                        if (vg != null) vg.removeView(c);
+                    } catch (Throwable ignored) { }
+                }
+            }).start();
+        } catch (Throwable ignored) {
+            try {
+                android.view.ViewGroup vg = (android.view.ViewGroup) c.getParent();
+                if (vg != null) vg.removeView(c);
+            } catch (Throwable t) { }
+        }
+    }
+
     // v5.56：离线兜底诊断计数（JS 端 ?diag 经 RemPlugin.cacheInfo 只读——定位兜底断在哪一环）
     public static volatile int interceptCount = 0;
     public static volatile int fetchFailCount = 0;
@@ -55,6 +85,18 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        // v9.5.6 启动页①：正规启用系统 SplashScreen（纸底+带箭尖品牌环）承接冷启空窗。
+        // 日夜按时间规则（<420 分或 >=1140 分=夜），与 JS shouldBeDark、下方 v9.5.5 WebView 表面
+        // 预置块逐字同规则——本 App 夜不跟随系统，故 setTheme 显式选变体再 install（官方
+        // setTheme-before-onCreate 模式，<31 由 androidx 读当前主题、31+ 平台首帧同认）。
+        // 整块 try/catch：任何意外退回 manifest 基础主题（仍是纸底+环+日间色），绝不影响既有启动链。
+        java.util.Calendar splashCal = java.util.Calendar.getInstance();
+        int splashMin = splashCal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + splashCal.get(java.util.Calendar.MINUTE);
+        final boolean splashNight = splashMin < 420 || splashMin >= 1140;
+        try {
+            setTheme(splashNight ? R.style.AppTheme_NoActionBarLaunch_Night : R.style.AppTheme_NoActionBarLaunch_Day);
+            androidx.core.splashscreen.SplashScreen.installSplashScreen(this);
+        } catch (Throwable ignored) { }
         // v5.51：注册自定义提醒桥（Capacitor 7 也支持自动扫描，显式注册更稳）
         registerPlugin(RemPlugin.class);
         registerPlugin(ImgClipPlugin.class); // v7.7.0：图片写系统剪贴板原生桥
@@ -104,6 +146,62 @@ public class MainActivity extends BridgeActivity {
             fallback.setVisibility(View.GONE);
             wv.reload();
         });
+
+        // v9.5.6 启动页②：A2 原生幕布。环=与系统闪屏同款矢量、同 96dp 居同位（两幕接缝只有文字浮现），
+        // 字标 19sp 衬线+金细线 34dp+slogan 12sp（色值同 THEME_PALETTE/DayNight 变体）。
+        // 加在 fallback 之后=盖住加载期；onPageFinished 250ms 后淡出，12s 硬超时兜底，构建失败则干脆无幕。
+        try {
+            final float dens = getResources().getDisplayMetrics().density;
+            android.widget.FrameLayout curtain = new android.widget.FrameLayout(this);
+            curtain.setBackgroundColor(splashNight ? 0xFF0F0F11 : 0xFFFBFBF8);
+            android.widget.ImageView ring = new android.widget.ImageView(this);
+            ring.setImageResource(splashNight ? R.drawable.splash_logo_night : R.drawable.splash_logo_day);
+            curtain.addView(ring, new android.widget.FrameLayout.LayoutParams(
+                    (int)(96 * dens + 0.5f), (int)(96 * dens + 0.5f), android.view.Gravity.CENTER));
+            android.widget.LinearLayout texts = new android.widget.LinearLayout(this);
+            texts.setOrientation(android.widget.LinearLayout.VERTICAL);
+            texts.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
+            android.widget.TextView wm = new android.widget.TextView(this);
+            wm.setText(R.string.app_name);
+            wm.setTypeface(android.graphics.Typeface.SERIF);
+            wm.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 19);
+            wm.setLetterSpacing(0.14f);
+            wm.setTextColor(splashNight ? 0xFFE9E8E3 : 0xFF1C1C1A);
+            texts.addView(wm);
+            View hair = new View(this);
+            android.widget.LinearLayout.LayoutParams hlp = new android.widget.LinearLayout.LayoutParams(
+                    (int)(34 * dens + 0.5f), Math.max(1, (int)(1 * dens + 0.5f)));
+            hlp.topMargin = (int)(15 * dens + 0.5f);
+            hair.setLayoutParams(hlp);
+            hair.setBackgroundColor(splashNight ? 0x80D4B068 : 0x808F7126);
+            texts.addView(hair);
+            android.widget.TextView sg = new android.widget.TextView(this);
+            sg.setText(R.string.splash_slogan);
+            sg.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 12);
+            sg.setLetterSpacing(0.30f);
+            sg.setTextColor(splashNight ? 0xFF7A786F : 0xFF98958A);
+            android.widget.LinearLayout.LayoutParams sgp = new android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT);
+            sgp.topMargin = (int)(13 * dens + 0.5f);
+            sg.setLayoutParams(sgp);
+            texts.addView(sg);
+            // 文块下压定位（闸 R2-P1 修正）：AOSP FrameLayout 对 CENTER 子_view 是「先居中、
+            // 再整体加 topMargin」（childTop=(parent-h)/2+m），非旧注释误称的 margin/2 下沉。
+            // 目标=字标顶落环下沿外 8dp（环半高 48+8=中心下 56dp）：m = 56 + 文块半高(~36) ≈ 92dp。
+            android.widget.FrameLayout.LayoutParams tlp = new android.widget.FrameLayout.LayoutParams(
+                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.FrameLayout.LayoutParams.WRAP_CONTENT, android.view.Gravity.CENTER);
+            tlp.topMargin = (int)(92 * dens + 0.5f);
+            curtain.addView(texts, tlp);
+            parent.addView(curtain);
+            splashCurtain = curtain;
+            splashCurtainUp = true;
+            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(new Runnable() {
+                @Override public void run() { dropSplashCurtain(); }
+            }, 15000);
+        } catch (Throwable ignored) { }
+
         wv.setWebViewClient(new BridgeWebViewClient(bridge) {
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
@@ -156,7 +254,13 @@ public class MainActivity extends BridgeActivity {
             public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                 super.onReceivedError(view, request, error);
                 // 走到这里 = 联网失败且本地也无缓存（仅首次安装从未联网过的极端场景）
-                if (request.isForMainFrame()) fallback.setVisibility(View.VISIBLE);
+                if (request.isForMainFrame()) {
+                    fallback.setVisibility(View.VISIBLE);
+                    // v9.5.6：兜底页与幕布平级——立刻掀幕，重试按钮绝不被压在幕布后
+                    new android.os.Handler(android.os.Looper.getMainLooper()).post(new Runnable() {
+                        @Override public void run() { MainActivity.this.dropSplashCurtain(); }
+                    });
+                }
             }
 
             @Override
@@ -168,6 +272,10 @@ public class MainActivity extends BridgeActivity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 mainFrameDone = true;  // v9.5.5：主文档落地，watchdog 不再补重载
+                // v9.5.6：主文档落地——250ms 待首帧画稳再掀 A2 幕布（匿名 client 内必须 MainActivity.this）
+                new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(new Runnable() {
+                    @Override public void run() { MainActivity.this.dropSplashCurtain(); }
+                }, 250);
                 super.onPageFinished(view, url);
             }
 
