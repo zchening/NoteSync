@@ -308,7 +308,7 @@ test('A14 彩蛋层两段位于主脚本之后、</body> 之前；样式块紧�
 
 /* ── A15 三 bump 与壳字节一致 ── */
 test('A15 版本 9.3.3；www 与 android 壳与根 index 逐字节一致', () => {
-  assert.ok(SRC.includes("const APP_VERSION = '9.5.2';"), 'APP_VERSION 应随彩蛋十门牌与音效层升到 9.3.1');
+  assert.ok(SRC.includes("const APP_VERSION = '9.5.3';"), 'APP_VERSION 应随彩蛋十门牌与音效层升到 9.3.1');
   assert.strictEqual(SRC, WWW, 'www 壳必须逐字节同步（本仓 brand W3/D5 同源钉）');
   assert.strictEqual(SRC, APK, 'android assets 壳必须逐字节同步');
 });
