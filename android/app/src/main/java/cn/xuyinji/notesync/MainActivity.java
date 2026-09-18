@@ -10,7 +10,7 @@ import android.view.ViewGroup;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
-import android.webkit.WebRenderProcessGoneDetail;
+import android.webkit.RenderProcessGoneDetail;
 import android.webkit.WebView;
 
 import com.getcapacitor.BridgeActivity;
@@ -150,7 +150,7 @@ public class MainActivity extends BridgeActivity {
             // v9.5.4 启动自愈：MIUI 幻影进程查杀/系统冻结会杀掉 WebView 渲染进程，画布留全白/全黑死屏。
             // 不消费此回调＝某些版本按未处理直接杀整 App，处理了不重建也永远白屏。
             @Override
-            public boolean onRenderProcessGone(WebView view, WebRenderProcessGoneDetail detail) {
+            public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
                 if (!didRendererGoneRecreate) {
                     didRendererGoneRecreate = true;
                     try {

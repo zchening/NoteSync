@@ -30,7 +30,8 @@ test('v9.5.4 版本固定名下载：server.js 白名单路由 + push 脚本上�
 });
 
 test('v9.5.4 启动自愈：onRenderProcessGone 重建（进程内一次）+ onResume 10 分钟陈旧 reload', () => {
-  assert.ok(ACT.includes('public boolean onRenderProcessGone(WebView view, WebRenderProcessGoneDetail detail)'), 'onRenderProcessGone 已消费');
+  assert.ok(ACT.includes('public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail)'), 'onRenderProcessGone 已消费（类名无 Web 前缀，CI 编译终裁）');
+  assert.ok(!ACT.includes('WebRenderProcessGoneDetail'), '禁回潮错类名 WebRenderProcessGoneDetail（不存在，CI 必挂 cannot find symbol）');
   assert.ok(ACT.includes('didRendererGoneRecreate'), '进程内仅一次重建防循环');
   assert.ok(ACT.includes('recreate(); return true;'), '重建并消费回调（不消费系统按未处理杀 App）');
   assert.ok(ACT.includes('private static boolean didRendererGoneRecreate'), '防循环旗标必须 static（recreate 后实例字段归零＝循环，闸 R1/R2 双路命中）');
