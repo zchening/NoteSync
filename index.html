@@ -818,8 +818,8 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '9.4.1';
-const BUILD_DATE = '2026-09-16';
+const APP_VERSION = '9.5.0';
+const BUILD_DATE = '2026-09-18';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
 let nsSkin = 0;
@@ -2518,10 +2518,44 @@ function showImagePreview(blob) {
   overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
 }
 // 渲染离屏副本并出 PNG Blob（Promise 化：手势窗口内可直接装入 ClipboardItem 延迟兑现）
+// v9.5.0（用户定稿 A3 极简版）：导出图从「裸正文平铺」升级为书纸卡——外衬卡(--box-bg)裱内衬(--bg)两层，
+// 全图金色只留两枚锚点（页头题线 + 页脚品牌标），刻印/tagline 均为装饰层不碰正文存档；
+// 桌面出图宽度封顶 640px（书内文行宽），手机照旧跟编辑器宽；色值全走 var() 令牌、挂在 body 下
+// 随日夜自动换板，零新色字面量。剪贴板手势保活与回退阶梯（exportImage）零改动。
 async function renderNotePng() {
   const cs = getComputedStyle(editor);
+  // 640 封顶只给桌面（闸 R3 修正兑现原话「手机不受影响」）：触屏（含横屏手机/平板，pointer:coarse）
+  // 照旧跟编辑器宽——书纸行宽是给「一米宽条幅」治的，不是给窄屏加码的。
+  const coarse = typeof matchMedia === 'function' && matchMedia('(pointer:coarse)').matches;
+  const shotW = coarse ? editor.clientWidth : Math.min(editor.clientWidth, 640);
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'position:absolute;left:-9999px;top:0;width:' + shotW + 'px;padding:16px;background:var(--box-bg);border:1px solid var(--line);border-radius:10px';
+  const mat = document.createElement('div');
+  mat.style.cssText = 'background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:30px 28px 0';
+
+  // 页头：金题线 + 日期（单行 nowrap，折行判「low」），右角 noteId 无框等宽刻印（空名不挂）
+  const head = document.createElement('div');
+  head.style.cssText = 'display:flex;align-items:flex-end;justify-content:space-between;gap:12px';
+  const hdL = document.createElement('div');
+  hdL.style.cssText = 'display:flex;align-items:center;gap:10px;flex:none';
+  const rule = document.createElement('span');
+  rule.style.cssText = 'height:1.5px;width:52px;background:var(--accent);opacity:.85;flex:none';
+  const dt = document.createElement('span');
+  const now = new Date(), p2 = n => (n < 10 ? '0' : '') + n;
+  dt.textContent = now.getFullYear() + '-' + p2(now.getMonth() + 1) + '-' + p2(now.getDate()) +
+    ' · 星期' + ['日', '一', '二', '三', '四', '五', '六'][now.getDay()];
+  dt.style.cssText = 'font:12px/1 var(--mono);color:var(--muted);letter-spacing:.03em;white-space:nowrap';
+  hdL.appendChild(rule); hdL.appendChild(dt); head.appendChild(hdL);
+  if (noteId) {
+    const stamp = document.createElement('span');
+    stamp.textContent = noteId;
+    stamp.style.cssText = 'font:11px/1 var(--mono);color:var(--muted);letter-spacing:.12em;opacity:.6;white-space:nowrap;max-width:45%;overflow:hidden;text-overflow:ellipsis';
+    head.appendChild(stamp);
+  }
+
+  // 正文：预处理与旧版逐字同构（链接转文本、长词补空格断行），只换容器与去自身背景
   const tmp = document.createElement('div');
-  tmp.style.cssText = 'position:absolute;left:-9999px;top:0;width:' + editor.clientWidth + 'px;padding:' + cs.padding + ';font:' + cs.font + ';line-height:2.2;white-space:pre-wrap;word-break:break-all;overflow-wrap:anywhere;background:' + cs.backgroundColor + ';color:' + cs.color;
+  tmp.style.cssText = 'padding:26px 0 0;font:' + cs.font + ';line-height:2.2;white-space:pre-wrap;word-break:break-all;overflow-wrap:anywhere;color:' + cs.color;
   tmp.innerHTML = editor.innerHTML;
 
   tmp.querySelectorAll('a').forEach(a => {
@@ -2542,25 +2576,55 @@ async function renderNotePng() {
     if (!text) return;
     textNode.nodeValue = breakLongWords(text);
   });
+  tmp.querySelectorAll('img').forEach(im => { im.style.maxWidth = '100%'; }); // 窄卡防溢出（旧版卡宽＝编辑器宽不会溢出，640 封顶后必须限）
 
-  document.body.appendChild(tmp);
+  // 页脚落款：克隆顶栏真品牌标（永远与品牌同源）+「来自 NoteSync」+ 右侧 tagline，一条发线收底
+  const foot = document.createElement('div');
+  foot.style.cssText = 'display:flex;align-items:center;gap:9px;padding:15px 0;margin-top:6px;border-top:1px solid var(--line)';
+  const brandSvg = document.querySelector('header .brand svg');
+  if (brandSvg) {
+    const mark = brandSvg.cloneNode(true);
+    mark.setAttribute('aria-hidden', 'true');
+    mark.style.cssText = 'width:16px;height:16px;flex:none;color:var(--accent)';
+    foot.appendChild(mark);
+  }
+  const wm = document.createElement('span');
+  wm.style.cssText = 'font:11.5px/1 var(--mono);color:var(--muted);letter-spacing:.14em;white-space:nowrap';
+  wm.appendChild(document.createTextNode('来自 '));
+  const wmB = document.createElement('b');
+  wmB.textContent = 'NoteSync';
+  wmB.style.cssText = 'color:var(--accent);font-weight:600;letter-spacing:.06em';
+  wm.appendChild(wmB);
+  foot.appendChild(wm);
+  const tail = document.createElement('span');
+  tail.textContent = '记录，自有回响';
+  tail.style.cssText = 'margin-left:auto;font:10.5px/1 var(--mono);color:var(--muted);opacity:.7;letter-spacing:.22em;white-space:nowrap';
+  foot.appendChild(tail);
+
+  mat.appendChild(head); mat.appendChild(tmp); mat.appendChild(foot);
+  wrap.appendChild(mat);
+  // 闸 R2-P1 根修：借壳（国产强制反色）的 SHELL_CSS 给 img,canvas 钉了 filter:invert(1)!important，
+  // html2canvas 从 wrap 起渲会无视祖先整层反色、却忠实执行图片自身 filter——不钉回去，借壳态导出
+  // 图里的正文图会比卡片底多翻一次色。内联 !important 压过样式表 !important，非借壳态为无害 no-op。
+  wrap.querySelectorAll('img,canvas').forEach(el => el.style.setProperty('filter', 'none', 'important'));
+  document.body.appendChild(wrap);
 
   await new Promise(r => setTimeout(r, 50));
 
   try {
-    const canvas = await html2canvas(tmp, {
-      backgroundColor: getComputedStyle(document.body).backgroundColor,
+    const canvas = await html2canvas(wrap, {
+      backgroundColor: null, // 圆角外保持透明（外衬卡自带底色）
       scale: 2,
       useCORS: true,
       logging: false,
-      width: tmp.scrollWidth,
-      height: tmp.scrollHeight,
-      windowWidth: tmp.scrollWidth,
-      windowHeight: tmp.scrollHeight
+      width: wrap.offsetWidth,  // 闸 R2-P2：scrollWidth 不含 1px 边框，右/下边线被裁 2px
+      height: wrap.offsetHeight,
+      windowWidth: wrap.offsetWidth,
+      windowHeight: wrap.offsetHeight
     });
     return await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
   } finally {
-    document.body.removeChild(tmp);
+    document.body.removeChild(wrap);
   }
 }
 
@@ -8531,6 +8595,10 @@ if ('serviceWorker' in navigator) {
 <style>
 /* ═══ v9.0.0 彩蛋层样式：全部只吃主题令牌，零新色字面量 ═══ */
 .ns-game{position:fixed;inset:0;z-index:70;display:flex;flex-direction:column;background:var(--bg);color:var(--fg)}
+/* v9.5.0 移动端报障根修：canvas 全屏 + pointerdown 开火，Chromium/WebView 对可点元素默认叠一层
+   半透明蓝点按高亮（tap highlight）——层是全屏的，看起来就是「每发一弹整屏闪一次蓝」。
+   -webkit-tap-highlight-color 可继承，挂 .ns-game 根一次盖住画布/HUD/提示条，与顶栏按钮同款处方。 */
+.ns-game{-webkit-tap-highlight-color:transparent}
 /* dom 型彩蛋（镜像）：壳必须透明且不吃点击，否则全屏不透明底把被镜像的站点整个盖住 */
 .ns-game.ns-passthru{background:transparent;pointer-events:none}
 .ns-game.ns-passthru .ns-hud,.ns-game.ns-passthru .ns-mirror-panel{pointer-events:auto}
