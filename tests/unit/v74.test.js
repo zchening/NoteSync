@@ -134,8 +134,8 @@ test('V74-B6 标记语义（辅助函数直测）：新鲜→抑制跳转 / 过�
   const { window } = app;
   window.sessionStorage.setItem(JUMPED, String(Date.now()));
   assert.equal(window.jumpedRecently(), true, '新鲜时间戳应判定为「刚回过首页」');
-  window.sessionStorage.setItem(JUMPED, String(Date.now() - 119999));
-  assert.equal(window.jumpedRecently(), true, '窗口边界内 119999ms 应判定为新鲜（抑制跳转）');
+  window.sessionStorage.setItem(JUMPED, String(Date.now() - 110000));
+  assert.equal(window.jumpedRecently(), true, '窗口内 110000ms 应判定为新鲜（抑制跳转）；不用 119999 距边界仅 1ms，全量负载下 Date.now 前进即越界成 flake');
   window.sessionStorage.setItem(JUMPED, String(Date.now() - 120000));
   assert.equal(window.jumpedRecently(), false, '恰好 120000ms 应判定过期（v5.52 特性放行）');
   window.sessionStorage.setItem(JUMPED, String(Date.now() + 60000));

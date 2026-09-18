@@ -21,6 +21,38 @@
 <link rel="icon" href="/favicon.svg?v=7.9.0" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <title>NoteSync</title>
+<script>
+/* v9.5.5 启动首帧优化（原生冷启「全白很久→加载中→白→黑」根修之一）：
+   (a) 主题预应用——主脚本 applyTheme 晚于首帧，夜间先画白底 #loading 再翻黑=白闪。这里在 <head> 同步按
+       时间规则（与 shouldBeDark 逐字同：分钟<420 或 >=1140）先给 html/#loading 铺夜色，首帧即深色。
+   (b) 原生冷启自动跳——原在 init（主脚本尾 ~8437）才 location.assign 上次笔记，root 页要空跑完 ~760KB 顶层
+       JS（低端机 1~3s 全白「加载中」）才跳、跳完再走一遍。这里在 head 判定，命中即跳，root 主脚本根本不解析。
+   两处常量与主脚本逐字一致，tests/unit/v955.test.js 钉住防漂移。 */
+(function(){
+  try{
+    var now=new Date(), mm=now.getHours()*60+now.getMinutes();
+    if(mm<420||mm>=1140){ /* THEME_DAY_START=7*60, THEME_NIGHT_START=19*60 */
+      var s=document.createElement('style'); s.id='ns-boot-theme';
+      s.textContent='html{background:#0F0F11!important}#loading{background:#0F0F11!important;color:#7A786F!important}';
+      (document.head||document.documentElement).appendChild(s);
+    }
+  }catch(e){}
+  try{
+    var isNative=!!(window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isNativePlatform());
+    if(!isNative) return;
+    var path=location.pathname.replace(/^\/+|\/+$/g,'');
+    if(path) return; /* 已是笔记路由，交给主脚本 init 解锁 */
+    var t=Number(sessionStorage.getItem('notesync_jumped'));
+    var age=Date.now()-t;
+    if(isFinite(t)&&age>=0&&age<120000) return; /* JUMP_WINDOW_MS：刚回过首页不抢跳；未来戳=过期放行（与 init jumpedRecently 逐字同语义，防时钟回拨永久抑制） */
+    var last=localStorage.getItem('notesync_last_note');
+    if(last&&/^[A-Za-z0-9_-]{1,64}$/.test(last)){
+      try{ sessionStorage.setItem('notesync_jumped', String(Date.now())); }catch(e){}
+      location.assign('/'+encodeURIComponent(last)); /* assign 非 replace：留历史，返回键可回首页换笔记（与 init 语义一致） */
+    }
+  }catch(e){}
+})();
+</script>
 <!-- v7.5.1：html2canvas 不再挂公共 CDN（jsdelivr 在大陆常不可达→手机「图片导出组件未加载」）。
      改为导出时从同源 /html2canvas.min.js 懒加载（见 loadHtml2Canvas），与 jsQR 同范式。 -->
 <style>
@@ -818,7 +850,7 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '9.5.4';
+const APP_VERSION = '9.5.5';
 const BUILD_DATE = '2026-09-19';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
@@ -1121,6 +1153,7 @@ function syncThemeMenuItem(dark) {
   if (lb) lb.textContent = dark ? '日间模式' : '夜间模式';
 }
 function applyTheme(dark) {
+  try { var bt = document.getElementById('ns-boot-theme'); if (bt) bt.remove(); } catch (e) {} // v9.5.5：head 预应用只管首帧，主脚本接管即摘（防手动翻日后 boot !important 钉夜色）
   syncThemeMenuItem(dark);       // v6.1：菜单「日夜间」项文案/图标随语义翻转（日间显「夜间模式」）
   // v8.2.0：皮肤环内绝不借壳——invert 滤镜会把皮肤色翻成认不出的样子；检测到强制反色环境
   //（浅色检测型对手会把浅色皮肤反掉）时，皮肤直接走夜间变体自保，语义/环态不受影响。
@@ -1885,6 +1918,9 @@ async function apiGet() {
 function withTimeout(p, ms) {
   return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout-' + ms)), ms))]);
 }
+// v9.5.5：JS 存活心跳顶层常驻（闸修：曾只挂 init 自动解锁路径，口令解锁/锁定页无心跳被 onResume
+// 探活恒判死页→闪烁原样回归）。每秒写 window.__nsBeat，原生据此判页面死活（定时器停摆=JS 冻结）。
+try { window.__nsBeat = Date.now(); setInterval(function () { try { window.__nsBeat = Date.now(); } catch (e) {} }, 1000); } catch (e) {}
 // v6.0：在途写入计数。PUT 已发出但响应未回的窗口里，服务端 v 已递增而本机 localVer 尚未回写；
 // 此刻 SSE（onmessage → poll）拿到的 note.v 必然大于 localVer，若再有未保存输入就会被判成
 // 「远端有更新」弹冲突条——新建笔记落盐时 100% 命中（见 BUG_CHECKLIST T1）。
@@ -2936,7 +2972,7 @@ async function tryPairingUnlock() {
     return false;
   }
   let note;
-  try { note = await apiGet(); }
+  try { note = await withTimeout(apiGet(), 8000); } // v9.5.5：#k= 配对入口首拉同享 8s 超时（此前裸 await，半死 socket 挂 1~2 分钟）
   catch (e) { stripHash(); throw e; } // 锁定/笔记名非法/断网：交给正常 init 流程显示对应提示
   try {
     // 拒绝配对到不存在/未初始化的笔记：真实解锁过的笔记必有 salt。缺 salt 时若放行，
@@ -8212,7 +8248,7 @@ async function poll() {
   if (inflightWrites > 0) return; // v6.0：本机写入在途——本轮跳过，别把自增的 v 当成别人的更新
   if (!cryptoKey) return; // 已锁定：无密钥无须轮询，避免“同步中断”噪声
   try {
-    const note = await apiGet();
+    const note = await withTimeout(apiGet(), 12000); // v9.5.5：poll 加 12s 超时——半死 socket 下 fetch 不再无限挂冻结状态条（「同步中断/连接中…」卡死根因）；不加在途重入闸（会误伤 startSync 首 poll 与紧随的合法 poll，破坏冲突检测）
     lastSyncAt = Date.now(); // v5.50：轮询成功=与服务端通信成功
     setStatus(true, '已同步');
     hideOfflineBar();
@@ -8582,12 +8618,12 @@ if (noteId && (isNativeApp() || !CHIP_HOVER_OK)) {
     if (note.ct) { try { lastHtml = await decryptText(note.ct, note.iv, cryptoKey); editor.innerHTML = lastHtml; } catch (e) {} }
     if (note.ct) cachePut({ ct: note.ct, iv: note.iv, v: note.v, salt: note.salt, savedAt: Date.now() }); // v5.49：成功加载即缓存正文密文，供离线阅读；v5.54 附盐
     lastSyncAt = Date.now(); // v5.50：在线加载成功=与服务端通信成功
+    startSync(); // v9.5.5：同步先启动——loadReminder 尾段 persistReminders 的 apiGet 若半死挂起，不再连带把同步启动一起挡死（状态条冻结「连接中…」）
     await loadReminder(note, cryptoKey); // v5.56：自动解锁路径补提醒恢复——此前仅口令解锁路径（applyUnlocked）恢复，记住密钥的设备关标签/杀进程重开后提醒列表恒空、下划线全丢（真机实锤）
     ensureBlockWrapped();
     if (note.ct) { try { linkifyEditor(); } catch (e) {} }
     ensureCaret(); // 自动加载后显式重建合法折叠光标
     undoStack = []; redoStack = []; lastState = captureState(); // 新笔记会话：清空并重置撤销栈基线
-    startSync();
     consumeBackupImportMsg(); // v7.7.0：首页扫备份码跳转解锁后的一次性成功提示
     setTimeout(function () { try { nsDayGreet(); } catch (e) {} }, 1000); // v9.3.9：记住密钥的自动解锁路径同样递「每日一句话」
   } else {

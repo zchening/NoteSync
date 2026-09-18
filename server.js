@@ -235,6 +235,9 @@ const server = http.createServer((req, res) => {
   if (req.method === 'GET' && url.startsWith('/api/note/') && url.endsWith('/stream')) {
     const id = decodeURIComponent(url.replace(/\/stream$/, '').replace(/^\/api\/note\//, ''));
     if (!id || !ID_RE.test(id)) return sendJSON(res, 400, { error: 'bad id' });
+    // v5.52：全局连接上限，防恶意客户端开大量长连接耗尽 fd / 内存。
+    // v9.5.5 修：上限检查必须在 writeHead(200) 之前——原放在其后，触发 429 时 sendJSON 再写头直接抛 ERR_HTTP_HEADERS_SENT。
+    if (sseActive >= MAX_SSE) return sendJSON(res, 429, { error: 'too many streams' });
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -242,8 +245,6 @@ const server = http.createServer((req, res) => {
       'X-Accel-Buffering': 'no'
     });
     res.write(': connected\n\n');
-    // v5.52：全局连接上限，防恶意客户端开大量长连接耗尽 fd / 内存
-    if (sseActive >= MAX_SSE) return sendJSON(res, 429, { error: 'too many streams' });
     if (!sseClients.has(id)) sseClients.set(id, new Set());
     sseClients.get(id).add(res);
     sseActive++;
@@ -623,8 +624,18 @@ const server = http.createServer((req, res) => {
       res.end('{"error":"not found"}');
       return;
     }
-    // SPA：其他都返回 index.html（必须 no-cache 防止移动端浏览器缓存旧版）
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache, no-store, must-revalidate' });
+    // SPA：其他都返回 index.html。v9.5.5：no-store 改 no-cache + ETag 条件请求——
+    // 旧策略每次冷启必全量重下 275KB(gzip)，弱网 1.5~10s 纯白屏的大头；现在复访命中 304 传输≈0，
+    // 发版覆盖文件后 mtime/size 变、ETag 自然失效，不会吐旧版（no-cache 仍保证每次带条件问源）。
+    let ieTag = '';
+    try { const ist = fs.statSync(INDEX_FILE); ieTag = 'W/"' + ist.size.toString(16) + '-' + Math.round(ist.mtimeMs).toString(16) + '"'; } catch (e) {}
+    const inm = req.headers['if-none-match'];
+    if (ieTag && inm && (inm === ieTag || inm.indexOf(ieTag) >= 0)) {
+      res.writeHead(304, { 'Cache-Control': 'no-cache', 'ETag': ieTag });
+      res.end();
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache', 'ETag': ieTag });
     fs.createReadStream(INDEX_FILE).pipe(res);
     return;
   }

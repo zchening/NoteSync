@@ -44,9 +44,9 @@ test('v9.5.4 启动自愈：onRenderProcessGone 重建（进程内一次）+ onR
   assert.ok(iApk > -1 && iVer > iApk && iJson > iVer, '上传顺序：latest.apk → 版本副本 → json 最后（闸 R1-P1）');
 });
 
-test('v9.5.4 首拉超时：withTimeout 8s 包 init 自动解锁与手动 unlock 的 apiGet，后台同步不包', () => {
+test('v9.5.4 首拉超时：withTimeout 8s 包 init 自动解锁/手动 unlock/#k= 配对的 apiGet，后台同步 poll 用 12s', () => {
   assert.ok(SRC.includes('function withTimeout(p, ms)'), 'withTimeout 助手在位');
-  assert.ok(SRC.includes('note = await withTimeout(apiGet(), 8000);'), '两处首拉（init/unlock）带超时');
+  assert.ok(SRC.includes('note = await withTimeout(apiGet(), 8000);'), '首拉（init/unlock/pairing）带超时');
   const n = (SRC.match(/withTimeout\(apiGet\(\), 8000\)/g) || []).length;
-  assert.strictEqual(n, 2, '恰好 2 处首拉超时（后台同步 apiGet 不激进超时）');
+  assert.strictEqual(n, 3, '3 处首拉超时（v9.5.5 补齐 #k= 配对入口；poll 用 12s 另计，不在此列）');
 });

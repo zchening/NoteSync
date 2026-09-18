@@ -34,6 +34,7 @@ public class MainActivity extends BridgeActivity {
 
     private boolean pendingRemNotifyClick = false;
     private static final String MAIN_DOC_CACHE = "cached_index.html";
+    private static final String MAIN_DOC_ETAG = "cached_index.etag"; // v9.5.5：条件请求用弱/强 ETag 存文（fetchMainDoc 304 链路）
     // v9.5.4 启动自愈：①WebView 渲染进程被 MIUI 幻影进程查杀/系统冻结杀死后画布全白全黑不自复——
     // 零 onRenderProcessGone 处理是根因，进程内只允许一次 recreate 防重建循环；
     // ②后台超 10 分钟回前台主动 reload，兜「冻而未死」（JS 定时器停摆、keep-alive socket 半死）灰区。
@@ -41,6 +42,10 @@ public class MainActivity extends BridgeActivity {
     // 渲染进程慢性被杀会变成 recreate 死循环；static 才是真·进程级一次。
     private static boolean didRendererGoneRecreate = false;
     private long pausedAt = 0;
+    // v9.5.5 首载 watchdog：Capacitor 在 super.onCreate 内就发起首载（早于 setWebViewClient），
+    // 半死 socket 下首载绕过拦截器、无超时保护 → 全白很久。此标志随主文档 onPageFinished 置真；
+    // 装完 client 后 postDelayed 探测，若首载迟迟不落地则 stopLoading+loadUrl 重走带超时的拦截器三级兜底。
+    private volatile boolean mainFrameDone = false;
 
     // v5.56：离线兜底诊断计数（JS 端 ?diag 经 RemPlugin.cacheInfo 只读——定位兜底断在哪一环）
     public static volatile int interceptCount = 0;
@@ -117,7 +122,14 @@ public class MainActivity extends BridgeActivity {
                     interceptCount++;
                     try {
                         byte[] bytes = fetchMainDoc(request.getUrl().toString());
-                        if (bytes != null && bytes.length > 0) {
+                        if (bytes != null && bytes.length == 0) {
+                            // v9.5.5：304 条件命中——磁盘缓存仍新鲜，直接吐缓存（冷启主文档传输≈0），不计失败
+                            byte[] fresh = readMainDoc();
+                            if (fresh != null && fresh.length > 0) {
+                                cacheHitCount++;
+                                return new WebResourceResponse("text/html", "utf-8", new ByteArrayInputStream(fresh));
+                            }
+                        } else if (bytes != null && bytes.length > 0) {
                             saveMainDoc(bytes);
                             return new WebResourceResponse("text/html", "utf-8", new ByteArrayInputStream(bytes));
                         }
@@ -147,6 +159,18 @@ public class MainActivity extends BridgeActivity {
                 if (request.isForMainFrame()) fallback.setVisibility(View.VISIBLE);
             }
 
+            @Override
+            public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
+                mainFrameDone = false; // v9.5.5：每次导航开始复位，供首载 watchdog 判本轮是否落地
+                super.onPageStarted(view, url, favicon);
+            }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                mainFrameDone = true;  // v9.5.5：主文档落地，watchdog 不再补重载
+                super.onPageFinished(view, url);
+            }
+
             // v9.5.4 启动自愈：MIUI 幻影进程查杀/系统冻结会杀掉 WebView 渲染进程，画布留全白/全黑死屏。
             // 不消费此回调＝某些版本按未处理直接杀整 App，处理了不重建也永远白屏。
             @Override
@@ -162,6 +186,8 @@ public class MainActivity extends BridgeActivity {
                     } catch (Throwable ignored) { }
                     try { recreate(); return true; } catch (Throwable ignored) { }
                 }
+                // v9.5.5：进程内已重建过一次仍再死（渲染进程被反复查杀的极端机型）→ 静默 finish 像闪退，补一条提示
+                try { android.widget.Toast.makeText(this, "界面渲染异常，请重新打开", android.widget.Toast.LENGTH_LONG).show(); } catch (Throwable ignored) { }
                 try { finish(); } catch (Throwable ignored) { }
                 return true;
             }
@@ -176,6 +202,31 @@ public class MainActivity extends BridgeActivity {
             didCacheBootstrapReload = true;
             wv.reload();
         }
+
+        // v9.5.5 ⑩ WebView 表面背景预置：默认白底在夜间冷启首帧前露出白闪（windowBackground 管不到
+        // WebView 自身表面）。按与 shouldBeDark/head boot 同一时间规则预置夜色，首帧起就是对的底色。
+        try {
+            java.util.Calendar bootCal = java.util.Calendar.getInstance();
+            int bootMin = bootCal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + bootCal.get(java.util.Calendar.MINUTE);
+            boolean bootNight = bootMin < 420 || bootMin >= 1140;
+            wv.setBackgroundColor(bootNight ? 0xFF0F0F11 : 0xFFFBFBF8);
+        } catch (Throwable ignored) { }
+
+        // v9.5.5 ⑧ 首载 watchdog（「全白很久」根治）：Capacitor 首载在 super.onCreate 内发起，早于
+        // setWebViewClient——绕过拦截器的 3+6s 超时与三级兜底，半死 socket 下 Chromium 自身无应用层
+        // 读超时（分钟级）。6s 主文档仍未 onPageFinished → stopLoading+loadUrl 当前目标重走拦截器：
+        // 联网 3+6s 封顶 → 磁盘缓存 → 内置壳，白屏总封顶从「无限」压到 ~15s 内必有页面。
+        final WebView wvBoot = wv;
+        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(new Runnable() {
+            @Override public void run() {
+                if (mainFrameDone || wvBoot == null || isFinishing() || isDestroyed()) return;
+                try {
+                    String cur = wvBoot.getUrl();
+                    wvBoot.stopLoading();
+                    wvBoot.loadUrl(cur != null && cur.startsWith("http") ? cur : "https://biji.xuyinji.com.cn/");
+                } catch (Throwable ignored) { }
+            }
+        }, 6000);
 
         // v6.0：冷启动也接住通知点击（进程被杀后点通知拉起 APP，intent 走 onCreate 不走 onNewIntent）
         // v6.3 P1 根治「点通知有时进错笔记」：此前首屏加载根页后，JS 的「自动进入上次笔记」
@@ -242,7 +293,9 @@ public class MainActivity extends BridgeActivity {
     /** v5.57：缓存引导 reload 只跑一次（防循环），进程重建后若仍无缓存允许再试 */
     private boolean didCacheBootstrapReload = false;
 
-    /** 联网时 native 侧抓主文档；无网络直接返回 null 快败（不阻塞拦截层） */
+    /** 联网时 native 侧抓主文档；无网络直接返回 null 快败（不阻塞拦截层）。
+     *  v9.5.5 闸修（R1/R2 P1：ETag 在 App 链路是死代码——拦截器自抓不带条件头，冷启仍全量 275KB）：
+     *  有磁盘缓存且存过 ETag 时带 If-None-Match 条件请求；304 返回空数组（byte[0]）信号，调用方直接吐磁盘缓存。 */
     private byte[] fetchMainDoc(String urlStr) throws Exception {
         ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
         NetworkInfo ni = cm.getActiveNetworkInfo();
@@ -252,7 +305,18 @@ public class MainActivity extends BridgeActivity {
         conn.setReadTimeout(6000);
         conn.setRequestProperty("Accept", "text/html");
         try {
-            if (conn.getResponseCode() < 200 || conn.getResponseCode() >= 300) return null;
+            java.io.File df = new java.io.File(getFilesDir(), MAIN_DOC_CACHE);
+            String savedEtag = readSmallText(MAIN_DOC_ETAG);
+            if (df.exists() && savedEtag != null && !savedEtag.isEmpty()) conn.setRequestProperty("If-None-Match", savedEtag);
+        } catch (Exception ignored) { }
+        try {
+            int code = conn.getResponseCode();
+            if (code == 304) return new byte[0]; // 条件命中：磁盘缓存仍新鲜
+            if (code < 200 || code >= 300) return null;
+            try {
+                String et = conn.getHeaderField("ETag");
+                if (et != null && !et.isEmpty()) writeSmallText(MAIN_DOC_ETAG, et);
+            } catch (Exception ignored) { }
             try (InputStream in = conn.getInputStream(); ByteArrayOutputStream bo = new ByteArrayOutputStream()) {
                 byte[] buf = new byte[8192];
                 int n;
@@ -262,6 +326,20 @@ public class MainActivity extends BridgeActivity {
         } finally {
             conn.disconnect();
         }
+    }
+
+    private String readSmallText(String name) {
+        try (FileInputStream fi = openFileInput(name); ByteArrayOutputStream bo = new ByteArrayOutputStream()) {
+            byte[] buf = new byte[512]; int n;
+            while ((n = fi.read(buf)) > 0) bo.write(buf, 0, n);
+            return bo.toString("UTF-8").trim();
+        } catch (Exception e) { return null; }
+    }
+
+    private void writeSmallText(String name, String val) {
+        try (FileOutputStream fo = openFileOutput(name, MODE_PRIVATE)) {
+            fo.write(val.getBytes("UTF-8"));
+        } catch (Exception ignored) { }
     }
 
     private void saveMainDoc(byte[] bytes) {
@@ -319,12 +397,25 @@ public class MainActivity extends BridgeActivity {
         super.onResume();
         // v5.55：前台标志——前台时 JS 提醒卡+声音已负责，RemReceiver 不重复推通知
         RemPlugin.isForeground = true;
-        // v9.5.4 启动自愈：后台躺超 10 分钟回前台，页面多半「冻而未死」（JS 定时器停摆、keep-alive socket 半死，
-        // 正是「加载中挂半天」的温床）——主动 reload 一次；冷启动 pausedAt=0 不误触；reload 走 native 三级兜底拦截器，代价仅一屏刷新。
+        // v9.5.5 修正：v9.5.4 的无条件 reload 本身就是「黑屏闪几下→白加载中→黑加载中」的制造者
+        // （躺 11 分钟回来必闪一整轮）。改为心跳探活：JS 每秒写 window.__nsBeat，取不到或落后 >15s
+        // 才说明页面真「冻而未死」→ reload；活着就静默返回，一帧都不闪。
         if (pausedAt > 0 && System.currentTimeMillis() - pausedAt > 10 * 60_000L) {
-            WebView wvResume = (bridge != null) ? bridge.getWebView() : null;
+            final WebView wvResume = (bridge != null) ? bridge.getWebView() : null;
             pausedAt = 0;
-            if (wvResume != null) { try { wvResume.reload(); } catch (Throwable ignored) { } }
+            if (wvResume != null) {
+                try {
+                    wvResume.evaluateJavascript("String(Date.now()-(window.__nsBeat||0))", new android.webkit.ValueCallback<String>() {
+                        @Override public void onReceiveValue(String value) {
+                            long gap = Long.MAX_VALUE; // 取不到/非数字＝当死页处理
+                            try { gap = Long.parseLong(String.valueOf(value).replace("\"", "")); } catch (Exception ignored) { }
+                            if (gap > 15000) {
+                                try { if (!wvResume.isFinishing()) { wvResume.stopLoading(); wvResume.reload(); } } catch (Throwable ignored) { }
+                            }
+                        }
+                    });
+                } catch (Throwable ignored) { }
+            }
         }
         if (pendingRemNotifyClick) {
             dispatchRemNotifyClick();

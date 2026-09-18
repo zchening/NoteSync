@@ -6,6 +6,9 @@
     servers {
         protocols h1
     }
+    # v9.5.5 注：曾拟恢复 h2 治「同域 6 连接排队」，闸 R1 考古实锤 v3.3 提交明言 h1 是
+    # 「fixes HTTP/2+SSE issues」的刻意降级——历史决策未真机验证前不翻，h2 留专项。
+    # 本版启动挂死已由 ETag/304（主文档≈0 字节）+ poll 12s 超时 + 原生首载 watchdog 三兜治住。
 }
 https://xuyinji.com.cn, https://www.xuyinji.com.cn {
     # v5.26 NoteSync pairing short link: /note/<id> -> 302 -> note.xuyinji.com.cn/<id>
@@ -39,7 +42,7 @@ https://note.xuyinji.com.cn {
         Referrer-Policy "no-referrer"
     }
     @html path /index.html /
-    header @html Cache-Control "no-cache, no-store, must-revalidate"
+    header @html Cache-Control "no-cache" # v9.5.5：摘 no-store——源站 server.js 已带 ETag+no-cache，no-store 会掐死 304 复访（闸 R1/R2-P1）
 }
 
 https://520.xuyinji.com.cn {
@@ -124,5 +127,5 @@ https://biji.xuyinji.com.cn {
         Referrer-Policy "no-referrer"
     }
     @html path /index.html /
-    header @html Cache-Control "no-cache, no-store, must-revalidate"
+    header @html Cache-Control "no-cache" # v9.5.5：摘 no-store——源站 server.js 已带 ETag+no-cache，no-store 会掐死 304 复访（闸 R1/R2-P1）
 }

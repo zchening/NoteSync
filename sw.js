@@ -48,10 +48,18 @@ self.addEventListener('fetch', e => {
   if (url.origin !== self.location.origin) return;
   // API 请求不缓存
   if (url.pathname.startsWith('/api/')) return;
-  // index.html：网络优先，失败回退缓存（在线时顺带刷新缓存）
+  // v9.5.5：网络分支统一 10s AbortController 超时——半死 keep-alive socket 下 fetch 永不 reject，
+  // respondWith 无限挂起=冷启纯白屏（连「加载中」都不出）；笔记路由走下方 cache-first 分支的 fetch 同理。
+  // 超时 abort 后按各自原兜底落缓存，白屏最长 10 秒必破。
+  function fetchTO(req, ms) {
+    var c = new AbortController();
+    var t = setTimeout(function () { try { c.abort(); } catch (e) {} }, ms);
+    return fetch(req, { signal: c.signal }).finally(function () { clearTimeout(t); });
+  }
+  // index.html：网络优先（10s 超时），失败/超时回退缓存（在线时顺带刷新缓存）
   if (url.pathname === '/' || url.pathname === '/index.html') {
     e.respondWith(
-      fetch(e.request).then(r => {
+      fetchTO(e.request, 10000).then(r => {
         const copy = r.clone();
         caches.open(CACHE).then(c => c.put('/index.html', copy)).catch(() => {});
         return r;
@@ -59,8 +67,8 @@ self.addEventListener('fetch', e => {
     );
     return;
   }
-  // 其他静态资源：缓存优先
+  // 其他静态资源：缓存优先，网络兜底同样 10s 超时
   e.respondWith(
-    caches.match(e.request).then(r => r || fetch(e.request).catch(() => caches.match('/index.html')))
+    caches.match(e.request).then(r => r || fetchTO(e.request, 10000).catch(() => caches.match('/index.html')))
   );
 });
