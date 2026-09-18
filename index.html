@@ -818,7 +818,7 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '9.5.1';
+const APP_VERSION = '9.5.2';
 const BUILD_DATE = '2026-09-19';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
@@ -6955,9 +6955,9 @@ async function nsUpdInstall(br, path) {
     updMsg('在设置里允许「安装未知应用」后，回到这里再点一次', true);
     return;
   }
-  y.disabled = false; y.textContent = '重新拉起安装';
+  y.disabled = false; y.textContent = '立即安装';
   if (!r || !r.ok) { updMsg('安装页没拉起来：' + ((r && r.error) || '未知原因'), true); return; }
-  updMsg('安装页已打开：点「安装」即覆盖升级，笔记数据不会丢');
+  updMsg('点「立即安装」升级，笔记和数据都会保留');
 }
 $('#aboutUpd').addEventListener('click', () => { try { nsCheckUpdate(); } catch (e) {} });
 // 闸R2-P1：关窗不 clearInterval——DownloadManager 还在跑，掐了轮询就是「关窗失联、APK 滞留」；
