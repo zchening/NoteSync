@@ -246,6 +246,6 @@ test('G9c nsVerCmp 语义：段比大小、缺段按 0、相等 0', t => {
   const w = app.window;
   assert.ok(w.eval('nsVerCmp("9.3.0","9.2.9")') > 0);
   assert.ok(w.eval('nsVerCmp("9.3","9.3.0")') === 0, '缺段按 0——9.3 不比 9.3.0 旧');
-  assert.ok(w.eval('nsVerCmp("10.0.0","9.99.99")') > 0, '十位段不许按字符串比');
+  assert.ok(w.eval('nsVerCmp("10.0.1","9.99.99")') > 0, '十位段不许按字符串比');
   assert.ok(w.eval('nsVerCmp("v9.3.1".replace(/^v/,""),"9.3.0")') > 0);
 });

@@ -55,9 +55,9 @@ test('v9.5.8 ④：安装卡=浮卡语言四 id 齐、双出口语义分死（�
 });
 
 test('v9.5.8 三 bump + 双壳一致', () => {
-  assert.ok(SRC.includes("const APP_VERSION = '10.0.0';"), 'APP_VERSION 9.5.8');
-  assert.ok(GRADLE.includes('versionCode 1000') && GRADLE.includes('versionName "10.0.0"'), 'gradle 958/9.5.8');
-  assert.ok(MCP.includes("version: '10.0.0'"), 'mcp serverInfo 9.5.8');
+  assert.ok(SRC.includes("const APP_VERSION = '10.0.1';"), 'APP_VERSION 9.5.8');
+  assert.ok(GRADLE.includes('versionCode 1001') && GRADLE.includes('versionName "10.0.1"'), 'gradle 958/9.5.8');
+  assert.ok(MCP.includes("version: '10.0.1'"), 'mcp serverInfo 9.5.8');
   assert.strictEqual(SHELL_WWW.replace(/\r\n/g, '\n'), SRC.replace(/\r\n/g, '\n'), 'www 壳一致');
   assert.strictEqual(SHELL_APK.replace(/\r\n/g, '\n'), SRC.replace(/\r\n/g, '\n'), 'APK 内置壳一致');
 });

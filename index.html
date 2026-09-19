@@ -873,7 +873,7 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '10.0.0';
+const APP_VERSION = '10.0.1';
 const BUILD_DATE = '2026-09-19';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
@@ -2767,7 +2767,8 @@ async function renderNotePng() {
   if (noteId) {
     const stamp = document.createElement('span');
     stamp.textContent = noteId;
-    stamp.style.cssText = 'font:11px/1 var(--mono);color:var(--muted);letter-spacing:.12em;opacity:.6;white-space:nowrap;max-width:45%;overflow:hidden;text-overflow:ellipsis';
+    // v10.0.1：行高 1→1.6——盒子高=字号时 g/p/q/y/j 下伸半截被 overflow:hidden（省略号承重）连 html2canvas 一起裁掉（用户实拍「字母下半显示不全」）
+    stamp.style.cssText = 'font:11px/1.6 var(--mono);color:var(--muted);letter-spacing:.12em;opacity:.6;white-space:nowrap;max-width:45%;overflow:hidden;text-overflow:ellipsis';
     head.appendChild(stamp);
   }
 
@@ -7126,7 +7127,16 @@ async function nsPrefetchUpdate() {
     let apk = null; (o.assets || []).forEach(a => { if (!apk && /\.apk$/i.test(a.name || '')) apk = a; });
     if (!tag || !apk || !apk.browser_download_url) return;
     if (nsVerCmp(tag, base) <= 0) return;                     // 无新版
-    if (window.__prefetchTag === tag) return; window.__prefetchTag = tag; // 本会话该版本只预下一次，避免重复撤单重下
+    // v10.0.1：预下载让位手动——①内存标记冷启动即清零，6s 预下载常与进行中的手动下载撞车（同 url 互撤单=「下载被取消」根因之一）；
+    // 改 localStorage 落盘，同版本跨会话只预下一次的语义不变且真生效。②手动下载在跑或更新弹窗开着 → 本轮预下载直接退出。
+    if (window.__updBusy) return;
+    if (!document.getElementById('updMask').classList.contains('hidden')) return;
+    const PT = 'notesync_prefetch_tag';
+    let doneTag = '';
+    try { doneTag = localStorage.getItem(PT) || ''; } catch (e) {}
+    if (!doneTag) doneTag = window.__prefetchTag || ''; // 隐私模式写不进时的内存档回读（写而不读=死值）
+    if (doneTag === tag) return;
+    try { localStorage.setItem(PT, tag); } catch (e) { window.__prefetchTag = tag; } // 隐私模式写不进退回内存档
     await br.downloadApk({ url: apk.browser_download_url, tag, expectedBytes: apk.size || 0, wifiOnly: true }).catch(() => null); // 静默、仅 Wi‑Fi、失败不提示；v9.5.4 带精确字节
   } catch (e) {}
 }
@@ -7142,21 +7152,23 @@ async function nsUpdDownload(url, tag, size) {
   }
   const y = $('#updYes'); y.disabled = true; y.textContent = '准备下载…';
   $('#updProg').classList.remove('hidden'); $('#updBar').style.width = '0';
+  window.__updBusy = true; // v10.0.1：手动下载在跑——6s 预下载见此标记直接让位，不再同 url 互撤单
   const res = await br.downloadApk({ url, tag, expectedBytes: size || 0 }).catch(() => null); // v9.5.4：expectedBytes 精确校验，坏缓存文件不再被复用
-  if (!res || !res.ok) { y.disabled = false; y.textContent = '重试'; updMsg('下载启动失败：' + ((res && res.error) || '桥无应答'), true); return; }
-  if (res.reused && res.path) { $('#updBar').style.width = '100%'; nsUpdInstall(br, res.path); return; } // 闸R2-P1：下过的 APK 秒回直通安装，不「撤单从零重下」
+  if (!res || !res.ok) { window.__updBusy = false; y.disabled = false; y.textContent = '重试'; updMsg('下载启动失败：' + ((res && res.error) || '桥无应答'), true); return; }
+  if (res.reused && res.path) { window.__updBusy = false; $('#updBar').style.width = '100%'; nsUpdInstall(br, res.path); return; } // 闸R2-P1：下过的 APK 秒回直通安装，不「撤单从零重下」
+  // v10.0.1 attached：同 url 已有在跑下载单（预下载先发车/重复点），原生桥挂接旧单不再撤单重下——下面照常轮询 res.id
   y.textContent = '下载中…';
   clearInterval(updTimer);
   updTimer = setInterval(async () => {
     const st = await br.downloadState({ id: res.id }).catch(() => null);
     if (!st || !st.ok) return; // 单次查询失败不打断，下一拍再问
     if (st.status === 'done') {
-      clearInterval(updTimer); $('#updBar').style.width = '100%';
+      clearInterval(updTimer); window.__updBusy = false; $('#updBar').style.width = '100%';
       nsUpdInstall(br, st.path || res.path);
     } else if (st.status === 'failed' || st.status === 'gone') {
-      clearInterval(updTimer); y.disabled = false; y.textContent = '重试下载';
-      y.onclick = () => nsUpdDownload(url, tag);
-      updMsg(st.status === 'gone' ? '下载被取消了，点重试' : '下载失败，点重试', true);
+      clearInterval(updTimer); window.__updBusy = false; y.disabled = false; y.textContent = '重试下载';
+      y.onclick = () => nsUpdDownload(url, tag, size); // v10.0.1：旧版漏传 size——重试时 expectedBytes=0 退「>1MB 即复用」，截断坏件被直通安装（packageInfo is null 死循环根因）
+      updMsg(st.status === 'gone' ? '下载被取消了（网络切换或下载单被清理），点重试' : '下载失败' + (st.error ? '（' + st.error + '）' : '') + '，点重试', true); // v10.0.1：reason 码上屏，黑盒变线索
     } else if (st.total > 0) {
       const pc = Math.min(99, Math.round(st.downloaded / st.total * 100));
       $('#updBar').style.width = pc + '%';

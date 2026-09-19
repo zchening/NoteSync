@@ -24,7 +24,10 @@ test('V2 A PC/移动统一金胶囊 pill：nsAskConfirm 不再按 CHIP_HOVER_OK 
 test('V3 B web：冷启动静默预下载钩子 + wifiOnly + 仅一次', () => {
   assert.ok(SRC.includes('async function nsPrefetchUpdate()'), '须有 nsPrefetchUpdate 预下载函数');
   assert.ok(SRC.includes('br.downloadApk({ url: apk.browser_download_url, tag, expectedBytes: apk.size || 0, wifiOnly: true })'), '预下须带 wifiOnly:true + v9.5.4 expectedBytes 精确校验');
-  assert.ok(SRC.includes('window.__prefetchTag === tag') && SRC.includes('setTimeout(nsPrefetchUpdate,'), '本会话同版本只预下一次 + 冷启动延时触发');
+  // v10.0.1 契约翻转：「仅一次」标记由内存档改 localStorage 落盘（内存档冷启动清零=形同虚设），并让位在跑手动下载
+  assert.ok(SRC.includes("if (doneTag === tag) return;") && SRC.includes("'notesync_prefetch_tag'") && SRC.includes('setTimeout(nsPrefetchUpdate,'), '同版本只预下一次（localStorage 落盘）+ 冷启动延时触发');
+  assert.ok(SRC.includes('if (window.__updBusy) return;'), '预下载必须让位进行中的手动下载（同 url 互撤单=「下载被取消」根因）');
+  assert.ok(!SRC.includes('window.__prefetchTag === tag'), '禁回潮：仅内存标记判「本会话只预下一次」');
   assert.ok(SRC.includes('if (nsVerCmp(tag, base) <= 0) return;'), '无新版须直接返回，不预下');
 });
 

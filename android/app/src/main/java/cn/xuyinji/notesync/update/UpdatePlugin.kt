@@ -76,6 +76,15 @@ class UpdatePlugin : Plugin() {
             val safeTag = rawTag.replace(Regex("[^A-Za-z0-9._-]"), "_")
                 .ifEmpty { SimpleDateFormat("yyyyMMddHHmmss", Locale.US).format(Date()) }
             val f = File(dir, "notesync-$safeTag.apk")
+            // v10.0.1 在跑单接管（「下载被取消了」根修）：同 url/同目标文件已有未完成下载单（预下载先发车、用户重复点、
+            // 或进程重启后 urlToId 内存映射清零）——直接返回在跑单 id 让 JS 接着轮询。旧行为「撤旧单+删正在写的半成品+从零重下」
+            // 让撞车的另一方立即 gone，删文件那一枪还会把没人撞的下载写成截断件（v9.5.4 尺寸闸兜住也只剩报 failed 重来）。
+            findActiveTask(dm, url, f.absolutePath)?.let { activeId ->
+                urlToId[url] = activeId
+                idToPath[activeId] = f.absolutePath
+                ret.put("ok", true); ret.put("attached", true); ret.put("id", activeId); ret.put("path", f.absolutePath)
+                call.resolve(ret); return
+            }
             // R2 闸 P1：同 url 重复调用不再「撤单+删文件+从零重下」——已下完的 APK 直接复用秒回（重进弹窗点更新不再是哑弹重跑）。
             // v9.5.4：带 expectedBytes 时精确相等才复用；大小不符＝截断/混装坏文件，删掉重下（旧「>1MB 即复用」会把坏文件永占缓存致 packageInfo is null 死循环）。
             if (f.exists()) {
@@ -84,7 +93,7 @@ class UpdatePlugin : Plugin() {
                         ret.put("ok", true); ret.put("reused", true); ret.put("path", f.absolutePath); ret.put("bytes", f.length())
                         call.resolve(ret); return
                     }
-                    try { f.delete() } catch (e: Exception) {} // 坏文件即删，下面走全新下载
+                    try { f.delete() } catch (e: Exception) {} // 坏文件即删——上文在跑单接管已保证此刻绝没有写到一半的活单
                 } else if (f.length() > 1_000_000L) {
                     ret.put("ok", true); ret.put("reused", true); ret.put("path", f.absolutePath); ret.put("bytes", f.length())
                     call.resolve(ret); return
@@ -94,7 +103,7 @@ class UpdatePlugin : Plugin() {
                 ret.put("ok", false); ret.put("wifi", false); ret.put("error", "not-wifi")
                 call.resolve(ret); return
             }
-            // 半成品残留：撤旧任务 + 删截断文件，再重下
+            // v10.0.1：能走到这里＝无在跑单（findActiveTask 已接管）。撤的只会是终态旧单、删的只会是终态残件，再全新下载。
             urlToId[url]?.let { oldId ->
                 try { dm.remove(oldId) } catch (e: Exception) { /* 旧任务已终态，撤不掉也不碍事 */ }
                 if (f.exists()) try { f.delete() } catch (e: Exception) {}
@@ -130,6 +139,36 @@ class UpdatePlugin : Plugin() {
             val cap = cm.getNetworkCapabilities(net) ?: return false
             cap.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
         } catch (e: Exception) { false }
+    }
+
+    // v10.0.1：本 App 是否有该 url/该落盘路径的未完成下载单（pending/running/paused），有则返回其 id。
+    // 进程重启后 urlToId 内存映射清零，靠这里兜底找回在跑单：dm.query 不带 setFilterById 只回本应用自己的下载，
+    // 无需 ACCESS_ALL_DOWNLOADS 权限。COLUMN_URI=远端 url，COLUMN_LOCAL_URI=落盘 file://（DownloadManager 自记）。
+    // 查询抛异常按「无在跑单」处理——退回全新下载老路，最坏不过从零重下一趟，不会比旧版更坏。
+    private fun findActiveTask(dm: DownloadManager, url: String, destPath: String): Long? {
+        var cur: Cursor? = null
+        try {
+            cur = dm.query(DownloadManager.Query())
+            val iId = cur.getColumnIndex(DownloadManager.COLUMN_ID)
+            val iSt = cur.getColumnIndex(DownloadManager.COLUMN_STATUS)
+            if (iId < 0 || iSt < 0) return null
+            val iUrl = cur.getColumnIndex(DownloadManager.COLUMN_URI)
+            val iLoc = cur.getColumnIndex(DownloadManager.COLUMN_LOCAL_URI)
+            while (cur.moveToNext()) {
+                val st = cur.getInt(iSt)
+                if (st != DownloadManager.STATUS_PENDING && st != DownloadManager.STATUS_RUNNING && st != DownloadManager.STATUS_PAUSED) continue
+                val remote = if (iUrl >= 0) cur.getString(iUrl) else null
+                if (remote == url) return cur.getLong(iId)
+                val loc = if (iLoc >= 0) cur.getString(iLoc) else null
+                val locPath = if (loc != null && loc.startsWith("file://")) Uri.parse(loc).path else loc
+                if (locPath != null && locPath == destPath) return cur.getLong(iId)
+            }
+        } catch (e: Exception) {
+            /* 查询失败＝无在跑单，走全新下载 */
+        } finally {
+            try { cur?.close() } catch (e: Exception) {}
+        }
+        return null
     }
 
     /** downloadState({id}) → {ok, status:'pending'|'running'|'done'|'failed'|'gone', downloaded, total, path}
