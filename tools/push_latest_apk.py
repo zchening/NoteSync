@@ -37,6 +37,11 @@ APK_CACHE_DIR = os.path.join(REPO, "_apkdl")
 
 
 def _run(cmd, **kw):
+    # v10.0.0：text 模式按 locale 解码子进程输出——远端 certutil 的中文表头是 GBK 字节，
+    # 本地用 python -X utf8 跑就会解码失败（表现为 subprocess 内部 IndexError），
+    # 上传明明全绿、却崩在最后一步校验。文本模式统一 errors='replace' 容错。
+    if 'errors' not in kw:
+        kw['errors'] = 'replace'
     return subprocess.run(cmd, shell=isinstance(cmd, str), capture_output=True, text=True, **kw)
 
 
@@ -244,9 +249,19 @@ def deploy_to_server(latest_json_local, apk_local, tag=None):
     o = ssh_run('curl -s -o NUL -w "%{http_code}" http://localhost:8080/dl/latest.apk')
     print("[verify] /api/latest -> %s；版本副本 HEAD=%s；/dl/latest.apk HEAD=%s" % (got, o2, o))
     chk_file = ("%s.apk" % tag) if (tag and _re.match(r"^v\d+(?:\.\d+)*$", tag)) else "latest.apk"
-    o = ssh_run('certutil -hashfile C:\\Services\\NoteSync\\apk\\' + chk_file + ' SHA256')
-    remote_sha = "".join(ch for ch in o if ch in "0123456789abcdefABCDEF")
-    print("[verify] 服务器 %s sha256=%s" % (chk_file, remote_sha[-64:]))
+    # v10.0.0 修两处：①原来把 certutil 中文表头里的字母也当十六进制字符拼进去，取末 64 位得到污染串
+    # （实测一次成功上传被它报成不一致）——只认独立的 64 位十六进制串；
+    # ②更严重的是这一步过去只 print、从不 assert，「服务器 sha256==本地」从来是靠人肉眼看的闸。
+    # 现在真比对并判红，且把覆盖式 latest.apk 一并验，杜绝两个文件不同步。
+    local_sha = sha256(apk_local)
+    for f in filter(None, {chk_file, "latest.apk"}):
+        raw = ssh_run('certutil -hashfile C:\\Services\\NoteSync\\apk\\' + f + ' SHA256')
+        cand = _re.findall(r"[0-9a-fA-F]{64}", raw)
+        assert cand, "无法从 certutil 输出解析出 sha256（%s）：%s" % (f, raw[:160])
+        remote_sha = cand[0].lower()
+        print("[verify] 服务器 %s sha256=%s" % (f, remote_sha))
+        assert remote_sha == local_sha, "服务器 %s 与本地 APK sha256 不一致（%s ≠ %s）——OTA 未真正到位" % (f, remote_sha[:12], local_sha[:12])
+    print("[verify] 本地 sha256=%s；%s 与 latest.apk 均一致" % (local_sha[:12], chk_file))
 
 
 def main():
