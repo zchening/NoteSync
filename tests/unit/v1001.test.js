@@ -49,9 +49,9 @@ test('V1001-C web 侧撞车三修：busy 标记、重试补 size、reason 上屏
 });
 
 test('V1001-D 三 bump 10.0.1 + 双壳逐字节', () => {
-  assert.ok(SRC.includes("const APP_VERSION = '10.0.1';"), 'APP_VERSION 应 10.0.1');
-  assert.ok(GRADLE.includes('versionCode 1001') && GRADLE.includes('versionName "10.0.1"'), 'gradle 应 1001/10.0.1');
-  assert.ok(MCP.includes("version: '10.0.1'"), 'MCP serverInfo 应 10.0.1');
+  assert.ok(SRC.includes("const APP_VERSION = '10.0.2';"), 'APP_VERSION 应 10.0.1');
+  assert.ok(GRADLE.includes('versionCode 1002') && GRADLE.includes('versionName "10.0.2"'), 'gradle 应 1001/10.0.1');
+  assert.ok(MCP.includes("version: '10.0.2'"), 'MCP serverInfo 应 10.0.1');
   const a = fs.readFileSync(path.join(ROOT, 'www/index.html'));
   const b = fs.readFileSync(path.join(ROOT, 'android/app/src/main/assets/public/index.html'));
   const c = fs.readFileSync(path.join(ROOT, 'index.html'));

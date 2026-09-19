@@ -27,6 +27,8 @@ test('exportImage 走同源懒加载 loadHtml2Canvas', () => {
   assert.ok(src.includes('!(await loadHtml2Canvas())'), 'exportImage 应先 await loadHtml2Canvas 再判定');
   assert.ok(!src.includes("'图片导出组件未加载'"), '旧的「未加载」死逻辑应移除');
   assert.ok(src.includes('图片导出组件加载失败'), '加载失败时给明确的网络类提示文案');
+  assert.ok(src.includes('function prefetchHtml2CanvasIdle()'), 'v10.0.2 空闲预取在位（首次导出零下载等待）');
+  assert.ok(src.includes('if (window.__h2cLoading) { window.__h2cLoading.push(resolve); return; }'), 'v10.0.2 预取与点击并发在途去重（只挂一个 <script>）');
 });
 
 test('server.js 有 /html2canvas.min.js 同源路由（immutable 长缓存）', () => {

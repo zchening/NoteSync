@@ -873,8 +873,8 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '10.0.1';
-const BUILD_DATE = '2026-09-19';
+const APP_VERSION = '10.0.2';
+const BUILD_DATE = '2026-09-20';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
 let nsSkin = 0;
@@ -2615,19 +2615,42 @@ copyBtn.addEventListener('click', async () => {
 function loadHtml2Canvas() {
   return new Promise(resolve => {
     if (typeof window.html2canvas === 'function') return resolve(true);
+    if (window.__h2cLoading) { window.__h2cLoading.push(resolve); return; } // v10.0.2 预取与点击并发只挂一个 <script>
+    window.__h2cLoading = [resolve];
+    const done = ok => { const q = window.__h2cLoading || []; window.__h2cLoading = null; q.forEach(f => f(ok)); };
     const s = document.createElement('script');
     s.src = '/html2canvas.min.js';
     s.onload = () => {
       const ok = typeof window.html2canvas === 'function';
       if (!ok) console.error('[export] /html2canvas.min.js 已加载但 window.html2canvas 非函数（检查文件内容/UMD 形态）');
-      resolve(ok);
+      done(ok);
     };
     s.onerror = e => {
       console.error('[export] /html2canvas.min.js 加载失败（服务端未部署该文件 / 断网 / CSP script-src 缺 \'self\'）', e);
-      resolve(false);
+      done(false);
     };
     document.head.appendChild(s);
   });
+}
+// v10.0.2 提速①：空闲预取同源导出组件（同 URL 浏览器去重，点击导出时零下载等待）；失败静默，点击时懒加载兜底照旧
+(function prefetchHtml2CanvasIdle() {
+  const go = () => { try { loadHtml2Canvas().catch(() => {}); } catch (e) {} };
+  try {
+    if (typeof window.requestIdleCallback === 'function') requestIdleCallback(go, { timeout: 4000 });
+    else setTimeout(go, 3000);
+    setTimeout(go, 8000); // 移动内核 rIC 可能不来：双保险，重复调用同 URL 去重无害
+  } catch (e) { go(); }
+})();
+// v10.0.2 导出图页脚随机句池（用户拍板 16 句全留）：品牌原句放两份＝×2 权重（约 1/9 概率），其余各一份
+const EXPORT_TAGLINES = [
+  '记录，自有回响', '记录，自有回响',
+  '一字一句，皆有归处', '日常琐碎，亦是珍藏', '纸上烟火，人间自留', '微言可存，长夜不孤',
+  '心事入册，岁月成篇', '写字的人，不慌张', '落笔，心就安了', '慢慢写，不着急',
+  '落笔，自有归处', '写下，即成过往', '一言，可抵千日', '此刻，来日相见',
+  '微末，亦是山河', '独语，自成天地', '凡记，皆不虚行'
+];
+function pickExportTagline() {
+  return EXPORT_TAGLINES[Math.floor(Math.random() * EXPORT_TAGLINES.length)];
 }
 async function exportImage() {
   dismissKeyboardForTouch(); // v9.5.1 移动端报障根修：导出钮原是全排唯一不收键盘的顶栏动作——光标在正文时点导出，pointerdown 的 preventDefault 令编辑器不失焦、渲染几秒键盘一直挂着（观感=「导出把键盘打开」）。入口同步 blur 收一次，桌面/组字期 no-op。
@@ -2816,20 +2839,58 @@ async function renderNotePng() {
   wm.appendChild(wmB);
   foot.appendChild(wm);
   const tail = document.createElement('span');
-  tail.textContent = '记录，自有回响';
-  tail.style.cssText = 'margin-left:auto;font:10.5px/1 var(--mono);color:var(--muted);opacity:.7;letter-spacing:.22em;white-space:nowrap';
+  tail.textContent = pickExportTagline(); // v10.0.2 随机句池（原句 ×2 权重）
+  // v10.0.2（用户拍板 C+D 合体）：大字距观感保住，窄卡放不下先整句右对齐折两行（C），两行仍容纳不下才 ellipsis 截尾（D）；
+  // 358px 现状手机档实测页脚 266px < 可用 322px，单行如常，仅 288 级极端档触发折行。行高 1→1.7 防两行贴线。
+  tail.style.cssText = 'margin-left:auto;font:10.5px/1.7 var(--mono);color:var(--muted);opacity:.7;letter-spacing:.22em;text-align:right;min-width:64px;max-height:3.4em;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2';
   foot.appendChild(tail);
 
   mat.appendChild(head); mat.appendChild(tmp); mat.appendChild(foot);
   wrap.appendChild(mat);
+  // v10.0.2（用户拍板丙·恒定展开）：折叠在导出图里显示为 ▼ + 正文全量可见。三角 CSS 原锁 #editor 作用域，
+  // 离屏副本吃不到 → [折叠] 原样成字（用户报障）。这里挂一段只作用于导出副本的作用域样式：
+  // 选择器走 [data-ns-export] 属性（编辑器 DOM 永无此属性，零渗透），画法与 #editor .ns-fold-mark 逐字同源、
+  // 颜色只吃 --muted/--line 令牌；间隙 7px 必须用 px——em 在 font-size:0 的标记上归零（mockup 实锤）。
+  wrap.classList.add('ns-export');
+  tmp.querySelectorAll('.ns-fold-mark').forEach(mk => { mk.setAttribute('data-ns-export', '1'); });
+  const foldCss = document.createElement('style');
+  foldCss.textContent =
+    '[data-ns-export]{font-size:0;margin-right:7px;color:var(--muted)}' + // R2-P2：编辑器 ▼ 吃 --muted，导出同款（否则继承正文 ink 色）
+    '[data-ns-export]::before{content:"\\25BC";font-size:12px;line-height:1.9;vertical-align:baseline}' +
+    '.ns-export .ns-fold-hide{display:block}';
+  wrap.insertBefore(foldCss, wrap.firstChild); // v10.0.2 实锤：挂 head 时 SVG 快路序列化前已被拆/foreignObject 看不见页面样式——常驻副本子树随 clone 序列化进 SVG，两路同源
   // 闸 R2-P1 根修：借壳（国产强制反色）的 SHELL_CSS 给 img,canvas 钉了 filter:invert(1)!important，
   // html2canvas 从 wrap 起渲会无视祖先整层反色、却忠实执行图片自身 filter——不钉回去，借壳态导出
   // 图里的正文图会比卡片底多翻一次色。内联 !important 压过样式表 !important，非借壳态为无害 no-op。
   wrap.querySelectorAll('img,canvas').forEach(el => el.style.setProperty('filter', 'none', 'important'));
   document.body.appendChild(wrap);
 
-  await new Promise(r => setTimeout(r, 50));
+  try {
+    // v10.0.2 提速②：布局落定改双 rAF（与 60ms 定时器赛跑，无 rAF 环境/jsdom 不挂）；卡内图片先 decode()
+    // 预解码再进渲染器，html2canvas 不再边解边画（多图长笔记主要耗时点之一）。
+    await new Promise(r => {
+      let done = false; const fin = () => { if (!done) { done = true; r(); } };
+      try { requestAnimationFrame(() => requestAnimationFrame(fin)); } catch (e) {}
+      setTimeout(fin, 60);
+    });
+    try {
+      await Promise.all(Array.prototype.map.call(wrap.querySelectorAll('img'), im =>
+        (im.decode ? im.decode().catch(() => {}) : Promise.resolve())));
+    } catch (e) {}
 
+    // v10.0.2 提速③：Chromium 触屏（App 壳/移动浏览器）走 SVG foreignObject 原生光栅快路（比 html2canvas 快一个量级），
+    // 任何异常/空白/超时一律静默回退老链路；桌面与 jsdom 单测恒走老链路（scale:2 契约不变）。
+    const fastBlob = await renderNotePngFast(wrap);
+    if (fastBlob) return fastBlob;
+    return await renderNotePngSlow(wrap);
+  } finally {
+    // v10.0.2 闸修：wrap 拆除原只在老链路 finally 里——快路 return 时漏拆，每次手机导出在 body 泄漏一张离屏卡
+    try { wrap.removeChild(foldCss); } catch (e) {}
+    try { if (wrap.parentNode === document.body) document.body.removeChild(wrap); } catch (e) {}
+  }
+}
+
+async function renderNotePngSlow(wrap) {
   try {
     const canvas = await html2canvas(wrap, {
       backgroundColor: null, // 圆角外保持透明（外衬卡自带底色）
@@ -2845,6 +2906,111 @@ async function renderNotePng() {
   } finally {
     document.body.removeChild(wrap);
   }
+}
+
+// ── v10.0.2 提速③ SVG 快渲：仅 Chromium 触屏（App 壳/手机）启用；桌面、jsdom 单测、非 Blink 内核恒走老链路。
+// 原理：卡副本逐元素内联 computed 样式（白名单，零色值字面量——色全从 live computed 解析来）+ <img> 转 data URI，
+// 序列化进 <foreignObject> 由浏览器原生光栅一次成图；解码失败/空白/超时/跨域污染一律返回 null → 调用方回退 html2canvas。
+function nsExportFastEligible() {
+  try {
+    const ua = navigator.userAgent || '';
+    const chromium = /Chrome\/\d+/.test(ua) && !/Edg\/|EdgA\/|OPR\//.test(ua) && !/Firefox/.test(ua); // R2-P2：真 Edge 桌面 token 是 Edg/（旧正则 Edg\./ 永不命中=漏排除）
+    const coarse = typeof matchMedia === 'function' && matchMedia('(pointer:coarse)').matches;
+    return chromium && coarse;
+  } catch (e) { return false; }
+}
+const NS_EXPORT_INLINE_PROPS = ('display visibility opacity direction writing-mode font-family font-size font-style font-weight ' +
+  'line-height letter-spacing word-spacing text-align text-decoration text-decoration-color text-decoration-style text-decoration-line ' +
+  'text-indent text-overflow white-space word-break overflow-wrap color background-color background-image ' +
+  'width height padding padding-top padding-right padding-bottom padding-left margin margin-top margin-right margin-bottom margin-left ' +
+  'border border-top border-right border-bottom border-left border-top-left-radius border-top-right-radius border-bottom-left-radius border-bottom-right-radius ' +
+  'box-sizing flex flex-grow flex-shrink flex-basis flex-wrap align-items align-self justify-content gap vertical-align min-width max-width min-height max-height overflow transform').split(' ');
+function nsInlineFastStyles(src, dst) {
+  if (dst.nodeType === 3) return; // 文本节点原样
+  if (dst.nodeType !== 1) return;
+  if (dst.tagName === 'IMG') {
+    dst.setAttribute('style', 'max-width:100%;display:inline-block');
+    return; // 尺寸靠 width/height 属性兜底
+  }
+  const cs = getComputedStyle(src);
+  let s = '';
+  for (let i = 0; i < NS_EXPORT_INLINE_PROPS.length; i++) {
+    const p = NS_EXPORT_INLINE_PROPS[i];
+    let v = '';
+    try { v = cs.getPropertyValue(p); } catch (e) {}
+    if (v) s += p + ':' + v + ';';
+  }
+  if (dst.hasAttribute && dst.hasAttribute('data-ns-export')) s += 'margin-right:7px;font-size:0;'; // em 归零坑→px；▼ 由 foldCss（v10.0.2 起常驻 wrap 子树，随副本序列化进 foreignObject）画 ::before
+  if (src.tagName === 'svg' || (typeof dst.getBoundingClientRect === 'function' && src.tagName !== 'USE' && cs.width && cs.height && /svg/i.test(src.tagName))) {
+    try { dst.setAttribute('width', Math.round(src.getBoundingClientRect().width)); dst.setAttribute('height', Math.round(src.getBoundingClientRect().height)); } catch (e) {}
+  }
+  dst.setAttribute('style', s);
+  const sc = src.children; const dc = dst.children;
+  for (let i = 0; i < sc.length && i < dc.length; i++) nsInlineFastStyles(sc[i], dc[i]);
+}
+async function renderNotePngFast(wrap) {
+  try {
+    if (!nsExportFastEligible()) return null;
+    const w = wrap.offsetWidth, h = wrap.offsetHeight;
+    if (!w || !h || h > 8000) return null; // R2-P1-2：×2 后 16000 设备 px，远离 GPU 纹理极限（超长笔记恒走稳态老路）
+    const clone = wrap.cloneNode(true);
+    const imgs = [];
+    const sc = wrap.querySelectorAll('img'), dc = clone.querySelectorAll('img');
+    for (let i = 0; i < sc.length; i++) imgs.push(nsInlineFastImg(sc[i], dc[i]));
+    if ((await Promise.all(imgs)).includes(false)) return null;
+    nsInlineFastStyles(wrap, clone);
+    clone.style.position = 'static'; clone.style.left = 'auto'; clone.style.top = 'auto';
+    clone.style.width = w + 'px'; clone.style.height = h + 'px';
+    const xml = new XMLSerializer().serializeToString(clone);
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '">' +
+      '<foreignObject width="100%" height="100%">' + xml + '</foreignObject></svg>';
+    const b64 = await new Promise((res, rej) => {
+      const fr = new FileReader();
+      fr.onload = () => res(String(fr.result).split(',')[1]);
+      fr.onerror = () => rej(fr.error || new Error('svg b64 fail'));
+      fr.readAsDataURL(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }));
+    });
+    const img = new Image();
+    await new Promise((res, rej) => {
+      const t = setTimeout(() => rej(new Error('fast svg decode timeout')), 3000);
+      img.onload = () => { clearTimeout(t); res(); };
+      img.onerror = () => { clearTimeout(t); rej(new Error('fast svg decode fail')); };
+      img.src = 'data:image/svg+xml;base64,' + b64;
+    });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(w * 2); canvas.height = Math.round(h * 2); // 与老链路 scale:2 同清晰度
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    let px = ctx.getImageData(0, 0, Math.min(8, canvas.width), Math.min(8, canvas.height)).data;
+    let ink = false;
+    for (let i = 3; i < px.length; i += 4) { if (px[i] > 0) { ink = true; break; } }
+    if (ink) { // R2-P1-2：左上必有衬卡底色，单点采样拦不住「上半程画了、下半程残」——底部左角再采一带
+      px = ctx.getImageData(0, Math.max(0, canvas.height - 8), Math.min(8, canvas.width), Math.min(8, canvas.height)).data;
+      ink = false;
+      for (let i = 3; i < px.length; i += 4) { if (px[i] > 0) { ink = true; break; } }
+    }
+    if (!ink) return null; // 两带全透明=没画出来/半程残图，回退
+    const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+    return blob || null;
+  } catch (e) { return null; }
+}
+async function nsInlineFastImg(srcEl, dstEl) {
+  try {
+    const r = await fetch(srcEl.currentSrc || srcEl.src, { mode: 'cors', cache: 'force-cache' });
+    if (!r.ok) return false;
+    const b = await r.blob();
+    const du = await new Promise((res, rej) => {
+      const fr = new FileReader();
+      fr.onload = () => res(String(fr.result));
+      fr.onerror = () => rej(fr.error || new Error('img b64 fail'));
+      fr.readAsDataURL(b);
+    });
+    const rect = srcEl.getBoundingClientRect();
+    dstEl.setAttribute('src', du);
+    if (rect.width) dstEl.setAttribute('width', Math.round(rect.width));
+    if (rect.height) dstEl.setAttribute('height', Math.round(rect.height));
+    return true;
+  } catch (e) { return false; }
 }
 
 if (window.PointerEvent) {

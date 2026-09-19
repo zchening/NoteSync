@@ -26,7 +26,8 @@ test('v9.5.0 导出图：640 封顶 + 页头/页脚件在位，旧裸渲染禁�
   assert.ok(SRC.includes('width: wrap.offsetWidth'), '出图尺寸含边框，右/下 2px 不裁（闸 R2-P2）');
   assert.ok(SRC.includes('max-width:45%;overflow:hidden;text-overflow:ellipsis'), '长 noteId 刻印截断不撑爆页头（闸 R2-P2）');
   assert.ok(SRC.includes("createTextNode('来自 ')"), '水印字标「来自 」+b NoteSync');
-  assert.ok(SRC.includes("'记录，自有回响'"), '右下角 tagline 在位');
+  assert.ok(SRC.includes('const EXPORT_TAGLINES = ['), 'v10.0.2 右下角 tagline 改随机句池（原句在池内 ×2 权重）');
+  assert.strictEqual((SRC.match(/'记录，自有回响'/g) || []).length, 2, '品牌原句在池内放两份＝×2 权重');
   assert.ok(SRC.includes("· 星期"), '日期含星期且单行（nowrap 见 white-space:nowrap 组合）');
   assert.ok(!SRC.includes("width:' + editor.clientWidth + 'px;padding:' + cs.padding"), '旧「裸正文铺编辑器宽」渲染禁回潮');
 });
@@ -66,7 +67,10 @@ test('v9.5.0 导出图行为：结构齐、链接转纯文本、渲染后离屏�
   assert.ok(!bag.node.querySelector('a'), '链接转纯文本（旧预处理保留）');
   assert.ok(bag.node.querySelector('img').style.maxWidth === '100%', '图片限宽防溢出');
   assert.ok(txt.includes('来自 NoteSync') || (txt.includes('来自') && txt.includes('NoteSync')), '底部水印在图内');
-  assert.ok(txt.includes('记录，自有回响'), 'tagline 在图内');
+  assert.ok(SRC.slice(SRC.indexOf('const EXPORT_TAGLINES')).split('];')[0].includes('凡记，皆不虚行'), '句池常量在位');
+  const tailEl = bag.node.querySelector('span[style*="-webkit-line-clamp"]');
+  const pool = ['记录，自有回响', '一字一句，皆有归处', '日常琐碎，亦是珍藏', '纸上烟火，人间自留', '微言可存，长夜不孤', '心事入册，岁月成篇', '写字的人，不慌张', '落笔，心就安了', '慢慢写，不着急', '落笔，自有归处', '写下，即成过往', '一言，可抵千日', '此刻，来日相见', '微末，亦是山河', '独语，自成天地', '凡记，皆不虚行'];
+  assert.ok(tailEl && pool.includes(tailEl.textContent), 'tagline 在图内且必为句池成员（v10.0.2 随机）');
   assert.ok(/星期[日一二三四五六]/.test(txt), '日期星期在页头');
   assert.ok(!w.document.body.contains(bag.node), '渲染完离屏卡自拆，不留残骸');
   assert.strictEqual(ed(w).innerHTML, before, '正文存档零写入');

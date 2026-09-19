@@ -85,6 +85,14 @@ function startServer(opts = {}) {
     if (req.method === 'POST' && url.startsWith('/api/fail/')) return sendJSON(res, 200, { locked: false, count: 0 });
     if (req.method === 'GET' && url === '/healthz') { res.writeHead(200); res.end('ok'); return; }
 
+    // v10.0.2：懒加载库占位（红线15，同 e2e/server.js 口径）——空闲预取/导出懒加载都会请求 /html2canvas.min.js，
+    // 被 SPA 回退成 HTML 当经典 <script> 执行会恒定抛 Unexpected token '<' 污染 pageerror。
+    if (req.method === 'GET' && (url === '/html2canvas.min.js' || url === '/jsQR.js')) {
+      res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'no-cache' });
+      res.end('/*e2e stub: ' + url + ' intentionally undefined*/');
+      return;
+    }
+
     // SPA 回退 / 静态
     if (req.method === 'GET') {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache, no-store, must-revalidate' });

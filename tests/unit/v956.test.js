@@ -22,8 +22,8 @@ const SHELL_APK = fs.readFileSync(path.join(ROOT, 'android/app/src/main/assets/p
 test('v9.5.6 网页：landing sub=「落笔即心安」、旧功能句 sub 退役、三 bump 到位', () => {
   assert.ok(SRC.includes('<p class="sub">落笔即心安</p>'), 'landing sub 已换 slogan');
   assert.ok(!SRC.includes('<p class="sub">端到端加密 · 多设备同步</p>'), '旧功能句 sub 不残留（功能语义由底部信任行承载）');
-  assert.ok(SRC.includes("const APP_VERSION = '10.0.1';"), 'APP_VERSION 9.5.6');
-  assert.ok(GRADLE.includes('versionCode 1001') && GRADLE.includes('versionName "10.0.1"'), 'gradle 956/9.5.6');
+  assert.ok(SRC.includes("const APP_VERSION = '10.0.2';"), 'APP_VERSION 9.5.6');
+  assert.ok(GRADLE.includes('versionCode 1002') && GRADLE.includes('versionName "10.0.2"'), 'gradle 956/9.5.6');
 });
 
 test('v9.5.6 原生①：installSplashScreen 先于 super.onCreate、时间规则与 JS 逐字同、异常有 try 护栏', () => {
