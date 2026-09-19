@@ -166,7 +166,21 @@
   .confcard .conf-btns{display:flex;gap:10px}
   .confcard .conf-btns button{flex:1;min-height:44px;padding:12px 0;font-size:15px;color:var(--fg);background:none;border:1px solid var(--line);border-radius:10px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
   #remoteBar{top:96px} /* v5.56 远端冲突条：与草稿条同族错位，避免双条叠盖 */
-  #installBar{bottom:16px}
+  /* v9.5.8 安装引导升级：单行 hintbar 换扫码配对同款浮卡（圆角18+rise+衬线标题+细金线+反相主按钮）。
+     全令牌取色，随夜间/皮肤自动同权（hintbar 家族先例，不进三板名单）。 */
+  #installBar{position:fixed;left:50%;transform:translateX(-50%);bottom:16px;z-index:55;max-width:92vw}
+  #installBar.hidden{display:none}
+  .instcard{position:relative;background:var(--box-bg);border:1px solid var(--line);border-radius:18px;box-shadow:0 24px 70px rgba(20,20,18,.16);padding:20px 24px 18px;width:min(88vw,340px);text-align:center;animation:instRise .5s cubic-bezier(.2,.7,.3,1) both}
+  @keyframes instRise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+  .inst-logo{width:30px;height:30px;color:var(--accent);display:block;margin:0 auto 4px}
+  #installTitle{font-family:var(--serif);font-size:16.5px;font-weight:600;letter-spacing:.02em;color:var(--fg);-webkit-text-fill-color:var(--fg)}
+  #installTitle::after{content:'';display:block;width:52px;height:1px;background:var(--accent);margin:9px auto 0;opacity:.8}
+  #installMsg{font-size:12.5px;line-height:1.7;color:var(--muted);-webkit-text-fill-color:var(--muted);margin:10px 0 14px}
+  .inst-btns{display:flex;gap:10px}
+  .inst-btns button{flex:1;min-height:44px;padding:12px 0;font-size:15px;font-weight:500;border-radius:10px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;border:1px solid var(--line);background:none;color:var(--fg);-webkit-text-fill-color:var(--fg)}
+  .inst-btns button:active{opacity:.8}
+  #installGo{background:var(--fg);color:var(--bg);-webkit-text-fill-color:var(--bg);border-color:transparent}
+  #installGo.hidden{display:none}
   /* v5.40：到点提醒卡片对齐扫码配对弹窗（.box）视觉——圆角 18 / rise 入场 / 同款阴影与标题层级；
      不加遮罩：到点提醒是通知不是操作门槛，不打断正在输入的用户；颜色全走主题变量（--box-bg 不透明） */
   /* v5.44：remCard 必须用 remRise 专用入场——通用 rise 的 to 帧是 transform:none，
@@ -271,7 +285,7 @@
   #remBtn.on{color:var(--fg);background:var(--hover)}
   .hintbar button{flex-shrink:0;padding:4px 10px;font-size:12px;color:var(--fg);background:none;border:1px solid var(--line);border-radius:8px;cursor:pointer;transition:border-color .2s;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
   .hintbar button:hover{border-color:var(--muted)}
-  #installDismiss{border:0;padding:2px 6px;font-size:14px;color:var(--muted);display:inline-flex;align-items:center}
+  #installDismiss{position:absolute;top:8px;right:10px;border:0;padding:6px 8px;font-size:14px;color:var(--muted);-webkit-text-fill-color:var(--muted);display:inline-flex;align-items:center;background:none;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
   #installDismiss svg{width:13px;height:13px;display:block}
   /* v5.37：工具栏 8 个按钮（v5.34 曾加待办至 8，v5.36 加提醒至 9，v5.37 删待办回 8），
      360px 屏按原尺寸仍会溢出（40 padding + 17 brand + 90 gap + 8×31 = 395px > 360px），
@@ -594,7 +608,7 @@
     <path d="M18.72 16.96h2.2l6.16 11V16.96h2.2v14.08h-2.2l-6.16-11V31.04h-2.2Z" fill="currentColor"/>
   </svg>
   <h1>NoteSync</h1>
-  <p class="sub">落笔即安心</p>
+  <p class="sub">落笔即心安</p>
   <div class="input-row">
     <input id="landingInput" placeholder="笔记名（英文/数字）" maxlength="64" autocomplete="off">
     <button id="landingBtn" disabled>打开</button>
@@ -695,10 +709,17 @@
     <div class="conf-btns"><button type="button" id="remoteKeep">保留本机</button><button type="button" id="remoteTake">使用云端</button></div>
   </div>
 </div>
-<div id="installBar" class="hintbar hidden">
-  <span id="installMsg"></span>
-  <button type="button" id="installGo">安装</button>
-  <button type="button" id="installDismiss" title="不再提示" aria-label="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6.2 6.2 11.6 11.6"/><path d="M17.8 6.2 6.2 17.8"/></svg></button>
+<div id="installBar" class="hidden">
+  <div class="instcard">
+    <button type="button" id="installDismiss" title="不再提示" aria-label="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6.2 6.2 11.6 11.6"/><path d="M17.8 6.2 6.2 17.8"/></svg></button>
+    <svg class="inst-logo" viewBox="0 0 48 48" fill="none" aria-hidden="true"><g stroke="currentColor" stroke-width="3.6" stroke-linecap="round"><path d="M40.5 14.5A19 19 0 0 1 14.5 40.5"/><path d="M7.5 33.5A19 19 0 0 1 33.5 7.5"/></g><path d="M18.72 16.96h2.2l6.16 11V16.96h2.2v14.08h-2.2l-6.16-11V31.04h-2.2Z" fill="currentColor"/></svg>
+    <div id="installTitle">安装到主屏幕</div>
+    <p id="installMsg"></p>
+    <div class="inst-btns">
+      <button type="button" id="installGo">安装</button>
+      <button type="button" id="installLater">以后再说</button>
+    </div>
+  </div>
 </div>
 <div id="editor" data-ph="开始输入，自动同步到所有设备…" contenteditable="true"></div>
 <input type="file" id="fileInput" accept="image/*" style="display:none">
@@ -850,7 +871,7 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '9.5.7';
+const APP_VERSION = '9.5.8';
 const BUILD_DATE = '2026-09-19';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
@@ -4769,7 +4790,7 @@ $('#remoteTake').addEventListener('click', async () => {
 // Android/桌面 Chromium：beforeinstallprompt 触发 → [安装] 一键装
 // iOS：beforeinstallprompt 永不触发，只能走 Safari 分享菜单「添加到主屏幕」（如实提示，不装糊涂）
 // 已安装（standalone）/ 用户点过 × / 本次会话已弹过 → 不再弹；解锁后才弹，不在落地页打扰
-const installBar = $('#installBar'), installMsg = $('#installMsg'), installGo = $('#installGo'), installDismiss = $('#installDismiss');
+const installBar = $('#installBar'), installMsg = $('#installMsg'), installGo = $('#installGo'), installDismiss = $('#installDismiss'), installLater = $('#installLater');
 let deferredInstall = null;
 let installShownThisSession = false;
 function isStandaloneMode() {
@@ -4790,7 +4811,7 @@ function tryShowInstallBar() {
   if (!draftBar.classList.contains('hidden')) return; // 草稿冲突优先，不叠条
   installShownThisSession = true;
   if (deferredInstall) {
-    installMsg.textContent = '安装到主屏幕，像 App 一样打开';
+    installMsg.textContent = '像 App 一样打开：桌面直达、全屏输入、更新自动到位';
     installGo.classList.remove('hidden');
     installBar.classList.remove('hidden');
   } else if (isIOSDevice()) {
@@ -4803,6 +4824,10 @@ installGo.addEventListener('click', async () => {
   if (!deferredInstall) return;
   try { deferredInstall.prompt(); await deferredInstall.userChoice; } catch (e) {}
   deferredInstall = null;
+  installBar.classList.add('hidden');
+});
+// v9.5.8：「以后再说」只收本会话（installShownThisSession 已挡重弹），不写永久；× 才是「不再提示」
+installLater.addEventListener('click', () => {
   installBar.classList.add('hidden');
 });
 installDismiss.addEventListener('click', () => {
@@ -9868,6 +9893,18 @@ function rnd(a, b) { return a + Math.floor(Math.random() * (b - a + 1)); }
 function rf(a, b) { return a + Math.random() * (b - a); }
 function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 function rr(c, x, y, w, h, r) { c.beginPath(); if (c.roundRect) c.roundRect(x, y, w, h, r); else c.rect(x, y, w, h); }
+// v9.5.8：彩蛋画布品牌图章（tank 基地/bitcoin 创世块弃记事本纸片，改用产品标环+N）。
+// 小尺寸按分级规矩用无尖 F2 形态；两弧角度与 favicon 逐字同（-30°→120°、150°→300°）；
+// 颜色只吃令牌（P.ac 金），日夜与皮肤环自动同权。
+function nsBrandMark(c, P, x, y, r) {
+  c.save(); c.translate(x, y);
+  c.strokeStyle = P.ac; c.lineCap = 'round'; c.lineWidth = Math.max(1.4, r * .14);
+  c.beginPath(); c.arc(0, 0, r, -Math.PI / 6, Math.PI * 2 / 3); c.stroke();
+  c.beginPath(); c.arc(0, 0, r, Math.PI * 5 / 6, Math.PI * 10 / 6); c.stroke();
+  c.fillStyle = P.ac; c.font = '700 ' + (r * 1.05) + 'px Georgia,"Times New Roman",serif';
+  c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('N', 0, r * .06);
+  c.restore();
+}
 // v9.2.0：把笔记名画进小框时，旧版一律 `String(label).slice(0, 6)`——6 个汉字按 10px 就是 60px，
 // 塞进 52px 的障碍框必压出长方形（用户报 dragon 实锤）。截断必须看**量出来的宽度**而不是数字数：
 // 逐字回退到能容下「…」。调用前必须先设好 c.font（measureText 量的是当前字体）。
@@ -10373,8 +10410,7 @@ R(function () {
           c.strokeStyle = P.fg; c.setLineDash([2.6, 2.4]); c.strokeRect(-11, -8, 22, 16); c.setLineDash([]);
           c.strokeStyle = P.ac; c.beginPath(); c.moveTo(0, -8); c.lineTo(0, -14); c.stroke();
         } else {
-          c.strokeStyle = P.ac; c.fillStyle = P.soft; c.fillRect(-22, -14, 44, 28); c.strokeRect(-22, -14, 44, 28);
-          c.beginPath(); c.moveTo(-16, -6); c.lineTo(16, -6); c.moveTo(-16, 0); c.lineTo(6, 0); c.stroke();
+          nsBrandMark(c, P, 0, 0, 15);
         }
         c.restore();
       });
@@ -10386,7 +10422,7 @@ R(function () {
   };
 }());
 
-/* ═══ /tank 单屏 13×13 四向三关：基地是写着你笔记名的记事本 ═════════ */
+/* ═══ /tank 单屏 13×13 四向三关：基地=你的笔记（v9.5.8 起画品牌环+N 图章） ═════════ */
 R(function () {
   var N = 13, u = 26, map = [], me = null, foes = [], bullets = [], items = [], level = 1, left = 0, killT = 0, base = null, lives = 3, t = 0, shield = 0, freeze = 0, fireCd = .32, pet = null; // v9.4.0：桌宠躲某块可碎砖后，被拆即现形串下一块
   function brickCells() { var a = []; for (var yy = 0; yy < N; yy++) for (var xx = 0; xx < N; xx++) if (map[yy] && map[yy][xx] === 1) a.push({ x: xx, y: yy }); return a; }
@@ -10513,10 +10549,7 @@ R(function () {
         if (v === 2) { c.strokeStyle = P.fg; c.setLineDash([2.6, 2.4]); rr(c, px + 2, py + 2, u - 4, u - 4, 3); c.stroke(); c.setLineDash([]); }
         if (v === 3) { c.strokeStyle = P.ac; c.globalAlpha = gA(.75); c.lineWidth = 1.4; c.beginPath(); // 河：三道波纹，靠形态而非颜色与钢墙区分
           c.moveTo(px + 3, py + u * .38); c.lineTo(px + u - 3, py + u * .38); c.moveTo(px + 3, py + u * .58); c.lineTo(px + u - 3, py + u * .58); c.moveTo(px + 3, py + u * .78); c.lineTo(px + u - 3, py + u * .78); c.stroke(); c.globalAlpha = 1; }
-        if (v === 9) {
-          c.strokeStyle = P.ac; c.fillStyle = P.soft; rr(c, px + 1, py + 2, u - 2, u - 4, 3); c.fill(); c.stroke();
-          c.beginPath(); c.moveTo(px + 5, py + u * .45); c.lineTo(px + u - 5, py + u * .45); c.moveTo(px + 5, py + u * .68); c.lineTo(px + u * .6, py + u * .68); c.stroke();
-        }
+        if (v === 9) { nsBrandMark(c, P, px + u / 2, py + u / 2, u * .34); }
       }
       function tank(o, foe) {
         var px = ox + o.x * u, py = oy + o.y * u;

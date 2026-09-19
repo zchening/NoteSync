@@ -1,4 +1,4 @@
-// v9.5.6 守护：启动页纸墨化（用户拍板方案 A2 + slogan「落笔即安心」）——
+// v9.5.6 守护：启动页纸墨化（用户拍板方案 A2 + slogan「落笔即心安」）——
 // ①系统 SplashScreen 正规启用（纸底+带箭尖环，时间制 Day/Night 显式变体，install 先于 super.onCreate）；
 // ②原生 A2 幕布（环+字标+金细线+slogan 盖加载期，落地 250ms 淡出，12s 硬超时，错误页立即掀幕）；
 // ③网页首页 landing sub 换 slogan（功能句退役，信任行仍承载功能语义）。
@@ -19,11 +19,11 @@ const GRADLE = fs.readFileSync(path.join(ROOT, 'android/app/build.gradle'), 'utf
 const SHELL_WWW = fs.readFileSync(path.join(ROOT, 'www/index.html'), 'utf8');
 const SHELL_APK = fs.readFileSync(path.join(ROOT, 'android/app/src/main/assets/public/index.html'), 'utf8');
 
-test('v9.5.6 网页：landing sub=「落笔即安心」、旧功能句 sub 退役、三 bump 到位', () => {
-  assert.ok(SRC.includes('<p class="sub">落笔即安心</p>'), 'landing sub 已换 slogan');
+test('v9.5.6 网页：landing sub=「落笔即心安」、旧功能句 sub 退役、三 bump 到位', () => {
+  assert.ok(SRC.includes('<p class="sub">落笔即心安</p>'), 'landing sub 已换 slogan');
   assert.ok(!SRC.includes('<p class="sub">端到端加密 · 多设备同步</p>'), '旧功能句 sub 不残留（功能语义由底部信任行承载）');
-  assert.ok(SRC.includes("const APP_VERSION = '9.5.7';"), 'APP_VERSION 9.5.6');
-  assert.ok(GRADLE.includes('versionCode 957') && GRADLE.includes('versionName "9.5.7"'), 'gradle 956/9.5.6');
+  assert.ok(SRC.includes("const APP_VERSION = '9.5.8';"), 'APP_VERSION 9.5.6');
+  assert.ok(GRADLE.includes('versionCode 958') && GRADLE.includes('versionName "9.5.8"'), 'gradle 956/9.5.6');
 });
 
 test('v9.5.6 原生①：installSplashScreen 先于 super.onCreate、时间规则与 JS 逐字同、异常有 try 护栏', () => {
@@ -73,7 +73,7 @@ test('v9.5.6 资源：环=带箭尖全细节版、日夜色与 THEME_PALETTE 同
     assert.ok(logo.includes(hex), '主色 ' + hex);
   }
   assert.ok(COL.includes('#FBFBF8') && COL.includes('#0F0F11') && COL.includes('#1C1C1A') && COL.includes('#E9E8E3') && COL.includes('#98958A') && COL.includes('#7A786F'), '四对色与 THEME_PALETTE 逐值同');
-  assert.ok(STR.includes('<string name="splash_slogan">落笔即安心</string>'), 'slogan 资源与 landing 同词');
+  assert.ok(STR.includes('<string name="splash_slogan">落笔即心安</string>'), 'slogan 资源与 landing 同词');
 });
 
 test('v9.5.6 双壳一致：www 与 APK 内置壳 = 根 index.html 同字节（含 slogan+9.5.6）', () => {

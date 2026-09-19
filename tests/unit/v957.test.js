@@ -1,12 +1,13 @@
 // v9.5.7 守护：启动页真机三坑修复（用户选 A 案保留幕布）——
-// ①A12+ 把系统闪屏 AnimatedIcon 放大 288dp 套蒙版裁外圈 1/3，v9.5.6 满幅环被切成"角括号"
-//   → 新建中央 1/3 安全区素材 splash_icon_day/night（144 画布 group 平移 48），styles 改指；
-//   幕布继续用满幅 splash_logo_*（ImageView 无蒙版），两套素材各司其职。
+// ①A12+ 把系统闪屏 AnimatedIcon 放大 288dp 套蒙版裁外圈 1/3，v9.5.6 满幅环被切成"角括号"。
+//   v9.5.7 曾改中央 1/3 安全区素材；v9.5.8 甲案再进一步：闪屏纯纸底（透明空图），
+//   品牌只由幕布呈现一次，杜绝双源位置跳动。幕布满幅 splash_logo_* 不变。
 // ②CoordinatorLayout 默认子参数=WRAP_CONTENT×WRAP_CONTENT+左上 → 幕布塌左上窄条
 //   → 显式 MATCH_PARENT addView + 单列 LinearLayout 整体居中（v956 契约测已随版翻转）。
-// ③秒开时幕布叠在系统退场动画下 250ms 即掀，slogan 永不可见
-//   → 双条件揭幕（落地+250 与 首帧退场+450 取 max），首帧用 postFrameCallback 记时刻，
-//   禁 setOnExitAnimationListener（会接管吞掉系统 radial-wipe 退场）。
+// ③秒开时幕布叠在系统退场动画下即掀，slogan 永不可见
+//   → 双条件揭幕（落地+250 与 首帧退场+450 取 max），首帧 OnPreDrawListener 记时刻
+//   （postFrameCallback 在 CI android.jar 无符号，两度编译红后换），禁 setOnExitAnimationListener。
+// 注：本文件不钉 APP_VERSION/gradle 版本号（历版教训：版本断言归当期守护测 v958，防每版必红）。
 const { test } = require('node:test');
 const assert = require('node:assert');
 const fs = require('node:fs');
@@ -15,24 +16,21 @@ const path = require('node:path');
 const ROOT = path.resolve(__dirname, '..', '..');
 const ACT = fs.readFileSync(path.join(ROOT, 'android/app/src/main/java/cn/xuyinji/notesync/MainActivity.java'), 'utf8');
 const STY = fs.readFileSync(path.join(ROOT, 'android/app/src/main/res/values/styles.xml'), 'utf8');
-const ICON_DAY = fs.readFileSync(path.join(ROOT, 'android/app/src/main/res/drawable/splash_icon_day.xml'), 'utf8');
-const ICON_NIGHT = fs.readFileSync(path.join(ROOT, 'android/app/src/main/res/drawable/splash_icon_night.xml'), 'utf8');
+const EMPTY = fs.readFileSync(path.join(ROOT, 'android/app/src/main/res/drawable/splash_icon_empty.xml'), 'utf8');
 const LOGO_DAY = fs.readFileSync(path.join(ROOT, 'android/app/src/main/res/drawable/splash_logo_day.xml'), 'utf8');
 const SRC = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
-const GRADLE = fs.readFileSync(path.join(ROOT, 'android/app/build.gradle'), 'utf8');
 const SHELL_WWW = fs.readFileSync(path.join(ROOT, 'www/index.html'), 'utf8');
 const SHELL_APK = fs.readFileSync(path.join(ROOT, 'android/app/src/main/assets/public/index.html'), 'utf8');
 
-test('v9.5.7 素材分职：闪屏=中央1/3安全区版，幕布=满幅版，styles 指向正确', () => {
-  for (const [ic, hex] of [[ICON_DAY, '#8F7126'], [ICON_NIGHT, '#D4B068']]) {
-    assert.ok(ic.includes('android:width="144dp"') && ic.includes('android:viewportWidth="144"'), '144 画布');
-    assert.ok(ic.includes('android:translateX="48"') && ic.includes('android:translateY="48"'), '内容 group 平移 48 占中央 1/3（A12+ 288 足迹裁外圈 1/3 仍完整）');
-    assert.ok(ic.includes('M40.5,14.5A19,19 0 0,1 14.5,40.5') && ic.includes('M14.5,35.5v5h-5'), '带箭尖全细节几何与满幅版逐字同');
-    assert.ok(ic.includes(hex), '主色 ' + hex);
-  }
-  assert.ok(STY.includes('windowSplashScreenAnimatedIcon">@drawable/splash_icon_day'), '日主题指安全区版');
-  assert.ok(STY.includes('windowSplashScreenAnimatedIcon">@drawable/splash_icon_night'), '夜变体指安全区夜版');
-  assert.ok(!LOGO_DAY.includes('viewportWidth="144"'), '满幅版未被误改（幕布 96dp ImageView 用）');
+test('v9.5.7→8 素材链：闪屏=纯纸空图（显式给防 Launcher 回落），幕布=满幅版，安全区素材退役', () => {
+  assert.ok(EMPTY.includes('android:viewportWidth="144"'), '空图为 144 画布矢量');
+  assert.ok(!EMPTY.includes('<path'), '空图无任何 path（纯透明）');
+  assert.ok(STY.includes('windowSplashScreenAnimatedIcon">@drawable/splash_icon_empty'), '日主题指空图（缺省会回落 Launcher 图标，必须显式）');
+  assert.ok(!STY.includes('splash_icon_day') && !STY.includes('splash_icon_night'), '中央 1/3 素材已从主题退役');
+  assert.ok(!fs.existsSync(path.join(ROOT, 'android/app/src/main/res/drawable/splash_icon_day.xml')), 'splash_icon_day.xml 已删');
+  assert.ok(!fs.existsSync(path.join(ROOT, 'android/app/src/main/res/drawable/splash_icon_night.xml')), 'splash_icon_night.xml 已删');
+  assert.ok(STY.includes('windowSplashScreenBackground">@color/splash_bg_night'), '夜变体仍换纸夜色（只留底色差异）');
+  assert.ok(LOGO_DAY.includes('android:width="96dp"') && LOGO_DAY.includes('M14.5,35.5v5h-5'), '幕布满幅带尖版原样在位');
 });
 
 test('v9.5.7 揭幕调度：双条件取 max、未落地不调度、重排撤旧帖、退场只记不驱动', () => {
@@ -54,10 +52,9 @@ test('v9.5.7 构建失败不再静默：catch 记 Log.w', () => {
   assert.ok(ACT.includes('android.util.Log.w("NoteSync", "splash curtain build failed", t)'), '真机排查有痕');
 });
 
-test('v9.5.7 三 bump + 双壳 + slogan 未动', () => {
-  assert.ok(SRC.includes("const APP_VERSION = '9.5.7';"), 'APP_VERSION 9.5.7');
-  assert.ok(GRADLE.includes('versionCode 957') && GRADLE.includes('versionName "9.5.7"'), 'gradle 957/9.5.7');
-  assert.ok(SRC.includes('<p class="sub">落笔即安心</p>'), 'landing slogan 未动');
+test('v9.5.7 双壳一致 + slogan 两处同词（心安）', () => {
+  assert.ok(SRC.includes('<p class="sub">落笔即心安</p>'), 'landing slogan=心安');
+  assert.ok(ACT.includes('R.string.splash_slogan'), '幕布吃同一字符串资源');
   assert.strictEqual(SHELL_WWW.replace(/\r\n/g, '\n'), SRC.replace(/\r\n/g, '\n'), 'www 壳一致');
   assert.strictEqual(SHELL_APK.replace(/\r\n/g, '\n'), SRC.replace(/\r\n/g, '\n'), 'APK 内置壳一致');
 });

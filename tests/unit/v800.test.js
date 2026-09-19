@@ -46,7 +46,7 @@ test('D3 Unicode 字形收编：☰ 与 × 改绘 SVG，尺寸挂点入 CSS', ()
 test('D4 品牌环N几何一字未动（形制保留硬约束 + favicon 字节未改）', () => {
   const arcs = 'M40.5 14.5A19 19 0 0 1 14.5 40.5';
   const nPath = 'M18.72 16.96h2.2l6.16 11V16.96h2.2v14.08h-2.2l-6.16-11V31.04h-2.2Z';
-  assert.strictEqual((SRC.split(arcs).length - 1), 2, 'hero+header 双弧两处原样');
+  assert.strictEqual((SRC.split(arcs).length - 1), 3, 'hero+header+安装卡角标 三处原样（v9.5.8 安装卡入列）');
   assert.ok(SRC.includes(nPath), '衬线N原路径');
   assert.ok(FAV.includes(arcs) && FAV.includes(nPath) && FAV.includes('stroke-width="4.6"'), 'favicon 定稿未动（?v 保留正当）');
 });

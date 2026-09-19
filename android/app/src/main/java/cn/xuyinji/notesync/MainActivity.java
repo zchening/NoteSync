@@ -170,7 +170,7 @@ public class MainActivity extends BridgeActivity {
         // v9.5.7 启动页②：A2 原生幕布（重构，真机三坑见下）。环=满幅矢量 splash_logo_* 96dp，
         // 衬线字标 19sp+金细线 34dp+slogan 12sp 单列整体居中（色值同 THEME_PALETTE/DayNight 变体）。
         // 揭幕=页面落地≥250ms 且 首帧退场≥450ms 双条件（scheduleCurtainDrop），15s 硬超时兜底，
-        // 错误兜底页即掀；构建失败 Log.w 不再静默。系统闪屏另用中央 1/3 安全区素材 splash_icon_*。
+        // 错误兜底页即掀；构建失败 Log.w 不再静默。v9.5.8 起系统闪屏纯纸底（空图，甲案），品牌只幕布这一处。
         try {
             final float dens = getResources().getDisplayMetrics().density;
             android.widget.LinearLayout curtain = new android.widget.LinearLayout(this);
