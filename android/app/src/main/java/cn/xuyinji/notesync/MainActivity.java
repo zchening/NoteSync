@@ -228,7 +228,7 @@ public class MainActivity extends BridgeActivity {
                 }
             };
             if (android.os.Build.VERSION.SDK_INT >= 24) {
-                getWindow().getDecorView().postFrameCallback(new android.view.FrameCallback() {
+                getWindow().getDecorView().postFrameCallback(new android.view.Choreographer.FrameCallback() {
                     @Override public void doFrame(long frameTimeNanos) { markSplashExit.run(); }
                 });
             } else {
