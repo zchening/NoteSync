@@ -22,8 +22,8 @@ const SHELL_APK = fs.readFileSync(path.join(ROOT, 'android/app/src/main/assets/p
 test('v9.5.6 网页：landing sub=「落笔即安心」、旧功能句 sub 退役、三 bump 到位', () => {
   assert.ok(SRC.includes('<p class="sub">落笔即安心</p>'), 'landing sub 已换 slogan');
   assert.ok(!SRC.includes('<p class="sub">端到端加密 · 多设备同步</p>'), '旧功能句 sub 不残留（功能语义由底部信任行承载）');
-  assert.ok(SRC.includes("const APP_VERSION = '9.5.6';"), 'APP_VERSION 9.5.6');
-  assert.ok(GRADLE.includes('versionCode 956') && GRADLE.includes('versionName "9.5.6"'), 'gradle 956/9.5.6');
+  assert.ok(SRC.includes("const APP_VERSION = '9.5.7';"), 'APP_VERSION 9.5.6');
+  assert.ok(GRADLE.includes('versionCode 957') && GRADLE.includes('versionName "9.5.7"'), 'gradle 956/9.5.6');
 });
 
 test('v9.5.6 原生①：installSplashScreen 先于 super.onCreate、时间规则与 JS 逐字同、异常有 try 护栏', () => {
@@ -38,18 +38,23 @@ test('v9.5.6 原生①：installSplashScreen 先于 super.onCreate、时间规�
   assert.ok(ACT.includes('final boolean splashNight'), 'splashNight 声明一次供主题+幕布共用（与后文 bootNight 不重名）');
 });
 
-test('v9.5.6 原生②：A2 幕布契约——构建/上叠/落地250ms淡出/12s超时/错误页即掀/幂等旗标', () => {
+test('v9.5.6 原生②：A2 幕布契约（v9.5.7 重构版）——单列全屏/双条件揭幕/错误即掀/幂等旗标', () => {
   assert.ok(ACT.includes('splashCurtain = curtain') && ACT.includes('splashCurtainUp = true'), '幕布挂旗');
-  assert.ok(ACT.includes('R.string.splash_slogan') && ACT.includes('R.drawable.splash_logo_night'), '幕布吃 slogan 与夜环资源');
-  assert.ok(ACT.includes('}, 15000);'), '15s 硬超时兜底（覆盖 watchdog 6s+拦截器 3+6s 最坏路径）');
-  assert.ok(ACT.includes('(int)(92 * dens + 0.5f)'), '文块 topMargin=92dp（闸 R2-P1：CENTER+topMargin 全量下沉算式）');
-  assert.ok(!ACT.includes('174 * dens'), '174dp 错误算式禁回潮');
-  assert.ok(ACT.includes('}, 250);'), '落地 250ms 稳定期再掀幕');
-  assert.ok(ACT.includes('MainActivity.this.dropSplashCurtain()'), '匿名 client 内显式外嵌 this（历版 Toast 裸 this 教训）');
+  assert.ok(ACT.includes('R.string.splash_slogan') && ACT.includes('R.drawable.splash_logo_night'), '幕布吃 slogan 与满幅夜环素材');
+  assert.ok(ACT.includes('curtain.setOrientation(android.widget.LinearLayout.VERTICAL)') && ACT.includes('curtain.setGravity(android.view.Gravity.CENTER)'), '单列整体居中（弃 center+topMargin 下沉算式）');
+  assert.ok(ACT.includes('parent.addView(curtain, new android.view.ViewGroup.LayoutParams('), '显式全屏参数（CoordinatorLayout 默认 WC×WC 塌左上，真机实锤）');
+  assert.ok(!ACT.includes('parent.addView(curtain);'), '裸 addView 禁回潮');
+  assert.ok(!ACT.includes('92 * dens') && !ACT.includes('174 * dens'), '两代错误下沉算式均禁回潮');
+  assert.ok(ACT.includes('wm.setMaxLines(1)') && ACT.includes('sg.setMaxLines(1)'), '字标/slogan 锁单行防折');
+  assert.ok(ACT.includes('}, 15000);'), '15s 硬超时兜底');
+  assert.ok(ACT.includes('curtainPageDoneAt + 250') && ACT.includes('curtainSplashExitAt + 450'), '双条件：落地+250 与 退场+450 取 max');
+  assert.ok(ACT.includes('if (curtainPageDoneAt == 0) return;'), '页面未落地不调度（错误/15s 兜底管）');
+  assert.ok(ACT.includes('postFrameCallback') && !ACT.includes('setOnExitAnimationListener'), '首帧记退场时刻；exit listener 禁用（会吞 A12+ radial-wipe）');
+  assert.ok(ACT.includes('h.removeCallbacks(curtainDropPending)'), '重排撤旧帖（短延时不得提前掀）');
+  assert.ok(ACT.includes('MainActivity.this.scheduleCurtainDrop()'), '匿名 client 内显式外嵌 this（历版教训）');
   assert.ok(ACT.includes('if (!splashCurtainUp) return;'), 'drop 幂等短路（重复导航/超时/错误不互踩）');
   const iErr = ACT.indexOf('fallback.setVisibility(View.VISIBLE);');
-  assert.ok(ACT.slice(iErr, iErr + 400).includes('dropSplashCurtain'), '错误兜底页出现即掀幕，重试按钮不被压');
-  assert.ok(ACT.includes('parent.addView(curtain)'), '幕布与离线兜底同 parent 上叠');
+  assert.ok(ACT.slice(iErr, iErr + 400).includes('dropSplashCurtain'), '错误兜底页出现即掀幕（绕过 dwell），重试按钮不被压');
 });
 
 test('v9.5.6 主题：SplashScreen 四属性齐、bitmap 退役、Night 变体换纸夜+夜金', () => {
