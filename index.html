@@ -828,9 +828,11 @@ var qrcode=function(){function i(t,r){function a(t,r){g=function(t){for(var r=ne
 'use strict';
 
 // --- Cloudinary 配置（非密钥，安全） ---
-const CLOUD_NAME = 'dntsgx6t3';
-const UPLOAD_PRESET = 'NoteXCloudinary';
-const CLOUDINARY_URL = 'https://api.cloudinary.com/v1_1/' + CLOUD_NAME + '/image/upload';
+// v10.0.0：preset 名不再硬编码在此。免签名 preset 连同 cloud_name 写在页面源码里，
+// 任何人复制一份就能往本账号白图（烧配额、塞违规内容连累封号）——这正是本版要关的洞。
+// preset / 目录 / cloud_name 现由服务端 /api/upsign 一次一签提供，后台改 preset 名不必重发前端版。
+const CLOUD_NAME = 'dntsgx6t3'; // 仅作签发响应缺字段时的兜底
+const CLOUDINARY_URL_OF = c => 'https://api.cloudinary.com/v1_1/' + c + '/image/upload';
 const MAX_IMG_WIDTH = 1920;
 
 // v9.0.0：十个彩蛋门牌为专属保留字——命中即不解析为笔记（noteId 置空走首页态），
@@ -850,7 +852,7 @@ const NOTE_API = NOTESYNC_API_BASE + '/api/note/' + encodeURIComponent(noteId);
 const FAIL_API = NOTESYNC_API_BASE + '/api/fail/' + encodeURIComponent(noteId);
 const KEY_STORE = 'notesync_key_' + noteId;
 const PBKDF2_ITER = 200000;
-const FAIL_LIMIT = 10;
+const FAIL_LIMIT = 20; // v10.0.0：与 server.js FAIL_LIMIT 逐字同值（只用于「剩余 N 次」文案，不一致=提示说谎）
 // v5.52：APK 冷启动自动进入上次笔记（仅原生环境，Web 端不受影响）
 const NOTE_LAST_KEY = 'notesync_last_note';
 const NOTE_JUMPED_KEY = 'notesync_jumped';
@@ -871,7 +873,7 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '9.5.8';
+const APP_VERSION = '10.0.0';
 const BUILD_DATE = '2026-09-19';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
@@ -1898,6 +1900,69 @@ async function decryptText(ctB64, ivB64, key) {
   const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64ToBuf(ivB64) }, key, b64ToBuf(ctB64));
   return new TextDecoder().decode(pt);
 }
+
+// ===== v10.0.0 渲染消毒 =====
+// 本版刻意不动加密边界（密钥仍驻 localStorage、CSP 仍放开内联脚本——为保免密自动解锁的便利）。
+// 于是剩下的主要风险是「把 HTML 注进正文 → 脚本执行 → 读走密钥」这条链。unsafe-inline 只是允许
+// 页面自带脚本运行，攻击者要执行代码仍必须先把标签注进 DOM——消毒掐的正是这一环，零体验变化。
+// 白名单来自全仓实测而非常识：正文真正用到的标签是 u（含 rem-mark 与 linkify 拆出的裸 u）、
+// a[href]、img[src]、br、div、span、p、b/i/s/em/strong；class / data-* / style 是折叠标记、
+// 提醒标记、链接定位的承重结构（见 ns-fold-*、data-url、data-m），吃掉等于功能当场坏，必须放行。
+// 【关键设计】只有真的删了东西才返回新串，否则原样返回入参——冲突检测拿 lastHtml 与
+// editor.innerHTML 做字符串比较（blocksEqual / isDecorativelyEqual），DOMParser 往返会改实体编码，
+// 无脑回写会让每次保存都看起来「内容变了」，那是比注入更难查的事故。
+const NS_SANITIZE_DROP = new Set(['script', 'style', 'iframe', 'frame', 'frameset', 'object', 'embed', 'applet',
+  'link', 'meta', 'base', 'form', 'input', 'button', 'textarea', 'select', 'option', 'optgroup', 'fieldset',
+  'svg', 'math', 'noscript', 'template', 'portal', 'xmp', 'marquee', 'noembed', 'noframes', 'plaintext', 'listing']);
+const NS_SANITIZE_URL_ATTR = { href: 1, src: 1, 'xlink:href': 1, action: 1, data: 1, formaction: 1, poster: 1 };
+function nsUnsafeUrl(v, isHref) {
+  // 去空白与控制字符再判：`java\tscript:` 与 ` javascript:` 都是经典绕过
+  const s = String(v).replace(/[\u0000-\u0020\u007f\s]+/g, '').toLowerCase();
+  if (/^(javascript|vbscript|livescript|file|view-source):/.test(s)) return true;
+  // 闸 R2-E：href 里的 data: 一律禁。原黑名单只挡 data:text/html，漏了
+  // `data:image/svg+xml,<svg onload=…>`——Firefox 顶层导航到 data: URL 继承来源，等于同源 XSS，
+  // 而本版保留密钥驻 localStorage，同源脚本即可读走全部笔记。
+  if (isHref && s.indexOf('data:') === 0) return true;
+  // src 保留位图 data:（粘贴图/离线兜底要用），但 svg/xhtml/text 均可携带脚本，一并拒
+  if (s.indexOf('data:') === 0 && /^data:(image\/svg\+xml|image\/html|application\/xhtml\+xml|text\/|application\/xml)/.test(s)) return true;
+  return false;
+}
+function nsSanitizeHtml(html) {
+  if (!html || typeof html !== 'string' || html.indexOf('<') < 0) return html; // 纯文本零开销直通
+  let doc;
+  try { doc = new DOMParser().parseFromString('<body>' + html + '</body>', 'text/html'); }
+  catch (e) { return html; } // 解析不了就原样交给浏览器——与今天行为一致，不给消毒自己引入新故障面
+  let dirty = false;
+  (function walk(node) {
+    for (const el of Array.from(node.children)) {
+      const tag = el.tagName.toLowerCase();
+      if (NS_SANITIZE_DROP.has(tag)) { el.remove(); dirty = true; continue; } // 整节点摘掉，子树不保留
+      for (const at of Array.from(el.attributes)) {
+        const name = at.name.toLowerCase();
+        if (name.indexOf('on') === 0) { el.removeAttribute(at.name); dirty = true; continue; }
+        if (NS_SANITIZE_URL_ATTR[name] && nsUnsafeUrl(at.value, name === 'href' || name === 'xlink:href')) {
+          el.removeAttribute(at.name); dirty = true;
+        }
+      }
+      walk(el);
+    }
+  })(doc.body);
+  return dirty ? doc.body.innerHTML : html;
+}
+// ===== v10.0.0 关键路径落盘失败不再静默 =====
+// 全文件 472 个 catch 里 285 个是空体。彩蛋、桌宠、hover 那些静默是对的，一律不动；
+// 但压在「密钥 / 离线草稿 / 阅读缓存 / 提醒草稿」上的那几个，一旦真失败就是用户找不回来的丢数据。
+// 这里只补三件事：状态条给一次可见提示、同一原因只报一次不刷屏、本地留一条失败流水（发版前可扫）。
+const nsStoreErrSeen = new Set();
+function nsStoreFail(msg, where) {
+  try { const prev = JSON.parse(localStorage.getItem('notesync_store_err') || '[]'); prev.push({ w: where || '?', at: Date.now() }); localStorage.setItem('notesync_store_err', JSON.stringify(prev.slice(-50))); }
+  catch (e) {} // 流水本身写不进就作罢，绝不再抛
+  if (nsStoreErrSeen.has(where)) return;
+  nsStoreErrSeen.add(where);
+  try { setStatus(false, msg); } catch (e) {}
+  try { toast(msg); } catch (e) {}
+}
+
 // --- URL-safe Base64（v5.20 二维码配对）---
 // 配对链接在 URL fragment（#k=...）里携带 AES 密钥；标准 base64 的 + / = 在 URL 中
 // 会被百分号编码或解析改写，统一改用 URL-safe 变体（-_、无填充），解析时还原。
@@ -1919,6 +1984,7 @@ async function fetchRetry(url, opts, retries) {
       if (!r.ok) {
         const err = new Error((opts?.method||'GET') + ' ' + r.status);
         err.status = r.status;
+        try { const ej = await r.json(); if (ej && ej.error) err.serverError = ej.error; } catch (e0) {} // v10.0.0：403 要分「凭据不符」与「版本过旧」
         throw err;
       }
       return r;
@@ -1946,10 +2012,58 @@ try { window.__nsBeat = Date.now(); setInterval(function () { try { window.__nsB
 // 此刻 SSE（onmessage → poll）拿到的 note.v 必然大于 localVer，若再有未保存输入就会被判成
 // 「远端有更新」弹冲突条——新建笔记落盐时 100% 命中（见 BUG_CHECKLIST T1）。
 let inflightWrites = 0;
-async function apiPut(obj) {
+// ===== v10.0.0 写入凭据（writeKey）=====
+// 从已解锁的 AES 密钥派生 HMAC-SHA256（域分离串带笔记名，跨笔记不通用），服务端只存其 sha256。
+// 语义是「能解密 ⇔ 能写入」：没口令的人解不开正文，也就派生不出凭据——不新增任何用户记忆负担，
+// 口令、解锁流程、配对流程一个字都不改。与街机档案（x-arcade-key）同一套归属模型。
+// 刻意不缓存派生结果：HMAC over 32 字节是微秒级，而 cryptoKey 在四条解锁路径上都会被重新赋值，
+// 「缓存 + 多路径赋值」正是本项目历来最容易长出脏 bug 的形状（见 v5.58 空盐、v7.5.1 版本落后两案）。
+async function deriveWriteKey(key) {
+  if (!key) return null;
+  try {
+    const raw = await crypto.subtle.exportKey('raw', key);
+    const hk = await crypto.subtle.importKey('raw', raw, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    const sig = await crypto.subtle.sign('HMAC', hk, new TextEncoder().encode('notesync-write-v1:' + noteId));
+    return b64ToUrlSafe(bufToB64(new Uint8Array(sig)));
+  } catch (e) {
+    // 派生失败=这次保存将不带凭据。off/new-only 档仍能写成功，full 档会被服务端拒——必须让人看见，
+    // 绝不落进静默 catch（v10.0.0 关键路径止血的第一处）。
+    try { setStatus(false, '写入凭据异常，本次保存可能不被接受'); } catch (e2) {}
+    return null;
+  }
+}
+function getWriteKey() { return deriveWriteKey(cryptoKey); }
+// v10.0.0 B1：首次解锁即向服务端登记本机凭据（纯登记，不改正文、不动版本，失败不影响任何读写）。
+// 存量笔记只有被真主认领过才真正进入保护圈；认领窗口越短越好，所以挂在解锁而不是等到第一次保存。
+async function claimNote() {
+  const wk = await getWriteKey();
+  if (!wk) return; // 未解锁=没有凭据，不认领（也绝不能用别的凭据去认领）
+  try {
+    const r = await fetch(NOTE_API + '/claim', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-note-key': wk }, body: '{}' });
+    // 复核①：403 必须当场说，不能等用户保存到被拒才发现——此刻本机密钥已作废（多半是口令在别处改过）
+    if (r.status === 403) {
+      try { setStatus(false, '本机密钥已失效'); } catch (e2) {}
+      try { toast('本机保存的密钥已失效（口令可能在其他设备改过）。请退出锁定、重新输入口令解锁本篇，否则无法保存。'); } catch (e3) {}
+    }
+  } catch (e) {} // 网络类失败静默：下一次解锁/保存仍会再试，绝不因此打断打开笔记这条路
+}
+// 两处历史快照写入共用（正门锁了侧门不锁等于白装，见 server.js 历史分支同一注释）
+async function wkJsonHeaders() {
+  const h = { 'Content-Type': 'application/json' };
+  const wk = await getWriteKey();
+  if (wk) h['x-note-key'] = wk;
+  return h;
+}
+async function apiPut(obj, opts) {
   inflightWrites++;
   try {
-    const r = await fetchRetry(NOTE_API, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(obj) }, 2);
+    // opts.wkKey：改口令时用「新密钥」派生凭据（此刻 cryptoKey 仍是旧钥）；
+    // opts.wkOld：同一次请求出示旧凭据，服务端据此原子换绑——换绑与写入同批完成，无自锁窗口。
+    const wk = await deriveWriteKey((opts && opts.wkKey) || cryptoKey);
+    const headers = { 'Content-Type': 'application/json' };
+    if (wk) headers['x-note-key'] = wk;
+    if (opts && opts.wkOld) obj.wkOld = opts.wkOld; // 服务端只挑已知字段落库，多余键天然被忽略
+    const r = await fetchRetry(NOTE_API, { method: 'PUT', headers: headers, body: JSON.stringify(obj) }, 2);
     return r.json();
   } finally {
     if (inflightWrites > 0) inflightWrites--;
@@ -1957,7 +2071,10 @@ async function apiPut(obj) {
 }
 async function reportFail() {
   try {
-    const r = await fetch(FAIL_API, { method: 'POST' });
+    // v10.0.0 修既有失效：服务端 /api/fail 自 v5.52 起强制 JSON content-type（防跨域 simple 请求），
+    // 而这里发的是不带任何 content-type 的裸 POST → 恒定 400，失败计数器一次也没加过，
+    // 「尝试过多」的爆破锁因此双重失效（既靠客户端自报、自报又是坏的）。补上头与体即恢复。
+    const r = await fetch(FAIL_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
     const j = await r.json();
     if (r.status === 429 || j.locked) { err.textContent = '尝试过多，请 ' + fmtRetry(j.retryAfter || 1800) + ' 后再试'; return; }
     const left = FAIL_LIMIT - (j.count || 0);
@@ -1987,10 +2104,31 @@ async function compressImage(file) {
   });
 }
 async function uploadToCloudinary(blob) {
+  // v10.0.0 两段式：先向自家服务器取一次一签（云端 secret 只在服务器，不碰笔记明文，零知识不破），
+  // 再直传 Cloudinary。此前是免签名 preset 直传，而 preset 名就印在页面源码里 = 开放写入口。
+  let s;
+  try {
+    const sr = await fetch(NOTESYNC_API_BASE + '/api/upsign', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ note: noteId }),
+    });
+    if (!sr.ok) throw new Error(sr.status === 503 ? '服务器未启用上传签名' : ('签发失败 ' + sr.status));
+    s = await sr.json();
+  } catch (e) {
+    throw new Error(e && e.message ? e.message : '无法取得上传授权');
+  }
+  if (!s || !s.signature || !s.api_key) throw new Error('签发响应不完整');
   const formData = new FormData();
   formData.append('file', blob);
-  formData.append('upload_preset', UPLOAD_PRESET);
-  const r = await fetch(CLOUDINARY_URL, { method: 'POST', body: formData });
+  formData.append('api_key', s.api_key);
+  formData.append('timestamp', s.timestamp);
+  formData.append('signature', s.signature);
+  formData.append('upload_preset', s.upload_preset);
+  formData.append('folder', s.folder);
+  // 刻意不传 public_id / transformation：签名只覆盖 folder+timestamp+upload_preset 三项，
+  // 多带一个未签参数就会被 Cloudinary 判签名不符。public_id 交云端随机生成，前端无从控制。
+  const r = await fetch(CLOUDINARY_URL_OF(s.cloud_name || CLOUD_NAME), { method: 'POST', body: formData });
   if (!r.ok) throw new Error('Upload failed: ' + r.status);
   const j = await r.json();
   return j.secure_url;
@@ -2000,7 +2138,17 @@ async function uploadToCloudinary(blob) {
 function insertImageAtCursor(url) {
   editor.focus();
   const sel = window.getSelection();
-  if (!sel.rangeCount) { editor.innerHTML += '<img src="' + url + '"><br>'; return; }
+  // v10.0.0：无选区分支此前是 editor.innerHTML += '<img src="' + url + '">'——把外部返回的字符串
+  // 直接拼进 HTML，是 103 处 innerHTML 里最直白的一处注入面（一个带引号的 URL 就能逃出来）。
+  // 改走与有选区分支同一条 createElement + src 赋值路径，字符串拼接彻底消失，行为完全等价。
+  if (!sel.rangeCount) {
+    const img0 = document.createElement('img');
+    img0.src = url;
+    editor.appendChild(img0);
+    editor.appendChild(document.createElement('br'));
+    editor.dispatchEvent(new Event('input'));
+    return;
+  }
   const range = sel.getRangeAt(0);
   range.deleteContents();
   const img = document.createElement('img');
@@ -2021,10 +2169,12 @@ async function handleImageUpload(file) {
     insertImageAtCursor(url);
     try { dismissKeyboardForTouch(); } catch (eKb) {} // v9.3.7 问题5：insertImageAtCursor 内 editor.focus() 会在移动端弹软键盘，图片插入完成后收一次（拍照/从相册两条路都走这里；桌面/组字期 no-op）
     showUploadStatus('上传成功');
+    setTimeout(hideUploadStatus, 2000);
   } catch (e) {
-    showUploadStatus('上传失败：' + e.message);
+    // 失败必须看得见，且读得完：2 秒在手机上根本来不及看清一次失败原因（v10.0.0 关键路径止血）。
+    showUploadStatus('上传失败：' + (e && e.message ? e.message : '未知错误') + '，图片未插入，请重试');
+    setTimeout(hideUploadStatus, 4500);
   }
-  setTimeout(hideUploadStatus, 2000);
 }
 
 // 在光标处插入节点：基于 Selection/Range，不依赖已废弃的 execCommand，
@@ -2839,12 +2989,12 @@ async function applyUnlocked(key, note) {
   try {
     const raw = await crypto.subtle.exportKey('raw', key);
     localStorage.setItem(KEY_STORE, bufToB64(raw));
-  } catch (e) {}
+  } catch (e) { nsStoreFail('本机密钥未能保存，下次打开可能需重新输入口令', 'applyUnlocked'); }
   localVer = note.v || 0;
   mask.classList.add('hidden');
   editor.contentEditable = true;
   if (note.ct) {
-    try { lastHtml = await decryptText(note.ct, note.iv, key); editor.innerHTML = lastHtml; }
+    try { lastHtml = nsSanitizeHtml(await decryptText(note.ct, note.iv, key)); editor.innerHTML = lastHtml; }
     catch (e) {
       // v6.0：记住的密钥解不开服务端密文 = 口令已在他端变更（Y 简单式的配套检测）。
       // 旧密钥/旧缓存/旧草稿全部作废，必须清掉——否则显示空或旧内容，用户一保存
@@ -2867,6 +3017,7 @@ async function applyUnlocked(key, note) {
   ensureCaret(); // 关键：解密内容载入后显式重建合法折叠光标（避免"解锁后无光标/无法输入"）
   undoStack = []; redoStack = []; lastState = captureState(); // 新笔记会话：清空并重置撤销栈基线
   startSync();
+  claimNote(); // v10.0.0 B1：解锁成功即认领（fire-and-forget）
   tryShowInstallBar(); // v5.35：解锁后再弹安装引导，不在落地页打扰
   consumeBackupImportMsg(); // v7.7.0：首页扫备份码跳转解锁后的一次性成功提示
   try { nsFestWelcome(); } catch (e) {} // v8.2.0：节日雨——每次打开 App 那一刻放一轮（非节日静默）
@@ -2894,7 +3045,7 @@ async function unlock(pass) {
           await decryptText(c.ct, c.iv, key); // 口令校验：不匹配此处抛出
           cryptoKey = key;
           serverSalt = b64ToBuf(c.salt); // v5.58：离线解锁路径也落地 serverSalt——此前留 null，联网保存时空盐曾冲掉服务端盐（正确口令恒定解密失败的根因）
-          try { localStorage.setItem(KEY_STORE, bufToB64(await crypto.subtle.exportKey('raw', key))); } catch (e2) {}
+          try { localStorage.setItem(KEY_STORE, bufToB64(await crypto.subtle.exportKey('raw', key))); } catch (e2) { nsStoreFail('本机密钥未能保存，下次打开可能需重新输入口令', 'offlineUnlock'); }
           const ok = await loadCachedBody(key);
           if (ok) {
             loadingEl.classList.add('hidden');
@@ -2940,7 +3091,7 @@ async function unlock(pass) {
   // 同时必须接回 r.v 回写 localVer，否则版本落后必然触发误报冲突。
   if (!note.salt) {
     try {
-      const rr = await apiPut({ ct: note.ct || '', iv: note.iv || '', salt: currentSaltB64() });
+      const rr = await apiPut({ ct: note.ct || '', iv: note.iv || '', salt: currentSaltB64() }, { wkKey: key }); // v10.0.0：落盐这一枪带上凭据=新笔记在建档瞬间即被真主认领（B1 下未认领档随时可被登记，越早越好）
       if (rr && typeof rr.v === 'number') { localVer = rr.v; note.v = rr.v; } // v7.5.1：同步 note.v，防紧随的 applyUnlocked:2102 用旧快照(note.v=0)把 localVer 覆盖回 0 → 首端 baseV 恒 0 永久 409、正文永不落库
     } catch (e) {}
   }
@@ -3001,7 +3152,8 @@ async function tryPairingUnlock() {
     if (!note.salt) throw new Error('pairing target not initialized');
     const key = await crypto.subtle.importKey('raw', b64ToBuf(b64), { name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
     if (note.ct) await decryptText(note.ct, note.iv, key); // 校验密钥正确性；不匹配会抛出
-    localStorage.setItem(KEY_STORE, b64); // 先落地，供重载后的 loadStoredKey 自动解锁
+    try { localStorage.setItem(KEY_STORE, b64); } // 先落地，供重载后的 loadStoredKey 自动解锁
+    catch (e) { nsStoreFail('配对密钥未能保存，本机下次仍需输入口令', 'pairing'); }
     location.replace(cleanUrl); // 整页重载到干净 URL（见上方说明），本次 init 到此为止
     return true;
   } catch (e) {
@@ -4193,7 +4345,7 @@ function restoreSelectionInBlock(root, saved) {
 // 草稿存的是 AES-GCM 密文（与正文同一把 key），明文不落盘，零知识不变。
 const DRAFT_KEY = 'notesync_draft_' + noteId;
 function writeDraft(ct, iv) {
-  try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ ct: ct, iv: iv, baseV: localVer, at: Date.now() })); } catch (e) {} // HB3：baseV 用 localVer（sseV 抬高会跳过 409 静默覆盖）
+  try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ ct: ct, iv: iv, baseV: localVer, at: Date.now() })); } catch (e) { nsStoreFail('离线草稿未能保存，关页前请确认已同步', 'writeDraft'); } // HB3：baseV 用 localVer（sseV 抬高会跳过 409 静默覆盖）
 }
 function readDraft() {
   try { const s = localStorage.getItem(DRAFT_KEY); const d = s ? JSON.parse(s) : null;
@@ -4208,7 +4360,7 @@ function clearDraft() { try { localStorage.removeItem(DRAFT_KEY); } catch (e) {}
 const CACHE_KEY = 'notesync_cache_' + noteId;
 function cachePut(obj) {
   // v5.54：缓存附带 salt（PBKDF2 盐非机密，明文存储无风险）——离线输口令时派生密钥必需
-  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ct: obj.ct, iv: obj.iv, v: obj.v, salt: obj.salt || null, savedAt: obj.savedAt || Date.now() })); } catch (e) {}
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ct: obj.ct, iv: obj.iv, v: obj.v, salt: obj.salt || null, savedAt: obj.savedAt || Date.now() })); } catch (e) { nsStoreFail('离线缓存未能保存，断网后可能读不到本篇', 'cachePut'); }
 }
 function cacheGet() {
   try { const s = localStorage.getItem(CACHE_KEY); return s ? JSON.parse(s) : null; } catch (e) { return null; }
@@ -4628,7 +4780,7 @@ async function loadCachedBody(key) {
   const c = cacheGet();
   if (!c || !c.ct) return false;
   try {
-    const html = await decryptText(c.ct, c.iv, key);
+    const html = nsSanitizeHtml(await decryptText(c.ct, c.iv, key)); // v10.0.0：缓存密文同样是外部来源
     lastHtml = html; localVer = c.v || 0;
     editor.innerHTML = html;
     ensureBlockWrapped();
@@ -4660,7 +4812,7 @@ async function restoreDraftIfNeeded(key) {
   const d = readDraft();
   if (!d) return;
   let html = '';
-  try { html = await decryptText(d.ct, d.iv, key); }
+  try { html = nsSanitizeHtml(await decryptText(d.ct, d.iv, key)); }
   catch (e) { clearDraft(); return; }
   if (!html) { clearDraft(); return; }
   if (html === lastHtml) { clearDraft(); return; }
@@ -4687,7 +4839,7 @@ draftRestoreBtn.addEventListener('click', async () => {
   const d = readDraft();
   if (!d || !cryptoKey) return;
   try {
-    const html = await decryptText(d.ct, d.iv, cryptoKey);
+    const html = nsSanitizeHtml(await decryptText(d.ct, d.iv, cryptoKey));
     hideDraftBar();
     editor.innerHTML = html;
     ensureBlockWrapped(); try { linkifyEditor(); } catch (e) {} ensureCaret();
@@ -4763,7 +4915,7 @@ $('#remoteTake').addEventListener('click', async () => {
   const note = pendingRemoteNote; pendingRemoteNote = null; hideRemoteBar();
   if (!note || !cryptoKey) return;
   try {
-    const html = await decryptText(note.ct, note.iv, cryptoKey);
+    const html = nsSanitizeHtml(await decryptText(note.ct, note.iv, cryptoKey));
     lastHtml = html; localVer = note.v || localVer;
     editor.innerHTML = html;
     remPrevSrcs = null; // v8.1.8（闸审 P2）：整段换正文（走不到 loadReminder 清理时）丢弃本机旧正文指纹兜底，防陈旧证据对新正文首轮对账多删
@@ -5924,7 +6076,7 @@ async function stashReminderDraft() {
     } else {
       localStorage.setItem(REM_DRAFT_KEY, JSON.stringify({ list: reminders, at: Date.now() })); // 无密钥兜底明文（挂起期必已解锁，正常不可达）
     }
-  } catch (e) {}
+  } catch (e) { nsStoreFail('提醒草稿未能保存，挂起期的改动可能丢失', 'stashReminderDraft'); }
 }
 async function takeReminderDraft() {
   try {
@@ -6030,7 +6182,7 @@ async function handleReminderConflict(retryLeft) {
   const nv = note.v || 0;
   if (nv > localVer) {
     let remoteHtml = null;
-    try { remoteHtml = await decryptText(note.ct, note.iv, cryptoKey); } catch (e) { remoteHtml = null; }
+    try { remoteHtml = nsSanitizeHtml(await decryptText(note.ct, note.iv, cryptoKey)); } catch (e) { remoteHtml = null; } // v10.0.0：远端串进比较器前必须消毒
     const pendingHtml = editor.innerHTML;
     if (remoteHtml !== null && (
         remoteHtml === lastHtml || isDecorativelyEqual(remoteHtml, lastHtml) ||
@@ -7148,12 +7300,17 @@ async function cpRotate() {
       remCipher = JSON.stringify(re); remOut = remCipher;
     } else { remCipher = null; } // 显式 null = 服务端清除提醒字段
     const keyOld = cryptoKey; // v6.3：历史快照迁移要用旧钥（下一行就换了）
+    // v10.0.0：改口令=换 AES 密钥=换派生的写入凭据。这一枪同时完成「写新密文」与「凭据换绑」：
+    // 请求头带新钥派生的凭据，body 出示旧凭据自证身份，服务端原子换绑。
+    // 不这么做的话，改完口令后每次保存都会被自己的凭据闸 403——用户被锁在自己的笔记外。
+    const wkOldStr = await deriveWriteKey(keyOld);
     // P1：改口令补 baseV（红线8——此前无 baseV，可静默覆盖他端刚存的修改）；遇 409 采纳等价远端版本后重试 1 次，真实不同则明确提示，绝不静默覆盖
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        const r = await apiPut({ ct: enc.ct, iv: enc.iv, salt: bufToB64(saltNew), rem: remOut, baseV: localVer });
+        const r = await apiPut({ ct: enc.ct, iv: enc.iv, salt: bufToB64(saltNew), rem: remOut, baseV: localVer },
+          wkOldStr ? { wkKey: keyNew, wkOld: wkOldStr } : { wkKey: keyNew });
         cryptoKey = keyNew; serverSalt = saltNew; localVer = r.v; lastHtml = html;
-        try { localStorage.setItem(KEY_STORE, bufToB64(await crypto.subtle.exportKey('raw', keyNew))); } catch (e) {}
+        try { localStorage.setItem(KEY_STORE, bufToB64(await crypto.subtle.exportKey('raw', keyNew))); } catch (e) { nsStoreFail('本机密钥未能保存，下次打开可能需重新输入口令', 'cpRotate'); }
         cachePut({ ct: enc.ct, iv: enc.iv, v: r.v, salt: bufToB64(saltNew), savedAt: Date.now() }); // 离线兜底立即换新密文，绝不能留旧密钥的缓存
         if (isDraftBarHidden()) clearDraft(); // 旧草稿是旧密钥加密的，留着解不开还占位；草稿条挂起期间保留待拍板
         lastSyncAt = Date.now(); setStatus(true, '已同步');
@@ -7170,7 +7327,7 @@ async function cpRotate() {
           const n2 = await apiGet();
           if (n2 && (n2.v || 0) > localVer) {
             let rh = null;
-            try { rh = await decryptText(n2.ct, n2.iv, cryptoKey); } catch (e3) { rh = null; }
+            try { rh = nsSanitizeHtml(await decryptText(n2.ct, n2.iv, cryptoKey)); } catch (e3) { rh = null; } // v10.0.0：同上
             if (rh === null) {
               cpErr.textContent = '远端内容无法解密，改口令已取消';
               cpOk.disabled = false;
@@ -7192,7 +7349,7 @@ async function cpRotate() {
     cpErr.textContent = '修改失败，请重试';
     cpOk.disabled = false;
   } catch (e) {
-    cpErr.textContent = (e && e.locked) ? '已锁定，请稍后' : '修改失败，请重试';
+    cpErr.textContent = (e && e.locked) ? '已锁定，请稍后' : (e && e.status === 403 ? (e.serverError === 'forbidden' ? '写入凭据不符，改口令已取消' : '本设备版本过旧，无法改口令') : '修改失败，请重试');
     cpOk.disabled = false;
   }
 }
@@ -7211,7 +7368,7 @@ async function migrateHistoryKeys(keyOld, keyNew) {
         const j2 = await r2.json();
         const html = await decryptText(j2.ct, j2.iv, keyOld);
         const enc = await encryptText(html, keyNew);
-        await fetchRetry(NOTE_API + '/history/' + h.ts, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ct: enc.ct, iv: enc.iv }) }, 0);
+        await fetchRetry(NOTE_API + '/history/' + h.ts, { method: 'PUT', headers: await wkJsonHeaders(), body: JSON.stringify({ ct: enc.ct, iv: enc.iv }) }, 0);
       } catch (e) { /* 单条失败跳过 */ }
     }
   } catch (e) { /* 列表取不到就整体放弃，不影响主流程 */ }
@@ -7288,7 +7445,7 @@ async function snapshotHistory(html, manual) {
   }
   try {
     const enc = await encryptText(html, cryptoKey);
-    await fetchRetry(NOTE_API + '/history', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ct: enc.ct, iv: enc.iv, manual: !!manual }) }, 0);
+    await fetchRetry(NOTE_API + '/history', { method: 'PUT', headers: await wkJsonHeaders(), body: JSON.stringify({ ct: enc.ct, iv: enc.iv, manual: !!manual }) }, 0);
   } catch (e) {} // 快照是保险不是主链路，失败静默
 }
 async function loadHistList() {
@@ -7325,7 +7482,7 @@ async function loadHistList() {
       } catch (e) { toast('预览失败：网络异常，请重试'); return; }
       let html;
       try {
-        html = await decryptText(j2.ct, j2.iv, cryptoKey);
+        html = nsSanitizeHtml(await decryptText(j2.ct, j2.iv, cryptoKey));
       } catch (e) { markHistBad(row, pv, rs); toast('该版本不可用'); return; }
       const box = document.createElement('div'); box.className = 'hist-preview';
       box.textContent = html.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').slice(0, 300) || '（空）';
@@ -7338,7 +7495,7 @@ async function loadHistList() {
         j2 = await r2.json();
       } catch (e) { toast('恢复失败：网络异常，请重试'); return; }
       try {
-        const html = await decryptText(j2.ct, j2.iv, cryptoKey);
+        const html = nsSanitizeHtml(await decryptText(j2.ct, j2.iv, cryptoKey));
         pendingRemoteNote = null; hideRemoteBar(); // 恢复 = 用户显式拍板，任何远端挂起一并作废
         editor.innerHTML = html; lastHtml = html;
         lastRestoreAt = Date.now(); // P0-5/P0-4：标记恢复窗口——窗口内不自动采纳他端远端，防无声撤销本机刚拍板的恢复
@@ -7569,7 +7726,7 @@ async function buildBackupPayload() {
   const favs = readFavs();
   if (!favs.length) return null;
   if (cryptoKey && !localStorage.getItem(KEY_STORE)) { // 当前笔记内存有密钥但 KEY_STORE 缺失（v5.21 revealQr 同款补写）
-    try { localStorage.setItem(KEY_STORE, bufToB64(await crypto.subtle.exportKey('raw', cryptoKey))); } catch (e) {}
+    try { localStorage.setItem(KEY_STORE, bufToB64(await crypto.subtle.exportKey('raw', cryptoKey))); } catch (e) { nsStoreFail('本机密钥未能保存，下次打开可能需重新输入口令', 'favs'); }
   }
   const entries = []; let skipped = 0;
   for (const id of favs) {
@@ -7719,6 +7876,18 @@ async function saveLocal(force) {
       if (keepMineArmed) { keepMineArmed = false; await retryKeepMineSave(); return; } // P0-2：拍板后二次 409 自动以最新 v 收口重试一次（限 1 次）
       await handleWriteConflict(); // v7.2.0：版本落后被拒——挂起等拍板，绝不退避重试（baseV 不变重试必再 409 死循环）
     }
+    else if (e && e.status === 403 && e.serverError === 'forbidden') {
+      // v10.0.0（复核③）：凭据不符≠版本过旧，混成一句会误导真主去升级。
+      setStatus(false, '写入凭据不符');
+      try { toast('本机写入凭据与服务器登记的不一致。若是你刚改过口令，重新解锁本篇即可；若不是，说明该笔记凭据被抢先登记——在服务器上删掉该档的 wkHash 字段即可恢复（README「手工解除认领」）'); } catch (e8) {}
+    }
+    else if (e && e.status === 403) {
+      // v10.0.0（闸 R3-1）：403=服务器明确拒收这次写入，不是网络抖动，退避重试只会白刷，
+      // 还会让用户误以为「再等等就能存」。最常见原因是本机版本过旧（full 档后不再接受无凭据写入）。
+      // 内容仍在内存与草稿里，不丢；这里只把话说清楚并停止无意义重试。
+      setStatus(false, '写入被拒：版本过旧');
+      try { toast('服务器拒绝了本次写入。请把 NoteSync 升级到最新版本，你的内容已留在本机，不会丢'); } catch (e9) {}
+    }
     else {
       setStatus(false, '保存失败');
       scheduleSaveRetry(); // I4：失败自动退避重试，不再“失败即永久丢失，须手动再改一笔”
@@ -7751,7 +7920,7 @@ async function retryKeepMineSave() {
       // 等价/装饰一致（版本竞态/装饰 bump）→ 采纳最新 v 收口；真实差异（他端新争端）→ 挂起弹条，
       // 绝不以旧拍板静默覆盖（此前只取 v 不比较正文，武装跨时长即静默吞他端真实修改）。
       let remoteHtml = null;
-      try { remoteHtml = await decryptText(n2.ct, n2.iv, cryptoKey); } catch (e) { remoteHtml = null; }
+      try { remoteHtml = nsSanitizeHtml(await decryptText(n2.ct, n2.iv, cryptoKey)); } catch (e) { remoteHtml = null; } // v10.0.0：同上
       const pendingHtml = editor.innerHTML;
       if (remoteHtml !== null && (
           remoteHtml === lastHtml || isDecorativelyEqual(remoteHtml, lastHtml) ||
@@ -7783,7 +7952,7 @@ async function handleWriteConflict() {
     const note = await apiGet();
     if ((note.v || 0) > localVer && note.ct) {
       let remoteHtml = null;
-      try { remoteHtml = await decryptText(note.ct, note.iv, cryptoKey); } catch (e) { remoteHtml = null; }
+      try { remoteHtml = nsSanitizeHtml(await decryptText(note.ct, note.iv, cryptoKey)); } catch (e) { remoteHtml = null; } // v10.0.0：远端串进比较器前必须消毒
       const pendingHtml = editor.innerHTML;
       if (remoteHtml !== null && (
           remoteHtml === lastHtml || isDecorativelyEqual(remoteHtml, lastHtml) ||
@@ -7822,12 +7991,13 @@ async function autoMergeSave(note, remoteHtml) {
   if (isComposing) return false;                              // 组字中合并毁 IME 缓冲/光标
   if (Date.now() - lastRestoreAt <= RESTORE_GUARD_MS) return false; // 恢复保护窗内绝不自动合并（铁律9）
   if (!remoteHtml) return false;
+  remoteHtml = nsSanitizeHtml(remoteHtml); // v10.0.0（复核①）：三方合并的远端侧同样收口
   let merged;
   try {
     merged = threeWayMergeBlocks(blockize(lastHtml), blockize(editor.innerHTML), blockize(remoteHtml));
   } catch (e) { return false; }
   if (!merged || !merged.ok || (merged.conflicts && merged.conflicts.length)) return false;
-  const mergedHtml = merged.blocks.join('');
+  const mergedHtml = nsSanitizeHtml(merged.blocks.join('')); // v10.0.0（复核①）：合并结果要落库+上屏，两侧必须同形态
   if (!mergedHtml || !mergedHtml.trim()) return false;        // 合并结果空/变空一律不落地（防误清空）
   // v7.5.0（修7）：PUT 期间占住保存互斥（与 saveLocal :5029 同一口）——autoMerge 的 PUT 在途时
   // busy 原为 false，用户新输入的 saveLocal 与本 PUT 会并发双 PUT 互 409。不加入口拦截：
@@ -8228,6 +8398,8 @@ window.__threeWayMerge = function (anc, mine, theirs) {
 // 返回 true=已应用（调用方消费版本号）；false=组字中，调用方跳过本次（下轮 poll 重试，不吞版本）。
 async function applyRemoteBody(note, html) {
   if (isComposing) return false; // 组字中替换 innerHTML 会毁 IME 缓冲与光标，推迟到组字结束（P0-2）
+  html = nsSanitizeHtml(html); // v10.0.0（复核①）：远端正文进 DOM 前统一收口——此前只挂在 decryptText 直调点，
+                              // 这种「先存进变量再传进来」的路径整条漏网，注入链经 409/提醒冲突仍然通
   if (html !== editor.innerHTML) {
     const wasFocused = document.activeElement === editor;
     // 用字符偏移保存光标，而非 cloneRange：替换 innerHTML 后旧 Range 指向的节点被 detach，
@@ -8278,7 +8450,7 @@ async function poll() {
     setStatus(true, '已同步');
     hideOfflineBar();
     if ((note.v || 0) > localVer && note.ct) {
-      const html = await decryptText(note.ct, note.iv, cryptoKey);
+      const html = nsSanitizeHtml(await decryptText(note.ct, note.iv, cryptoKey));
       // v7.2.0（症状4根修）：远端三级分类——先判远端是不是实质变更，再决定弹不弹冲突条。
       // 级0 严格相等：v 仅被 rem/附属字段 bump（他端到点标 fired 的 persistReminders 等）
       //   → 静默消费版本，rem 变了照常应用；本机脏不脏都不弹条。
@@ -8640,10 +8812,12 @@ if (noteId && (isNativeApp() || !CHIP_HOVER_OK)) {
     try { if (noteId) localStorage.setItem(NOTE_LAST_KEY, noteId); } catch (e) {}
     loadingEl.classList.add('hidden');
     editor.contentEditable = true;
-    if (note.ct) { try { lastHtml = await decryptText(note.ct, note.iv, cryptoKey); editor.innerHTML = lastHtml; } catch (e) {} }
+    let auKeyGood = true; // v10.0.0（复核①P0）：解密失败=本机密钥已作废（口令在别处改过），绝不能再拿它去认领
+    if (note.ct) { try { lastHtml = nsSanitizeHtml(await decryptText(note.ct, note.iv, cryptoKey)); editor.innerHTML = lastHtml; } catch (e) { auKeyGood = false; } } // v10.0.0 补回被批量脚本误删的渲染行
     if (note.ct) cachePut({ ct: note.ct, iv: note.iv, v: note.v, salt: note.salt, savedAt: Date.now() }); // v5.49：成功加载即缓存正文密文，供离线阅读；v5.54 附盐
     lastSyncAt = Date.now(); // v5.50：在线加载成功=与服务端通信成功
     startSync(); // v9.5.5：同步先启动——loadReminder 尾段 persistReminders 的 apiGet 若半死挂起，不再连带把同步启动一起挡死（状态条冻结「连接中…」）
+    if (auKeyGood) claimNote(); // v10.0.0 B1：免密自动解锁路径同样认领——但仅限本机密钥确实能解开正文时
     await loadReminder(note, cryptoKey); // v5.56：自动解锁路径补提醒恢复——此前仅口令解锁路径（applyUnlocked）恢复，记住密钥的设备关标签/杀进程重开后提醒列表恒空、下划线全丢（真机实锤）
     ensureBlockWrapped();
     if (note.ct) { try { linkifyEditor(); } catch (e) {} }

@@ -16,8 +16,9 @@
     4) 上传（v9.5.4 倒装，杜绝 URL 指向未上传文件的 404 窗口）：先 apk/latest.apk（覆盖式，旧壳兼容）+ apk/vX.Y.Z.apk（不可变副本，只留最近 2 份），最后落 latest_app.json（备份旧版）
     5) 线上校验：/api/latest 返版本 URL、版本副本与 /dl/latest.apk HEAD 200、服务器 APK sha256 与本地一致
 
-安全：服务器密码只从 C:\\Temp\\new_server_pwd.txt 读，绝不打印；对 paramiko banner 限速退避重试。
-依赖：pip install paramiko；gh 已登录（zchening）。
+安全：v10.0.0 起走系统 ssh/scp + 本机 ~/.ssh/notesync_deploy 密钥（BatchMode，无密码交互、无重试锁定风险），
+不再读取任何明文密码文件。
+依赖：gh 已登录（zchening）；服务器 C:\ProgramData\ssh\administrators_authorized_keys 已收录本机公钥。
 """
 import os, sys, json, time, hashlib, shutil, subprocess, tempfile, threading, glob
 
@@ -32,7 +33,6 @@ def versioned_dl_url(tag):
     return TAG_DEFAULT_DL
 HOST, USER, REMOTE_DIR = "124.221.92.225", "Administrator", "C:/Services/NoteSync"
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PWD_FILE = r"C:\Temp\new_server_pwd.txt"
 APK_CACHE_DIR = os.path.join(REPO, "_apkdl")
 
 
@@ -157,87 +157,96 @@ def build_latest_json(meta, apk_size, summary=None):
     return o
 
 
+# ===== v10.0.0 部署通道：系统 ssh/scp + 本机 ed25519 部署密钥 =====
+# paramiko 2.7.1（配 Python 3.8）对这台 Windows OpenSSH 9.5 的 publickey 与 password 认证均被实测拒绝
+# （同一把密钥经系统 ssh 客户端一次通过，AUTH_OK）。密钥认证 + BatchMode 下重试不触发账户锁定，
+# 且发版链路从此不再读任何明文密码文件——比原方案稳，也少一个泄密面。
+SSH_KEY = os.path.expanduser("~/.ssh/notesync_deploy")
+SSH_OPTS = ["-i", SSH_KEY, "-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes",
+            "-o", "ConnectTimeout=20", "-o", "StrictHostKeyChecking=accept-new"]
+
+
+def ssh_run(cmd, tries=3):
+    last = ""
+    for i in range(tries):
+        r = _run(["ssh"] + SSH_OPTS + ["%s@%s" % (USER, HOST), cmd])
+        if r.returncode == 0:
+            return r.stdout.strip()
+        last = (r.stderr or r.stdout or "").strip()
+        time.sleep(3 * (i + 1))
+    sys.exit("[ssh] 远端命令失败（%s…）：%s" % (cmd[:60], last))
+
+
+def scp_put(local, remote, tries=3):
+    last = ""
+    for i in range(tries):
+        r = _run(["scp", "-q"] + SSH_OPTS + [local, "%s@%s:%s" % (USER, HOST, remote)])
+        if r.returncode == 0:
+            return
+        last = (r.stderr or "").strip()
+        time.sleep(3 * (i + 1))
+    sys.exit("[scp] 上传失败 %s → %s：%s" % (local, remote, last))
+
+
+def remote_size(path):
+    return int(ssh_run("powershell -NoProfile -Command \"(Get-Item '%s').Length\"" % path.replace("/", "\\")))
+
+
+def remote_mkdir(remote_full):
+    d = remote_full.replace("/", "\\").rsplit("\\", 1)[0]
+    ssh_run("mkdir \"%s\" 2>nul & echo ok" % d)
+
+
 def deploy_to_server(latest_json_local, apk_local, tag=None):
-    import paramiko, io
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace") if hasattr(sys.stdout, "buffer") else sys.stdout
-    with open(PWD_FILE, "r", encoding="utf-8") as f:
-        password = f.read().strip()
-
-    def connect():
-        last = None
-        for i in range(6):
-            try:
-                s = paramiko.SSHClient(); s.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-                s.connect(HOST, username=USER, password=password, banner_timeout=90, auth_timeout=60, timeout=60)
-                return s
-            except Exception as e:
-                last = e; print("[ssh] attempt %d 失败，退避：%s" % (i + 1, e)); time.sleep(10 + i * 5)
-        raise last
-
-    ssh = connect()
-    sftp = ssh.open_sftp()
+    import re as _re
     ts = str(int(time.time()))
-
-    def ensure_parents(remote_full):
-        parts = remote_full.split("/")[:-1]; cur = ""
-        for p in parts:
-            cur = (cur + "/" + p) if cur else p
-            if cur:
-                try: sftp.mkdir(cur)
-                except Exception: pass
+    local_size = os.path.getsize(apk_local)
 
     # 闸 R1-P1：上传顺序倒装——两个 APK 文件先就位、latest_app.json 最后落。
     # 旧序（json→apk）在两次 put 之间，/api/latest 已指向还不存在的 /dl/vX.Y.Z.apk，全网手机点更新必 404。
-    # apk/latest.apk：固定名直接覆盖（不备份，服务器只留最新一个）
     ra = REMOTE_DIR + "/apk/latest.apk"
-    ensure_parents(ra)
-    sftp.put(apk_local, ra)
-    remote_size = sftp.stat(ra).st_size
-    local_size = os.path.getsize(apk_local)
-    print("[srv] apk/latest.apk local=%d remote=%d %s" % (local_size, remote_size, "OK" if remote_size == local_size else "MISMATCH!!"))
-    assert remote_size == local_size, "APK 上传尺寸不符"
+    remote_mkdir(ra)
+    scp_put(apk_local, ra)
+    rs = remote_size(ra)
+    print("[srv] apk/latest.apk local=%d remote=%d %s" % (local_size, rs, "OK" if rs == local_size else "MISMATCH!!"))
+    assert rs == local_size, "APK 上传尺寸不符"
 
     # v9.5.4：不可变版本副本——latest_app.json 的下载 URL 指它，杜绝「下载中途 latest.apk 被覆盖」混装。
-    import re as _re
     if tag and _re.match(r"^v\d+(?:\.\d+)*$", tag):
         rv = REMOTE_DIR + "/apk/%s.apk" % tag
-        sftp.put(apk_local, rv)
-        assert sftp.stat(rv).st_size == local_size, "版本副本 %s 上传尺寸不符" % rv
+        scp_put(apk_local, rv)
+        assert remote_size(rv) == local_size, "版本副本 %s 上传尺寸不符" % rv
         print("[srv] apk/%s.apk 已上传（不可变副本）" % tag)
         try:
-            vers = sorted([a for a in sftp.listdir_attr(REMOTE_DIR + "/apk")
-                           if _re.match(r"^v\d+(?:\.\d+)*\.apk$", a.filename)],
-                          key=lambda a: (a.st_mtime or 0), reverse=True)
-            for old in vers[2:]:  # 只留最近 2 份版本副本（C 盘仅 ~8G）
-                try: sftp.remove(REMOTE_DIR + "/apk/" + old.filename); print("[srv] 清理旧副本 %s" % old.filename)
-                except Exception: pass
+            names = ssh_run("powershell -NoProfile -Command \"(Get-ChildItem '%s/apk' -Filter 'v*.apk' | Sort-Object LastWriteTime -Descending | Select-Object -Skip 2 -ExpandProperty Name) -join ','\"" % REMOTE_DIR)
+            for old in [n for n in names.split(",") if n]:
+                ssh_run("del /q \"%s\\apk\\%s\" & echo ok" % (REMOTE_DIR.replace("/", "\\"), old))
+                print("[srv] 清理旧副本 %s" % old)
         except Exception as e:
             print("[srv] 旧副本清理跳过（非致命）：%s" % e)
 
     # latest_app.json 最后落（备份再覆盖）：此刻 latest.apk 与版本副本都已在位，URL 切换零 404 窗口。
     rj = REMOTE_DIR + "/latest_app.json"
-    try: sftp.stat(rj); sftp.rename(rj, rj + ".bak_" + ts); print("[srv] latest_app.json 已备份 -> .bak_%s" % ts)
-    except Exception: print("[srv] latest_app.json 无旧文件")
-    sftp.put(latest_json_local, rj)
-    assert sftp.stat(rj).st_size == os.path.getsize(latest_json_local), "latest_app.json 上传尺寸不符"
-
-    def run(cmd):
-        _, o, e = ssh.exec_command(cmd); o.channel.recv_exit_status()
-        return o.read().decode("utf-8", "replace").strip(), e.read().decode("utf-8", "replace").strip()
+    if ssh_run("if exist \"%s\" (echo yes) else (echo no)" % rj.replace("/", "\\")) == "yes":
+        ssh_run("ren \"%s\" \"latest_app.json.bak_%s\" & echo ok" % (rj.replace("/", "\\"), ts))
+        print("[srv] latest_app.json 已备份 -> .bak_%s" % ts)
+    else:
+        print("[srv] latest_app.json 无旧文件")
+    scp_put(latest_json_local, rj)
+    assert remote_size(rj) == os.path.getsize(latest_json_local), "latest_app.json 上传尺寸不符"
 
     # latest_app.json 每次请求实时读，无需重启；仅校验
-    o, _ = run('curl -s http://localhost:8080/api/latest')
+    o = ssh_run('curl -s http://localhost:8080/api/latest')
     got = json.loads(o)["assets"][0]["browser_download_url"]
     exp_url = versioned_dl_url(tag)
     assert got == exp_url, "线上 /api/latest 未指向 %s：%s" % (exp_url, got)
-    o2, _ = run('curl -s -o NUL -w "%{http_code}" http://localhost:8080' + exp_url.split("com.cn", 1)[1])
-    o, _ = run('curl -s -o NUL -w "%{http_code}" http://localhost:8080/dl/latest.apk')
+    o2 = ssh_run('curl -s -o NUL -w "%{http_code}" http://localhost:8080' + exp_url.split("com.cn", 1)[1])
+    o = ssh_run('curl -s -o NUL -w "%{http_code}" http://localhost:8080/dl/latest.apk')
     print("[verify] /api/latest -> %s；版本副本 HEAD=%s；/dl/latest.apk HEAD=%s" % (got, o2, o))
     chk_file = ("%s.apk" % tag) if (tag and _re.match(r"^v\d+(?:\.\d+)*$", tag)) else "latest.apk"
-    o, _ = run('certutil -hashfile C:\\Services\\NoteSync\\apk\\' + chk_file + ' SHA256')
+    o = ssh_run('certutil -hashfile C:\\Services\\NoteSync\\apk\\' + chk_file + ' SHA256')
     remote_sha = "".join(ch for ch in o if ch in "0123456789abcdefABCDEF")
     print("[verify] 服务器 %s sha256=%s" % (chk_file, remote_sha[-64:]))
-    sftp.close(); ssh.close()
 
 
 def main():

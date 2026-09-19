@@ -13,7 +13,38 @@ permissions:
   actions: read
 
 jobs:
+  # v10.0.0：发版闸进机器。此前 CI 只编译签名出包、不跑任何测试，「六子代理四层闸」全靠本地手动执行
+  # （gate.mjs 还写死了本机 node 绝对路径）——手滑或换机就能把红版推到手机上。
+  # 现在：单测不绿 → 不出包、不打 Release。e2e 需要真浏览器与本机服务器，仍留本地闸内跑。
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: tests/package-lock.json
+
+      - name: 物化三端壳（www/ 与 android assets 均在 .gitignore 内，全新检出不存在）
+        run: |
+          mkdir -p www android/app/src/main/assets/public
+          cp index.html www/index.html
+          cp index.html android/app/src/main/assets/public/index.html
+
+      - name: Install test deps（--ignore-scripts 跳过 playwright 下载浏览器，单测只要 jsdom）
+        working-directory: tests
+        run: npm ci --no-audit --no-fund --ignore-scripts
+
+      - name: 全量单元测试（任一红 → 本作业失败 → build 不执行 → 不出包）
+        working-directory: tests
+        run: node --test unit/*.test.js
+
   build:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

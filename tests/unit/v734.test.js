@@ -116,7 +116,7 @@ test('V734-B2：poll 级2 脏路径先尝试 autoMergeSave（打字活跃期内�
 test('V734-B3：autoMergeSave 落库路径齐全（force baseV=note.v / 草稿 / 缓存 / 失败即退）', () => {
   const idx = SRC.indexOf('async function autoMergeSave');
   assert.ok(idx > -1, '应存在 autoMergeSave');
-  const seg = SRC.slice(idx, idx + 1300);
+  const seg = SRC.slice(idx, idx + 1700); // v10.0.0：入口插了一行远端侧消毒，取样窗口随之放宽（断言内容不变）
   assert.ok(/baseV: note\.v \|\| localVer/.test(seg), 'autoMergeBase 应以远端权威 v 为 baseV 重发');
   assert.ok(/writeDraft\(enc\.ct, enc\.iv\)/.test(seg), '合并结果应先落草稿');
   assert.ok(/if \(!mergedHtml \|\| !mergedHtml\.trim\(\)\) return false/.test(seg), '合并结果空一律不落地（防误清空）');

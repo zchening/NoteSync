@@ -41,11 +41,13 @@ const PBKDF2_ITER = 200000; // 与 index.html PBKDF2_ITER 严格一致
 const REM_MAX = 10;         // 未来提醒上限（与 index.html REM_MAX 一致）
 const REM_DONE_MAX = 20;    // 已触发条目保留上限 FIFO（与 index.html REM_DONE_MAX 一致）
 
-// ---------- Cloudinary（v7.1.1 note_image） ----------
-// 与 web 端 index.html 同源同值（unsigned preset，非密钥可公开）——改一处必须同步另一处。
+// ---------- Cloudinary（v7.1.1 note_image；v10.0.0 改走服务端签发） ----------
+// 旧做法是把 preset 名硬编码在这里并与 web 端「同源同值、改一处必须同步另一处」——
+// 免签名 preset 连同 cloud 名写死在两份源码里，等于对外张贴开放写入口（烧配额、可塞违规内容连累封号），
+// 而「两处必须手工同步」本身就是事故温床。现统一向自家服务器 POST /api/upsign 索取一次一签，
+// preset / folder / 签名都由服务端下发，这里只留一个 cloud 名兜底。
 const CLOUD_NAME = 'dntsgx6t3';
-const UPLOAD_PRESET = 'NoteXCloudinary';
-const CLOUDINARY_URL = 'https://api.cloudinary.com/v1_1/' + CLOUD_NAME + '/image/upload';
+const cloudUploadUrl = c => 'https://api.cloudinary.com/v1_1/' + (c || CLOUD_NAME) + '/image/upload';
 const IMG_MAX_BYTES = 8 * 1024 * 1024; // MCP 直传不压缩（web 端才压缩到 1920 宽），上限 8MB
 const IMG_EXT_RE = /\.(png|jpe?g|gif|webp)$/i;
 
@@ -89,19 +91,38 @@ function decryptText(ctB64, ivB64, keyRaw) {
 }
 
 // ---------- API ----------
+// v10.0.0 写入凭据：与 web 端 deriveWriteKey 逐字同构——HMAC-SHA256(key=派生的 AES 原始密钥,
+// msg='notesync-write-v1:'+笔记名)，输出 base64url 无填充。两端算法差一个字节，服务端就会判 403。
+// MCP 的 env 里本来就存着口令（见文件头「口令只存在本机 MCP 配置的 env 里」），
+// 所以凭据在本地自行派生即可：能力不减、不新增任何敏感存储。
+const saltByName = new Map(); // apiGet 时记下该笔记当前服务端盐，供保存缺 salt 时回落
+function mcpWriteKey(name, saltB64) {
+  try {
+    const salt = saltB64 || saltByName.get(name) || '';
+    if (!salt) return null;
+    const raw = getKeyFor(name, salt);
+    return crypto.createHmac('sha256', raw).update('notesync-write-v1:' + name).digest('base64url');
+  } catch (e) { return null; }
+}
 async function apiGet(name) {
   const r = await fetch(BASE + '/api/note/' + encodeURIComponent(name), { cache: 'no-store' });
   if (!r.ok) throw new Error('GET /api/note failed: HTTP ' + r.status);
-  return r.json();
+  const j = await r.json();
+  if (j && typeof j.salt === 'string' && j.salt) saltByName.set(name, j.salt);
+  return j;
 }
 async function apiPut(name, obj) {
+  const headers = { 'Content-Type': 'application/json' };
+  const wk = mcpWriteKey(name, obj && obj.salt);
+  if (wk) headers['x-note-key'] = wk;
   const r = await fetch(BASE + '/api/note/' + encodeURIComponent(name), {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: headers,
     body: JSON.stringify(obj),
   });
   const j = await r.json().catch(() => ({}));
   if (r.status === 409) { const e = new Error('version conflict'); e.conflict = true; e.serverV = j.v; throw e; }
+  if (r.status === 403) { const e = new Error('PUT 被拒：写入凭据缺失或不匹配（口令是否与本机 env 不一致？）'); e.forbidden = true; throw e; }
   if (!r.ok) throw new Error('PUT /api/note failed: HTTP ' + r.status);
   return j;
 }
@@ -660,12 +681,32 @@ async function toolImage(args) {
   if (buf.length > IMG_MAX_BYTES) throw new Error('图片超过 8MB（实际 ' + (buf.length / 1048576).toFixed(1) + 'MB）；MCP 直传不压缩，请先缩小后再试');
 
   // 上传放在重试闭包外：409 重试只重做 PUT，绝不重复上传产生垃圾文件（对抗审 P1-2）
+  // v10.0.0：与 web 端同构，先向自家服务器取一次一签再直传。签发失败绝不退回免签直投——
+  // 那等于把本版刚关掉的开放写入口原样开回来。
+  let sign = null;
+  try {
+    const sr = await fetch(BASE + '/api/upsign', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ note: name }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!sr.ok) throw new Error('HTTP ' + sr.status);
+    sign = await sr.json();
+    if (!sign || !sign.signature || !sign.api_key) throw new Error('响应不完整');
+  } catch (e) {
+    throw new Error('未取得上传授权（' + (e && e.message ? e.message : e) + '）：服务器需配置 Cloudinary 签名密钥');
+  }
   const fd = new FormData();
   fd.append('file', new Blob([buf]), path.basename(p));
-  fd.append('upload_preset', UPLOAD_PRESET);
+  fd.append('api_key', sign.api_key);
+  fd.append('timestamp', sign.timestamp);
+  fd.append('signature', sign.signature);
+  fd.append('upload_preset', sign.upload_preset);
+  fd.append('folder', sign.folder);
   let url = '';
   try {
-    const resp = await fetch(CLOUDINARY_URL, { method: 'POST', body: fd, signal: AbortSignal.timeout(30000) });
+    const resp = await fetch(cloudUploadUrl(sign.cloud_name), { method: 'POST', body: fd, signal: AbortSignal.timeout(30000) });
     let j = null;
     try { j = await resp.json(); } catch (e) { throw new Error('Cloudinary 响应非 JSON：HTTP ' + resp.status); }
     if (!resp.ok || !j || !j.secure_url) {
@@ -1234,7 +1275,7 @@ function handleLine(line) {
     rpcResult(id, {
       protocolVersion: '2024-11-05',
       capabilities: { tools: {} },
-      serverInfo: { name: 'notesync', version: '9.5.8' },
+      serverInfo: { name: 'notesync', version: '10.0.0' },
     });
     return;
   }

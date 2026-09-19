@@ -40,3 +40,17 @@ capacitor-cordova-android-plugins/
 *.p12
 *.keystore
 latest_app.json
+
+# v10.0.0 仓库卫生：历版一次性 bump/修补/探针脚本归档在此（本地留存，不入库）
+/tools/once/
+# 根目录 scratch 与历史大体积副本（.g901 那类 630KB 的 index 快照）
+/_*.*
+/.g[0-9]*
+
+# v10.0.0：发闸产物与探针（_gate_report.json / _gate_baseline.md / 探针脚本）不入库
+tests/_*
+# v10.0.0：本地工件，不入库（留着只会让 git status 常年有噪音、增加误提交风险）
+.trash/
+_apkdl/
+mockups/
+__pycache__/

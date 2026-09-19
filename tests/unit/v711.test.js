@@ -24,11 +24,19 @@ const mWeb = SRC.match(/function fmtRemInsert\(at\) \{[\s\S]*?\n\}/);
 assert.ok(mWeb, 'index.html 应有 fmtRemInsert 函数');
 const webFmtRemInsert = (new Function(mWeb[0] + '; return fmtRemInsert;'))();
 
-// ── fetch mock：Cloudinary / GET note / PUT note 三路 ──
+// ── fetch mock：签发 / Cloudinary / GET note / PUT note 四路 ──
 const jsonResp = (status, obj) => ({ ok: status >= 200 && status < 300, status, json: async () => obj });
 function makeFetch(state) {
   return async (url, opts = {}) => {
     const u = String(url);
+    // v10.0.0：MCP 图片改两段式上传，先取一次一签。不计 cloudCalls，
+    // 免得把「409 重试不重传」那类只数上传次数的断言搅浑。
+    if (u.endsWith('/api/upsign')) {
+      state.signCalls = (state.signCalls || 0) + 1;
+      const sspec = state.signResponses && state.signResponses.shift();
+      if (sspec) return jsonResp(sspec.status || 200, sspec.body);
+      return jsonResp(200, { cloud_name: 'dntsgx6t3', api_key: 'k-test', timestamp: '1700000000', signature: 's-test', upload_preset: 'notesync-signed', folder: 'notesync' });
+    }
     if (u.startsWith('https://api.cloudinary.com')) {
       state.cloudCalls += 1;
       const spec = state.cloudinary.shift() || {};
@@ -69,7 +77,7 @@ const H = mcp.fmtRemLine(T1); // 与 fmtRemInsert 同构的 MCP 行格式，pars
 test('V711-A MCP 源码：五工具/版本/常量/样式/上传闭包外', () => {
   assert.ok(MCP_SRC.includes("name: 'note_image'"), 'TOOLS 应注册 note_image');
   assert.ok(MCP_SRC.includes('note_image: toolImage'), 'IMPLS 应含 note_image');
-  assert.ok(MCP_SRC.includes("version: '9.5.8'"), 'serverInfo 应 9.3.1');
+  assert.ok(MCP_SRC.includes("version: '10.0.0'"), 'serverInfo 应 9.3.1');
   assert.ok(MCP_SRC.includes("['add', 'list', 'cancel', 'clear']"), 'note_remind op 四模式');
   assert.ok(MCP_SRC.includes('const REM_DONE_MAX = 20'), 'REM_DONE_MAX=20 与 web 对齐');
   assert.ok(MCP_SRC.includes('img{max-width:100%;height:auto}'), 'renderImage 应有完整 img 限宽样式（宽图长图导出不爆版）');
@@ -208,6 +216,7 @@ test('V711-E note_image：成功 append / 409 重试不重传 / 内联定位 / �
     global.fetch = makeFetch(st7);
     global.fetch = async (url, opts = {}) => {
       const u = String(url);
+      if (u.endsWith('/api/upsign')) return jsonResp(200, { cloud_name: 'dntsgx6t3', api_key: 'k-test', timestamp: '1700000000', signature: 's-test', upload_preset: 'notesync-signed', folder: 'notesync' });
       if (u.startsWith('https://api.cloudinary.com')) return jsonResp(200, { secure_url: 'https://res.cloudinary.com/dntsgx6t3/image/upload/v1/ok.png' });
       if (opts.method === 'PUT') return jsonResp(500, { error: 'boom' });
       return jsonResp(200, { v: 3, ct: st7.ct, iv: st7.iv, salt: st7.salt, rem: null });
@@ -333,6 +342,7 @@ test('V711-K note_image：大写扩展名接受、恰 8MB 放行、Cloudinary �
     await assert.rejects(() => mcp.toolImage({ name: NOTE, path: jpgP }), /响应非 JSON：HTTP 200/, '非 JSON 响应');
     global.fetch = async (url) => {
       if (String(url).startsWith('https://api.cloudinary.com')) { const e = new Error('aborted'); e.name = 'TimeoutError'; throw e; }
+      if (String(url).endsWith('/api/upsign')) return base(url, {}); // v10.0.0 前置签发放行，本例只测上传超时
       throw new Error('不应到达（上传在重试闭包外，先于 loadNote）');
     };
     await assert.rejects(() => mcp.toolImage({ name: NOTE, path: jpgP }), /上传超时（30s），未写入笔记/, '30s 超时分支');

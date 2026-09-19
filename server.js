@@ -82,6 +82,164 @@ function readBody(req, limit) {
 
 const EMPTY = { v: 0, ct: '', iv: '', salt: '', updatedAt: 0 };
 
+// ===== v10.0.0 笔记写入凭据（writeKey）=====
+// 背景：街机档案（/api/arcade）早已实现「id 只寻址 + 请求头凭据 + 服务端只存哈希 + 钥匙错与不存在同形」，
+// 但笔记接口从未回填——PUT /api/note/:id 零凭据，任何人猜中笔记名即可覆盖写（读只拿到密文，毁却很容易）。
+// 模型：客户端在解锁后从已有 AES 密钥派生 writeKey（HMAC-SHA256，域分离含笔记名），写入时带 x-note-key 头；
+// 服务端只存 sha256(writeKey)，零知识不变——没口令 → 解不开 → 也派生不出凭据，「能解密」与「能写入」同义。
+// 兼容铁律：GET 的响应形状一个字节都不能改（旧客户端靠 200+空密文判「新建」，改 404 会直接堵死建笔记）；
+// 无凭据的写在 off 档完全照旧放行，线上旧版客户端不受任何影响。
+const WK_HEADER = 'x-note-key';
+const WK_MIN = 16, WK_MAX = 128;                 // 32 字节 base64url=43 字符，留双侧余量
+const WK_MODE_FILE = path.join(DATA_DIR, 'wk-mode.txt');
+let _wkMode = { v: '', at: 0 };
+function wkMode() {
+  const now = Date.now();
+  if (now - _wkMode.at < 5000) return _wkMode.v;
+  let m = String(process.env.NOTESYNC_WK_MODE || 'off').trim();
+  try { const f = fs.readFileSync(WK_MODE_FILE, 'utf8').trim(); if (f) m = f; } catch (e) {} // 文件优先：SFTP 写一个字节即热切，不必重启服务
+  if (m !== 'off' && m !== 'new-only' && m !== 'full') m = 'off';
+  _wkMode = { v: m, at: now };
+  return m;
+}
+function wkHash(k) { return crypto.createHash('sha256').update(String(k)).digest('hex'); }
+function wkHashFromReq(req) {
+  const k = req.headers[WK_HEADER];
+  if (typeof k !== 'string' || k.length < WK_MIN || k.length > WK_MAX) return null;
+  return wkHash(k);
+}
+// 凭据失败独立桶：只挡写入，绝不牵连 GET。
+// 若与口令爆破共用 failMap，不升级的旧客户端每次自动保存都记一次失败，攒够就把「老版本不能写」
+// 升级成「老版本连自己的笔记都看不到」（闸 R2-B 命中，不可接受的误伤）。阈值给到 60，
+// 真持有者永远撞不到，只有脚本化抢注才会被限。
+const WK_FAIL_LIMIT = 60, WK_FAIL_WINDOW = 10 * 60 * 1000, WK_LOCK = 10 * 60 * 1000;
+const wkFailMap = new Map(); // 'ip:id' -> { n, first, lockedAt }
+function wkRecordFail(ip, id) {
+  const key = ip + ':' + id, now = Date.now();
+  let r = wkFailMap.get(key);
+  // 窗口滚动只重置计数，绝不清 lockedAt——否则锁到点自动解，等于没锁（复核意见）
+  if (!r || now - r.first > WK_FAIL_WINDOW) { r = { n: 0, first: now, lockedAt: (r && r.lockedAt) || 0 }; wkFailMap.set(key, r); }
+  r.n++;
+  if (r.n >= WK_FAIL_LIMIT) r.lockedAt = now;
+  if (wkFailMap.size > 5000) { for (const [k, v] of wkFailMap) { if (now - v.first > WK_FAIL_WINDOW && !v.lockedAt) wkFailMap.delete(k); } }
+}
+function wkLimited(ip, id) {
+  const r = wkFailMap.get(ip + ':' + id);
+  if (!r || !r.lockedAt) return 0;
+  const left = WK_LOCK - (Date.now() - r.lockedAt);
+  if (left <= 0) { wkFailMap.delete(ip + ':' + id); return 0; }
+  return Math.ceil(left / 1000);
+}
+// 主写入与两处历史快照写入共用同一判据（抄三处=改一处忘两处，本项目历来如此）。
+// 【B1 语义】未认领的笔记接受第一次凭据登记（=认领）；一旦认领，凭据不符一律硬 403，绝不自动降级。
+//   · 为什么允许对「已有正文的存量笔记」认领：否则本版对外宣称修掉了零鉴权，实际你手上所有存量
+//     笔记一个字节都没被保护（只保护新建≈不保护），那才是不可接受的。
+//   · 代价与其边界：真主完成认领之前，知道笔记名的人可以抢先登记、把真主挡在写入之外。
+//     但他本来就能直接覆盖这篇（off/new-only 下无凭据写入仍放行），所以抢注并未给他新的破坏力，
+//     只是新增一种"冻结写入"。恢复通道明确存在且只有一步：登录服务器删掉该档的 wkHash 字段
+//     （见 README「手工解除认领」）。真主一旦认领完成，抢注窗口永久关闭——故发版当天把全部
+//     笔记各打开一遍（客户端首次解锁即自动认领），窗口就压到几分钟。
+//   · 为什么不做"被抢注即自动退回无保护"：那等于攻击者先用错凭据撞一下就能卸掉防护再覆盖，
+//     保护退化成防手滑的摆设，还不如不做。宁可承担"可一步恢复的冻结"，不做"不可依赖的防护"。
+//   · 已认领笔记仍允许同一次请求出示 wkOld 自证换绑（改口令路径），避免换密钥把自己锁死。
+// 凭据失败另立独立计数桶，且只挡写入、绝不牵连 GET（见 wkRecordFail）。
+function wkCheckNote(req, ip, id, cur, obj) {
+  const wk = wkHashFromReq(req);
+  const claimed = typeof cur.wkHash === 'string' && cur.wkHash.length === 64;
+  if (wk) {
+    if (claimed && cur.wkHash !== wk) {
+      const old = obj && typeof obj.wkOld === 'string' ? obj.wkOld : '';
+      if (old.length >= WK_MIN && old.length <= WK_MAX && wkHash(old) === cur.wkHash) {
+        return { ok: true, wk: wk, claimed: true, swap: true }; // 旧凭据自证 → 换绑（改口令）
+      }
+      // 复核②：off 档一律不拒——off 的全部承诺就是「行为与今天逐字相同、不发任何锁」，
+      // 把 mismatch 检查放在 mode 之前等于让 off 档也能把人锁死，自相矛盾。
+      if (wkMode() === 'off') return { ok: true, wk: wk, claimed: true };
+      wkRecordFail(ip, id);
+      return { ok: false, code: 403, error: 'forbidden' };
+    }
+    if (claimed) return { ok: true, wk: wk, claimed: true };
+    // B1：未认领的档一律接受第一次凭据登记（=认领）。曾要求「该档尚不存在且无正文」，
+    // 那样存量笔记永远登记不上，等于对外宣称修了零鉴权、实际一个字节都没保护。
+    return { ok: true, wk: wk, claimed: false, claim: true };
+  }
+  const mode = wkMode();
+  if (claimed) {
+    if (mode === 'full') { wkRecordFail(ip, id); return { ok: false, code: 403, error: 'credential required', mode: mode }; }
+    return { ok: true, wk: null, claimed: true }; // off / new-only：已认领笔记的宽限期
+  }
+  if (mode !== 'off' && !noteExists(id)) {        // 只挡「真新建且无凭据」，存量永不因此被拒
+    wkRecordFail(ip, id);
+    return { ok: false, code: 403, error: 'credential required', mode: mode };
+  }
+  return { ok: true, wk: null, claimed: false };
+}
+
+// --- 笔记名扫描守卫：GET 一个不存在的名字会拿到 200+空密文（形状不可改），于是名字存在性可被枚举。
+// 凭据上线后枚举的收益已降到「知道某人有个叫 work 的笔记」，这里再补一道按 IP 的 misses 计数收紧。
+// 【闸 R2-D】阈值从 40 提到 80：该桶按 IP 计，共享出口（CGNAT/校园网）下攻击者用自己那份流量
+// 就能把同段邻居一起挡在读取外，误伤代价大于收益；而它防的只是低价值的存在性探测。
+const SCAN_WINDOW = 10 * 60 * 1000;
+const SCAN_LIMIT = 80;
+const scanMap = new Map(); // ip -> { n, first }
+function noteExists(id) {
+  try { return fs.existsSync(notePath(id)); } catch (e) { return false; }
+}
+function scanCheck(ip) {
+  const now = Date.now(), rec = scanMap.get(ip);
+  if (!rec || now - rec.first > SCAN_WINDOW) return { blocked: false };
+  return rec.n >= SCAN_LIMIT ? { blocked: true, retryAfter: Math.ceil((SCAN_WINDOW - (now - rec.first)) / 1000) } : { blocked: false };
+}
+function scanRecordMiss(ip) {
+  const now = Date.now(), rec = scanMap.get(ip);
+  if (!rec || now - rec.first > SCAN_WINDOW) { scanMap.set(ip, { n: 1, first: now }); return; }
+  rec.n++;
+  if (scanMap.size > 5000) { for (const [k, v] of scanMap) { if (now - v.first > SCAN_WINDOW) scanMap.delete(k); } } // 无界增长=内存泄漏
+}
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of scanMap) { if (now - v.first > SCAN_WINDOW) scanMap.delete(k); }
+}, 5 * 60 * 1000).unref();
+
+// --- v10.0.0 签发端点配置（云端 secret 只从 env 来，源码零硬编码；缺失即 503 降级不崩服务）---
+const CLOUD = {
+  name: String(process.env.CLOUDINARY_CLOUD || ''),
+  key: String(process.env.CLOUDINARY_KEY || ''),
+  secret: String(process.env.CLOUDINARY_SECRET || ''),
+};
+const UPSIGN_FOLDER = String(process.env.CLOUDINARY_FOLDER || 'notesync');
+const UPSIGN_PRESET = String(process.env.CLOUDINARY_PRESET || 'notesync-signed');
+const UPSIGN_TTL = 120;                                        // 一次一签，秒级时间戳由 Cloudinary 侧判过期
+const UPSIGN_PER_MIN = Number(process.env.CLOUDINARY_UPSIGN_PER_MIN || 20);
+const UPSIGN_PER_DAY = Number(process.env.CLOUDINARY_UPSIGN_PER_DAY || 2000);
+// 白名单（逗号分隔的 IP）享十倍额度——真实用户撞不到默认值，这条只防哪天把自己限死。
+const UPSIGN_WHITELIST = new Set(String(process.env.NOTESYNC_UPSIGN_WHITELIST || '').split(',').map(s => s.trim()).filter(Boolean));
+const upsignMap = new Map(); // ip -> { m, ms, d, ds }
+// 【闸 R2-A】配额主键只按 IP：原先掺了请求体里的 note，而 note 客户端可任意编——
+// 每换一个假名字额度就翻一倍，限流形同虚设。note 只用于日志归属，白名单也只认 IP，
+// 否则「猜中一个已加白的笔记名」就能提十倍。
+function upsignQuota(ip) {
+  const now = Date.now();
+  const mult = UPSIGN_WHITELIST.has(ip) ? 10 : 1;
+  let r = upsignMap.get(ip);
+  if (!r) { r = { m: 0, ms: now, d: 0, ds: now }; upsignMap.set(ip, r); }
+  if (now - r.ms > 60000) { r.m = 0; r.ms = now; }
+  if (now - r.ds > 86400000) { r.d = 0; r.ds = now; }
+  if (r.m >= UPSIGN_PER_MIN * mult) return { ok: false, retryAfter: Math.ceil((60000 - (now - r.ms)) / 1000) };
+  if (r.d >= UPSIGN_PER_DAY * mult) return { ok: false, retryAfter: Math.ceil((86400000 - (now - r.ds)) / 1000) };
+  r.m++; r.d++;
+  if (upsignMap.size > 5000) { for (const [k, v] of upsignMap) { if (now - v.ms > 120000) upsignMap.delete(k); } } // 同 arcWrites：无界增长=内存泄漏
+  return { ok: true };
+}
+// Cloudinary 签名规则：除 file/cloud_name/api_key/signature/resource_type 外的参数按 key 升序拼 k=v&...，
+// 尾部直接接 api_secret（无分隔符）取 SHA1 hex。我们刻意只签这三项——多签一个参数就多一分算不一致的概率，
+// 而 public_id 交给 Cloudinary 随机生成（前端不传），攻击者拿到一次签名也只能往固定目录塞一张 jpg。
+function cloudSign(ts) {
+  const params = { folder: UPSIGN_FOLDER, timestamp: ts, upload_preset: UPSIGN_PRESET };
+  const str = Object.keys(params).sort().map(k => k + '=' + params[k]).join('&');
+  return crypto.createHash('sha1').update(str + CLOUD.secret).digest('hex');
+}
+
 // noteId 校验：英文/数字/下划线/短横线，1-64 字符（v5.19 恢复 _ 与 -：
 // v5.15 为禁中文收紧成纯字母数字，误伤了早期带 _/- 的旧笔记；中文仍被拒绝）
 const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
@@ -90,9 +248,12 @@ const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 const RESERVED_IDS = new Set(['mirror', 'snake', 'dragon', 'brick', 'satoshi', 'bitcoin', 'tank', 'spacex', 'tesla', 'pet']);
 
 // --- 限流参数 ---
-const FAIL_LIMIT = 10;                   // 失败阈值
+// v10.0.0：这道锁此前是死的（客户端上报请求不带 JSON 头 → 恒定 400 → 计数从未增加），本版修好后
+// 它第一次真的会落锁，所以阈值同步放宽：真防口令爆破靠的是 PBKDF2 20 万次迭代，不是靠锁人；
+// 而锁一旦落下连 GET 都挡，太容易把连错几次口令的正常用户关在自己笔记外面。20 次/10 分钟、锁 10 分钟。
+const FAIL_LIMIT = 20;                   // 失败阈值
 const FAIL_WINDOW = 10 * 60 * 1000;      // 计数窗口 10 分钟
-const LOCK_DURATION = 30 * 60 * 1000;    // 锁定 30 分钟
+const LOCK_DURATION = 10 * 60 * 1000;    // 锁定 10 分钟
 // Map<key, { count, firstFail, lockedAt }>
 const failMap = new Map();
 
@@ -261,6 +422,34 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // --- API: 认领笔记（v10.0.0 B1）---
+  // 客户端首次解锁即调用，把「本机从口令派生出的写入凭据」登记到服务端。
+  // 这是一次纯登记：不改正文、不递增版本，所以任何内容写入路径都不被它牵连；
+  // 已认领且凭据相符=幂等成功；已认领而凭据不符=硬 403（绝不静默换绑，那是 B1 拒绝的"可卸掉的防护"）。
+  // 不建档：名字不存在直接 404，建档仍由落盐那一枪负责。三种模式都允许认领——off 档提前登记，
+  // 正是为了让发版当天扫一遍笔记之后，切 new-only/full 时存量已经在保护圈内。
+  if (req.method === 'POST' && /^\/api\/note\/[^/]+\/claim$/.test(url)) {
+    let cid;
+    try { cid = decodeURIComponent(url.slice('/api/note/'.length, -'/claim'.length)); } catch { return sendJSON(res, 400, { error: 'bad id' }); }
+    if (!cid || !ID_RE.test(cid)) return sendJSON(res, 400, { error: 'bad id' });
+    req.resume(); // POST 带体：先抽干，任何分支都不留悬挂请求体
+    const limit = checkLimit(ip, cid);
+    if (limit.locked) return sendJSON(res, 429, { error: 'locked', retryAfter: limit.retryAfter });
+    const wkLock = wkLimited(ip, cid); // 复核⑤：认领端点同样要节流，否则它是绕过凭据锁的枚举入口
+    if (wkLock) return sendJSON(res, 429, { error: 'locked', retryAfter: wkLock });
+    const wk = wkHashFromReq(req);
+    if (!wk) return sendJSON(res, 400, { error: 'no credential' });
+    if (!noteExists(cid)) return sendJSON(res, 404, { error: 'not found' });
+    const cur = readNote(cid);
+    // 复核②：readNote 对损坏/半截文件会静默回落 EMPTY（salt 空）。此时认领会把真档覆写成
+    // 「空档 + 外来哈希」= 打开一次即永久毁文。故 EMPTY 回落一律拒写，并用 404 同形不多给信号。
+    if (!cur.salt) return sendJSON(res, 404, { error: 'not found' });
+    const claimed = typeof cur.wkHash === 'string' && cur.wkHash.length === 64;
+    if (claimed && cur.wkHash !== wk) { wkRecordFail(ip, cid); return sendJSON(res, 403, { error: 'forbidden' }); }
+    if (!claimed) { cur.wkHash = wk; writeNote(cid, cur); console.log('[claim] ' + cid); } // 只加字段，v/ct/iv/salt/rem 原样不动
+    return sendJSON(res, 200, { ok: true, claimed: true, v: cur.v || 0 });
+  }
+
   // --- API: 历史版本（v6.0，必须先于主 /api/note/ 分支——ID_RE 不含斜杠，放后面会被主分支吃掉）---
   // GET  /api/note/:id/history      → 元数据列表（ts/v/manual/size，不含密文，省流量）
   // GET  /api/note/:id/history/:ts  → 单条密文（预览/恢复时才取）
@@ -299,6 +488,9 @@ const server = http.createServer((req, res) => {
       if (!obj || typeof obj.ct !== 'string' || !obj.ct || typeof obj.iv !== 'string' || !obj.iv) {
         return sendJSON(res, 400, { error: 'missing fields' });
       }
+      // v10.0.0：历史快照按条覆写是主写入的侧门——正门锁了侧门不锁，等于攻击者仍可逐条毁历史。
+      const wkc1 = wkCheckNote(req, ip, id, readNote(id));
+      if (!wkc1.ok) return sendJSON(res, wkc1.code, wkc1.mode ? { error: wkc1.error, mode: wkc1.mode } : { error: wkc1.error });
       const hist = readHist(id);
       const item = hist.list.find(x => String(x.ts) === m[2]);
       if (!item) return sendJSON(res, 404, { error: 'no such snapshot' });
@@ -324,6 +516,12 @@ const server = http.createServer((req, res) => {
         return sendJSON(res, 400, { error: 'missing fields' });
       }
       const cur = readNote(id);
+      // v10.0.0：历史环追加快照同样是写入，必须过同一道凭据闸。
+      const wkc2 = wkCheckNote(req, ip, id, cur);
+      if (!wkc2.ok) return sendJSON(res, wkc2.code, wkc2.mode ? { error: wkc2.error, mode: wkc2.mode } : { error: wkc2.error });
+      // 笔记档本身不存在时凭空建 <id>.hist.json 是纯磁盘填充面（任意合法名字都能造文件）。
+      // 为守住「off 档行为与今天逐字相同」的灰度承诺，只在 new-only/full 起效。
+      if (!noteExists(id) && wkMode() !== 'off') return sendJSON(res, 403, { error: 'orphan history' });
       const hist = readHist(id);
       let ts = Date.now();
       while (hist.list.some(x => x.ts === ts)) ts++; // v6.0：同毫秒去重，否则 GET /:ts 永远只命中第一条
@@ -349,7 +547,16 @@ const server = http.createServer((req, res) => {
     if (!id || !ID_RE.test(id)) return sendJSON(res, 400, { error: 'bad id' });
     const limit = checkLimit(ip, id);
     if (limit.locked) return sendJSON(res, 429, { error: 'locked', retryAfter: limit.retryAfter });
-    return sendJSON(res, 200, readNote(id));
+    // v10.0.0：响应形状一字未改（旧客户端靠 200+空密文判新建），只在旁路记 miss 供扫描守卫用。
+    const exists = noteExists(id);
+    const scan = scanCheck(ip);
+    if (scan.blocked) return sendJSON(res, 429, { error: 'locked', retryAfter: scan.retryAfter });
+    if (!exists) scanRecordMiss(ip);
+    // v10.0.0：凭据哈希不出门（虽不可逆，但「是否已认领」本身就是探测者想要的信号）。
+    // readNote 每次返回的都是 JSON.parse 出的新对象，直接 delete 即安全剥除，其余键逐字不变。
+    const pub = readNote(id);
+    if ('wkHash' in pub) delete pub.wkHash;
+    return sendJSON(res, 200, pub);
   }
 
   // --- API: 写入笔记 ---
@@ -372,6 +579,12 @@ const server = http.createServer((req, res) => {
         return sendJSON(res, 400, { error: 'missing fields' });
       }
       const cur = readNote(id);
+      // ===== v10.0.0 凭据闸（三态：off / new-only / full，判据见 wkCheckNote）=====
+      const wkLock = wkLimited(ip, id);
+      if (wkLock) return sendJSON(res, 429, { error: 'locked', retryAfter: wkLock });
+      const wkc = wkCheckNote(req, ip, id, cur, obj);
+      if (!wkc.ok) return sendJSON(res, wkc.code, wkc.mode ? { error: wkc.error, mode: wkc.mode } : { error: wkc.error });
+      const wk = wkc.wk, claimed = wkc.claimed;
       // v6.3：opt-in 乐观并发控制——写入带 baseV 时，版本不符返回 409（附当前 v），
       // 客户端重读-改-重写；v7.2.0 起 web 端也带 baseV（baseV=localVer），
       // 不带 baseV 的旧客户端行为完全不变（不破坏任何现有客户端）。
@@ -393,6 +606,11 @@ const server = http.createServer((req, res) => {
       const ctIn = (typeof obj.ct === 'string' && obj.ct) ? obj.ct : (cur.ct || '');
       const ivIn = (typeof obj.iv === 'string' && obj.iv) ? obj.iv : (cur.iv || '');
       const next = { v: (cur.v || 0) + 1, ct: ctIn, iv: ivIn, salt: saltIn, rem: rem, updatedAt: Date.now() };
+      // v10.0.0：只有「原子换绑」或「无正文时认领」才落哈希；已认领的沿用。
+      // 未认领且已有正文时带来的外来凭据一律不落库——否则 wkCheckNote 里「有正文不接受外来凭据」
+      // 这条 P0 防线会在落库环节被绕过（闸 R2-H1）。
+      if (wkc.swap || wkc.claim) next.wkHash = wk;
+      else if (claimed) next.wkHash = cur.wkHash;
       writeNote(id, next);
       sseBroadcast(id, { v: next.v, updatedAt: next.updatedAt });
       return sendJSON(res, 200, { ok: true, v: next.v, updatedAt: next.updatedAt });
@@ -413,6 +631,34 @@ const server = http.createServer((req, res) => {
     if (limit.locked) return sendJSON(res, 429, { locked: true, retryAfter: limit.retryAfter });
     const rec = failMap.get(ip + ':' + id);
     return sendJSON(res, 200, { locked: false, count: rec ? rec.count : 0 });
+  }
+
+  // --- v10.0.0 图片上传签名签发 ---
+  // 背景：前端直传 Cloudinary 用的是免签名 preset，而 cloud_name + preset 名就写在页面源码里
+  // （index.html:810-811）——任何人拿它就能往本站 Cloudinary 账号白图：烧配额、塞违规内容连累封号。
+  // 改法：preset 转 Signed，签名由本端点签发。云端 secret 只当配额闸门，不碰笔记明文，零知识不破。
+  // 已知边界（写进 VERSION_LOG）：本服务零知识，无从判断客户端是否已解锁，所以这一版拦的是
+  // 「不经我服务器 + 无限量」，真正的「解锁才能签发」等 writeKey 全量强制后在同一处加一行校验即可。
+  if (req.method === 'POST' && url === '/api/upsign') {
+    if (!CLOUD.name || !CLOUD.key || !CLOUD.secret) return sendJSON(res, 503, { error: 'signing unavailable' });
+    // 强制 JSON content-type：与 /api/fail 的 v5.52 同一手法——不要求的话这是 simple 请求，
+    // 任意恶意网页都能跨域连发要签名；要求了就触发预检，而本服务不回 ACAO 头，浏览器直接拦死。
+    const ct = req.headers['content-type'] || '';
+    if (!ct.includes('application/json')) return sendJSON(res, 400, { error: 'bad content-type' });
+    readBody(req, 4096).then(function (body) {
+      let o = {}; try { o = JSON.parse(body || '{}'); } catch (e) {}
+      const note = (typeof o.note === 'string' && ID_RE.test(o.note)) ? o.note : ''; // 仅日志归属，不参与配额主键
+      const q = upsignQuota(ip);
+      if (!q.ok) return sendJSON(res, 429, { error: 'too many', retryAfter: q.retryAfter });
+      const ts = Math.floor(Date.now() / 1000);
+      const sig = cloudSign(ts);
+      console.log('[upsign] ts=' + ts + ' note=' + (note || '-')); // 只记时间与归属笔记，绝不记 secret / 签名
+      return sendJSON(res, 200, {
+        cloud_name: CLOUD.name, api_key: CLOUD.key, timestamp: ts, signature: sig,
+        upload_preset: UPSIGN_PRESET, folder: UPSIGN_FOLDER, expires_in: UPSIGN_TTL,
+      });
+    }).catch(function () { return sendJSON(res, 413, { error: 'too large' }); });
+    return;
   }
 
   // --- API: 最新 release 元数据（v9.3.1 二修）——不做任何外网请求：读发布五件套随部署上传的

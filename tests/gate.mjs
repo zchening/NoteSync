@@ -11,7 +11,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const NODE = process.env.NOTESYNC_NODE || 'C:/Users/zchen/.workbuddy/binaries/node/versions/22.22.2-3/node.exe';
+// v10.0.0：此前写死本机某个 node 版本目录的绝对路径 → 四层闸只能在开发机上跑，CI 与换机直接瘫（
+// 「发版闸是本地仪式而非机器闸门」的技术根因就在这行）。默认改用「正在执行本脚本的那个 node」，
+// 需要指定版本时仍可用环境变量 NOTESYNC_NODE 显式覆盖。
+const NODE = process.env.NOTESYNC_NODE || process.execPath;
 const TESTS = path.dirname(fileURLToPath(import.meta.url));
 const REPORT = path.join(TESTS, '_gate_report.json');
 const manifest = JSON.parse(fs.readFileSync(path.join(TESTS, 'gate.manifest.json'), 'utf8'));

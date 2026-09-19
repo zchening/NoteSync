@@ -24,7 +24,7 @@ test('T1 落盐不写空 ct + 接回 v + 在途写入闸门 + 服务端空 ct �
   const sv = readServer();
 
   assert.ok(!/apiPut\(\{\s*ct:\s*''/.test(src), '不得再用空 ct 覆写服务端（会清空并发端刚写入的正文）');
-  assert.ok(src.includes("const rr = await apiPut({ ct: note.ct || '', iv: note.iv || '', salt: currentSaltB64() });"), '落盐应回写 GET 到的 ct/iv');
+  assert.ok(/const rr = await apiPut\(\{ ct: note\.ct \|\| '', iv: note\.iv \|\| '', salt: currentSaltB64\(\) \}(, \{ wkKey: key \})?\);/.test(src), '落盐应回写 GET 到的 ct/iv（v10 起还须带 wkKey 完成认领）');
   assert.ok(src.includes("if (rr && typeof rr.v === 'number') { localVer = rr.v; note.v = rr.v; }"), '落盐必须接回 v 回写 localVer，并同步 note.v 防 applyUnlocked 用旧快照覆盖回 0');
 
   assert.ok(src.includes('let inflightWrites = 0;'), '应有在途写入计数');
@@ -87,10 +87,14 @@ test('T5 修改口令：旧口令显式验证 → 新盐轮换 → 本机密钥/
   assert.ok(/cpVerify[\s\S]{0,900}await deriveKey\(pass, saltBuf\)[\s\S]{0,200}await decryptText\(note\.ct, note\.iv, k\)/.test(src), '验证必须重派生并解开服务端当前密文，不能只信内存密钥');
   assert.ok(src.includes('crypto.getRandomValues(new Uint8Array(16))'), '应生成 16 字节新随机盐');
   assert.ok(/cpRotate[\s\S]{0,1400}await deriveKey\(p1, saltNew\)/.test(src), '新密钥必须由新口令+新盐派生');
-  assert.ok(/cpRotate[\s\S]{0,2400}apiPut\(\{ ct: enc\.ct, iv: enc\.iv, salt: bufToB64\(saltNew\), rem: remOut(?:, baseV: localVer)? \}\)/.test(src), 'PUT 应携带新盐与非空 ct（服务端 v5.58 只挡空盐，非空直接采纳；v7.3.3 补 baseV 乐观并发红线8）');
-  assert.ok(/cpRotate[\s\S]{0,3200}localStorage\.setItem\(KEY_STORE, bufToB64\(await crypto\.subtle\.exportKey\('raw', keyNew\)\)\)/.test(src), '改完必须更新本机记住的密钥');
-  assert.ok(/cpRotate[\s\S]{0,3600}cachePut\(\{ ct: enc\.ct, iv: enc\.iv, v: r\.v, salt: bufToB64\(saltNew\)/.test(src), '离线缓存必须换新密文，绝不能留旧密钥的缓存');
-  assert.ok(/cpRotate[\s\S]{0,4000}clearDraft\(\)/.test(src), '旧密钥加密的草稿必须清除');
+  assert.ok(/cpRotate[\s\S]{0,2400}apiPut\(\{ ct: enc\.ct, iv: enc\.iv, salt: bufToB64\(saltNew\), rem: remOut, baseV: localVer \}/.test(src), 'PUT 应携带新盐与非空 ct（服务端 v5.58 只挡空盐，非空直接采纳；v7.3.3 补 baseV 乐观并发红线8）');
+  // v10.0.0：改口令=换 AES 密钥=换派生写入凭据。这一枪必须同时完成「写新密文」与「凭据换绑」，
+  // 缺任一半都会把用户锁在自己的笔记外（换绑先成功而写入失败 → 旧凭据作废；反之 → 后续保存恒 403）。
+  assert.ok(/apiPut\([\s\S]{0,200}wkKey: keyNew/.test(src), 'v10 锚：改口令这一枪要用新密钥派生写入凭据');
+  assert.ok(/deriveWriteKey\(keyOld\)/.test(src), 'v10 锚：必须出示旧凭据自证身份供服务端原子换绑');
+  assert.ok(/cpRotate[\s\S]{0,3700}localStorage\.setItem\(KEY_STORE, bufToB64\(await crypto\.subtle\.exportKey\('raw', keyNew\)\)\)/.test(src), '改完必须更新本机记住的密钥');
+  assert.ok(/cpRotate[\s\S]{0,4100}cachePut\(\{ ct: enc\.ct, iv: enc\.iv, v: r\.v, salt: bufToB64\(saltNew\)/.test(src), '离线缓存必须换新密文，绝不能留旧密钥的缓存');
+  assert.ok(/cpRotate[\s\S]{0,4500}clearDraft\(\)/.test(src), '旧密钥加密的草稿必须清除');
 });
 
 // ── T5b：其他设备「口令已变更」检测（Y 简单式的配套，防旧内容覆盖服务端）──
@@ -110,7 +114,9 @@ test('T6 历史版本 UI：菜单入口 + 二级视图（列表/空态/返回/�
   }
   assert.ok(src.includes('async function snapshotHistory(html, manual)'), '快照函数应存在');
   assert.ok(src.includes('now - lastAutoSnap < 60000'), '自动快照应 60s 节流——打字场景不能每 300ms 挤掉一个老版本');
-  assert.ok(src.includes("fetchRetry(NOTE_API + '/history', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ct: enc.ct, iv: enc.iv, manual: !!manual }) }, 0)"), '快照上传失败应静默放弃（重试 0 次），快照是保险不是主链路');
+  assert.ok(src.includes("fetchRetry(NOTE_API + '/history', { method: 'PUT', headers: await wkJsonHeaders(), body: JSON.stringify({ ct: enc.ct, iv: enc.iv, manual: !!manual }) }, 0)"), '快照上传失败应静默放弃（重试 0 次），快照是保险不是主链路');
+  // v10.0.0：历史环是主写入的侧门——正门上了凭据闸而这里不带头，等于白装。
+  assert.ok(src.includes("'/history', { method: 'PUT', headers: await wkJsonHeaders()"), 'v10 锚：快照 PUT 必须带写入凭据头（与主写入同判据）');
   assert.ok(src.includes('async function loadHistList()'), '历史列表加载函数应存在');
   assert.ok(src.includes("fetchRetry(NOTE_API + '/history/' + item.ts, { cache: 'no-store' }, 1)"), '单条快照应按 ts 拉取且禁缓存');
   assert.ok((src.match(/await decryptText\(j2\.ct, j2\.iv, cryptoKey\)/g) || []).length >= 2, '预览与恢复都必须在本机解密（零知识：服务端只见密文）');
@@ -124,7 +130,9 @@ test('T6b 历史版本语义：恢复走 saveLocal 绝不删历史 + saveLocal/p
   const sv = readServer();
 
   // 恢复 = 用户显式拍板：作废远端挂起 → 应用正文 → 正常保存（v+1，其他设备经 poll 收到）
-  assert.ok(/const html = await decryptText\(j2\.ct, j2\.iv, cryptoKey\);[\s\S]{0,80}pendingRemoteNote = null; hideRemoteBar\(\);[\s\S]{0,80}editor\.innerHTML = html; lastHtml = html;[\s\S]{0,80}lastRestoreAt = Date\.now\(\);[\s\S]{0,320}saveLocal\(true\);/.test(src), '恢复应作废远端挂起、标记恢复窗口并走 saveLocal(true) 强制落库，生成新版本而非回退');
+  assert.ok(/const html = (?:nsSanitizeHtml\()?await decryptText\(j2\.ct, j2\.iv, cryptoKey\)\)?;[\s\S]{0,80}pendingRemoteNote = null; hideRemoteBar\(\);[\s\S]{0,80}editor\.innerHTML = html; lastHtml = html;[\s\S]{0,80}lastRestoreAt = Date\.now\(\);[\s\S]{0,320}saveLocal\(true\);/.test(src), '恢复应作废远端挂起、标记恢复窗口并走 saveLocal(true) 强制落库，生成新版本而非回退');
+  // v10.0.0：恢复是把历史密文直接铺进正文的入口之一，必须过消毒
+  assert.ok(/const html = nsSanitizeHtml\(await decryptText\(j2\.ct, j2\.iv, cryptoKey\)\);/.test(src), 'v10 锚：历史恢复上屏前必须消毒');
   assert.ok(src.includes('历史不删'), '恢复语义必须注明「历史不删」——防误删的最后保障');
 
   // 自动快照：两处保存成功路径都挂「上一版」
