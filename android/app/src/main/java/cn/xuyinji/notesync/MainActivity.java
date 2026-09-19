@@ -220,20 +220,23 @@ public class MainActivity extends BridgeActivity {
             splashCurtainUp = true;
             // App 首帧≈系统闪屏退场启动时刻：只记时间戳供双条件调度；
             // 禁用退场动画接管监听（31+ 上会接管并吞掉系统 radial-wipe 退场动画）。
-            // postFrameCallback 为 API24+，23 退回 decorView.post（约同一次遍历，误差可忽略）。
+            // 首帧探测用 ViewTreeObserver.OnPreDrawListener（自 API1 存在，首次绘制前恰发一次，
+            // 自摘）——View.postFrameCallback 在 CI 的 android.jar 无此符号（24/31 版本口径文档打架），
+            // 本机无 SDK 肉眼过两次皆红，CI 编译是终裁，换零悬念 API。
             final Runnable markSplashExit = new Runnable() {
                 @Override public void run() {
                     curtainSplashExitAt = android.os.SystemClock.elapsedRealtime();
                     scheduleCurtainDrop();
                 }
             };
-            if (android.os.Build.VERSION.SDK_INT >= 24) {
-                getWindow().getDecorView().postFrameCallback(new android.view.Choreographer.FrameCallback() {
-                    @Override public void doFrame(long frameTimeNanos) { markSplashExit.run(); }
-                });
-            } else {
-                getWindow().getDecorView().post(markSplashExit);
-            }
+            final View curtainDv = getWindow().getDecorView();
+            curtainDv.getViewTreeObserver().addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener() {
+                @Override public boolean onPreDraw() {
+                    try { curtainDv.getViewTreeObserver().removeOnPreDrawListener(this); } catch (Throwable ignored) { }
+                    markSplashExit.run();
+                    return true;
+                }
+            });
             new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(new Runnable() {
                 @Override public void run() { dropSplashCurtain(); }
             }, 15000);

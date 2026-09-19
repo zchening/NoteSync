@@ -49,7 +49,7 @@ test('v9.5.6 原生②：A2 幕布契约（v9.5.7 重构版）——单列全屏
   assert.ok(ACT.includes('}, 15000);'), '15s 硬超时兜底');
   assert.ok(ACT.includes('curtainPageDoneAt + 250') && ACT.includes('curtainSplashExitAt + 450'), '双条件：落地+250 与 退场+450 取 max');
   assert.ok(ACT.includes('if (curtainPageDoneAt == 0) return;'), '页面未落地不调度（错误/15s 兜底管）');
-  assert.ok(ACT.includes('postFrameCallback') && !ACT.includes('setOnExitAnimationListener'), '首帧记退场时刻；exit listener 禁用（会吞 A12+ radial-wipe）');
+  assert.ok(ACT.includes('addOnPreDrawListener') && !ACT.includes('setOnExitAnimationListener'), '首帧 OnPreDrawListener 记退场时刻；exit listener 禁用（会吞 A12+ radial-wipe）');
   assert.ok(ACT.includes('h.removeCallbacks(curtainDropPending)'), '重排撤旧帖（短延时不得提前掀）');
   assert.ok(ACT.includes('MainActivity.this.scheduleCurtainDrop()'), '匿名 client 内显式外嵌 this（历版教训）');
   assert.ok(ACT.includes('if (!splashCurtainUp) return;'), 'drop 幂等短路（重复导航/超时/错误不互踩）');

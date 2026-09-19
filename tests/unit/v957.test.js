@@ -40,12 +40,13 @@ test('v9.5.7 揭幕调度：双条件取 max、未落地不调度、重排撤旧
   assert.ok(ACT.includes('if (curtainPageDoneAt == 0) return;'), '页面未落地直接不调度（错误即掀/15s 兜底独立驱动）');
   assert.ok(ACT.includes('long when = curtainPageDoneAt + 250;') && ACT.includes('when = Math.max(when, curtainSplashExitAt + 450);'), 'max(落地+250, 退场+450)');
   assert.ok(ACT.includes('if (curtainDropPending != null) h.removeCallbacks(curtainDropPending);'), '重排必撤旧帖（防先到的短延时提前掀幕）');
-  const iFrame = ACT.indexOf('getDecorView().postFrameCallback');
-  assert.ok(iFrame > 0 && ACT.slice(iFrame, iFrame + 200).includes('markSplashExit.run()'), '首帧回调=委托统一记时块（锚真实调用行）');
+  const iFrame = ACT.indexOf('addOnPreDrawListener');
+  assert.ok(iFrame > 0 && ACT.slice(iFrame, iFrame + 300).includes('markSplashExit.run()'), 'OnPreDraw 首帧委托统一记时块');
+  assert.ok(ACT.includes('removeOnPreDrawListener(this)') && ACT.slice(ACT.indexOf('onPreDraw'), ACT.indexOf('onPreDraw') + 400).includes('return true'), '首帧后自摘且放行绘制');
   const iMark = ACT.indexOf('final Runnable markSplashExit');
   assert.ok(iMark > 0 && ACT.slice(iMark, iMark + 300).includes('curtainSplashExitAt =') && ACT.slice(iMark, iMark + 300).includes('scheduleCurtainDrop()'), '记时块只写时间戳+交调度，不直接掀幕');
   assert.ok(!ACT.includes('setOnExitAnimationListener'), 'exit listener 禁用（31+ 接管吞系统 radial-wipe 退场）');
-  assert.ok(ACT.includes('SDK_INT >= 24'), 'postFrameCallback API24 门槛+23 退化 decorView.post');
+  assert.ok(!ACT.includes('postFrameCallback('), 'postFrameCallback 禁回潮（CI android.jar 无此符号，两次编译红实锤）');
   assert.ok(ACT.includes('if (!splashCurtainUp || isFinishing() || isDestroyed()) return;'), 'scheduleCurtainDrop 存活+挂旗双护栏');
 });
 
