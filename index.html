@@ -390,6 +390,12 @@
   /* v9.1.1：折叠正文往里缩进 1.5em + 左侧引导线（--line 令牌，非新色），层级更清晰；线沿每个正文块画，到空行（非 ns-fold-body）自然断开 */
   #editor .ns-fold-body{margin-left:.5em;padding-left:1em;border-left:2px solid var(--line)}
   #editor .ns-fold-hide{display:none}
+  /* v10.0.3（用户拍板）：折叠组改为「[折叠] 标题以下全归组」，空行不再切断组——组内空行照旧走引导线，
+     层级不断；闭合改由 [/折叠] 锚显式表达（行尾挂尾为主形态，兼容独立行锚）。全部隐形只吃 font-size:0/0 高，
+     零新色，导出与打印另有作用域副本规则（见 renderNotePng 的 foldCss）。 */
+  #editor .ns-fold-gap{margin-left:.5em;padding-left:1em;border-left:2px solid var(--line)}
+  #editor span.ns-fold-endmark{font-size:0}
+  #editor .ns-fold-endline{height:0;line-height:0;overflow:hidden;opacity:0;font-size:0}
   /* v9.3.0（用户反馈）：移动端三角感应区只有 ≈18×23px 且紧贴标题，手指稍偏即命中正文→落光标弹键盘。
      窄屏下可见三角 12→16px，感应区用定宽定高+负 margin 撑到 44×44（行盒高度与左缘排版不变），
      touch-action:manipulation 消掉双击缩放等待；只在 ≤560px 生效，桌面外观零变化。颜色仍只吃令牌。 */
@@ -873,8 +879,8 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '10.0.2';
-const BUILD_DATE = '2026-09-20';
+const APP_VERSION = '10.0.3';
+const BUILD_DATE = '2026-09-21';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
 let nsSkin = 0;
@@ -2853,11 +2859,21 @@ async function renderNotePng() {
   // 颜色只吃 --muted/--line 令牌；间隙 7px 必须用 px——em 在 font-size:0 的标记上归零（mockup 实锤）。
   wrap.classList.add('ns-export');
   tmp.querySelectorAll('.ns-fold-mark').forEach(mk => { mk.setAttribute('data-ns-export', '1'); });
+  tmp.querySelectorAll('.ns-fold-endmark').forEach(mk => { mk.setAttribute('data-ns-export-end', '1'); });
   const foldCss = document.createElement('style');
   foldCss.textContent =
     '[data-ns-export]{font-size:0;margin-right:7px;color:var(--muted)}' + // R2-P2：编辑器 ▼ 吃 --muted，导出同款（否则继承正文 ink 色）
     '[data-ns-export]::before{content:"\\25BC";font-size:12px;line-height:1.9;vertical-align:baseline}' +
-    '.ns-export .ns-fold-hide{display:block}';
+    '.ns-export .ns-fold-hide{display:block}' +
+    // v10.0.3（用户报障）：折叠正文在导出图里没有缩进、没有左引导线——基规则 #editor .ns-fold-body 锁在
+    // #editor 作用域，离屏副本吃不到（与 v10.0.2 那个「[折叠] 显成字」同一类根因，当时只补了三角漏了这条）。
+    // 这里逐字复刻基规则的 margin/padding/border-left 与 --line 令牌；SVG 快渲的 computed 白名单已含
+    // margin-left/padding-left/border-left 三项，故快慢两路同源不分叉。
+    '.ns-export .ns-fold-body{margin-left:.5em;padding-left:1em;border-left:2px solid var(--line)}' +
+    '.ns-export .ns-fold-gap{margin-left:.5em;padding-left:1em;border-left:2px solid var(--line)}' +
+    // [/折叠] 闭合锚在导出图里同样不许露字：挂尾 span 隐形，独立行锚压成 0 高不占位
+    '[data-ns-export-end]{font-size:0}' +
+    '.ns-export .ns-fold-endline{height:0;line-height:0;overflow:hidden;opacity:0;font-size:0}';
   wrap.insertBefore(foldCss, wrap.firstChild); // v10.0.2 实锤：挂 head 时 SVG 快路序列化前已被拆/foreignObject 看不见页面样式——常驻副本子树随 clone 序列化进 SVG，两路同源
   // 闸 R2-P1 根修：借壳（国产强制反色）的 SHELL_CSS 给 img,canvas 钉了 filter:invert(1)!important，
   // html2canvas 从 wrap 起渲会无视祖先整层反色、却忠实执行图片自身 filter——不钉回去，借壳态导出
@@ -2924,6 +2940,9 @@ const NS_EXPORT_INLINE_PROPS = ('display visibility opacity direction writing-mo
   'text-indent text-overflow white-space word-break overflow-wrap color background-color background-image ' +
   'width height padding padding-top padding-right padding-bottom padding-left margin margin-top margin-right margin-bottom margin-left ' +
   'border border-top border-right border-bottom border-left border-top-left-radius border-top-right-radius border-bottom-left-radius border-bottom-right-radius ' +
+  // v10.0.3（闸 R2-P1-6）：折叠引导线承重件补长写——border-left 简写在个别内核 getPropertyValue 返空，
+  // 且 foreignObject 内 var(--line) 不解析，快路必须靠"活文档算好的长写值"内联，才与慢路（html2canvas 读活样式）同源。
+  'border-left-width border-left-style border-left-color border-top-width border-top-style border-top-color ' +
   'box-sizing flex flex-grow flex-shrink flex-basis flex-wrap align-items align-self justify-content gap vertical-align min-width max-width min-height max-height overflow transform').split(' ');
 function nsInlineFastStyles(src, dst) {
   if (dst.nodeType === 3) return; // 文本节点原样
@@ -3575,7 +3594,7 @@ function linkifyEditor(opts) {
     const breakSeparators = /([\/.?:=&#_%-])/g;
 
     const autoLinks = Array.from(editor.querySelectorAll('a[data-url="1"]'));
-    const straySpans = Array.from(editor.querySelectorAll('span:not(.ns-fold-mark)')); // v9.1.1：折叠标记 span 由 applyFolds 自管先拆后建，不并入杂散 span 拍平——否则只要有一处折叠，linkify 永不走无操作早退、每键都全量拆建（性能/光标抖动）
+    const straySpans = Array.from(editor.querySelectorAll('span:not(.ns-fold-mark):not(.ns-fold-endmark)')); // v9.1.1：折叠标记 span 由 applyFolds 自管先拆后建，不并入杂散 span 拍平——否则只要有一处折叠，linkify 永不走无操作早退、每键都全量拆建（性能/光标抖动）；v10.0.3：[/折叠] 闭合锚同款待遇（也是 applyFolds 自管的显示层 span）
     const remMarks = Array.from(editor.querySelectorAll('u.rem-mark')); // v5.45：提醒标记也要先拆后建
     // v8.1.8（用户拍板③「加提醒后日期下两条下划线」）：本 App 无手动下划线功能（用户确认），任何非 rem-mark
     // 的 <u> 都是 contenteditable 打字延续的克隆（紧邻已有下划线后新敲的字被塞进裸 <u>，先「自带下划线」），
@@ -3706,9 +3725,11 @@ function linkifyEditor(opts) {
 }
 
 // ===== v9.1.1 折叠列表（纯显示层，内容/同步/导出/打印仍全文）=====
-// 规则：某一行「开头」写 [折叠] 才生效；它下面直到第一个空行为止的正文被折叠；末尾以空行收束。
-// 支持一条笔记多处折叠。[折叠] 文本始终留在正文 DOM（同步/导出/打印不丢字），只是显示时
-// 用行首三角替代、正文用 class 隐藏。开/合状态存本机 localStorage（按 noteId），不跨设备同步。
+// 规则（v10.0.3 改）：某一行「开头」写 [折叠] 才生效；它下面的正文一路折到 ①下一个 [折叠] 把手行
+// ②[/折叠] 闭合锚 ③笔记末尾 为止——**空行不再切断组**（旧口径让空行既当排版又当边界，一次回车
+// 就能把组截断或把新打的字吞进收起的组里，用户报障两症状同源）。支持一条笔记多处折叠。
+// [折叠] 与 [/折叠] 文本始终留在正文 DOM（同步/导出/打印不丢字），只是显示时分别用行首三角与
+// font-size:0 隐形承担。开/合状态存本机 localStorage（按 noteId），不跨设备同步。
 const FOLD_MARK = '[折叠]';
 const NS_FOLD_KEY = 'notesync_fold_open';
 // 折叠身份用「第几处折叠」的序号（在本文所有 [折叠] 把手中的位置），而非把手文字——
@@ -3740,6 +3761,169 @@ function isBlankFoldLine(b) {
   if (!b || b.nodeType !== 1) return true;
   return (b.textContent || '').replace(/\u200B/g, '').trim() === '' && !b.querySelector('img');
 }
+// ── v10.0.3（用户拍板）折叠组语义改造 ────────────────────────────────
+// 旧：组 = 把手行往下「到第一个空行为止」。空行既是排版又是边界，一次回车就能把组截断
+//     （正文整段掉出组、再也折不回去），或把新打的字吞进收起的组里（用户报障两症状同源）。
+// 新：组 = 把手行往下，直到 ①下一个 [折叠] 把手行 ②[/折叠] 闭合锚 ③笔记末尾。
+//     空行彻底退出边界判定 → 标题以下全归组；要"在组外继续写"由闭合锚显式表达。
+// 锚两形态：行尾挂尾（主形态，[/折叠] 缩在组内最后一行行尾，font-size:0 零视觉痕迹）；
+//           独立成行（兜底：组内无正文可挂、或用户手写，压成 0 高不占位）。
+const FOLD_END_MARK = '[/折叠]';
+let foldAnchorJustAdded = false;   // 本次 ensureFoldEndAnchor 是否真补了锚（异常回滚据此撤锚）
+function foldVisibleText(b) { return (b.textContent || '').replace(/[\u200B\u200C\uFEFF\u2060]/g, ''); }
+// 块内"第 visHead 个可见字符"对应的 DOM 点（跳过 [折叠] 标记自身的文字与零宽）。
+// 回车拆把手行要用它定位，再用 Range.extractContents 搬节点——保住行内链接/删除线/提醒标记不被拍平。
+function foldSplitPoint(block, visHead) {
+  const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT, {
+    acceptNode: node => (node.parentElement && node.parentElement.closest && node.parentElement.closest('span.ns-fold-mark')) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT
+  });
+  let n;
+  while ((n = walker.nextNode())) {
+    const v = n.nodeValue;
+    let clean = 0;
+    for (let i = 0; i < v.length; i++) {
+      const cc = v.charCodeAt(i);
+      if (cc === 0x200B || cc === 0x200C || cc === 0xFEFF || cc === 0x2060) continue;
+      if (clean === visHead) return { node: n, off: i };
+      clean++;
+    }
+  }
+  return null; // visHead 已达块尾（末尾回车）
+}
+// 把手行判据（与扫描同口径）：首子节点是文本、去掉前导零宽后以 [折叠] 开头
+function foldLeadInfo(b) {
+  if (!b || b.nodeType !== 1) return null;
+  const first = b.firstChild;
+  if (!first || first.nodeType !== 3) return null;
+  const orig = first.nodeValue;
+  const lead = orig.length - orig.replace(/^[\u200B\u200C\uFEFF\u2060]+/, '').length;
+  return orig.slice(lead).indexOf(FOLD_MARK) === 0 ? { node: first, lead: lead } : null;
+}
+// 是不是把手块：未渲染时看行首 [折叠] 文本，已渲染时看 ns-fold 类（applyFolds 把标记包成 span 后
+// firstChild 不再是文本，foldLeadInfo 会漏判——跨组扫描一律走这个，闸 R2-P2）
+function isFoldHandleBlock(b) {
+  if (!b || b.nodeType !== 1) return false;
+  if (b.classList && b.classList.contains('ns-fold')) return true;
+  return !!foldLeadInfo(b);
+}
+// 闸 R2三审-②：只看块**直属子节点**有没有 br/img（querySelector 走全子树会把"锚行里嵌了图/嵌套 br"误判成 tail）
+function foldHasVisualChild(b) {
+  if (!b || !b.childNodes) return false;
+  for (let i = 0; i < b.childNodes.length; i++) {
+    const c = b.childNodes[i];
+    if (c.nodeType === 1 && (c.tagName === 'BR' || c.tagName === 'IMG')) return true;
+  }
+  return false;
+}
+// 本行是不是闭合锚：'line'=整行只有 [/折叠] / 'tail'=行尾挂着 [/折叠] / null=不是
+// 闸 R2-P2-a：原本是个空行（含 <br>）而锚挂在它后面时，必须按 'tail' 算——否则该行被判"整行只有锚"
+// 扫成 0 高 endline，展开态组内那行行距凭空塌掉。
+function foldEndKind(b) {
+  const t = foldVisibleText(b).trim();
+  const hasVisual = foldHasVisualChild(b);
+  if (t === FOLD_END_MARK) return hasVisual ? 'tail' : 'line';
+  if (t.length > FOLD_END_MARK.length && t.slice(-FOLD_END_MARK.length) === FOLD_END_MARK) return 'tail';
+  return null;
+}
+// 把行尾的 [/折叠] 包进隐形 span（先拆后建，幂等；文本始终留在 DOM，同步/导出/打印不丢字）
+function renderFoldEndMark(b, allowWhole) {
+  let n = b.lastChild;
+  // 闸 R2-P2-c：跳过尾部空文本与行尾 <br>（用户打完 [/折叠] 又换行的形态），否则锚裸显
+  while (n && (
+    (n.nodeType === 3 && !n.nodeValue.replace(/[\u200B\u200C\uFEFF\u2060]/g, '')) ||
+    (n.nodeType === 1 && n.tagName === 'BR')
+  )) n = n.previousSibling;
+  if (!n || n.nodeType !== 3) return false;
+  const v = n.nodeValue;
+  const core = v.replace(/[\u200B\u200C\uFEFF\u2060]+$/, '');   // 尾部零宽一并裹进隐形 span，不留裸零宽
+  if (core.slice(-FOLD_END_MARK.length) !== FOLD_END_MARK) return false;
+  // 闸 R2-P2-b：行尾连着多枚锚（双端各补一次留下的重复锚）时一次全裹进同一个隐形 span，
+  // 只裹最后一枚会把前面那枚留成裸字。
+  let cut = core.length, marks = 0;
+  while (marks < 3 && core.slice(cut - FOLD_END_MARK.length, cut) === FOLD_END_MARK) { cut -= FOLD_END_MARK.length; marks++; }
+  const start = cut;
+  // 整块只有锚（独立行形态）时不在此包；但"块内最后一个文本节点恰好全是锚"（如 前文<a>官网</a>[/折叠]、
+  // 或空行挂着锚）必须照包——否则锚以裸文本显形（闸 R1-P1 修锚落点时引出的次生坑 + R2-P2-a）
+  const onlyMark = foldVisibleText(b).trim() === FOLD_END_MARK;
+  const hasVisual = foldHasVisualChild(b);
+  if (onlyMark && !hasVisual && !allowWhole) return false;
+  const span = document.createElement('span');
+  span.className = 'ns-fold-endmark';
+  span.textContent = core.slice(start) + v.slice(core.length);
+  n.nodeValue = core.slice(0, start);
+  b.insertBefore(span, n.nextSibling);
+  return true;
+}
+// 块直属的行尾挂尾锚 span（嵌套在 <a>/<u> 里的不算，防误伤链接文本）
+function foldEndMarkOfBlock(block) {
+  if (!block || block.nodeType !== 1 || !block.querySelector) return null;
+  const s = block.querySelector('span.ns-fold-endmark');
+  return (s && s.parentNode === block) ? s : null;
+}
+// 光标是否停在隐形锚「内部或之后」——这是挂尾锚唯一的散架风险：一旦在锚之后打字，
+// [/折叠] 被顶到行中间 → foldEndKind 认不出 → 整组边界当场失效。判到就弹回锚之前。
+function caretAtFoldEndMark(range) {
+  const node = range.startContainer, off = range.startOffset;
+  if (node.nodeType === 3) {
+    const p = node.parentElement && node.parentElement.closest ? node.parentElement.closest('span.ns-fold-endmark') : null;
+    return p;                                    // 锚之前那个「文本 offset 0」是合法落位，不在这里命中
+  }
+  if (node.nodeType === 1) {
+    if (node.classList && node.classList.contains('ns-fold-endmark')) return node;
+    const s = foldEndMarkOfBlock(node);
+    if (s) { const idx = Array.prototype.indexOf.call(node.childNodes, s); if (off > idx) return s; }
+  }
+  return null;
+}
+// 锚之前的合法落位（该行可见内容的末尾）
+function foldEndBeforePos(span) {
+  const block = span.parentNode;
+  let p = span.previousSibling;
+  while (p && p.nodeType === 3 && p.nodeValue === '') p = p.previousSibling;
+  if (p && p.nodeType === 3) return { node: p, off: p.nodeValue.length };
+  if (p && p.nodeType === 1) return { node: block, off: Array.prototype.indexOf.call(block.childNodes, p) + 1 };
+  return { node: block, off: Array.prototype.indexOf.call(block.childNodes, span) };
+}
+// 独立行锚（0 高不占位）不许当停靠点：往里落就往前后找可见行——光标能到的位置永远看得见
+function foldEndLineCaretFix(block) {
+  let nx = block.nextElementSibling;
+  while (nx && nx.classList && nx.classList.contains('ns-fold-hide')) nx = nx.nextElementSibling;
+  if (nx) {
+    const mk = foldMarkOfBlock(nx);
+    if (mk) { const pos = foldLeftmostPos(mk); setCaret(pos.node, pos.off); return true; }
+    const tn = (function(b){ const w = document.createTreeWalker(b, NodeFilter.SHOW_TEXT); let n; while (n = w.nextNode()) if (n.nodeValue) return n; return null; })(nx);
+    if (tn) { setCaret(tn, 0); return true; }
+    try { placeCaretInBlock(nx); return true; } catch (e) {}
+  }
+  return foldJumpToPrevLineEnd(block);
+}
+// 删把手时联动删掉本组的闭合锚（挂尾＝剥掉行尾那 4 个字；独立行＝整行删掉），
+// 否则把手没了、锚成了无主文本，用户会在行尾看到一串没人解释得了的 [/折叠]。
+function removeFoldAnchorAfter(handle) {
+  const blocks = Array.prototype.filter.call(editor.children, b => b.nodeType === 1);
+  const hi = blocks.indexOf(handle);
+  for (let k = hi + 1; k < blocks.length; k++) {
+    const bb = blocks[k];
+    if (isFoldHandleBlock(bb)) break;                  // 已越过本组范围（闸 R2-P2：渲染后把手必须按类判，否则扫到下一组去删别人的锚）
+    const kind = foldEndKind(bb);
+    if (!kind) continue;
+    if (kind === 'line') { bb.remove(); return true; }
+    const sp = foldEndMarkOfBlock(bb);                 // 挂尾形态：已包好 → 直接拆 span
+    if (sp) { sp.remove(); try { bb.normalize(); } catch (e) {} return true; }
+    let tn = bb.lastChild;                             // 未包形态（applyFolds 还没跑过）→ 从末段文本里剥那 4 个字
+    while (tn && !(tn.nodeType === 3 && tn.nodeValue.replace(/[\u200B\u200C\uFEFF\u2060]/g, ''))) tn = tn.previousSibling;
+    if (tn && tn.nodeType === 3) {
+      const core = tn.nodeValue.replace(/[\u200B\u200C\uFEFF\u2060]+$/, '');
+      if (core.slice(-FOLD_END_MARK.length) === FOLD_END_MARK) {
+        tn.nodeValue = core.slice(0, core.length - FOLD_END_MARK.length) + tn.nodeValue.slice(core.length);
+        try { bb.normalize(); } catch (e) {}
+        return true;
+      }
+    }
+    return false;
+  }
+  return false;
+}
 function applyFolds() {
   if (typeof editor === 'undefined' || !editor) return;
   // 折叠重绘会改块内 DOM——先按「块内可见字符偏移」存选区，术后恢复（仿 linkifyEditor）
@@ -3752,53 +3936,127 @@ function applyFolds() {
       if (editor.contains(r.commonAncestorContainer)) { try { saved = saveSelectionBlocked(editor, r); } catch (e) {} }
     }
   }
-  // 1) 复位：拆掉已有 fold-mark span（[折叠] 文本合回行首），清掉所有折叠类——先拆后建，幂等
-  Array.prototype.forEach.call(editor.querySelectorAll('span.ns-fold-mark'), s => {
+  // 1) 复位：拆掉已有 fold-mark / fold-endmark span（文本合回原位），清掉所有折叠类——先拆后建，幂等
+  Array.prototype.forEach.call(editor.querySelectorAll('span.ns-fold-mark, span.ns-fold-endmark'), s => {
     const p = s.parentNode;
     while (s.firstChild) p.insertBefore(s.firstChild, s);
     s.remove();
   });
   Array.prototype.forEach.call(editor.children, b => {
-    if (b.nodeType === 1) b.classList.remove('ns-fold', 'ns-fold-open', 'ns-fold-collapsed', 'ns-fold-hide', 'ns-fold-body');
+    if (b.nodeType === 1) b.classList.remove('ns-fold', 'ns-fold-open', 'ns-fold-collapsed', 'ns-fold-hide', 'ns-fold-body', 'ns-fold-gap', 'ns-fold-endline');
   });
   try { editor.normalize(); } catch (e) {}
-  // 2) 逐块扫描：行首 [折叠] → 包标记 + 折叠其下正文到第一个空行
+  // 2) 逐块扫描：行首 [折叠] → 包标记 + 折到闭合锚 / 下一个把手 / 文末
   const open = foldOpenSet();
   const blocks = Array.prototype.filter.call(editor.children, b => b.nodeType === 1);
   let i = 0, foldIdx = 0;
   while (i < blocks.length) {
     const b = blocks[i];
-    const first = b.firstChild;
-    let hit = false;
-    if (first && first.nodeType === 3) {
-      const orig = first.nodeValue;
-      const lead = orig.length - orig.replace(/^\u200B+/, '').length; // 只吞前导零宽（linkify 可能留），不动标题正文
-      const afterLead = orig.slice(lead);
-      if (afterLead.indexOf(FOLD_MARK) === 0) {
-        const span = document.createElement('span');
-        span.className = 'ns-fold-mark';
-        span.textContent = FOLD_MARK;
-        first.nodeValue = afterLead.slice(FOLD_MARK.length);
-        b.insertBefore(span, first);
-        b.classList.add('ns-fold');
-        const isOpen = open.has(foldIdx);
-        foldIdx++;
-        b.classList.add(isOpen ? 'ns-fold-open' : 'ns-fold-collapsed');
-        let j = i + 1;
-        while (j < blocks.length && !isBlankFoldLine(blocks[j])) {
-          blocks[j].classList.add('ns-fold-body'); // 始终标记正文块（展开/收起都在），CSS 据此缩进 + 画左引导线
-          if (!isOpen) blocks[j].classList.add('ns-fold-hide');
-          j++;
-        }
-        i = j; hit = true;
+    const lead = foldLeadInfo(b);
+    if (lead) {
+      const span = document.createElement('span');
+      span.className = 'ns-fold-mark';
+      span.textContent = FOLD_MARK;
+      lead.node.nodeValue = lead.node.nodeValue.slice(lead.lead + FOLD_MARK.length);
+      b.insertBefore(span, lead.node);
+      b.classList.add('ns-fold');
+      const isOpen = open.has(foldIdx);
+      foldIdx++;
+      b.classList.add(isOpen ? 'ns-fold-open' : 'ns-fold-collapsed');
+      if (foldEndKind(b)) { renderFoldEndMark(b, true); i = i + 1; continue; } // 闸 R2-P1-3：把手自己行尾就挂着 [/折叠]（用户手写 [折叠]标题[/折叠]）＝本组为空且已闭合；不特判会既显裸字又把后面所有行吞进组
+      let anchorIdx = -1, anchorKind = null;
+      for (let k = i + 1; k < blocks.length; k++) {
+        if (foldLeadInfo(blocks[k])) break;                     // 下一个把手先出现 → 本组无锚
+        const kind = foldEndKind(blocks[k]);
+        if (kind) { anchorIdx = k; anchorKind = kind; break; }
       }
+      let bodyEnd, next;
+      if (anchorIdx < 0) {
+        let stop = blocks.length;
+        for (let k = i + 1; k < blocks.length; k++) { if (foldLeadInfo(blocks[k])) { stop = k; break; } }
+        bodyEnd = stop - 1; next = stop;                        // 无锚：一路收到下一个把手或文末
+      } else if (anchorKind === 'tail') {
+        bodyEnd = anchorIdx; next = anchorIdx + 1;              // 挂尾行本身就是组内最后一行
+      } else {
+        bodyEnd = anchorIdx - 1; next = anchorIdx + 1;          // 独立行锚不属于正文
+      }
+      for (let k = i + 1; k <= bodyEnd; k++) {
+        const bb = blocks[k];
+        if (!bb.classList) continue;
+        bb.classList.add(isBlankFoldLine(bb) ? 'ns-fold-gap' : 'ns-fold-body'); // 空隙也标记：引导线不断
+        if (!isOpen) bb.classList.add('ns-fold-hide');
+      }
+      if (anchorIdx >= 0) {
+        if (anchorKind === 'tail') renderFoldEndMark(blocks[anchorIdx]);
+        else blocks[anchorIdx].classList.add('ns-fold-endline');
+      }
+      i = next; continue;
     }
-    if (!hit) i++;
+    i++;
   }
+  // 2.5) 无主锚清扫（闸 R2-P2-9）：两端各补一次、或用户手敲一行 [/折叠] 而上方没有折叠时，
+  // 多余的锚不能变成行尾/整行裸字——用户口径「编辑器与导出图里都不许看到 [/折叠]」，一律压 0 高不占位。
+  Array.prototype.forEach.call(editor.children, b => {
+    if (b.nodeType !== 1 || !b.classList) return;
+    if (b.classList.contains('ns-fold') || b.classList.contains('ns-fold-body') || b.classList.contains('ns-fold-gap')) return;
+    if (b.querySelector && b.querySelector('span.ns-fold-endmark')) return;   // 已被某组收编的挂尾锚
+    if (foldVisibleText(b).trim() === FOLD_END_MARK) { b.classList.add('ns-fold-endline'); return; }
+    // 闸 R2-P2-b：组外行尾的裸锚（双端各补一次留下的第二枚、或用户手写）也一律就地隐形包，
+    // 口径＝"编辑器与导出图里都不许看到 [/折叠]"；最多连包三枚防意外死循环。
+    for (let guard = 0; guard < 3 && foldEndKind(b) === 'tail'; guard++) { if (!renderFoldEndMark(b, true)) break; }
+  });
   // 3) 恢复选区
   if (hadFocus && saved) {
     try { const nr = restoreSelectionInBlock(editor, saved); if (nr) setSel(nr); } catch (e) {}
   }
+}
+// 组内最后一块（含空隙），按上一次渲染的类走；把手自身无正文时返回把手
+function foldGroupLastBlock(handle) {
+  let last = handle, nx = handle.nextElementSibling;
+  while (nx && nx.classList && (nx.classList.contains('ns-fold-body') || nx.classList.contains('ns-fold-gap'))) { last = nx; nx = nx.nextElementSibling; }
+  return last;
+}
+function foldIndexOfHandle(handle) {
+  let idx = 0, n = handle;
+  while ((n = n.previousElementSibling)) { if (n.nodeType === 1 && n.classList && n.classList.contains('ns-fold')) idx++; }
+  return idx;
+}
+// 撤掉某一块行尾的闭合锚（隐形 span 或裸文本两种形态都认）——异常回滚专用
+function stripFoldEndMarkFrom(block) {
+  if (!block || block.nodeType !== 1) return false;
+  const sp = foldEndMarkOfBlock(block);
+  if (sp) { sp.remove(); try { block.normalize(); } catch (e) {} return true; }
+  let n = block.lastChild;
+  while (n && n.nodeType === 3 && !n.nodeValue.replace(/[\u200B\u200C\uFEFF\u2060]/g, '')) n = n.previousSibling;
+  if (n && n.nodeType === 3) {
+    const core = n.nodeValue.replace(/[\u200B\u200C\uFEFF\u2060]+$/, '');
+    if (core.slice(-FOLD_END_MARK.length) === FOLD_END_MARK) {
+      n.nodeValue = core.slice(0, core.length - FOLD_END_MARK.length) + n.nodeValue.slice(core.length);
+      try { block.normalize(); } catch (e) {}
+      return true;
+    }
+  }
+  return false;
+}
+// 补闭合锚（能省则省：本组已有锚就不动）。挂到组内最后一行行尾；组内无正文则落独立行锚。
+// 返回"锚所在块"——新行一律插在它之后，即天然组外。
+function ensureFoldEndAnchor(handle) {
+  foldAnchorJustAdded = false;
+  const blocks = Array.prototype.filter.call(editor.children, b => b.nodeType === 1);
+  const hi = blocks.indexOf(handle);
+  for (let k = hi + 1; k < blocks.length; k++) {
+    if (isFoldHandleBlock(blocks[k])) break;                      // 闸 R2-P2：已渲染 DOM 上把手块首子是 mark span，
+    if (foldEndKind(blocks[k])) return blocks[k];                 // foldLeadInfo 认不出下一把手 → 会跨组误判、漏补锚
+  }
+  const last = foldGroupLastBlock(handle);
+  // 组内无正文可挂（空折叠组）：锚直接挂到块真末尾。空折叠组时挂把手行尾，绝不插独立行——独立行锚压
+  // 0 高不占位，对用户就是一条"看不见的幽灵行"（光标能落进去打字进黑洞）。
+  const anchorHost = last;
+  anchorHost.appendChild(document.createTextNode(FOLD_END_MARK));
+  try { anchorHost.normalize(); } catch (e) {}
+  foldAnchorJustAdded = true;                                     // 闸 R2三审-①：异常回滚时据此撤掉本次新补的锚
+  applyFolds();
+  return anchorHost;
 }
 // 点行首三角开合（事件委托；三角是 .ns-fold-mark 的 ::before，点击 target 即该 span）
 editor.addEventListener('click', e => {
@@ -3806,8 +4064,7 @@ editor.addEventListener('click', e => {
   if (!mark || !editor.contains(mark)) return;
   e.preventDefault();
   const handle = mark.closest('.ns-fold'); if (!handle) return;
-  let idx = 0, n = handle;
-  while ((n = n.previousElementSibling)) { if (n.nodeType === 1 && n.classList.contains('ns-fold')) idx++; }
+  const idx = foldIndexOfHandle(handle);
   const open = foldOpenSet();
   if (open.has(idx)) open.delete(idx); else open.add(idx);
   try {
@@ -3909,6 +4166,7 @@ editor.addEventListener('keydown', e => {
   mark.remove();
   if (handle) {
     handle.classList.remove('ns-fold', 'ns-fold-open', 'ns-fold-collapsed');
+    try { removeFoldAnchorAfter(handle); } catch (err) {} // v10.0.3：把手没了，本组的 [/折叠] 锚跟着清，别留无主文本
     try { const t = handle.firstChild; if (t) setCaret(t.nodeType === 3 ? t : handle, 0); } catch (err) {}
   }
   try { applyFolds(); } catch (err) {}
@@ -3979,6 +4237,13 @@ function foldCaretNormalize() {
   if (!sel || !sel.rangeCount || !sel.isCollapsed) return false;
   const r = sel.getRangeAt(0);
   if (!editor || !editor.contains(r.startContainer)) return false;
+  // v10.0.3 护栏①：光标不许停在隐形闭合锚内部或之后（在那儿打字会把 [/折叠] 顶到行中间、整组边界当场失效）
+  // → 一律弹回锚之前＝该行可见内容的末尾。与 [折叠] 标记同款纪律：隐形文本不是停靠点。
+  const em = caretAtFoldEndMark(r);
+  if (em) { try { const pos = foldEndBeforePos(em); setCaret(pos.node, pos.off); } catch (e) {} return true; }
+  // v10.0.3 护栏②：独立行锚压成 0 高不占位，光标落进去就是"打字进黑洞"→ 就近弹到可见行
+  const eb = blockOf(r.startContainer, editor);
+  if (eb && eb !== editor && eb.classList && eb.classList.contains('ns-fold-endline')) { try { return foldEndLineCaretFix(eb); } catch (e) { return false; } }
   const mk = caretInsideFoldMark(r);
   if (!mk) return false;
   const fblock = (mk.closest ? mk.closest('.ns-fold') : null) || mk.parentNode;
@@ -4393,39 +4658,95 @@ function flattenSplitLink() {
   setSel(r);
 }
 editor.addEventListener('keydown', e => {
-  if (e.key !== 'Enter' || e.isComposing || e.metaKey || e.ctrlKey) return;
+  // 闸 R2-P1-5：组字守卫加固——本仓既有教训（安卓 WebView 的 e.isComposing 不可靠，须配 keyCode 229
+  // 与模块级 isComposing 双判），而本版把分支从「仅收起态标题末尾」扩到把手行任意落点，风险被放大，
+  // 三判齐上：组字期一律交回原生，绝不在拼音上屏中途动 DOM（红线9）。
+  if (e.key !== 'Enter' || e.isComposing || e.keyCode === 229 || e.metaKey || e.ctrlKey) return;
+  if (typeof isComposing !== 'undefined' && isComposing) return;
   if (e.shiftKey) return; // 软换行 <br>，交给浏览器
-  // v9.3.7 问题2：光标停在「收起态折叠标题」可见文字末尾按回车时，默认 insertParagraph 会把新空段
-  // 插进标题与其隐藏正文之间、搅乱折叠边界（用户见「折叠列表内的内容被换行」）。改为跳过整组折叠
-  // （所有 ns-fold-body 兄弟块，含 display:none 的隐藏正文），在折叠组之后另起一块并把光标落进去，
-  // 隐藏正文与折叠结构一律不动。展开态、光标在标题中间等仍走原逻辑。
+  // v10.0.3（用户拍板，替掉 v9.3.7 只挡「收起态+光标在标题末尾」那一格的守卫）：
+  // 光标在 [折叠] 把手行上按回车（展开/收起、行首/行中/行尾都算）——
+  //   ① 「[折叠]」+光标前的内容留在把手行（标记与三角绝不被劈开，行内链接/删除线/提醒标记原样带走）；
+  //   ② 光标后那段（末尾回车时为空）整体挪到整组之后 = 折叠组外，光标跟到它开头接着打字；
+  //   ③ 组内原有正文与开合态一律不动；
+  //   ④ 本组还没有 [/折叠] 闭合锚时补一枚——只有"用户从把手行回车要出组"才补，平时一个字都不加。
+  // 根因：旧规则下 insertParagraph 会把新块插进标题与正文之间，空行当场截断组 →
+  //       正文整段掉出组（再也折不回去），或把手被劈成「[折叠]前半句 + 隐藏后半句」（打字即"消失"）。
   {
     const sel0 = window.getSelection();
     if (sel0 && sel0.rangeCount && sel0.isCollapsed) {
       const r0 = sel0.getRangeAt(0);
       if (editor.contains(r0.startContainer)) {
         const blk = currentBlock(r0.startContainer);
-        if (blk && blk !== editor && blk.classList && blk.classList.contains('ns-fold') && blk.classList.contains('ns-fold-collapsed')) {
-          const tailRng = document.createRange();
-          tailRng.selectNodeContents(blk);
-          let atEnd = false;
+        if (blk && blk !== editor && blk.classList && blk.classList.contains('ns-fold')) {
+          let foldHandled = false;
+          let frag = null;                                            // 闸 R2-P1：catch 里要能把它塞回去
+          let anchorBlock = null;
+          let nb = null;
+          let extracted = false;                                      // 只有真摘出过后半句才需要回塞（否则回滚反把字加重复）
+          let tailPlain = '';                                         // 后半句的纯文本兜底（极端路径下按字回塞）
           try {
-            tailRng.setStart(r0.startContainer, r0.startOffset);
-            const tail = tailRng.toString();
-            let vis = 0;
-            for (let k = 0; k < tail.length; k++) { const cc = tail.charCodeAt(k); if (cc !== 0x200B && cc !== 0x200C && cc !== 0xFEFF && cc !== 0x2060) vis++; }
-            atEnd = vis === 0;
-          } catch (e0) { atEnd = false; }
-          if (atEnd) {
             e.preventDefault();
-            let last = blk, nx = blk.nextElementSibling;
-            while (nx && nx.classList && nx.classList.contains('ns-fold-body')) { last = nx; nx = nx.nextElementSibling; }
-            const nb = document.createElement('div'); nb.innerHTML = '<br>';
-            last.after(nb);
-            placeCaretInBlock(nb);
-            editor.dispatchEvent(new Event('input'));
+            // 光标在把手行内的可见字符落点：数「光标→块尾」的可见字数（与 v9.3.7 同款口径），
+            // 再拿可见标题长度反推偏移——直接数块首→光标会把 [折叠] 标记自己的 4 个字也算进去（劈错位置）。
+            const tailRng = document.createRange();
+            tailRng.selectNodeContents(blk);
+            tailRng.setStart(r0.startContainer, r0.startOffset);
+            let visTail = 0;
+            const tstr = tailRng.toString();
+            for (let k = 0; k < tstr.length; k++) { const cc = tstr.charCodeAt(k); if (cc !== 0x200B && cc !== 0x200C && cc !== 0xFEFF && cc !== 0x2060) visTail++; }
+            let visAll = 0;
+            const allRng = document.createRange();
+            allRng.selectNodeContents(blk);
+            const astr = allRng.toString();
+            for (let k = 0; k < astr.length; k++) { const cc = astr.charCodeAt(k); if (cc !== 0x200B && cc !== 0x200C && cc !== 0xFEFF && cc !== 0x2060) visAll++; }
+            const markLen = (blk.firstElementChild && blk.firstElementChild.classList.contains('ns-fold-mark')) ? FOLD_MARK.length : 0;
+            const titleLen = Math.max(0, visAll - markLen);
+            const full = markLen ? foldVisibleText(blk).slice(markLen) : foldVisibleText(blk);   // 去掉 [折叠] 后的可见标题原文
+            let pos = titleLen - visTail;
+            if (pos < 0) pos = 0;
+            if (pos > titleLen) pos = titleLen;
+            // 闸 R2-P0-2：绝不做 textContent 往返——那会把标题里的 <a href>/<u>/<s>/<img> 拍平成纯文本，
+            // 链接 href 永久丢失并被 saveLocal 写进云端与历史。改 Range.extractContents 搬节点。
+            tailPlain = full.slice(pos);
+            const sp = foldSplitPoint(blk, pos);
+            if (sp && pos < titleLen) {
+              const cut = document.createRange();
+              cut.selectNodeContents(blk);
+              cut.setStart(sp.node, sp.off);
+              frag = cut.extractContents();
+              extracted = true;
+            }
+            anchorBlock = ensureFoldEndAnchor(blk);                  // 落锚（内部 applyFolds 只重排类与 span，块引用不变）
+            nb = document.createElement('div');
+            if (frag && frag.textContent.replace(/[\u200B\u200C\uFEFF\u2060]/g, '')) nb.appendChild(frag);
+            else nb.innerHTML = '<br>';
+            (anchorBlock && anchorBlock.parentNode === editor ? anchorBlock : blk).after(nb);
+            foldHandled = true;
+            try { applyFolds(); } catch (err) {}
+            try { persistFoldStates(); } catch (err) {}
+            const first = (function (root) { const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT); let n; while (n = w.nextNode()) if (n.nodeValue) return n; return null; })(nb);
+            try { if (first) setCaret(first, 0); else placeCaretInBlock(nb); } catch (err) { try { placeCaretInBlock(nb); } catch (e2) {} }
+            editor.dispatchEvent(new Event('input'));              // 走既有链路：linkify→applyFolds→sync→保存
+            try { ensureCaret(); } catch (err) {}
+          } catch (err) {
+            foldHandled = false;
+            // 闸 R2三审-①（必修）：异常路径必须"像没按过这次回车"。
+            // ① 撤掉本次刚补的锚（不撤则回滚后锚甩在行中成裸字）；② 把摘出去的后半句塞回把手行（字符守恒）；
+            // ③ 关键：直接 return，绝不再掉到下面的通用换行分支——上一版就是漏了这句，二次 insertParagraph
+            //    平白多一枚空块、后半句落回把手正下方＝组内，把本版要修的症状在异常路径上原样复现。
+            try { if (foldAnchorJustAdded) { if (anchorBlock) stripFoldEndMarkFrom(anchorBlock); else removeFoldAnchorAfter(blk); } } catch (e5) {}
+            try {
+              if (extracted) {
+                if (frag && frag.firstChild) blk.appendChild(frag);
+                else if (tailPlain && (!nb || !editor.contains(nb))) blk.appendChild(document.createTextNode(tailPlain));
+              }
+            } catch (e4) {}
+            frag = null; tailPlain = '';
+            try { applyFolds(); } catch (e6) {}
             return;
           }
+          if (foldHandled) return;
         }
       }
     }
@@ -8292,7 +8613,7 @@ function normDecorHtml(html) {
       const tag = child.tagName;
       if (tag === 'A' && child.getAttribute('data-url') === '1') { out += walk(child); continue; }
       if (tag === 'U') { out += walk(child); continue; } // v8.1.8：本 App 无手动下划线（用户拍板），任何 <u>（rem-mark 或打字延续克隆）都是非语义装饰，一律拍平（旧口径只拆 rem-mark，克隆 u 会被判真实差异 → 术后假脏多存一版）
-      if (tag === 'SPAN' && child.classList.contains('ns-fold-mark')) { out += walk(child); continue; } // v9.1.1：折叠标记 <span class="ns-fold-mark">[折叠]</span> 是纯显示层装饰，拍平回 [折叠] 文本——加/去标记、开/合折叠（折叠态是块 div 上的 class，本函数不输出 div class）都不算内容改动，绝不误触 PUT/撤销/草稿冲突条
+      if (tag === 'SPAN' && (child.classList.contains('ns-fold-mark') || child.classList.contains('ns-fold-endmark'))) { out += walk(child); continue; } // v9.1.1：折叠标记 <span class="ns-fold-mark">[折叠]</span> 是纯显示层装饰，拍平回 [折叠] 文本——加/去标记、开/合折叠（折叠态是块 div 上的 class，本函数不输出 div class）都不算内容改动，绝不误触 PUT/撤销/草稿冲突条；v10.0.3：[/折叠] 闭合锚 span 同款（锚文本本身是真实内容，包不包 span 不算差异）
       if (tag === 'S' && child.classList.contains('rem-done')) { out += walk(child); continue; }
       if (tag === 'SPAN' && isCloneNoiseSpan(child)) { out += walk(child); continue; } // v7.7.0：克隆噪声 span 同裸 span 拍平
       const lt = tag.toLowerCase();
@@ -8350,7 +8671,7 @@ function normPlaceholderHtml(html) {
       if (c.nodeType === 3) { out += c.nodeValue.replace(ZWSP, ''); continue; }
       if (c.nodeType !== 1) continue;
       if (isEmptyShell(c)) continue; // 空壳连子树剥（壳内 <br> 一并消失）
-      if (c.tagName === 'SPAN' && c.classList.contains('ns-fold-mark')) { out += walk(c); continue; } // v9.1.1：折叠标记拍平回 [折叠] 文本（对齐 normDecorHtml 口径），占位等价也不把折叠装饰当真实差异
+      if (c.tagName === 'SPAN' && (c.classList.contains('ns-fold-mark') || c.classList.contains('ns-fold-endmark'))) { out += walk(c); continue; } // v9.1.1：折叠标记拍平回 [折叠] 文本（对齐 normDecorHtml 口径），占位等价也不把折叠装饰当真实差异；v10.0.3：[/折叠] 闭合锚 span 同款
       if (isCloneNoiseSpan(c)) { out += walk(c); continue; } // v7.5.0（修6）拍平裸 span + v7.7.0 克隆噪声 span（对齐 normDecorHtml 口径），包装差异不再干扰占位等价
       const lt = c.tagName.toLowerCase();
       let attrs = '';
@@ -10275,7 +10596,7 @@ function bodyWords() {
   function add(w) { w = w.trim(); if (w.length < 2 || w.length > 6) return; if (seen[w]) return; seen[w] = 1; out.push(w); }
   try {
     var t = (editor && editor.textContent) || '';
-    t = t.replace(/[​]/g, '').replace(/\[折叠\]/g, ' ').replace(/\s+/g, ' ');
+    t = t.replace(/[\u200B]/g, '').replace(/\[\/?折叠\]/g, ' ').replace(/\s+/g, ' '); // v10.0.3：[/折叠] 闭合锚同样不当游戏词源
     var parts = t.split(/[^0-9A-Za-z一-鿿%.\-]+/);
     for (var i = 0; i < parts.length && out.length < 40; i++) {
       var p = parts[i].replace(/^[.\-]+|[.\-]+$/g, '');

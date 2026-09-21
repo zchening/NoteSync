@@ -25,11 +25,11 @@
 | 分类 | 功能 | 条目数 | 触发核对的条件 |
 |------|------|--------|----------------|
 | A | 删除线 | 7 | 修改 strikeBtn / addStrikeToRange / removeStrikeFromRange / rangeIntersectsNode / contentHasS / linkifyEditor |
-| B | 导出图片 | 7 | 修改 exportImage / exportImgBtn 事件 / html2canvas 调用 / 临时 div 渲染 |
+| B | 导出图片 | 8 | 修改 exportImage / exportImgBtn 事件 / html2canvas 调用 / 临时 div 渲染 |
 | C | 缓存与图标 | 4 | 修改 favicon / manifest.json / Cache-Control 头 / icon-maskable 生成与路由 |
 | D | PWA 与移动端 | 7 | 修改 manifest.json / 触摸事件 / 夜间模式 CSS / applyTheme / THEME_PALETTE / mountThemeOverride / color-scheme 声明（:root 或 meta）/ theme-override 挂载点 / viewport meta（interactive-widget） |
 | E | 选区与同步 | 4 | 修改 editor 输入/粘贴处理 / linkifyEditor / saveSelectionOffsets·restoreSelectionOffsets / cleanupLeadingTrailingBreaks / insertNodeAtCaret / 删除逻辑 / poll 远端合并 / selectionchange 钳制 |
-| F | 光标与编辑 | 13 | 修改 Enter 处理 / cleanupLeadingTrailingBreaks / caretInsideNode / linkifyEditor 块内偏移 / ensureBlockWrapped / ensureCaret / repaintCaret / relocateCaretToVisible / isComposing |
+| F | 光标与编辑 | 14 | 修改 Enter 处理 / cleanupLeadingTrailingBreaks / caretInsideNode / linkifyEditor 块内偏移 / ensureBlockWrapped / ensureCaret / repaintCaret / relocateCaretToVisible / isComposing / applyFolds 折叠组边界与锚 |
 | G | 撤销栈 | 1 | 修改 自建撤销栈 / captureState / applyState / recordIfChanged / syncCurrentState / undo / redo / keydown 拦截 Ctrl+Z/Y |
 | H | 落地页/解锁/路由/图标/指纹 | 6 | 修改 landing 路由(ID_RE/extractId/导航) / 打开按钮禁用 / 解锁按钮禁用态样式 / 退出锁定禁用态 / 落地页中文输入过滤 / 指纹 WebAuthn PRF 逻辑（v5.15 起彻底移除） |
 | I | 链接转换/粘贴/保存可靠性 | 7 | 修改 linkifyEditor / buildLinkSafe / trimUrlTrailing / urlRegex / paste 处理 / pasteTextNative / input 处理器 busy 分支 / saveLocal / scheduleSaveRetry / flushDirtySave / fetchRetry / copyBtn / offline·online 事件监听 / lastSyncAt / currentSyncTime |
@@ -220,6 +220,18 @@
   - [ ] 含 Cloudinary 图片的笔记导出正常（useCORS: true）
   - [ ] 含其他域名图片时，有友好错误提示而非白屏
   - [ ] 错误提示后编辑器样式恢复正常（配合 B6）
+
+### B8 | 导出图片：折叠正文没有缩进与左引导线
+- **版本**: v10.0.3
+- **现象**: 「导出图片并复制」出的图里，`[折叠]` 组下的正文平铺通栏——没有编辑器里那套往里缩进 + 左侧一条竖引导线的层级
+- **根因**: 基规则 `#editor .ns-fold-body{margin-left:.5em;padding-left:1em;border-left:2px solid var(--line)}` 作用域锁在 `#editor`，而导出走离屏副本（`tmp` 挂在新建的 `wrap.ns-export` 上，不在 `#editor` 内），选择器根本匹配不到。v10.0.2 修「裸 [折叠] 显成字」时只给导出副本补了 ▼ 三角与 `display:block`，**漏了这条缩进/竖线**——同一类根因第二次踩
+- **修复**: `renderNotePng` 的 `foldCss` 内追加 `.ns-export .ns-fold-body` / `.ns-export .ns-fold-gap` 两条，逐字复刻基规则（--line 令牌，零新色）；`[/折叠]` 闭合锚同步 `[data-ns-export-end]{font-size:0}` + `.ns-export .ns-fold-endline` 0 高，出图不露字。SVG 快渲 computed 白名单早含 margin-left/padding-left/border-left，快慢两路同源不分叉
+- **关联文件**: index.html → `renderNotePng()` 内 `foldCss`；基规则在 `#editor .ns-fold-body`
+- **核对要点**:
+  - [ ] 导出图里折叠正文有缩进、有一条左竖线，与编辑器观感一致
+  - [ ] 组内空行处引导线不断（`ns-fold-gap` 同样吃到样式）
+  - [ ] 出图与编辑器 DOM 里都看不到 `[/折叠]` 字样
+  - [ ] 单测「复刻串与基规则一字不差」对照断言不红（防日后单边改动两路分叉）
 
 ---
 
@@ -694,6 +706,22 @@
   - [ ] 含 URL 行回车 → 链接保留、光标在空块。
   - [ ] 不回归 F12（含内容块坏偏移仍 relocate）。
   - [ ] 验收探针 `tests/e2e/_probe_f13.js` 6/6 + `tests/e2e/_probe_f13_edge.js` 16/16 全绿。
+
+### F14 | 折叠组 × 回车：空行既当排版又当组边界，一次回车截断组或吞掉新打的字
+- **版本**: v10.0.3
+- **现象**: 收起的折叠组上按回车、空两行再打字，折叠里的正文要么"消失"，要么整段跑到下面几行里变成普通行，三角再也折不回去
+- **根因**: 旧口径「[折叠] 往下折到第一个空行为止」让**空行同时是排版和组边界**，而回车恰恰生产空行/新行。两条通路：①展开态在标题与正文之间插入空块 → 下次重绘时组在该空行截断，原正文失去 `ns-fold-body` 身份、永久掉出组；②收起态光标在把手行中间/开头回车 → Blink `insertParagraph` 把把手劈成「[折叠]前半句 + 后半句」并把 `ns-fold*` 类**克隆**给新块，后半句随即被重算成该组正文 → 收起态下当场隐形（**字符守恒，字没删，只是看不见**），用户新打的字一并被吞。放大器：`applyFolds` 只挂在 linkify 的 finally，而 `linkifyDeferred` 在末次击键 1500ms 静默前一直推迟 → 打字期间 DOM 带着 Blink 克隆的陈旧折叠类，边打字边跳。v9.3.7 旧守卫只挡「收起态 + 光标在标题可见文字末尾」这一格，其余落点全裸奔
+- **修复**: ①组边界改为「下一个 `[折叠]` 把手 / `[/折叠]` 闭合锚 / 文末」，**空行彻底退出边界判定**（组内空行打 `ns-fold-gap` 走引导线、收起一并藏）；②闭合锚 `[/折叠]` 由系统**在用户要出组的那一刻**自动补，行尾挂尾为主形态（`span.ns-fold-endmark` font-size:0 零痕迹、不新增行），整行只有锚时 `ns-fold-endline` 压 0 高；③把手行回车重写：前半句留把手、后半句（末尾回车时为空）整体挪到锚之后＝组外、光标跟过去，组内正文与开合态不动；④光标护栏：隐形锚不是停靠点，落进锚内/锚后一律弹回锚之前（在那儿打字会把锚顶到行中间令整组散架，探针复现过）；删 `[折叠]` 联动删本组锚；⑤等价口径随动：`normDecorHtml` 与 `isPlaceholderEqual` 两处比较器 + linkify `straySpans` 名单同时豁免 `ns-fold-endmark`
+- **关联文件**: index.html → `applyFolds` / `foldEndKind` / `renderFoldEndMark` / `ensureFoldEndAnchor` / `removeFoldAnchorAfter` / Enter keydown 守卫 / `foldCaretNormalize`
+- **核对要点**:
+  - [ ] 收起态光标在标题末尾回车 + 打字 → 新行在组外可见，原正文仍被折起
+  - [ ] 收起态光标在标题中间回车 → 前半句留把手、后半句挪到组外，组内正文一字不动
+  - [ ] 展开态在标题与正文之间留下空块（正文首行行首回车）→ 组不截断、正文不掉出去
+  - [ ] 折叠组写在笔记最末尾 → 回车后新行不被吞（锚正是此刻补上的，不按回车就一个字都不加）
+  - [ ] 光标落到隐形锚之后打字 → 被弹回锚之前，锚不失效、组不散架
+  - [ ] 删掉 `[折叠]` 把手 → 本组 `[/折叠]` 一并清除，行尾不留无主标记
+  - [ ] 存量老笔记（标题下空一行再写正文）本版起该行归入折叠——拍板项，非回归
+  - [ ] 真 Chromium 探针 15 项 + `tests/unit/v1003.test.js` 七测全绿
 
 ---
 

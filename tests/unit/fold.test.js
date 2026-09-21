@@ -11,8 +11,8 @@ const SRC = fs.readFileSync(INDEX, 'utf8');
 function ed(w) { return w.document.getElementById('editor'); }
 function blocks(w) { return Array.prototype.slice.call(ed(w).children); }
 
-/* ── F1 行首 [折叠] 折叠其下到第一个空行，默认收起 ── */
-test('F1 行首 [折叠] 生效：包标记+默认收起，正文折到第一个空行为止', t => {
+/* ── F1 行首 [折叠] 生效：无锚时「标题以下全归组」（v10.0.3 语义翻转，用户拍板） ── */
+test('F1 行首 [折叠] 生效：包标记+默认收起，无锚时标题以下全归组（空行不再收束）', t => {
   const app = loadApp(); t.after(() => app.window.close());
   const w = app.window;
   ed(w).innerHTML = '<div>[折叠]标题</div><div>正文1</div><div>正文2</div><div><br></div><div>后面</div>';
@@ -26,8 +26,11 @@ test('F1 行首 [折叠] 生效：包标记+默认收起，正文折到第一个
   assert.strictEqual(b[0].textContent, '[折叠]标题', '折叠不得吞字：把手行文本原样保留');
   assert.ok(b[1].classList.contains('ns-fold-hide'), '正文1 被折叠隐藏');
   assert.ok(b[2].classList.contains('ns-fold-hide'), '正文2 被折叠隐藏');
-  assert.ok(!b[3].classList.contains('ns-fold-hide'), '空行是收束点，不隐藏');
-  assert.ok(!b[4].classList.contains('ns-fold-hide'), '空行之后的正文不受影响');
+  // v10.0.3：旧口径「空行是收束点、其后正文不受影响」当场作废——空行既排版又当边界，一次回车就能截断组
+  // （正文整段掉出组再也折不回去 / 新打的字被吞进收起的组）。空行退出边界判定，改由 [/折叠] 锚显式收束。
+  assert.ok(b[3].classList.contains('ns-fold-gap'), '空行归组内空隙（引导线不断）');
+  assert.ok(b[3].classList.contains('ns-fold-hide'), '收起态连组内空隙一起收起来');
+  assert.ok(b[4].classList.contains('ns-fold-body') && b[4].classList.contains('ns-fold-hide'), '无锚 → 空行之后的正文照旧归本组（标题以下全归组）');
 });
 
 /* ── F2 非行首的 [折叠] 不生效 ── */
@@ -52,8 +55,8 @@ test('F3 applyFolds 幂等（先拆后建），连跑多次不产生双层标记
   assert.strictEqual(b[0].textContent, '[折叠]标题', '多次重绘 [折叠] 不得翻倍');
 });
 
-/* ── F4 多处折叠：各自折到各自的空行 ── */
-test('F4 一条笔记多处折叠互不串扰', t => {
+/* ── F4 多处折叠：下一个把手收束上一组（v10.0.3：空行不再收束） ── */
+test('F4 一条笔记多处折叠互不串扰（下一处把手＝上一组的收束点）', t => {
   const app = loadApp(); t.after(() => app.window.close());
   const w = app.window;
   ed(w).innerHTML =
@@ -62,9 +65,21 @@ test('F4 一条笔记多处折叠互不串扰', t => {
   w.applyFolds();
   const b = blocks(w);
   assert.ok(b[0].classList.contains('ns-fold') && b[3].classList.contains('ns-fold'), '两处把手都被识别');
-  assert.ok(b[1].classList.contains('ns-fold-hide') && !b[2].classList.contains('ns-fold-hide'), '甲折到其空行');
-  assert.ok(b[4].classList.contains('ns-fold-hide') && !b[5].classList.contains('ns-fold-hide'), '乙折到其空行');
-  assert.ok(!b[6].classList.contains('ns-fold-hide'), '尾部正文不隐藏');
+  assert.ok(b[1].classList.contains('ns-fold-hide'), '甲的正文隐藏');
+  assert.ok(b[2].classList.contains('ns-fold-gap') && b[2].classList.contains('ns-fold-hide'), '甲组内空行归空隙（不再是收束点）');
+  assert.ok(!b[3].classList.contains('ns-fold-hide') && b[3].classList.contains('ns-fold'), '乙的把手不被甲吞成正文（下一处把手收束上一组）');
+  assert.ok(b[4].classList.contains('ns-fold-hide'), '乙折住 b1');
+  assert.ok(b[5].classList.contains('ns-fold-hide'), '乙组内空行一起收起');
+  assert.ok(b[6].classList.contains('ns-fold-hide'), '无锚 → 尾归乙组（标题以下全归组）');
+  // 补一枚 [/折叠] 锚到 b1 行尾 → 尾立刻回到组外
+  ed(w).innerHTML =
+    '<div>[折叠]甲</div><div>a1</div><div><br></div>' +
+    '<div>[折叠]乙</div><div>b1[/折叠]</div><div><br></div><div>尾</div>';
+  w.applyFolds();
+  const c = blocks(w);
+  assert.ok(c[4].classList.contains('ns-fold-body'), '挂尾行本身是组内最后一行');
+  assert.ok(c[4].querySelector(':scope > span.ns-fold-endmark'), '行尾 [/折叠] 被包成隐形 span');
+  assert.ok(!c[6].classList.contains('ns-fold-hide'), '有锚 → 锚之后的正文回到组外');
 });
 
 /* ── F5 折叠装饰不算内容改动（isDecorativelyEqual 豁免 ns-fold-mark + div class） ── */
@@ -94,9 +109,11 @@ test('F6 退格护栏锚定执法行（行首 [折叠] 原子整删 + 不吞 pre
 });
 
 /* ── F7 normDecorHtml 豁免补丁行 + CSS 作用域锁在 #editor（保证导出副本按全文渲染） ── */
-test('F7 normDecorHtml 拍平 ns-fold-mark 且折叠 CSS 锁在 #editor 下（导出/打印仍全文）', () => {
-  assert.ok(SRC.includes("if (tag === 'SPAN' && child.classList.contains('ns-fold-mark')) { out += walk(child); continue; }"),
-    'normDecorHtml 必须显式拍平折叠标记（锚定执法行）');
+test('F7 normDecorHtml 拍平折叠标记（含 [/折叠] 锚）且基样式锁在 #editor 下', () => {
+  assert.ok(SRC.includes("if (tag === 'SPAN' && (child.classList.contains('ns-fold-mark') || child.classList.contains('ns-fold-endmark')))"),
+    'normDecorHtml 必须显式拍平折叠标记与闭合锚 span（锚定执法行；锚文本是真实内容，包不包 span 不算差异）');
+  assert.ok(SRC.includes("span:not(.ns-fold-mark):not(.ns-fold-endmark)"),
+    'linkify 的杂散 span 拍平清单必须同时豁免 fold-mark 与 fold-endmark（否则每键全量拆建 + 光标抖动）');
   assert.ok(SRC.includes('#editor .ns-fold-hide{display:none}'), '隐藏正文规则必须作用域锁在 #editor');
   assert.ok(!/^\s*\.ns-fold-hide\{/m.test(SRC), '不得出现脱离 #editor 作用域的裸 .ns-fold-hide（否则离屏导出副本也会被隐藏丢字）');
   assert.ok(/@media print\{#editor \.ns-fold-hide\{display:block\}/.test(SRC),
@@ -151,8 +168,8 @@ test('F10 isPlaceholderEqual 也忽略折叠标记/收起类，与 isDecorativel
   assert.ok(w.isPlaceholderEqual(clean, decorated), '折叠装饰不得被占位等价判成真实差异（否则残留标记会被 PUT 进同步内容）');
 });
 
-/* ── F11 折叠正文始终带 ns-fold-body（缩进+引导线靠它），把手/空行不带 ── */
-test('F11 正文块打 ns-fold-body（收起/展开都打），把手与空行不打', t => {
+/* ── F11 正文块打 ns-fold-body、组内空行打 ns-fold-gap（缩进+引导线靠它们），把手不打 ── */
+test('F11 正文块打 ns-fold-body、组内空隙打 ns-fold-gap（收起/展开都打），把手不打', t => {
   const app = loadApp(); t.after(() => app.window.close());
   const w = app.window;
   ed(w).innerHTML = '<div>[折叠]甲</div><div>a1</div><div>a2</div><div><br></div><div>尾</div>';
@@ -160,13 +177,14 @@ test('F11 正文块打 ns-fold-body（收起/展开都打），把手与空行�
   let b = blocks(w);
   assert.ok(!b[0].classList.contains('ns-fold-body'), '把手块不是正文');
   assert.ok(b[1].classList.contains('ns-fold-body') && b[2].classList.contains('ns-fold-body'), '收起态正文仍带 ns-fold-body');
-  assert.ok(!b[3].classList.contains('ns-fold-body'), '空行（收束点）不带 ns-fold-body');
-  assert.ok(!b[4].classList.contains('ns-fold-body'), '空行之后的正文不带');
+  assert.ok(b[3].classList.contains('ns-fold-gap') && !b[3].classList.contains('ns-fold-body'), '组内空行＝空隙（走引导线，不冒充正文）');
+  assert.ok(b[4].classList.contains('ns-fold-body'), '无锚 → 空行之后的尾行仍在本组内');
   // 展开后仍带
   ed(w).querySelector('.ns-fold-mark').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
   b = blocks(w);
   assert.ok(b[1].classList.contains('ns-fold-body'), '展开态正文仍带 ns-fold-body');
   assert.ok(!b[1].classList.contains('ns-fold-hide'), '展开后正文不再隐藏');
+  assert.ok(b[3].classList.contains('ns-fold-gap') && !b[3].classList.contains('ns-fold-hide'), '展开后空隙可见（引导线连成一条）');
 });
 
 /* ── F12 v9.1.1 源码锚定：缩进引导线 CSS + 移动端点三角不弹键盘 ── */

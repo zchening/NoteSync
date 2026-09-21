@@ -77,7 +77,12 @@ test('R0 五步行首编辑：全程零弹条、每步对端秒级静默同步�
   const pageB = await openNote(ctxB, baseURL);
 
   // ── S2：PC 第一行输入时间+事项 → 光标落时间弹「添加提醒」→ 点卡真添加 ──
-  await pageA.evaluate(() => { document.getElementById('editor').innerHTML = '<div>2026-09-20 8:00 0800</div>'; });
+  // 提醒日期用「今天 +3 天」相对值：旧版钉死 2026-09-20，跨日即成过期提醒、悬浮卡永不出现
+  // （v10.0.3 首轮 e2e 就是这么红的——非回归，是日期钉腐烂）。事项串 0800 保持字面量，下游断言吃它。
+  const remDay = new Date(Date.now() + 3 * 86400 * 1000);
+  const remPad = x => (x < 10 ? '0' + x : '' + x);
+  const remLine = remDay.getFullYear() + '-' + remPad(remDay.getMonth() + 1) + '-' + remPad(remDay.getDate()) + ' 8:00 0800';
+  await pageA.evaluate(html => { document.getElementById('editor').innerHTML = '<div>' + html + '</div>'; }, remLine);
   await caretAtBlockStart(pageA, 0);
   await pageA.evaluate(() => {
     const b = document.getElementById('editor').firstElementChild.firstChild;
