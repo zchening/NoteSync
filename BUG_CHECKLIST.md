@@ -1464,9 +1464,9 @@
 ### R7 | 主文档磁盘缓存从未落盘（mainDocCache=none，离线兜底形同虚设）
 - **版本**: v5.57
 - **根因**: `super.onCreate()` 一执行 Capacitor 立刻发起首次主文档加载，`setWebViewClient` 装得太晚——每次冷启动主文档都绕过拦截器，缓存永远写不进（intercept 计数恒 0）
-- **修复**: 装完 client 后缓存不存在即 `wv.reload()` 一次（进程内 didCacheBootstrapReload 布尔防循环），此后拦截器接管、缓存落盘、三级兜底激活
+- **修复**: 装完 client 后缓存不存在即 `wv.reload()` 一次（进程内 didCacheBootstrapReload 布尔防循环），此后拦截器接管、缓存落盘、三级兜底激活。**【v10.1.0 升级】**旗标改名 `didBootInterceptorReload`，触发条件从「磁盘缓存不存在」改为「本地有货即接管」（`localMainDocAvailable()` → `stopLoading` + `loadUrl` 重走拦截器）：旧条件下"缓存存在但属上一版"这一最常见情形仍会绕过拦截器白等一次公网，正是本版治的「装完第一次打开慢」；接管首载同时消掉「绕过一遍 + 拦截器带旧 ETag 再下一遍」的重复下载。护栏随版迁移至 `tests/unit/v557.test.js` G9 + `tests/unit/v1010.test.js`
 - **关联文件**: android/.../MainActivity.java
-- **核对要点**: 新装 APK 联网开一次 → 诊断 mainDocCache 非 none、intercept>0 → 断网杀进程重开看到缓存正文+离线条
+- **核对要点**: 新装 APK 联网开一次 → 诊断 mainDocCache 非 none、intercept>0 → 断网杀进程重开看到缓存正文+离线条。**v10.1.0 追加**：`?diag` 的 boot 行应见 `serve=` 几十毫秒级、`(asset/844864B` 且 `bootReload=1`（内置壳顶住首帧、首载被接管）；杀进程重开第二次来源应变 `disk`
 
 ### R8 | APP 顶栏图标太小 + 日夜间/退出锁定无处放
 - **版本**: v5.57

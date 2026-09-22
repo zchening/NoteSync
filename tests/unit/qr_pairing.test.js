@@ -90,7 +90,7 @@ test('内联 qrcode 库可为真实配对 URL 生成模块矩阵', () => {
 test('APP_VERSION 为 9.3.0', () => {
   const fs = require('fs');
   const src = fs.readFileSync(require('../helpers').INDEX_PATH, 'utf8');
-  assert.ok(src.includes("const APP_VERSION = '10.0.4';"), 'index.html 应声明 APP_VERSION = 9.3.0');
+  assert.ok(src.includes("const APP_VERSION = '10.1.0';"), 'index.html 应声明 APP_VERSION = 9.3.0');
 });
 
 // ── Q5c：v8.1.4 无 GMS 机型扫码回退链守护（锚补丁行，防回潮）──

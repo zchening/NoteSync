@@ -312,7 +312,10 @@ class RemPlugin : Plugin() {
         }
     }
 
-    /** v5.56：主文档缓存与拦截计数只读诊断（?diag 浮层读取——离线兜底断在哪一环一眼看清） */
+    /** v5.56：主文档缓存与拦截计数只读诊断（?diag 浮层读取——离线兜底断在哪一环一眼看清）。
+     *  v10.1.0 D：补冷启主文档链路埋点。boot* 一律为相对 onCreate 入口的毫秒（0=该环节未发生）；
+     *  mainDocSrc=disk/asset/net/none 指本轮主文档由谁供；bgRefresh 记后台公网核对结果。
+     *  「装完第一次打开慢」这类问题从此不靠手感，?diag 一眼看清卡在哪一环。只读，零行为影响。 */
     @PluginMethod
     fun cacheInfo(call: PluginCall) {
         try {
@@ -324,6 +327,15 @@ class RemPlugin : Plugin() {
             ret.put("fetchFail", MainActivity.fetchFailCount)
             ret.put("cacheHit", MainActivity.cacheHitCount)
             ret.put("assetHit", MainActivity.assetHitCount)
+            ret.put("mainDocSrc", MainActivity.mainDocSrc)
+            ret.put("mainDocBytes", MainActivity.mainDocBytes)
+            ret.put("bootServeAt", MainActivity.bootServeAt)
+            ret.put("bootPageDoneAt", MainActivity.bootPageDoneAt)
+            ret.put("bootCurtainAt", MainActivity.bootCurtainAt)
+            ret.put("bootBgRefreshMs", MainActivity.bootBgRefreshMs)
+            ret.put("bgRefresh", MainActivity.bgRefreshResult)
+            ret.put("bootReload", MainActivity.bootInterceptorReload)
+            ret.put("diskVerOk", MainActivity.cacheDiskIsCurrentVersion)
             call.resolve(ret)
         } catch (e: Exception) {
             call.reject("cacheInfo error: ${e.message}", e)

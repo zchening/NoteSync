@@ -1,7 +1,7 @@
 // v5.57 单元测试：真机验收九连修的回归护栏
 // G1 通知点击不弹面板 | G2 提醒恢复后补下划线重绘 | G3 chip 裸文本兜底+组字补触发
 // G4 冲突/草稿浮卡形态 | G5 解锁框返回首页 | G6 自动解锁写最后笔记 | G7 APP 菜单收纳
-// G8 parsePairLink 扫码解析 | G9 MainActivity 缓存引导 reload + 诊断新字段
+// G8 parsePairLink 扫码解析 | G9 MainActivity 冷启接管首载 + 诊断新字段（v10.1.0 口径变更，详见用例注释）
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -107,16 +107,22 @@ test('G8 parsePairLink：短链/双域直链/裸路径放行，非本系统 null
   assert.equal(parsePairLink(''), null, '空串应拒绝');
 });
 
-// ── G9：MainActivity 缓存引导 reload（mainDocCache=none 根治）+ 诊断新字段 ──
-test('G9 MainActivity 缓存不存在则装完 client 补一次 reload + diag future/lastNativeSync', () => {
+// ── G9：MainActivity 冷启首载接管（mainDocCache=none 根治）+ 诊断新字段 ──
+// v10.1.0 口径变更：旧断言「磁盘缓存不存在才补一次 reload」作废——主文档改为本地优先后，
+// 缓存存在但自带版本号属上一版时同样必须走拦截器（否则首帧仍卡在公网上），旧触发条件反而漏治。
+// 现场由 v5.57 的 didCacheBootstrapReload 换成 didBootInterceptorReload（stopLoading + loadUrl 重走拦截器），
+// 新语义护栏见 tests/unit/v1010.test.js（A1-A4/B1-B2/D1）。本用例只保留仍然成立的两件事：
+// ①冷启一定有一次「装完 client 后主动接管首载」且带进程内防循环；②诊断字段不丢。
+test('G9 MainActivity 冷启接管首载（防循环）+ diag future/lastNativeSync', () => {
   const main = readAndroid('MainActivity.java');
-  assert.ok(main.includes('didCacheBootstrapReload'), '应有进程内防循环布尔');
-  assert.ok(main.includes('wv.reload()'), '缓存不存在时应补一次 reload 让拦截器接管');
-  const ri = main.indexOf('didCacheBootstrapReload = true;');
-  const reloadIdx = main.indexOf('wv.reload();', ri);
-  assert.ok(ri > -1 && reloadIdx > ri, 'reload 应在置位之后（防循环语义）');
-  const cacheChk = main.indexOf('new java.io.File(getFilesDir(), MAIN_DOC_CACHE).exists()');
-  assert.ok(cacheChk > -1, '应以磁盘缓存存在性为触发条件');
+  assert.ok(main.includes('didBootInterceptorReload'), '应有进程内防循环布尔（v10.1.0 随语义改名）');
+  assert.ok(main.includes('wv.stopLoading();'), '接管首载须掐掉绕过拦截器的在途请求');
+  const ri = main.indexOf('didBootInterceptorReload = true;');
+  const reloadIdx = main.indexOf('wv.stopLoading();');
+  assert.ok(ri > -1 && reloadIdx > ri, 'stopLoading 应在置位之后（防循环语义）');
+  const cacheChk = main.indexOf('if (!didBootInterceptorReload && localMainDocAvailable())');
+  assert.ok(cacheChk > -1, '必须锚到调用点判据「进程内一次 + 本地有货」——只判方法名存在防不住条件回退（闸 R2 变异实测：回退成 v5.57 旧口径时本用例曾假绿）');
+  assert.ok(!/boolean didCacheBootstrapReload/.test(main), '旧旗标声明不得残留（半改=两套首载接管并存）');
 
   const src = readSrc();
   assert.ok(src.includes('lastNativeSync='), '诊断应含最近原生同步读数');

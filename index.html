@@ -895,7 +895,7 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '10.0.4';
+const APP_VERSION = '10.1.0';
 const BUILD_DATE = '2026-09-22';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
@@ -1871,6 +1871,27 @@ function hideUploadStatus() { uploadStatus.classList.remove('show'); }
           '  intercept=' + (ci ? ci.intercept : '?') + '  fetchFail=' + (ci ? ci.fetchFail : '?') +
           '  cacheHit=' + (ci ? ci.cacheHit : '?') + '  assetHit=' + (ci ? ci.assetHit : '?') +
           '  nativeVer=' + (window.__remNativeVersion || '?'));
+        // v10.1.0 D：冷启主文档链路埋点（原生 RemPlugin.cacheInfo 扩字段，只读零行为影响；旧 APK 缺字段
+        // 一律 '?'）。bootServeAt=拦截器吐出主文档的时刻、pageDone/curtain=页面落地/掀幕，三者都是相对
+        // onCreate 的毫秒；bgRefresh=后台公网核对（已不在关键路径上）。web 段 domContent−serve ≈ 解析+执行
+        // 成本——「装完第一次打开慢」复发时一眼分清卡在下载还是卡在读代码，不再靠手感。
+        try {
+          const nav = (performance.getEntriesByType && performance.getEntriesByType('navigation')[0]) || {};
+          const ms = v => (typeof v === 'number' && v > 0) ? Math.round(v) : '?';
+          // 闸 R2-P2/R3-P2-A（双路命中）修正：旧 APK 上 ci 存在但新字段全是 undefined，原先直连拼接会把
+          // "undefined" 打上屏（说了落 '?' 却没做到）；且布尔 false 不能被 `|| '?'` 吞成 '?'（no 与"没有这个
+          // 字段"是两回事）。sv 统一口径：字符串原样、布尔出 yes/no、正数出数值、其余（含 undefined/0=未发生）出 '?'。
+          const sv = v => (typeof v === 'string') ? v
+            : (typeof v === 'boolean') ? (v ? 'yes' : 'no')
+            : (typeof v === 'number' && v > 0) ? v : '?';
+          L.push('boot: serve=' + sv(ci && ci.bootServeAt) + 'ms(' + sv(ci && ci.mainDocSrc) +
+            '/' + sv(ci && ci.mainDocBytes) + 'B diskVerOk=' + sv(ci && ci.diskVerOk) + ')' +
+            ' pageDone=' + sv(ci && ci.bootPageDoneAt) + 'ms curtain=' + sv(ci && ci.bootCurtainAt) +
+            'ms bgRefresh=' + sv(ci && ci.bootBgRefreshMs) + 'ms(' + sv(ci && ci.bgRefresh) + ')' +
+            ' bootReload=' + ((ci && typeof ci.bootReload === 'number') ? ci.bootReload : '?') +
+            ' | web: ttfb=' + ms(nav.responseStart) + ' respEnd=' + ms(nav.responseEnd) +
+            ' domContent=' + ms(nav.domContentLoadedEventStart) + ' load=' + ms(nav.loadEventStart) + 'ms');
+        } catch (e) { L.push('boot: ERR ' + e.message); }
         if (rb && typeof rb.cacheInfo === 'function') { rb.cacheInfo().then(r => { window.__remCacheInfo = r; }).catch(() => {}); }
         if (rb && typeof rb.getVersion === 'function') {
           rb.getVersion().then(r => {
