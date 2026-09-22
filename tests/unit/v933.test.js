@@ -31,8 +31,13 @@ test('K4 彩蛋 hover 命中放宽：hover 专用正则容忍尾随标点且防 
   assert.ok(SRC.includes("var NS_EGG_RE = /(^|[^A-Za-z0-9_\\-])\\/(mirror|snake|dragon|brick|satoshi|bitcoin|tank|spacex|tesla|pet)$/"), '敲字通道严格 NS_EGG_RE 保留不动');
 });
 
-test('K5 折叠三角两态等大：▶ 追加 VS15 强制文本呈现，与 ▼ 同尺寸', () => {
-  assert.ok(SRC.includes("content:'\\25B6\\FE0E'"), '折叠收起三角须用 ▶+VS15 文本呈现（防 emoji 画大 vs ▼ 偏小不一致）');
+test('K5 折叠三角两态等大（v10.0.4 契约翻转：改画几何三角，旧"两个码位凑等大"禁回潮）', () => {
+  assert.ok(SRC.includes("#editor .ns-fold-mark::before{content:'';display:inline-block;width:0;height:0;border-top:4px solid transparent;border-bottom:4px solid transparent;border-left:7px solid currentColor;vertical-align:middle;position:relative;top:-6px}"),
+    '收起＝边框画的右向三角（7px 长边 + 4+4px 底边，currentColor 吃 --muted）');
+  assert.ok(SRC.includes("#editor .ns-fold-open>.ns-fold-mark::before{border-top:7px solid currentColor;border-bottom:0;border-left:4px solid transparent;border-right:4px solid transparent}"),
+    '展开＝同套尺寸的下向三角（与收起互为 90° 旋转 → 与字体无关，必然等大）');
+  assert.ok(!SRC.includes("content:'\\25B6\\FE0E'"), '禁回潮：收起不再用 ▶+VS15 码位（光墨大小由系统字体决定，跨内核必飘）');
+  assert.ok(!SRC.includes("#editor .ns-fold-open>.ns-fold-mark::before{content:'▼'}"), '禁回潮：展开不再用 ▼ 码位');
 });
 
 test('K6 行为：进 /dragon 结束卡唤出→点空白重开，壳仍在、历史不动', t => {

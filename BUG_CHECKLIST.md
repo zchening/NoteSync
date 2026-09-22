@@ -29,7 +29,7 @@
 | C | 缓存与图标 | 4 | 修改 favicon / manifest.json / Cache-Control 头 / icon-maskable 生成与路由 |
 | D | PWA 与移动端 | 7 | 修改 manifest.json / 触摸事件 / 夜间模式 CSS / applyTheme / THEME_PALETTE / mountThemeOverride / color-scheme 声明（:root 或 meta）/ theme-override 挂载点 / viewport meta（interactive-widget） |
 | E | 选区与同步 | 4 | 修改 editor 输入/粘贴处理 / linkifyEditor / saveSelectionOffsets·restoreSelectionOffsets / cleanupLeadingTrailingBreaks / insertNodeAtCaret / 删除逻辑 / poll 远端合并 / selectionchange 钳制 |
-| F | 光标与编辑 | 14 | 修改 Enter 处理 / cleanupLeadingTrailingBreaks / caretInsideNode / linkifyEditor 块内偏移 / ensureBlockWrapped / ensureCaret / repaintCaret / relocateCaretToVisible / isComposing / applyFolds 折叠组边界与锚 |
+| F | 光标与编辑 | 15 | 修改 Enter 处理 / cleanupLeadingTrailingBreaks / caretInsideNode / linkifyEditor 块内偏移 / ensureBlockWrapped / ensureCaret / repaintCaret / relocateCaretToVisible / isComposing / applyFolds 折叠组边界与锚 |
 | G | 撤销栈 | 1 | 修改 自建撤销栈 / captureState / applyState / recordIfChanged / syncCurrentState / undo / redo / keydown 拦截 Ctrl+Z/Y |
 | H | 落地页/解锁/路由/图标/指纹 | 6 | 修改 landing 路由(ID_RE/extractId/导航) / 打开按钮禁用 / 解锁按钮禁用态样式 / 退出锁定禁用态 / 落地页中文输入过滤 / 指纹 WebAuthn PRF 逻辑（v5.15 起彻底移除） |
 | I | 链接转换/粘贴/保存可靠性 | 7 | 修改 linkifyEditor / buildLinkSafe / trimUrlTrailing / urlRegex / paste 处理 / pasteTextNative / input 处理器 busy 分支 / saveLocal / scheduleSaveRetry / flushDirtySave / fetchRetry / copyBtn / offline·online 事件监听 / lastSyncAt / currentSyncTime |
@@ -722,6 +722,35 @@
   - [ ] 删掉 `[折叠]` 把手 → 本组 `[/折叠]` 一并清除，行尾不留无主标记
   - [ ] 存量老笔记（标题下空一行再写正文）本版起该行归入折叠——拍板项，非回归
   - [ ] 真 Chromium 探针 15 项 + `tests/unit/v1003.test.js` 七测全绿
+
+### F15 | 折叠三角两态不等大 + 收起态跨行退格整段吞字
+- **版本**: v10.0.4
+- **现象一**: 折叠标题前的三角，展开时比收起时小（用户实拍反馈）
+- **根因一**: 两态用两个不同码位——收起 `▶`(U+25B6+VS15)、展开 `▼`(U+25BC)。字号同为 12px（移动 16px），但**光墨大小由系统字体决定**（本机 headless 实测前宽 10.34 vs 11.89px；换 MiSans/Noto 关系还会变），所以"哪个小"取决于设备
+- **修复一**: 两态改用 CSS 边框画的几何三角，共用 7px 长边 + 4+4px 底边、互为 90° 旋转（移动档同构放大 9px/5+5px）→ 与字体无关、必然等大。`@media print` 去三角必须连 `border:0;width:0;height:0` 一起清（只清 content 会留下一枚画出来的三角）。导出副本保持 ▼ 字形不动（快慢两条导出路径同源）
+- **现象二**: 折叠收起时，把光标放到折叠组下面那一行行首按退格，"回到了标题那里"，折叠里的内容整段不见了
+- **根因二**: 收起的正文是 `display:none`，**不生成盒子**。Blink 的"行首退格合并上一行"按盒子找邻居，会整段跳过隐藏区去跟把手行合并，顺手把没有盒子的块连同其中文字一起删除——是真删字（实测一次退格少 17 字；无闭合锚的老结构少 4 字＝`[折叠]` 标记本身），撤销能救但用户无从知晓
+- **修复二**: 这条跨行合并**由折叠语义自己执行**，不交给 Blink——展开态整行拼到组内正文最后一行末尾（闭合锚仍留该行行尾）；收起态整行拼到把手行末尾，隐藏正文一字不动。搬运一律 `Range.extractContents`（禁 textContent 往返，否则行内链接 href 丢失并被自动保存写进云端）。**只认退格，回车保持原生**（用户拍板：行首回车仍可插空行）。上一块不是"已闭合的折叠组尾行"一律交回原生；异常路径先把摘出的节点回塞再退出，绝不让退格失灵或吞字
+- **关联文件**: index.html → `#editor .ns-fold-mark::before` / `.ns-fold-open>.ns-fold-mark::before` / `@media print` / `hasTailEndMark` / `foldGroupOfPrev` / 新增 Backspace keydown 监听
+- **核对要点**:
+  - [ ] 桌面与移动档，展开与收起的三角肉眼等大（e2e E1 已按像素量测：两态包围盒互为转置）
+  - [ ] 打印预览里不出现三角、也不出现残留的边框图形
+  - [ ] 收起态：组外那一行行首按退格 → 该行文字接到标题末尾，折叠里的正文一字不少
+  - [ ] 展开态：同一操作 → 该行接到组内正文最后一行末尾，`[/折叠]` 锚仍留在那一行行尾
+  - [ ] 行首按**回车**仍是原生插空行（本版明确不接管回车）
+  - [ ] 普通两行之间、组内行之间的退格行为未被本规则改变
+- **已知观感与口径（拍板项，非疏漏）**: ①收起态把"下一把手整行"并上来时，标题里会出现裸 `[折叠]` 字样（用户规则就是"整行拼到标题最后"，撤销一步可还原）；②导出图那枚仍是 ▼ 字形、编辑器改成了边框画的几何三角——**两套独立画法**，导出只有恒定展开一态、快慢两条导出路径同源，编辑器与出图之间允许形状不同；③本版另补：光标停在"刚被收起的隐藏正文"里时（展开→点进正文→点三角收起）一律弹回该组把手**可见文字末尾**（复审二轮：不是行最左位，那格会让下一记退格整删 [折叠]+[/折叠] 拆掉整组），否则用户看不见地在啃标题字。
+  - [ ] 导出图片里折叠正文仍有缩进与左竖线、锚不露字（v10.0.3 契约不回归）
+  - [ ] 展开→点进正文→点三角收起→按退格：光标须已离开隐藏块（弹回把手），不得无声啃字
+  - [ ] 独立行锚（手写或历史残留）作为组尾时同样接管——可见行绝不被并进 0 高隐形行
+  - [ ] 无锚组（存量笔记）+ 紧邻下一把手：行首退格同样接管、零丢字（旧写法实测 31→22 字）
+  - [ ] 合并后光标落在**看得见**的块上（收起＝标题、展开＝正文尾锚前），继续打字不进黑洞
+  - [ ] 桌面与移动档，三角墨迹中心与标题文字中心差 ≤2px（改画后曾整体偏下 6px）
+  - [ ] 空行并入展开组只删不搬，锚前不留幽灵换行
+  - [ ] **真鼠标**点三角收起（不是 element.click()）：光标必须已逃出隐藏块，随后退格只许整删 [折叠] 或零改动（闸 R2 四审 P0，E7）
+  - [ ] 桌面三角命中区 ≥300px² 且两态同样大；感应区右缘不越进标题首字、上下缘不越出本行行盒（闸 R2 四审 P1，E8）
+  - [ ] 组外行尾的撑行高 <br> 不随整行搬进组：展开态组末不多空行、收起态标题不变两行（闸 R2 四审 P2，E9）
+  - [ ] 挂账：并组后 foldIdx 前移时旧序号展开态不迁移；锚嵌 <a>/<strong> 内不包；粘贴嵌套 div 行首退格让位原生（均非本版引入、零丢字）
 
 ---
 

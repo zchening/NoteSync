@@ -49,12 +49,15 @@ test('G1b jsdom 行为：选区跨收起折叠时复制——事件内显形、�
 });
 
 /* ── G2 折叠三角感应区 44×44（仅窄屏；桌面零变化） ─────────────────── */
-test('G2 窄屏三角放大钉：可见 16px + 44×44 定宽高 + touch-action + pointerdown 触屏拦截', () => {
+test('G2 窄屏三角放大钉：边框三角同构放大（9px 长边）+ 44×44 定宽高 + touch-action + pointerdown 触屏拦截', () => {
   const css = SRC.slice(SRC.indexOf('#editor .ns-fold-hide{display:none}'));
   const blk = css.slice(0, css.indexOf('/* v9.1.1：打印时展开全部折叠'));
   assert.ok(/@media \(max-width:560px\)/.test(blk), '感应区放大必须锁在窄屏媒体查询内');
   assert.ok(blk.includes('width:44px;height:44px'), '感应区 44×44 缺位');
-  assert.ok(blk.includes('font-size:16px'), '可见三角未加大');
+  // v10.0.4 契约翻转：三角改由边框画，"加大"体现为长边 7→9px、底边 4+4→5+5px，旧 font-size:16px 写法作废
+  assert.ok(blk.includes('border-left:9px solid currentColor'), '窄屏收起三角未同构放大（长边须 9px）');
+  assert.ok(blk.includes('border-top:5px solid transparent'), '窄屏底边未同构放大（须 5+5px）');
+  assert.ok(!blk.includes('font-size:16px'), '禁回潮：窄屏三角不再靠字号放大（码位光墨由字体决定）');
   assert.ok(blk.includes('touch-action:manipulation'), '缺双击缩放消等');
   const pd = SRC.indexOf("if (e.pointerType !== 'touch') return;");
   const pdTail = SRC.slice(pd, pd + 200);
@@ -246,6 +249,6 @@ test('G9c nsVerCmp 语义：段比大小、缺段按 0、相等 0', t => {
   const w = app.window;
   assert.ok(w.eval('nsVerCmp("9.3.0","9.2.9")') > 0);
   assert.ok(w.eval('nsVerCmp("9.3","9.3.0")') === 0, '缺段按 0——9.3 不比 9.3.0 旧');
-  assert.ok(w.eval('nsVerCmp("10.0.3","9.99.99")') > 0, '十位段不许按字符串比');
+  assert.ok(w.eval('nsVerCmp("10.0.4","9.99.99")') > 0, '十位段不许按字符串比');
   assert.ok(w.eval('nsVerCmp("v9.3.1".replace(/^v/,""),"9.3.0")') > 0);
 });

@@ -379,13 +379,24 @@
   body.ns-mirror-A #nsZoom .nz-stage,body.ns-mirror-B #nsZoom .nz-stage{transform:scaleX(-1)}
   #editor a{color:var(--accent);text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(169,134,60,.35);transition:text-decoration-color .2s;word-break:break-all;overflow-wrap:break-word}
   #editor a:hover{text-decoration-color:var(--accent)}
-  /* v9.1.1：折叠列表——行首写 [折叠] 显示为行首三角（收起 ▶ / 展开 ▼），正文整段隐藏。
+  /* v9.1.1：折叠列表——行首写 [折叠] 显示为行首三角（收起右指 / 展开下指），正文整段隐藏。
      纯显示层：[折叠] 文本仍在 DOM（同步/导出/打印仍全文），只是被 font-size:0 收起、
      用 ::before 画三角替代；折叠正文用 .ns-fold-hide 隐藏。全部作用域锁在 #editor 下，
      故 renderNotePng 的离屏 tmp（不在 #editor 内）自动按全文 + 原样 [折叠] 渲染。颜色只吃令牌。 */
-  #editor .ns-fold-mark{font-size:0;cursor:pointer;user-select:none;-webkit-user-select:none;white-space:nowrap;padding:0 3px;margin-right:2px;border-radius:6px;color:var(--muted)}
-  #editor .ns-fold-mark::before{content:'\25B6\FE0E';font-size:12px;line-height:1.9;vertical-align:baseline}
-  #editor .ns-fold-open>.ns-fold-mark::before{content:'▼'}
+  #editor .ns-fold-mark{font-size:0;cursor:pointer;user-select:none;-webkit-user-select:none;white-space:nowrap;padding:0 3px;margin-right:2px;border-radius:6px;color:var(--muted);position:relative}
+  /* v10.0.4（用户拍板）：两态改用 CSS 边框画几何三角——旧实现收起是 ▶(U+25B6+VS15)、展开是 ▼(U+25BC)，
+     两个不同码位的光学大小完全由系统字体决定（实测同一字号下前宽 10.34 vs 11.89px，换 MiSans/Noto 又是另一种），
+     用户观感"展开比收起小"即源于此。画出来的三角两态共用一套尺寸、互为 90° 旋转，字号/字体怎么变都等大。
+     导出副本仍走 ▼ 字形（快慢两条导出路径同源，本次不动它，避免动 pseudo 兼容面）。 */
+  #editor .ns-fold-mark::before{content:'';display:inline-block;width:0;height:0;border-top:4px solid transparent;border-bottom:4px solid transparent;border-left:7px solid currentColor;vertical-align:middle;position:relative;top:-6px}
+  #editor .ns-fold-open>.ns-fold-mark::before{border-top:7px solid currentColor;border-bottom:0;border-left:4px solid transparent;border-right:4px solid transparent}
+  /* 闸 R2-P1（本版改画的连带回归，实测）：三角改边框画后 span 自身盒高恒为 0，桌面唯一命中面就是 ::before 的
+     边框盒——elementFromPoint 逐像素扫描 187px²(11×17) 掉到 63px²(9×7)，旧版能点的 y105~108 / y116~121 全部失效，
+     点偏还把光标落进标题。补一枚不画任何像素的透明 ::after 当感应区（absolute 出流：行盒、缩进、墨迹包围盒一概不动，
+     E1/E4 两态等大用例逐像素不变），命中区实测 18×20=360px²（旧字形版 187px²），右缘 132px 不越进标题首字（首字起于 133px）、
+     上下缘 136~156 严格落在把手行盒 128~160 内，绝不抢相邻两行的点击落点。窄屏另有一套 44×44 inline-flex
+     感应区，那里显式撤掉 ::after，免得它在 flex 里多占一个子盒把居中挤偏。 */
+  #editor .ns-fold-mark::after{content:'';position:absolute;left:-4px;top:-15px;width:18px;height:20px}
   #editor .ns-fold-mark:hover{background:var(--hover)}
   /* v9.1.1：折叠正文往里缩进 1.5em + 左侧引导线（--line 令牌，非新色），层级更清晰；线沿每个正文块画，到空行（非 ns-fold-body）自然断开 */
   #editor .ns-fold-body{margin-left:.5em;padding-left:1em;border-left:2px solid var(--line)}
@@ -397,14 +408,19 @@
   #editor span.ns-fold-endmark{font-size:0}
   #editor .ns-fold-endline{height:0;line-height:0;overflow:hidden;opacity:0;font-size:0}
   /* v9.3.0（用户反馈）：移动端三角感应区只有 ≈18×23px 且紧贴标题，手指稍偏即命中正文→落光标弹键盘。
-     窄屏下可见三角 12→16px，感应区用定宽定高+负 margin 撑到 44×44（行盒高度与左缘排版不变），
-     touch-action:manipulation 消掉双击缩放等待；只在 ≤560px 生效，桌面外观零变化。颜色仍只吃令牌。 */
+     窄屏下感应区用定宽定高+负 margin 撑到 44×44（行盒高度与左缘排版不变），
+     touch-action:manipulation 消掉双击缩放等待；只在 ≤560px 生效，桌面外观零变化。颜色仍只吃令牌。
+     v10.0.4：三角改边框画后，"窄屏加大"体现为长边 7→9px、底边 4+4→5+5px（旧"靠字号放大"写法作废），
+     且感应区已是 inline-flex 居中，桌面那枚 top:-6px 补偿在窄屏归零。 */
   @media (max-width:560px){
-    #editor .ns-fold-mark::before{font-size:16px}
+    #editor .ns-fold-mark::before{border-top:5px solid transparent;border-bottom:5px solid transparent;border-left:9px solid currentColor;top:0}
+    #editor .ns-fold-open>.ns-fold-mark::before{border-top:9px solid currentColor;border-bottom:0;border-left:5px solid transparent;border-right:5px solid transparent}
     #editor .ns-fold-mark{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;margin:-11px -6px -11px -8px;padding:0;border-radius:12px;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+    #editor .ns-fold-mark::after{content:none}   /* 窄屏感应区已是 44×44，撤掉桌面那枚，flex 子盒数与居中回到改画前 */
   }
-  /* v9.1.1：打印时展开全部折叠（浏览器 Ctrl+P 直打活的 #editor，收起态正文会丢）——还原正文、显回 [折叠] 文本、去三角；无新色 */
-  @media print{#editor .ns-fold-hide{display:block}#editor .ns-fold-mark{font-size:inherit}#editor .ns-fold-mark::before{content:''}}
+  /* v9.1.1：打印时展开全部折叠（浏览器 Ctrl+P 直打活的 #editor，收起态正文会丢）——还原正文、显回 [折叠] 文本、去三角；无新色
+     v10.0.4：三角改成边框画的几何形后，"去三角"必须连边框一起清零（只清 content 会留下一枚画出来的三角） */
+  @media print{#editor .ns-fold-hide{display:block}#editor .ns-fold-mark{font-size:inherit}#editor .ns-fold-mark::before,#editor .ns-fold-open>.ns-fold-mark::before{content:'';display:none;border:0;width:0;height:0;top:0}}
   #editor s, #editor strike, #editor del{text-decoration:line-through;text-decoration-color:rgba(152,149,138,.7);color:var(--muted)}
   #editor p{margin:0}
   #editor::-webkit-scrollbar{width:8px}
@@ -879,8 +895,8 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '10.0.3';
-const BUILD_DATE = '2026-09-21';
+const APP_VERSION = '10.0.4';
+const BUILD_DATE = '2026-09-22';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
 let nsSkin = 0;
@@ -2855,8 +2871,11 @@ async function renderNotePng() {
   wrap.appendChild(mat);
   // v10.0.2（用户拍板丙·恒定展开）：折叠在导出图里显示为 ▼ + 正文全量可见。三角 CSS 原锁 #editor 作用域，
   // 离屏副本吃不到 → [折叠] 原样成字（用户报障）。这里挂一段只作用于导出副本的作用域样式：
-  // 选择器走 [data-ns-export] 属性（编辑器 DOM 永无此属性，零渗透），画法与 #editor .ns-fold-mark 逐字同源、
-  // 颜色只吃 --muted/--line 令牌；间隙 7px 必须用 px——em 在 font-size:0 的标记上归零（mockup 实锤）。
+  // 选择器走 [data-ns-export] 属性（编辑器 DOM 永无此属性，零渗透），颜色只吃 --muted/--line 令牌；
+  // 间隙 7px 必须用 px——em 在 font-size:0 的标记上归零（mockup 实锤）。
+  // v10.0.4 口径更新：编辑器那枚已改成边框画的几何三角（两态等大），导出这枚仍是 ▼ 字形——
+  // **两套独立画法**，不再"逐字同源"；导出只有恒定展开一态，快慢两条导出路径读的是同一段 foldCss，
+  // 所以真正必须同源的是"快路 vs 慢路"，编辑器与出图之间允许形状不同（观感均为下指小三角）。
   wrap.classList.add('ns-export');
   tmp.querySelectorAll('.ns-fold-mark').forEach(mk => { mk.setAttribute('data-ns-export', '1'); });
   tmp.querySelectorAll('.ns-fold-endmark').forEach(mk => { mk.setAttribute('data-ns-export-end', '1'); });
@@ -4073,6 +4092,11 @@ editor.addEventListener('click', e => {
     localStorage.setItem(NS_FOLD_KEY, JSON.stringify(all));
   } catch (err) {}
   try { applyFolds(); } catch (err) {}
+  // 闸 R2-P0（真鼠标 8/8 复现，v10.0.3 同源遗留）：点三角的 mousedown 被 preventDefault＝选区原地不动，
+  // applyFolds 复原选区又落回同一处 → selectionchange 压根不派发，「光标不许停在隐藏块里」的归一化守卫一次都没跑。
+  // 于是光标留在刚被隐藏的正文里（屏幕上看不见），下一记退格当场啃掉标题最后一个字并自动同步上云。
+  // 开合这条路上必须显式归一一次，绝不把安全寄托在事件上。
+  try { foldCaretNormalize(); } catch (err) {}
   try { dismissKeyboardForTouch(); } catch (err) {} // 触屏兜底：个别内核 touchstart 早于 mousedown 已聚焦，开合后收一次键盘（桌面/组字期为 no-op）
   try { backfillLastHtmlIfDecorativelyEqual(); } catch (err) {} // 开合只改折叠装饰（与正文装饰等价），回填 lastHtml 防后续「改回原文+残留标记」误判成真实改动多存一版
 });
@@ -4104,6 +4128,111 @@ editor.addEventListener('cut', () => {
   if (!hits.length) return;
   hits.forEach(n => n.classList.remove('ns-fold-hide'));
   setTimeout(() => { try { applyFolds(); } catch (err) {} try { persistFoldStates(); } catch (err) {} }, 0);
+});
+// v10.0.4（用户拍板）：折叠组外第一行行首按退格 = 跨边界合并，但**由折叠语义执行**，绝不交给 Blink
+// 自己去找"上一行"。根因：收起态的正文是 display:none、不生成盒子，Blink 按盒子找上一行会整段跳过
+// 隐藏区去跟把手行合并，顺手把没有盒子的块连同文字一起删掉（真机实测一次退格少 17 字）。
+// 新规则：①折叠展开 → 整行并到组内正文最后一行末尾（闭合锚仍留在那一行行尾）；
+//        ②折叠收起 → 整行并到把手行（标题）末尾，隐藏正文一个字都不动。
+// 只认退格；回车保持原生（行首回车仍可插空行）。搬运用 Range.extractContents 保行内格式（红线：禁 textContent 往返）。
+function hasTailEndMark(block) {              // 块直属子里有没有挂尾锚（不用 :scope——老内核抛错会让护栏静默失效）
+  if (!block || !block.childNodes) return false;
+  for (let i = 0; i < block.childNodes.length; i++) {
+    const c = block.childNodes[i];
+    if (c.nodeType === 1 && c.classList && c.classList.contains('ns-fold-endmark')) return c;
+  }
+  return false;
+}
+function foldGroupOfPrev(prev) {              // 上一块是否属于某个折叠组（含独立行锚），并算出该组"最后一个可见正文块"
+  if (!prev || prev.nodeType !== 1 || !prev.classList) return null;
+  const cl = prev.classList;
+  let h = null;
+  if (cl.contains('ns-fold')) h = prev;
+  // 闸 R1-P0b/R2-P1/R3-①：独立行锚（0 高）也是"组尾行"，必须认——否则下一可见行会被原生并进这条看不见的行里
+  else if (cl.contains('ns-fold-body') || cl.contains('ns-fold-gap') || cl.contains('ns-fold-endline')) {
+    let n = prev.previousElementSibling;
+    while (n) { if (n.classList && n.classList.contains('ns-fold')) { h = n; break; } n = n.previousElementSibling; }
+  }
+  if (!h) return null;
+  // 展开态落点＝该组最后一个正文块（跳过独立行锚与空隙，绝不落在看不见的块上）
+  const bs = Array.prototype.filter.call(editor.children, b => b.nodeType === 1);
+  let lastBody = null;
+  for (let k = bs.indexOf(h) + 1; k < bs.length; k++) {
+    const b = bs[k];
+    if (!b.classList || b.classList.contains('ns-fold')) break;
+    if (b.classList.contains('ns-fold-body')) lastBody = b;
+  }
+  return { handle: h, open: h.classList.contains('ns-fold-open'), lastBody: lastBody };
+}
+// 合并后落光标：一律落在"看得见的拼接点"——有挂尾锚则停在锚之前，否则停在该块可见内容末尾。
+// 闸 R2-P0：绝不能把光标留在 display:none 的隐藏正文块里（ensureCaret 只救"非法选区"，
+// 落在不可见块里的合法选区它判合法直接早退 → 用户接下来的字全打进看不见的地方）。
+function placeCaretAfterMerge(host) {
+  try {
+    const es = hasTailEndMark(host);
+    if (es) {
+      const p = es.previousSibling;
+      if (p && p.nodeType === 3 && p.nodeValue) setCaret(p, p.nodeValue.length);
+      else setCaret(host, Array.prototype.indexOf.call(host.childNodes, es));
+    } else {
+      const pos = foldEndPosOfBlock(host); setCaret(pos.node, pos.off);
+    }
+    return true;
+  } catch (e9) { try { ensureCaret(); } catch (e10) {} return false; }
+}
+editor.addEventListener('keydown', e => {
+  if (e.defaultPrevented) return;                             // 闸 R2-P2：与后续退格护栏互斥，一条键只被一个监听处理
+  if (e.key !== 'Backspace' || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.isComposing || e.keyCode === 229) return;
+  if (typeof isComposing !== 'undefined' && isComposing) return;
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount || !sel.isCollapsed) return;
+  const r0 = sel.getRangeAt(0);
+  if (!editor.contains(r0.startContainer)) return;
+  const blk = blockOf(r0.startContainer, editor);
+  if (!blk || blk === editor) return;
+  // 闸 R2-P0（真鼠标实测）：光标停在隐藏正文块里（display:none 不产生盒子）时绝不能把这记退格让回原生——
+  // Blink 会跳过隐藏块直接与把手行合并，把整段隐藏正文连同标题尾字一起吃掉（探针：[折叠]标题一二三 → 掉「三」并上云）。
+  // 走到这里说明开合时那次显式归一被别的路径绕过了，就地弹回该组把手可见最左位，本记退格不产生任何删改。
+  if (blk.classList.contains('ns-fold-hide')) {
+    e.preventDefault();
+    try { foldCaretNormalize(); } catch (eh) {}
+    return;
+  }
+  let frag = null;                                            // catch 里要能看见（抛错必须回塞，保字符守恒）
+  try {
+    // 光标必须在"本行可见最左"（跳过 [折叠] 标记自身的字）
+    const pre = document.createRange(); pre.selectNodeContents(blk); pre.setEnd(r0.startContainer, r0.startOffset);
+    const beforeTxt = pre.toString().replace(/[\u200B\u200C\uFEFF\u2060]/g, '');
+    if (beforeTxt !== '' && !(beforeTxt === FOLD_MARK && blk.classList.contains('ns-fold'))) return;
+    if (blk.classList.contains('ns-fold-body') || blk.classList.contains('ns-fold-gap')) return;   // 组内行：交回原生
+    const g = foldGroupOfPrev(blk.previousElementSibling);
+    // 闸 R1-P0a：不再要求"已落锚"——无锚组（存量笔记、或还没回车出过组）同样会丢字，一律接管
+    if (!g) return;                                           // 上一块不属于任何折叠组 → 交回原生
+    e.preventDefault();
+    const host = (g.open && g.lastBody) ? g.lastBody : g.handle;
+    const noText = foldVisibleText(blk) === '' && !(blk.querySelector && blk.querySelector('img'));
+    if (!noText) {                                            // 闸 R1-P2②：整块只是空行（<br>）时直接删，别把换行搬到锚前造"组内幽灵换行"
+      const cut = document.createRange();
+      cut.selectNodeContents(blk);
+      frag = cut.extractContents();                           // 整行按节点搬走（链接/图片/删除线原样）
+      // 闸 R2-P2③：块尾那枚 <br> 只是 Blink 为撑行高自动留的排版件，整行并进目标行时一起搬过去
+      // 就会让展开态组末凭空多一条空行、收起态标题当场变两行（原生退格本应吃掉它）。只剥尾部，行内换行照搬。
+      while (frag.lastChild && frag.lastChild.nodeType === 1 && frag.lastChild.tagName === 'BR') frag.removeChild(frag.lastChild);
+      const es0 = hasTailEndMark(host);
+      if (es0) host.insertBefore(frag, es0); else host.appendChild(frag);
+      try { host.normalize(); } catch (e2) {}
+    }
+    blk.remove();
+    try { applyFolds(); } catch (e3) {}
+    try { persistFoldStates(); } catch (e4) {}
+    placeCaretAfterMerge(host);                               // 光标必须落在看得见的拼接点
+    editor.dispatchEvent(new Event('input'));                 // 走既有链路：linkify→applyFolds→sync→保存
+  } catch (err) {
+    // 任何一步抛错都不许让退格失灵或吞字：整行已被摘空且没接到目标行时，原样塞回去
+    try { if (frag && frag.firstChild && blk.parentNode === editor) blk.insertBefore(frag, blk.firstChild); } catch (e6) {}
+    try { applyFolds(); } catch (e7) {}
+  }
 });
 // 护栏：光标落在 [折叠] 标记内或紧随其后时按退格，整删 [折叠]（原子），绝不一个字一个字啃出 [折叠 半截坏标记
 function foldMarkTouchedByCaret(range) {
@@ -4143,6 +4272,7 @@ function imgBeforeCaret(range) {
   return null;
 }
 editor.addEventListener('keydown', e => {
+  if (e.defaultPrevented) return;   // 闸 R2-P2：跨行合并监听已处理过这条退格，绝不二次 preventDefault/二次删
   if (isComposing) return;
   if (e.key !== 'Backspace') return;
   const sel = window.getSelection();
@@ -4244,6 +4374,21 @@ function foldCaretNormalize() {
   // v10.0.3 护栏②：独立行锚压成 0 高不占位，光标落进去就是"打字进黑洞"→ 就近弹到可见行
   const eb = blockOf(r.startContainer, editor);
   if (eb && eb !== editor && eb.classList && eb.classList.contains('ns-fold-endline')) { try { return foldEndLineCaretFix(eb); } catch (e) { return false; } }
+  // 闸 R3三审（探针实锤）：光标停在"刚被收起的隐藏正文"里时（展开→点进正文→点三角收起），
+  // 用户屏幕上什么都看不见，退格却会啃把手的字。一律把光标从不可见块弹回该组把手。
+  const eb2 = blockOf(r.startContainer, editor);
+  if (eb2 && eb2 !== editor && eb2.classList && eb2.classList.contains('ns-fold-hide')) {
+    let n = eb2;
+    while (n) { if (n.classList && n.classList.contains('ns-fold')) break; n = n.previousElementSibling; }
+    const mk2 = n ? foldMarkOfBlock(n) : null;
+    // 闸 R2复审二轮：落点＝把手可见文字的**末尾**，不能是行最左位。自动把光标摆到最左位，下一记退格会走
+    // "原子整删 [折叠]"（连带被扫隐形的 [/折叠] 锚一起没，实测 9 字），一记键拆掉整组折叠结构还自动上云——
+    // 自动落点不许是"一步就出事"的位置。行尾挂锚时 placeCaretAfterMerge 自己落在锚前，不会顶开锚。
+    if (mk2 && placeCaretAfterMerge(n)) return true;
+    if (mk2) { const pos2 = foldLeftmostPos(mk2); try { setCaret(pos2.node, pos2.off); } catch (e) {} return true; }
+    try { foldJumpToPrevLineEnd(eb2); } catch (e) {}
+    return true;
+  }
   const mk = caretInsideFoldMark(r);
   if (!mk) return false;
   const fblock = (mk.closest ? mk.closest('.ns-fold') : null) || mk.parentNode;

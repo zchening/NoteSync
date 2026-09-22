@@ -381,9 +381,9 @@ test('V1003-H8 闸二轮回修：空行挂锚不塌行高、组外/重复/行尾
 
 /* ── G 三 bump + 双壳逐字节 ── */
 test('V1003-G 三 bump 10.0.3 + 双壳逐字节', () => {
-  assert.ok(SRC.includes("const APP_VERSION = '10.0.3';"), 'APP_VERSION 应 10.0.3');
-  assert.ok(GRADLE.includes('versionCode 1003') && GRADLE.includes('versionName "10.0.3"'), 'gradle 应 1003/10.0.3');
-  assert.ok(MCP.includes("version: '10.0.3'"), 'MCP serverInfo 应 10.0.3');
+  assert.ok(SRC.includes("const APP_VERSION = '10.0.4';"), 'APP_VERSION 应 10.0.3');
+  assert.ok(GRADLE.includes('versionCode 1004') && GRADLE.includes('versionName "10.0.4"'), 'gradle 应 1003/10.0.3');
+  assert.ok(MCP.includes("version: '10.0.4'"), 'MCP serverInfo 应 10.0.3');
   const a = fs.readFileSync(path.join(ROOT, 'www/index.html'));
   const b = fs.readFileSync(path.join(ROOT, 'android/app/src/main/assets/public/index.html'));
   const c = fs.readFileSync(path.join(ROOT, 'index.html'));

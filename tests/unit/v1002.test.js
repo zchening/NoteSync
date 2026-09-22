@@ -50,8 +50,9 @@ test('V1002-C 折叠恒定展开：作用域样式属性门控+7px 间隙，编�
   assert.ok(SRC.includes('.ns-export .ns-fold-hide{display:block}'), '收起态正文出图显形');
   assert.ok(SRC.includes('wrap.insertBefore(foldCss, wrap.firstChild)'), '样式常驻副本子树（SVG 快路随 clone 序列化进 foreignObject，两路同源）');
   assert.ok(SRC.includes('wrap.removeChild(foldCss)'), '用完即拆不堆积');
-  // 编辑器本体折叠 CSS 与打印规则一字不动
-  assert.ok(SRC.includes("#editor .ns-fold-mark::before{content:'\\25B6\\FE0E';font-size:12px;line-height:1.9;vertical-align:baseline}"), '#editor 三角规则原样');
+  // 编辑器本体折叠 CSS 与打印规则一字不动（v10.0.4 契约更新：三角改边框画，本测只验"导出侧改动没渗回编辑器"）
+  assert.ok(SRC.includes("#editor .ns-fold-mark::before{content:'';display:inline-block;width:0;height:0;border-top:4px solid transparent;border-bottom:4px solid transparent;border-left:7px solid currentColor;vertical-align:middle;position:relative;top:-6px}"), '#editor 三角规则在位（v10.0.4 几何画法）');
+  assert.ok(SRC.includes("[data-ns-export]::before{content:\"\\\\25BC\";font-size:12px;line-height:1.9;vertical-align:baseline}"), '导出副本三角仍走 ▼ 字形（与编辑器规则两套独立，互不渗透）');
   assert.ok(SRC.includes('#editor .ns-fold-hide{display:none}'), '#editor 隐藏规则原样（F7 锚不翻）');
   assert.ok(!/^\s*\.ns-fold-hide\{/m.test(SRC), '仍无裸 .ns-fold-hide 全局规则（离屏默认全文语义保持）');
 });
@@ -100,9 +101,9 @@ test('V1002-D 提速三层结构：预取/预解码/快渲门控+回退', () => 
 });
 
 test('V1002-E 三 bump 10.0.2 + 双壳逐字节', () => {
-  assert.ok(SRC.includes("const APP_VERSION = '10.0.3';"), 'APP_VERSION 应 10.0.2');
-  assert.ok(GRADLE.includes('versionCode 1003') && GRADLE.includes('versionName "10.0.3"'), 'gradle 应 1002/10.0.2');
-  assert.ok(MCP.includes("version: '10.0.3'"), 'MCP serverInfo 应 10.0.2');
+  assert.ok(SRC.includes("const APP_VERSION = '10.0.4';"), 'APP_VERSION 应 10.0.2');
+  assert.ok(GRADLE.includes('versionCode 1004') && GRADLE.includes('versionName "10.0.4"'), 'gradle 应 1002/10.0.2');
+  assert.ok(MCP.includes("version: '10.0.4'"), 'MCP serverInfo 应 10.0.2');
   const a = fs.readFileSync(path.join(ROOT, 'www/index.html'));
   const b = fs.readFileSync(path.join(ROOT, 'android/app/src/main/assets/public/index.html'));
   const c = fs.readFileSync(path.join(ROOT, 'index.html'));
