@@ -127,7 +127,13 @@ async function apiPut(name, obj) {
   return j;
 }
 function assertName(name) {
+  // v10.1.1（T1）：归一化小写并返回——服务端 NTFS 大小写不敏感，/XL 与 /xl 是同一篇笔记，
+  // 但写入凭据按名字逐字符派生（HMAC msg='notesync-write-v1:'+name），大写变体会与按小写
+  // 认领的 wkHash 不匹配 → wk-mode=full 下 PUT 403（用户实锤：AI 传大写 XL 改 xl 笔记失败）。
+  // 归一化必须落在「派生凭据的这一端」（本进程），服务端单方面归一无用（HMAC 单向不可换算）。
+  name = String(name || '').toLowerCase();
   if (!name || !ID_RE.test(name)) throw new Error('笔记名只允许英数/下划线/短横线，1-64 字符：' + name);
+  return name;
 }
 function mustPass() {
   if (!PASSPHRASE) throw new Error('未配置 NOTESYNC_PASSPHRASE（写在 MCP 配置的 env 里，不进对话不进 git）');
@@ -229,8 +235,7 @@ function regSeed() {
 // names 入参解析：显式 names[]（逐个入册）优先，否则注册表全部；一个都没有则报错。
 function resolveNames(args) {
   const explicit = Array.isArray(args && args.names) ? args.names.filter(Boolean) : null;
-  const names = explicit || regLoad().names;
-  for (const n of names) assertName(n);
+  const names = (explicit || regLoad().names).map(n => assertName(n)); // v10.1.1：逐个归一化小写
   if (explicit) for (const n of names) regAdd(n);
   if (!names.length) throw new Error('没有可用的笔记名：注册表为空（配置 env NOTESYNC_NOTE / NOTESYNC_NOTES，或调用任何工具时传 name/names 自动登记）');
   return [...new Set(names)];
@@ -427,8 +432,7 @@ function assertWhitelistHtml(html) {
 
 // ---------- 工具实现 ----------
 async function toolLocate(args) {
-  const name = args.name || DEFAULT_NOTE;
-  assertName(name);
+  const name = assertName(args.name || DEFAULT_NOTE); // v10.1.1：assertName 归一化小写并返回
   let note;
   try { note = await apiGet(name); }
   catch (e) { return { exists: false, name, error: String(e.message || e) }; }
@@ -445,8 +449,7 @@ async function toolLocate(args) {
 }
 
 async function toolRead(args) {
-  const name = args.name || DEFAULT_NOTE;
-  assertName(name);
+  const name = assertName(args.name || DEFAULT_NOTE); // v10.1.1：assertName 归一化小写并返回
   const format = args.format || 'text';
   const { html } = await loadNote(name);
   if (format === 'html') return { name, format, html };
@@ -526,8 +529,7 @@ async function withRetry409(name, fn, tries) {
 }
 
 async function toolEdit(args) {
-  const name = args.name || DEFAULT_NOTE;
-  assertName(name);
+  const name = assertName(args.name || DEFAULT_NOTE); // v10.1.1：assertName 归一化小写并返回
   const op = args.op;
   if (!['append', 'insert', 'delete', 'replace_html'].includes(op)) throw new Error('op 只支持 append | insert | delete | replace_html');
   if (op === 'replace_html') {
@@ -605,8 +607,7 @@ async function putBodyPreservingHtml(name, html, saltB64, key, v, remValue) {
   return apiPut(name, body);
 }
 async function toolRemind(args) {
-  const name = args.name || DEFAULT_NOTE;
-  assertName(name);
+  const name = assertName(args.name || DEFAULT_NOTE); // v10.1.1：assertName 归一化小写并返回
   mustPass();
   const op = args.op || 'add';
   if (!['add', 'list', 'cancel', 'clear'].includes(op)) throw new Error('op 只支持 add | list | cancel | clear');
@@ -670,8 +671,7 @@ async function toolRemind(args) {
 // 线上 CSP 已放行：img-src https://res.cloudinary.com + connect-src api.cloudinary.com（Caddy 头），
 // web 端正文渲染 <img> 无障碍；正文保存走 isDecorativelyEqual 之外的结构标签，不受纯文本转义影响。
 async function toolImage(args) {
-  const name = args.name || DEFAULT_NOTE;
-  assertName(name);
+  const name = assertName(args.name || DEFAULT_NOTE); // v10.1.1：assertName 归一化小写并返回
   if (args.op === 'remove') return imageRemove(name, args); // v7.2.0：按 URL 删图
   const p = String(args.path || '');
   if (!p) throw new Error('path 必填（本机图片绝对路径）');
@@ -972,17 +972,16 @@ async function toolImport(args) {
   const mode = args.mode || 'preview';
   if (!['preview', 'apply'].includes(mode)) throw new Error('mode 只支持 preview | apply');
   const force = !!args.force;
-  const namesFilter = Array.isArray(args.names) ? args.names.filter(Boolean) : null;
-  const singleTo = args.to || null;
-  if (singleTo) assertName(singleTo);
+  const namesFilter = Array.isArray(args.names) ? args.names.filter(Boolean).map(n => String(n).toLowerCase()) : null; // v10.1.1：过滤名同步归一，防大写过滤名匹配不到 zip 内小写名
+  const singleTo = args.to ? assertName(args.to) : null; // v10.1.1：归一化小写
 
   const plan = [], applied = [], skipped = [];
   const items = manifest.notes.filter(m => !namesFilter || namesFilter.includes(m.name));
   if (!items.length) throw new Error('zip 里没有匹配的笔记');
   if (singleTo && items.length > 1) throw new Error('to（改名导入）仅单篇导入时可用（zip 内匹配到 ' + items.length + ' 篇，请用 names 先限定一篇）');
   for (const m of items) {
-    const target = singleTo || m.name;
-    try { assertName(target); } catch (e) { skipped.push({ name: m.name, reason: e.message }); continue; }
+    let target;
+    try { target = assertName(singleTo || m.name); } catch (e) { skipped.push({ name: m.name, reason: e.message }); continue; } // v10.1.1：归一化小写
     let remote = null;
     try { remote = await apiGet(target); } catch (e) { remote = null; } // 404/无内容=新建
     const remoteV = remote && remote.v ? remote.v : null;
@@ -1275,7 +1274,7 @@ function handleLine(line) {
     rpcResult(id, {
       protocolVersion: '2024-11-05',
       capabilities: { tools: {} },
-      serverInfo: { name: 'notesync', version: '10.1.0' },
+      serverInfo: { name: 'notesync', version: '10.1.1' },
     });
     return;
   }
@@ -1331,4 +1330,5 @@ module.exports = {
   tokenize, buildIndexItem, indexLoad, indexStore,
   crc32, buildZip, readZip, htmlToMd, assertWhitelistHtml,
   toolSearch, toolExport, toolImport, htmlToPlainMap,
+  assertName, // v10.1.1（T1）：导出供守护测试验证归一化行为
 };

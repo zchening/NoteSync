@@ -196,7 +196,7 @@ test('V63-3 10 条未来后，面板与 chip 双路拒绝第 11 条（#2）', gu
     v: 7,
     rem: JSON.stringify({ ct: ctBuf.toString('base64'), iv: iv.toString('base64') }),
   };
-  await unlockNote('MaxTest', noteBody);
+  await unlockNote('maxtest', noteBody); // v10.1.1（T1）：归一化后客户端 GET 归一名，route 拦截须同口径
   assert.strictEqual(await page.evaluate(() => reminders.length), 10, '喂入的 10 条提醒应经真实解密载入');
 
   await page.click('#remBtn');

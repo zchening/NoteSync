@@ -181,12 +181,12 @@ test('V71-2 打标重写后远端 v+1：装饰等价不弹冲突条（旧版必�
   const body2 = seal(key, '<div>' + tomorrowStr + ' 10:30　写周报</div>');
 
   const note1 = { salt: salt, v: 1, ct: body1.ct, iv: body1.iv };
-  await unlockOn(page, 'V71Mark', note1);
+  await unlockOn(page, 'v71mark', note1); // v10.1.1（T1）：客户端 id 归一化后请求/拦截全走归一小写名
   assert.ok(true, '解锁载入 v1');
 
   // 第一级：远端 v2 = 含时间行正文 + rem → poll 应用后 linkify 打标改写 DOM
   const note2 = { salt: salt, v: 2, ct: body2.ct, iv: body2.iv, rem: rem };
-  await page.route('**/api/note/V71Mark', (route) => {
+  await page.route('**/api/note/v71mark', (route) => {
     if (route.request().method() === 'GET') return route.fulfill({ contentType: 'application/json', body: JSON.stringify(note2) });
     return route.continue();
   });
@@ -195,8 +195,8 @@ test('V71-2 打标重写后远端 v+1：装饰等价不弹冲突条（旧版必�
 
   // 第二级：远端 v3（正文同 v2）→ 旧版把打标 DOM 判为「本机未保存修改」弹冲突条
   const note3 = { salt: salt, v: 3, ct: body2.ct, iv: body2.iv, rem: rem };
-  await page.unroute('**/api/note/V71Mark');
-  await page.route('**/api/note/V71Mark', (route) => {
+  await page.unroute('**/api/note/v71mark');
+  await page.route('**/api/note/v71mark', (route) => {
     if (route.request().method() === 'GET') return route.fulfill({ contentType: 'application/json', body: JSON.stringify(note3) });
     return route.continue();
   });
@@ -212,7 +212,7 @@ test('V71-2 打标重写后远端 v+1：装饰等价不弹冲突条（旧版必�
   assert.ok(st.marks >= 1, '时间行应保持下划线标记');
   assert.ok(st.body.indexOf('写周报') >= 0, '正文应完整: ' + JSON.stringify(st.body));
   assert.strictEqual(page.__errors.length, 0, '不应有页面错误: ' + page.__errors.join(' | '));
-  await page.unroute('**/api/note/V71Mark');
+  await page.unroute('**/api/note/v71mark');
 }));
 
 // ── V71-3：UI 四修（X 关闭 / 滚动容器 / PC 聚焦）────────────────────

@@ -24,12 +24,12 @@
 
 | 分类 | 功能 | 条目数 | 触发核对的条件 |
 |------|------|--------|----------------|
-| A | 删除线 | 7 | 修改 strikeBtn / addStrikeToRange / removeStrikeFromRange / rangeIntersectsNode / contentHasS / linkifyEditor |
+| A | 删除线 | 8 | 修改 strikeBtn / addStrikeToRange / removeStrikeFromRange / rangeIntersectsNode / contentHasS / linkifyEditor |
 | B | 导出图片 | 8 | 修改 exportImage / exportImgBtn 事件 / html2canvas 调用 / 临时 div 渲染 |
 | C | 缓存与图标 | 4 | 修改 favicon / manifest.json / Cache-Control 头 / icon-maskable 生成与路由 |
 | D | PWA 与移动端 | 7 | 修改 manifest.json / 触摸事件 / 夜间模式 CSS / applyTheme / THEME_PALETTE / mountThemeOverride / color-scheme 声明（:root 或 meta）/ theme-override 挂载点 / viewport meta（interactive-widget） |
 | E | 选区与同步 | 4 | 修改 editor 输入/粘贴处理 / linkifyEditor / saveSelectionOffsets·restoreSelectionOffsets / cleanupLeadingTrailingBreaks / insertNodeAtCaret / 删除逻辑 / poll 远端合并 / selectionchange 钳制 |
-| F | 光标与编辑 | 15 | 修改 Enter 处理 / cleanupLeadingTrailingBreaks / caretInsideNode / linkifyEditor 块内偏移 / ensureBlockWrapped / ensureCaret / repaintCaret / relocateCaretToVisible / isComposing / applyFolds 折叠组边界与锚 |
+| F | 光标与编辑 | 16 | 修改 Enter 处理 / cleanupLeadingTrailingBreaks / caretInsideNode / linkifyEditor 块内偏移 / ensureBlockWrapped / ensureCaret / repaintCaret / relocateCaretToVisible / isComposing / applyFolds 折叠组边界与锚 / 折叠三角 mark CSS |
 | G | 撤销栈 | 1 | 修改 自建撤销栈 / captureState / applyState / recordIfChanged / syncCurrentState / undo / redo / keydown 拦截 Ctrl+Z/Y |
 | H | 落地页/解锁/路由/图标/指纹 | 6 | 修改 landing 路由(ID_RE/extractId/导航) / 打开按钮禁用 / 解锁按钮禁用态样式 / 退出锁定禁用态 / 落地页中文输入过滤 / 指纹 WebAuthn PRF 逻辑（v5.15 起彻底移除） |
 | I | 链接转换/粘贴/保存可靠性 | 7 | 修改 linkifyEditor / buildLinkSafe / trimUrlTrailing / urlRegex / paste 处理 / pasteTextNative / input 处理器 busy 分支 / saveLocal / scheduleSaveRetry / flushDirtySave / fetchRetry / copyBtn / offline·online 事件监听 / lastSyncAt / currentSyncTime |
@@ -43,6 +43,7 @@
 | Q | v5.56 真机验收六连修 | 6 | 修改 poll 挂起冲突条 / loadReminder 自动解锁路径 / poll note.rem / MainActivity 三级兜底缓存 / versionCode 双 bump / 菜单诊断入口 |
 | R | v5.57 真机验收九连修 | 9 | 修改 rem-notify-click / scheduleRemMarkRefresh / caretInfoInEditor 裸文本兜底 / conflictbar 浮卡 / unlockHome 返回首页 / NOTE_LAST_KEY / MainActivity 拦截器时机 / 菜单 native 项 / menuScan 扫码 |
 | S | v5.58 验收五连修 | 5 | 修改 confcard CSS 与冲突文案 / offlineBar 入 footer / footer·menu·☰ 尺寸 / 扫码全平台 / 盐自愈三层 |
+| T | MCP 集成 | 1 | 修改 tools/notesync-mcp-server.js / server.js 写入凭据（x-note-key·wk-mode）/ WorkBuddy mcp.json（notesync 条目） |
 
 ---
 
@@ -134,6 +135,24 @@
   - [ ] 部分选中（同行正常文字 + 删除线文字）加/取消 → 选中态保留
   - [ ] 连续多次加/取消同一区域 → 每次选中态都保留
   - [ ] 操作后光标不跳到笔记最前
+
+### A8 | 删除线末尾字符的删除线"过段时间"消失（v10.1.1 修复：beforeinput 拦截 + 探针同版）
+- **版本**: v10.1.0 报障（2026-09-25 登记；引入版本未定，可能与历史版本无关的长期潜伏）
+- **修复（v10.1.1，用户拍板"修复+探针同版"）**: editor 挂 `beforeinput` 拦截器——同块内跨 `<s>` 边界的单字符删除（deleteContentBackward/Forward，collapsed 选区）`preventDefault` 后手动删字符，`<s>` 结构零拆分（空壳按 A6 口径移除、块将空补 `<br>`、删后重派发 `input` 走撤销/保存/linkify 原路径）；组字期/选区删除/跨块删除/光标已在 `<s>` 内/`s.rem-done` 一律不拦交原生。同版 `?diag` 增 `strike: s=/sBare=` 探针行（sBare=紧贴裸文本的 `<s>` 计数，>0 即弹出复发，用户复制一行即可定位）。守护测试 v1011.test.js S1-S4。
+- **现象**: 一整段文字整体加删除线（例：yBIKEKEY），过一段时间后**末尾一个字符**的删除线消失、其余字符正常。用户感知为"过一会儿才丢"，非当场。
+- **初步根因（两条候选，待探针定案）**:
+  1. **Blink 格式拆分弹出（主嫌疑）**: 在 `<s>` 内/末尾继续打字再退格、或退格删到格式边界时，Blink 会把 `<s>` 尾部字符"弹出"到标签外（`<s>…KEY</s>` → `<s>…KE</s>Y`）。应用对此**零重建**——linkify 的先拆后建名单只有 `a[data-url]` / `u.rem-mark` / 裸 `u`（unwrapStrayU）/ `s.rem-done`，**手打 `<s>` 从不重建**；自建撤销栈 captureState 还会把弹出后的形态当合法状态收录固化。v8.1.8 修过同机制的裸 `<u>`，`<s>` 是漏网同类。
+  2. **折叠/回车手术边界（次嫌疑）**: v10.0.3 把手行回车用 Range.extractContents 搬运"行内链接/删除线/提醒标记"，若该文字恰在折叠把手行/组边界，拆分点落在 `<s>` 内部时可能产生残缺边界节点。需确认 yBIKEKEY 是否在折叠区。
+- **取证方案**: ①?diag 增探针（统计"`<s>` 紧邻裸文本兄弟"出现次数）；②e2e 复现脚本：加删除线→末尾打字→退格→断言 `<s>` 完整性；③复现后按主嫌疑落修。
+- **修复方向（待拍板）**: 给手打 `<s>` 打标记（addStrikeToRange 写 `data-ns`），linkify 每轮巡检"标记 `<s>` 紧贴的尾部/头部裸文本"自动吸回（判据：`<s data-ns>` 与裸文本间无空白；手动取消路径产出的是新 `<s>` 或整段裸化，均不命中该判据，不误伤）。或者先只做诊断版观察一周再定。
+- **关联文件**: index.html → addStrikeToRange / removeStrikeFromRange / linkifyEditor（重建名单）/ undoStack（captureState）
+- **核对要点**:
+  - [ ] 加删除线后在末尾打字再退格 → 所有原字符保持删除线（F12 DOM 检查 `<s>` 完整）
+  - [ ] 在 `<s>` 中间打字/删除 → 两端删除线保持
+  - [ ] 退格删到删除线边界再补字 → 格式不脱
+  - [ ] 两端同步后 `<s>` 结构不变
+  - [ ] A2/A5（取消删除线拆分/重加）不回归：手动取消仍有效、取消后可重加
+  - [ ] 撤销栈：Ctrl+Z 穿过 linkify 后不把弹出形态固化
 
 ---
 
@@ -751,6 +770,20 @@
   - [ ] 桌面三角命中区 ≥300px² 且两态同样大；感应区右缘不越进标题首字、上下缘不越出本行行盒（闸 R2 四审 P1，E8）
   - [ ] 组外行尾的撑行高 <br> 不随整行搬进组：展开态组末不多空行、收起态标题不变两行（闸 R2 四审 P2，E9）
   - [ ] 挂账：并组后 foldIdx 前移时旧序号展开态不迁移；锚嵌 <a>/<strong> 内不包；粘贴嵌套 div 行首退格让位原生（均非本版引入、零丢字）
+
+### F16 | 折叠开合时把手行标题换行数跳变（两行变三行/三行变两行）（v10.1.1 修复：滚动条槽恒定 + 三角等大同形墨迹盒）
+- **版本**: v10.1.0 报障（2026-09-25 登记）——**F15 修复一的残留维度**
+- **修复（v10.1.1，双层）**: ①用户澄清真实症状是**折叠列表上方的普通正文**跳行（非把手行）：`#editor` 加 `scrollbar-gutter:stable`——折叠展开正文超高后占位式滚动条（8px）出现/消失使可用宽度跳变、整篇重排，恒留槽后换行点稳定（老内核静默忽略，行为同旧）；②把手行维度：两态三角改**等大同形墨迹盒**——收起态 `border-left:8px`+上下 4px（8w×8h，½·8·8=32）与展开态 `border-top:8px`+左右 4px（8w×8h）旋转 90° 全等、占宽相等，行盒占宽两态归零、换行点恒定（首版定宽格子方案 inline-flex 使 `::before` 脱离行内流、`top:-6px` 补偿失准，v1004-E4 实测墨迹中心偏 -4.0px；二版 3.5px/8px 面积等但形状不旋转全等，v1004-E1 像素数 20≠26——均废弃；窄屏 44px 媒体查询覆盖不变）。守护测试 v1011.test.js F1-F2。
+- **现象**: 点三角展开/收起折叠组时，把手行标题文字的换行行数不稳定：有时两行变三行、有时三行变两行，反复开合可能来回跳。
+- **根因（已量化，待修）**: F15 修复一改的边框三角两态**面积等大，但行盒占宽不等**——收起态 `border-left:7px`（横向占 7px），展开态 `border-top:7px;border-left/right:4px`（横向占 4+4=8px）；加 `padding:0 3px;margin-right:2px` 后 mark span 总宽收起 15px / 展开 16px，**差 1px**。标题文字长度恰在行宽临界时，开合切换的 1px 宽差足以推移换行点 → 行数 2↔3 跳变。"有时候"取决于该行文字当前长度是否落在临界带。≤560px 窄屏 mark 定宽 44px（inline-flex）两态同盒，不受影响——桌面/宽屏命中。
+- **修复方向（待拍板）**: ①桌面档 mark 也定宽（同窄屏思路：`display:inline-flex;width:16px;justify-content:center`，两态共盒，改动最小）；②或把两态几何改成真同宽（收起也画 4+4px 底边/8px 宽）。方案①同时消灭未来的再回归面。
+- **关联文件**: index.html → `#editor .ns-fold-mark` / `.ns-fold-mark::before` / `.ns-fold-open>.ns-fold-mark::before`
+- **核对要点**:
+  - [ ] 构造临界宽度标题（桌面档），展开↔收起反复切换 20 次，换行行数恒定不变
+  - [ ] 三角两态肉眼等大（F15 修复一不回归）
+  - [ ] 三角两态墨迹中心差 ≤2px（F15 核对项不回归）
+  - [ ] 窄屏 ≤560px 感应区 44×44 与命中面不回归（F15/E8）
+  - [ ] 打印/导出图不露三角、不露 [折叠]（F15/v10.0.3 契约不回归）
 
 ---
 
@@ -1512,6 +1545,31 @@
 - **修复**: 三层——服务端 PUT 空盐保留原盐；前端 PUT 盐走 currentSaltB64()（缺失回退缓存盐）+ 离线解锁落地 serverSalt；解锁失败先走「口令+缓存盐」自愈（缓存与服务端正文都解开才采用并回写盐）
 - **关联文件**: server.js → PUT；index.html → unlock / currentSaltB64 / 诊断 salt=/cacheSalt=
 - **核对要点**: 曾解密失败的笔记输口令能进（自愈）；诊断 salt=ok；另一设备正常解锁同一笔记
+
+## T 类 | MCP 集成（2026-09-25 登记）
+
+### T1 | MCP note_edit 等写入工具失败（v10.0.0 重构后）（v10.1.1 根修：三端归一化，运维项待发版后执行）
+- **版本**: 线上/仓库 v10.1.0；MCP 宿主进程实际运行版本未知
+- **现象**: 通过 MCP（note_edit）往笔记添加内容，本次失败。用户自述怀疑与"上次整个项目重构更新（v10.0.0）"有关、MCP 可能还是旧版本。
+- **已排除（2026-09-25 只读诊断 `_diag_mcp_v101.js`，零写入零回显）**:
+  - 线上 note/biji 两域均 v10.1.0，GET /api/note 两域 200 正常
+  - 本机 `~/.workbuddy/mcp.json` 的 notesync 条目 args **直接指向仓库文件**（非旧下载副本），仓库版含 v10.0.0 writeKey（x-note-key）逻辑
+  - 用 mcp.json env 口令走与 MCP 完全同构的 PBKDF2+AES-GCM 本地解密 **SUCCESS**（zchening 笔记可解）→ 口令/盐/加解密链路无问题，writeKey 可正常派生
+- **根因（2026-09-25 已实锤，全链路证据闭环）——笔记名大小写变体 × NTFS 大小写不敏感 × 凭据按名字派生**：
+  - 链路：微信 ClawBot → 腾讯服务器（124.221.92.225）上的 WorkBuddy → notesync MCP（`C:\Services\NoteSync\tools\notesync-mcp-server.js`，v10 新版，09/22 10:41 随部署更新）→ `127.0.0.1:8080` → 笔记 xl
+  - MCP 本地注册表 `~/.notesync-mcp/registry.json` 实锤 AI 传的名字是 **"XL"（大写）**（names: zchening, I, T, xyj, XL）
+  - 服务端是 Windows/NTFS（大小写不敏感）：GET `/api/note/XL` 读到的就是 `xl.json` → AI 能正常**读到**内容（所以读不出错）
+  - 但写入凭据按名字逐字符域分离派生：`HMAC(key,'notesync-write-v1:XL')` ≠ 认领时按 `xl` 派生的 wkHash → wk-mode=**full**（`DATA_DIR/wk-mode.txt` 实查）→ wkCheckNote 403 → MCP 报"PUT 凭据缺失或不匹配"
+  - 对照组：zchening 全小写调用 → 派生凭据与认领记录**逐位 MATCH**（SFTP 取 xl/zchening 档案离线比对，脚本 `_recon_cred.py`）→ 成功
+  - 同类暴露面：registry 里的大写 I/T（档案是小写 i.json/t.json）同病；web 端手输大写 URL 同理 403
+- **修复（v10.1.1 已落码，2026-09-25）**: 三端 id 归一化小写——①server.js：extractId（L376）/SSE 流 id（L402）/claim cid（L438）decodeURIComponent 后 `.toLowerCase()`；②index.html：主路由 noteId（L867）+ parsePairLink（L3452，扫码链）归一；③tools/notesync-mcp-server.js：assertName 先归一再校验并**返回归一结果**（5 处调用点全走归一名），assertName 导出供守护测试。守护测试 v1011.test.js T1a-T1g（含 parsePairLink/assertName 真实行为断言）。
+- **发版后运维（未执行）**: ①SFTP 部署三文件（index.html / server.js / tools/notesync-mcp-server.js）；②服务器 `DATA_DIR` 下删 I/T/xl 档案的 wkHash 字段（旧大小写派生凭据作废），各笔记打开一次自动重认领；③服务器 MCP 副本 `C:\Services\NoteSync\tools\` 同步更新 + WorkBuddy 宿主重启（MCP 是长驻 stdio 进程，文件更新不重启不生效）；④微信 ClawBot 用 XL 复测写入。
+- **关联文件**: tools/notesync-mcp-server.js（apiPut/withRetry409/toolEdit）/ server.js（wkCheckNote 146-176 / PUT 587-613）/ `~/.workbuddy/mcp.json`
+- **核对要点**:
+  - [ ] 重启宿主后 MCP note_edit append 成功，Web 端几秒内收到
+  - [ ] 服务端日志无意外 403/409（409 偶发属正常，连续 409 需查）
+  - [ ] wk-mode.txt 与运维预期一致（登记时未确认）
+  - [ ] MCP 宿主进程加载的文件版本与仓库一致（文件 mtime 晚于进程启动时间即需重启）
 
 ## 版本与 bug 对应速查
 

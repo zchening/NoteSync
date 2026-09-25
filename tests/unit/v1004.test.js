@@ -27,13 +27,13 @@ function key(w, k) { ed(w).dispatchEvent(new w.KeyboardEvent('keydown', { key: k
 const FX = '<div>[折叠]阳台清单</div><div>花肥、喷壶[/折叠]</div><div>后面这行别删我</div>';
 
 /* ── ① 三角：两态同一套几何，旧"两个不同码位"禁回潮 ── */
-test('V1004-A1 两态三角改为边框画的几何形，尺寸成对（7px 长边 + 8px 底边互为一组旋转）', () => {
+test('V1004-A1 两态三角改为边框画的几何形，尺寸成对（v10.1.1：8px 长边 + 8px 底边，8w×8h 盒旋转 90° 全等）', () => {
   const base = SRC.match(/#editor \.ns-fold-mark::before\{([^}]*)\}/);
   const open = SRC.match(/#editor \.ns-fold-open>\.ns-fold-mark::before\{([^}]*)\}/);
   assert.ok(base && open, '两条 ::before 规则都在位');
-  assert.ok(/content:''/.test(base[1]) && /border-left:7px solid currentColor/.test(base[1]), '收起＝右向三角（7px 长边，currentColor 吃 --muted）');
-  assert.ok(/border-top:7px solid currentColor/.test(open[1]) && /border-left:4px solid transparent/.test(open[1]), '展开＝下向三角，同一 7px 长边（两态必然等大）');
-  assert.ok(/border-bottom:4px solid transparent/.test(base[1]) && /border-right:4px solid transparent/.test(open[1]), '底边 4+4=8px 两态互换，旋转关系精确');
+  assert.ok(/content:''/.test(base[1]) && /border-left:8px solid currentColor/.test(base[1]), '收起＝右向三角（8px 长边，currentColor 吃 --muted）');
+  assert.ok(/border-top:8px solid currentColor/.test(open[1]) && /border-left:4px solid transparent/.test(open[1]), '展开＝下向三角，同一 8px 长边（两态必然等大）');
+  assert.ok(/border-bottom:4px solid transparent/.test(base[1]) && /border-right:4px solid transparent/.test(open[1]), '底边 4+4=8px 两态互换，旋转关系精确（v10.1.1 F16：两态占宽 8px 相等，跳行根因归零）');
   assert.ok(!/#editor \.ns-fold-mark::before\{[^}]*content:'\\25B6/.test(SRC), '禁回潮：收起不再用 ▶ 码位（字体决定大小）');
   assert.ok(!SRC.includes("#editor .ns-fold-open>.ns-fold-mark::before{content:'▼'}"), '禁回潮：展开不再用 ▼ 码位');
   const mob = SRC.match(/@media \(max-width:560px\)\{\s*#editor \.ns-fold-mark::before\{([^}]*)\}/);
@@ -243,9 +243,9 @@ test('V1004-B9 源码锚：归一化含"光标落在隐藏正文块 → 弹回�
 
 /* ── 三 bump + 双壳 ── */
 test('V1004-C1 三 bump 10.0.4 + 双壳逐字节', () => {
-  assert.ok(SRC.includes("const APP_VERSION = '10.1.0';"), 'APP_VERSION 应 10.0.4');
-  assert.ok(GRADLE.includes('versionCode 1010') && GRADLE.includes('versionName "10.1.0"'), 'gradle 应 1004/10.0.4');
-  assert.ok(MCP.includes("version: '10.1.0'"), 'MCP serverInfo 应 10.0.4');
+  assert.ok(SRC.includes("const APP_VERSION = '10.1.1';"), 'APP_VERSION 应 10.0.4');
+  assert.ok(GRADLE.includes('versionCode 1011') && GRADLE.includes('versionName "10.1.1"'), 'gradle 应 1004/10.0.4');
+  assert.ok(MCP.includes("version: '10.1.1'"), 'MCP serverInfo 应 10.0.4');
   const a = fs.readFileSync(path.join(ROOT, 'www/index.html'));
   const b = fs.readFileSync(path.join(ROOT, 'android/app/src/main/assets/public/index.html'));
   const c = fs.readFileSync(path.join(ROOT, 'index.html'));

@@ -337,7 +337,7 @@
   .egg-count{font:400 10.5px/1 ui-monospace,"SF Mono",Consolas,monospace;letter-spacing:.14em;color:var(--muted);text-align:right;padding:2px 4px 10px}
 
   /* ── 编辑器 ─────────────────────────── */
-  #editor{flex:1;width:100%;max-width:720px;margin:0 auto;border:0;outline:0;resize:none;padding:40px 28px 120px;background:transparent;color:var(--fg);font:inherit;font-size:17px;overflow-x:hidden;overflow-y:auto;word-wrap:break-word;overflow-wrap:anywhere;word-break:break-all;white-space:pre-wrap;-webkit-user-select:text;user-select:text;line-height:1.9}
+  #editor{flex:1;width:100%;max-width:720px;margin:0 auto;border:0;outline:0;resize:none;padding:40px 28px 120px;background:transparent;color:var(--fg);font:inherit;font-size:17px;overflow-x:hidden;overflow-y:auto;scrollbar-gutter:stable;word-wrap:break-word;overflow-wrap:anywhere;word-break:break-all;white-space:pre-wrap;-webkit-user-select:text;user-select:text;line-height:1.9} /* v10.1.1（F16）：scrollbar-gutter:stable——内容超过视口时滚动条出现/消失会让可用宽度跳 8px（::-webkit-scrollbar 是占位式），折叠展开/收起即整篇重排换行（用户实锤：展开折叠后上方正文"吃"从第一行掉第二行）。恒留滚动条槽后内容宽度恒定，换行点稳定。老内核不识别该属性时静默忽略，行为同旧版 */
   #editor:empty:before{content:attr(data-ph);color:var(--muted);opacity:.75;pointer-events:none}
   #editor.dragover{background:var(--accent-soft);outline:1.5px dashed var(--accent);outline-offset:-8px}
   #editor img{max-width:100%;border-radius:10px;margin:6px 0;display:block;border:1px solid var(--line);cursor:zoom-in}
@@ -383,14 +383,14 @@
      纯显示层：[折叠] 文本仍在 DOM（同步/导出/打印仍全文），只是被 font-size:0 收起、
      用 ::before 画三角替代；折叠正文用 .ns-fold-hide 隐藏。全部作用域锁在 #editor 下，
      故 renderNotePng 的离屏 tmp（不在 #editor 内）自动按全文 + 原样 [折叠] 渲染。颜色只吃令牌。 */
-  #editor .ns-fold-mark{font-size:0;cursor:pointer;user-select:none;-webkit-user-select:none;white-space:nowrap;padding:0 3px;margin-right:2px;border-radius:6px;color:var(--muted);position:relative}
+  #editor .ns-fold-mark{font-size:0;cursor:pointer;user-select:none;-webkit-user-select:none;white-space:nowrap;padding:0 3px;margin-right:2px;border-radius:6px;color:var(--muted);position:relative} /* v10.1.1（F16）：桌面档保持 v10.1.0 行内流几何不动（v1004 E4/E8 几何闸钉死墨迹中心与命中区），两态占宽均等改由 ::before 等大墨迹盒实现（见下）——首版定宽格子方案用 inline-flex 使 ::before 脱离行内流、top:-6px 补偿失准（E4 实测 -4.0px），已废弃 */
   /* v10.0.4（用户拍板）：两态改用 CSS 边框画几何三角——旧实现收起是 ▶(U+25B6+VS15)、展开是 ▼(U+25BC)，
      两个不同码位的光学大小完全由系统字体决定（实测同一字号下前宽 10.34 vs 11.89px，换 MiSans/Noto 又是另一种），
      用户观感"展开比收起小"即源于此。画出来的三角两态共用一套尺寸、互为 90° 旋转，字号/字体怎么变都等大。
      导出副本仍走 ▼ 字形（快慢两条导出路径同源，本次不动它，避免动 pseudo 兼容面）。 */
-  #editor .ns-fold-mark::before{content:'';display:inline-block;width:0;height:0;border-top:4px solid transparent;border-bottom:4px solid transparent;border-left:7px solid currentColor;vertical-align:middle;position:relative;top:-6px}
-  #editor .ns-fold-open>.ns-fold-mark::before{border-top:7px solid currentColor;border-bottom:0;border-left:4px solid transparent;border-right:4px solid transparent}
-  /* 闸 R2-P1（本版改画的连带回归，实测）：三角改边框画后 span 自身盒高恒为 0，桌面唯一命中面就是 ::before 的
+  #editor .ns-fold-mark::before{content:'';display:inline-block;width:0;height:0;border-top:4px solid transparent;border-bottom:4px solid transparent;border-left:8px solid currentColor;vertical-align:middle;position:relative;top:-6px} /* v10.1.1（F16）：收起态墨迹盒 8w×8h（½·8·8=32）——与展开态（border-top:8px+左右各 4px，8w×8h）旋转 90° 全等且占宽相等，两态行盒占宽差归零、换行点恒定；v1004-E1 钉「同一枚三角旋转 90°」→ 两态必须同盒（首版 3.5px/8px 面积等但形状不旋转全等，E1 像素数 20≠26 已废弃） */
+  #editor .ns-fold-open>.ns-fold-mark::before{border-top:8px solid currentColor;border-bottom:0;border-left:4px solid transparent;border-right:4px solid transparent} /* v10.1.1（F16）：8w×8h 与收起态旋转 90° 全等、占宽相等（旧 7px 高造成两态占宽差 1px 的跳行根因） */
+  /* 闸 R2-P1（v10.0.4 改画的连带回归，实测；v10.1.1 三角升 8px 后 ::before 边框盒 9×8=72px²）：三角改边框画后 span 自身盒高恒为 0，桌面唯一命中面就是 ::before 的
      边框盒——elementFromPoint 逐像素扫描 187px²(11×17) 掉到 63px²(9×7)，旧版能点的 y105~108 / y116~121 全部失效，
      点偏还把光标落进标题。补一枚不画任何像素的透明 ::after 当感应区（absolute 出流：行盒、缩进、墨迹包围盒一概不动，
      E1/E4 两态等大用例逐像素不变），命中区实测 18×20=360px²（旧字形版 187px²），右缘 132px 不越进标题首字（首字起于 133px）、
@@ -864,7 +864,7 @@ const nsRouteHit = (function () {
   const p = location.pathname.split('?')[0].replace(/^\/+|\/+$/g, '').toLowerCase();
   return NS_RESERVED_ROUTES.indexOf(p) >= 0 ? p : '';
 })();
-const noteId = nsRouteHit ? '' : location.pathname.split('?')[0].replace(/^\/+|\/+$/g, '');
+const noteId = nsRouteHit ? '' : location.pathname.split('?')[0].replace(/^\/+|\/+$/g, '').toLowerCase(); // v10.1.1（T1）：归一化小写——凭据派生(deriveWriteKey 用 noteId)/localStorage/GET/PUT 全链共用此名，大写 URL(/XL) 必须与档案名(xl)同源，否则凭据闸 403（用户实锤）
 // 动态 manifest：让每个笔记的 start_url 指向自身路径，Chrome 安装/创建快捷方式时打开正确页面
 document.querySelector('link[rel="manifest"]').href = '/manifest.json?start=/' + encodeURIComponent(noteId);
 // v5.52：APK 改为 server.url 直连线上，与 Web 同源，相对路径天然可用，无需注入绝对地址。
@@ -895,8 +895,8 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '10.1.0';
-const BUILD_DATE = '2026-09-22';
+const APP_VERSION = '10.1.1';
+const BUILD_DATE = '2026-09-25';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
 let nsSkin = 0;
@@ -1580,6 +1580,90 @@ strikeBtn.addEventListener('touchstart', e => { e.preventDefault(); applyStrike(
 // mousedown：桌面端；preventDefault 阻止焦点转移
 strikeBtn.addEventListener('mousedown', e => { if (e.button !== 0) return; e.preventDefault(); applyStrike(); });
 
+// ── v10.1.1（A8）：拦截跨 <s> 边界的单字符删除，根除 Blink「格式弹出」──────────────
+// 用户报障：整词加删除线后过段时间末字母的删除线消失（<s>yBIKEKEY</s> → <s>yBIKEKE</s>Y）。
+// 机制：光标停在删除线外紧贴 <s> 边界按退格/Delete 时，Blink 跨格式边界删除会先把 <s> 尾/首
+// 字符「弹出」成裸文本再删，中断残留即永失格式；应用对用户手打 <s> 无重建逻辑（linkify 只
+// 重建自家标记），弹出态还会被自建撤销栈当合法状态固化。此处 preventDefault 后手动删字符：
+// <s> 结构全程不动、字符照删、光标照走、input 照派发（撤销/保存/linkify 与原生同路径）。
+// 范围：仅 deleteContentBackward/Forward 单字符删除，且只拦「同块内跨 <s> 边界」——跨块退格
+// （块合并）与 deleteWord/选区删除交原生（其拆分产物两侧仍带 <s>，不丢格式）。组字期绝不拦。
+function nsBlockOf(n) { let p = n.nodeType === 3 ? n.parentElement : n; while (p && p.parentElement !== editor) p = p.parentElement; return p; }
+function nsTextNodeFrom(el, backward) {
+  const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+  let n, res = null;
+  while ((n = w.nextNode())) { if (!n.nodeValue || !n.nodeValue.length) continue; if (!backward) return n; res = n; }
+  return res;
+}
+function nsPrevTextNode(node) { // editor 范围内 node 的前一个非空文本节点（O(n)，删除频率低可接受）
+  const w = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT, null);
+  let n, prev = null;
+  while ((n = w.nextNode())) { if (n === node) return prev; if (n.nodeValue && n.nodeValue.length) prev = n; }
+  return null;
+}
+function nsNextTextNode(node) {
+  const w = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT, null);
+  let n, seen = false;
+  while ((n = w.nextNode())) { if (n === node) { seen = true; continue; } if (seen && n.nodeValue && n.nodeValue.length) return n; }
+  return null;
+}
+editor.addEventListener('beforeinput', e => {
+  if (isComposing) return;
+  if (e.inputType !== 'deleteContentBackward' && e.inputType !== 'deleteContentForward') return;
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount || !sel.getRangeAt(0).collapsed) return; // 选区删除交原生
+  const r = sel.getRangeAt(0);
+  const sc = r.startContainer, off = r.startOffset;
+  const backward = e.inputType === 'deleteContentBackward';
+  let tNode = null, tOff = -1;
+  if (sc.nodeType === 3) {
+    if (backward) {
+      if (off > 0) { tNode = sc; tOff = off - 1; }
+      else {
+        const pv = nsPrevTextNode(sc);
+        if (!pv || nsBlockOf(pv) !== nsBlockOf(sc)) return;     // 跨块退格交原生（块合并语义不碰）
+        tNode = pv; tOff = pv.nodeValue.length - 1;
+      }
+    } else {
+      if (off < sc.nodeValue.length) { tNode = sc; tOff = off; }
+      else {
+        const nx = nsNextTextNode(sc);
+        if (!nx || nsBlockOf(nx) !== nsBlockOf(sc)) return;
+        tNode = nx; tOff = 0;
+      }
+    }
+  } else {
+    const idx = backward ? off - 1 : off;
+    if (idx < 0 || idx >= sc.childNodes.length) return;
+    const tgt = sc.childNodes[idx];
+    if (tgt.nodeType === 3) { if (!tgt.nodeValue || !tgt.nodeValue.length) return; tNode = tgt; tOff = backward ? tgt.nodeValue.length - 1 : 0; }
+    else { tNode = nsTextNodeFrom(tgt, backward); if (!tNode) return; tOff = backward ? tNode.nodeValue.length - 1 : 0; }
+  }
+  if (!tNode || tOff < 0) return;
+  const sp = tNode.parentElement && tNode.parentElement.closest ? tNode.parentElement.closest('s') : null;
+  if (!sp || !editor.contains(sp) || sp.classList.contains('rem-done')) return; // 不涉删除线/自家标记不拦
+  const scInS = sc.nodeType === 3 ? (sc.parentElement === sp || (sc.parentElement && sc.parentElement.closest && sc.parentElement.closest('s') === sp)) : (sc === sp || (sc.contains && sc.contains(sp)));
+  if (scInS) return;                                            // 光标已在 <s> 内：Blink 不弹出，交原生
+  // 到这里 = 同块内跨 <s> 边界删 <s> 内字符：拦截，手动删
+  e.preventDefault();
+  tNode.nodeValue = tNode.nodeValue.slice(0, tOff) + tNode.nodeValue.slice(tOff + 1);
+  if (!sp.textContent) {                                        // 空壳按 A6 口径移除，块将空时补 <br> 防塌缩
+    const p = sp.parentNode;
+    let hasContent = false;
+    for (const c of p.childNodes) {
+      if (c === sp) continue;
+      if (c.nodeType === 3) { if (c.nodeValue.replace(/\u200B/g, '').trim() !== '') { hasContent = true; break; } }
+      else if (c.tagName !== 'BR') { hasContent = true; break; }
+    }
+    if (!hasContent) p.insertBefore(document.createElement('br'), sp);
+    sp.remove();
+    try { ensureCaret(true); } catch (e2) {}
+  } else {
+    try { setCaret(tNode, tOff); } catch (e2) { try { ensureCaret(true); } catch (e3) {} }
+  }
+  editor.dispatchEvent(new Event('input', { bubbles: true }));  // 撤销记录/保存/linkify 与原生同路径
+});
+
 const bufToB64 = b => btoa(String.fromCharCode(...new Uint8Array(b)));
 const b64ToBuf = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 
@@ -1861,6 +1945,15 @@ function hideUploadStatus() { uploadStatus.classList.remove('show'); }
           '  wconAM=' + (window.__wconAutoMerge || 0) +
           '  l2AM=' + (window.__pollLevel2Merge || 0) +
           '  rbd=' + (window.__remoteBarDeferred || 0));
+        // v10.1.1（A8 探针）：删除线完整性——s=手打删除线数（不含已推送 rem-done），
+        // sBare=紧贴裸文本的 <s> 计数（>0 即发生过 Blink 格式弹出或取消拆分残留）。
+        // 用户报障「末字母失去删除线」时复制本行即可定位：sBare 增长=弹出复发。
+        try {
+          const sAll = Array.from(editor.querySelectorAll('s:not(.rem-done)'));
+          L.push('strike: s=' + sAll.length +
+            '  sBare=' + sAll.filter(s => (s.previousSibling && s.previousSibling.nodeType === 3 && s.previousSibling.nodeValue) ||
+                                          (s.nextSibling && s.nextSibling.nodeType === 3 && s.nextSibling.nodeValue)).length);
+        } catch (e9) {}
         const ci = window.__remCacheInfo;
         // v5.58：盐状态——serverSalt 空曾致联网保存冲掉服务端盐（正确口令恒定解密失败的根因）
         let cacheSaltOk = false;
@@ -3356,6 +3449,7 @@ function parsePairLink(raw) {
   if (!m) return null;
   let id = m[1];
   try { id = decodeURIComponent(id); } catch (e) { return null; }
+  id = id.toLowerCase(); // v10.1.1（T1）：与服务端/主路由同口径归一——扫码打开大写名笔记时凭据派生与档案一致
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) return null; // 与服务端 ID_RE 同规则（落地页 sanitize 剔非 ASCII）
   return '/' + id + (m[2] || '');
 }

@@ -99,7 +99,7 @@ async function getCaretInfo(pg) {
 // 首 PUT 被拦 409（模拟服务端因 baseV 落后拒写），之后 GET 返回 v=localVer+1 让 handleWriteConflict
 // 看到更高版本挂起冲突条；「保留我的」采纳挂起 v 后重发 PUT 放行到真实服务端。
 test('V72-1 双客户端竞态：B 落后版本 PUT 触发 409 → 冲突条 → 保留我的重发成功', guard(async () => {
-  const name = 'V72Conflict';
+  const name = 'v72conflict'; // v10.1.1（T1）：归一化后客户端全链请求归一小写名，route 拦截须同口径
   // B 解锁并写入 "A"（真实共享后端，服务端 v 递增）
   const ctxB = await browser.newContext();
   const pageB = await ctxB.newPage();

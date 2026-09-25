@@ -31,11 +31,11 @@ test('K4 彩蛋 hover 命中放宽：hover 专用正则容忍尾随标点且防 
   assert.ok(SRC.includes("var NS_EGG_RE = /(^|[^A-Za-z0-9_\\-])\\/(mirror|snake|dragon|brick|satoshi|bitcoin|tank|spacex|tesla|pet)$/"), '敲字通道严格 NS_EGG_RE 保留不动');
 });
 
-test('K5 折叠三角两态等大（v10.0.4 契约翻转：改画几何三角，旧"两个码位凑等大"禁回潮）', () => {
-  assert.ok(SRC.includes("#editor .ns-fold-mark::before{content:'';display:inline-block;width:0;height:0;border-top:4px solid transparent;border-bottom:4px solid transparent;border-left:7px solid currentColor;vertical-align:middle;position:relative;top:-6px}"),
-    '收起＝边框画的右向三角（7px 长边 + 4+4px 底边，currentColor 吃 --muted）');
-  assert.ok(SRC.includes("#editor .ns-fold-open>.ns-fold-mark::before{border-top:7px solid currentColor;border-bottom:0;border-left:4px solid transparent;border-right:4px solid transparent}"),
-    '展开＝同套尺寸的下向三角（与收起互为 90° 旋转 → 与字体无关，必然等大）');
+test('K5 折叠三角两态等大（v10.0.4 契约翻转：改画几何三角，旧"两个码位凑等大"禁回潮；v10.1.1 升格 8px 等大同形盒）', () => {
+  assert.ok(SRC.includes("#editor .ns-fold-mark::before{content:'';display:inline-block;width:0;height:0;border-top:4px solid transparent;border-bottom:4px solid transparent;border-left:8px solid currentColor;vertical-align:middle;position:relative;top:-6px}"),
+    '收起＝边框画的右向三角（8px 长边 + 4+4px 底边，currentColor 吃 --muted）');
+  assert.ok(SRC.includes("#editor .ns-fold-open>.ns-fold-mark::before{border-top:8px solid currentColor;border-bottom:0;border-left:4px solid transparent;border-right:4px solid transparent}"),
+    '展开＝同套尺寸的下向三角（与收起互为 90° 旋转且占宽相等 → 与字体无关，必然等大，F16 跳行根因归零）');
   assert.ok(!SRC.includes("content:'\\25B6\\FE0E'"), '禁回潮：收起不再用 ▶+VS15 码位（光墨大小由系统字体决定，跨内核必飘）');
   assert.ok(!SRC.includes("#editor .ns-fold-open>.ns-fold-mark::before{content:'▼'}"), '禁回潮：展开不再用 ▼ 码位');
 });

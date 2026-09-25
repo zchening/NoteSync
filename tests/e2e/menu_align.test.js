@@ -120,7 +120,7 @@ test('M3 收藏二级页新形态全链生效（收藏动作→二级渲染）',
     };
   });
   assert.ok(r.row && r.star && r.go, '收藏行=金星列+右箭头结构完整（缺=注入重写脱形）');
-  assert.strictEqual(r.name, 'V804Fav', 'mono 名列文本=笔记名');
+  assert.strictEqual(r.name, 'v804fav', 'mono 名列文本=归一化笔记名（v10.1.1 T1：大写输入归一显示）');
   assert.strictEqual(r.radius, '10px', '胶囊圆角与主菜单同族');
   assert.ok(r.kick && r.kick.includes('1'), '眉标计数跟渲染');
   await page.close();

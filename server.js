@@ -373,7 +373,12 @@ function extractId(url, prefix) {
   // /api/note/abc123 → abc123（路径段可能含中文等，需先 decodeURIComponent）
   const m = url.match(new RegExp('^' + prefix + '/([^/]+)'));
   if (!m) return null;
-  try { return decodeURIComponent(m[1]); } catch { return null; }
+  try { return decodeURIComponent(m[1]).toLowerCase(); } catch { return null; }
+  // v10.1.1（T1）：id 一律归一化小写——NTFS 大小写不敏感，/XL 与 /xl 在 Windows 部署上是同一篇
+  // 笔记，但写入凭据按名字逐字符派生（notesync-write-v1:<id>），大小写变体会被凭据闸判 403
+  // （用户实锤：AI 用大写 XL 改 xl 笔记失败）。GET/PUT/fail/保留字检查全走本函数，出口一处归一。
+  // 现网档案名全为小写/数字（NTFS 显示名取创建时形态），归一化零破坏；Linux 迁移时大写档案
+  // 不再可达——归一化后也不会再产生大写档，语义自洽。
 }
 
 const server = http.createServer((req, res) => {
@@ -394,7 +399,7 @@ const server = http.createServer((req, res) => {
 
   // --- API: SSE 流 ---
   if (req.method === 'GET' && url.startsWith('/api/note/') && url.endsWith('/stream')) {
-    const id = decodeURIComponent(url.replace(/\/stream$/, '').replace(/^\/api\/note\//, ''));
+    const id = decodeURIComponent(url.replace(/\/stream$/, '').replace(/^\/api\/note\//, '')).toLowerCase(); // v10.1.1：与 extractId 同口径归一，防大小写变体订阅错频道收不到推送
     if (!id || !ID_RE.test(id)) return sendJSON(res, 400, { error: 'bad id' });
     // v5.52：全局连接上限，防恶意客户端开大量长连接耗尽 fd / 内存。
     // v9.5.5 修：上限检查必须在 writeHead(200) 之前——原放在其后，触发 429 时 sendJSON 再写头直接抛 ERR_HTTP_HEADERS_SENT。
@@ -430,7 +435,7 @@ const server = http.createServer((req, res) => {
   // 正是为了让发版当天扫一遍笔记之后，切 new-only/full 时存量已经在保护圈内。
   if (req.method === 'POST' && /^\/api\/note\/[^/]+\/claim$/.test(url)) {
     let cid;
-    try { cid = decodeURIComponent(url.slice('/api/note/'.length, -'/claim'.length)); } catch { return sendJSON(res, 400, { error: 'bad id' }); }
+    try { cid = decodeURIComponent(url.slice('/api/note/'.length, -'/claim'.length)).toLowerCase(); } catch { return sendJSON(res, 400, { error: 'bad id' }); } // v10.1.1：归一化与 extractId 同口径——大写名认领/写入凭据必须落到同一档案
     if (!cid || !ID_RE.test(cid)) return sendJSON(res, 400, { error: 'bad id' });
     req.resume(); // POST 带体：先抽干，任何分支都不留悬挂请求体
     const limit = checkLimit(ip, cid);
