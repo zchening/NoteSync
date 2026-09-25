@@ -96,7 +96,7 @@ test('A3 根/www/assets 三壳逐字节一致，自带版本号==安装包 versi
     assert.ok(bufs[0].equals(bufs[i]), shells[i] + ' 与根 index.html 字节不一致（cap sync 漏同步，内置壳将吐旧版）');
   }
   const ver = embeddedVersion(bufs[0]);
-  assert.equal(ver, '10.1.1', '字节扫描应抠出真实版本号（抠不到＝标记字面漂移，A2/A5 判据会全体失效）');
+  assert.equal(ver, '10.1.2', '字节扫描应抠出真实版本号（抠不到＝标记字面漂移，A2/A5 判据会全体失效）');
   const gradle = fs.readFileSync(path.join(ROOT, 'android', 'app', 'build.gradle'), 'utf8');
   const vn = (gradle.match(/versionName "([^"]+)"/) || [])[1];
   assert.equal(ver, vn, '内置壳自带版本号必须等于安装包 versionName——否则覆盖安装后永远判不中本版');

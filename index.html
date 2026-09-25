@@ -895,8 +895,8 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '10.1.1';
-const BUILD_DATE = '2026-09-25';
+const APP_VERSION = '10.1.2';
+const BUILD_DATE = '2026-09-26';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
 let nsSkin = 0;
@@ -4060,6 +4060,12 @@ function removeFoldAnchorAfter(handle) {
 }
 function applyFolds() {
   if (typeof editor === 'undefined' || !editor) return;
+  // v10.1.2：建组定界只允许跑一轮（键入 [折叠] 那一帧），取局部变量后立刻清标志——
+  // 异常路径也不留下 armed（否则下一轮撤销/开合会被误判成"新建组"再切一刀）。
+  const seedArmed = foldSeedArmed; foldSeedArmed = false;
+  const prevHandles = seedArmed
+    ? Array.prototype.filter.call(editor.children, b => b.nodeType === 1 && b.classList.contains('ns-fold'))
+    : null;
   // 折叠重绘会改块内 DOM——先按「块内可见字符偏移」存选区，术后恢复（仿 linkifyEditor）
   const hadFocus = document.activeElement === editor;
   let saved = null;
@@ -4097,6 +4103,8 @@ function applyFolds() {
       const isOpen = open.has(foldIdx);
       foldIdx++;
       b.classList.add(isOpen ? 'ns-fold-open' : 'ns-fold-collapsed');
+      // v10.1.2：本帧新增的把手（上一帧还不是折叠行）→ 按「空行切」定界并补锚，只跑这一次
+      if (seedArmed && prevHandles.indexOf(b) < 0) { try { seedFoldGroup(b); } catch (eSeed) {} }
       if (foldEndKind(b)) { renderFoldEndMark(b, true); i = i + 1; continue; } // 闸 R2-P1-3：把手自己行尾就挂着 [/折叠]（用户手写 [折叠]标题[/折叠]）＝本组为空且已闭合；不特判会既显裸字又把后面所有行吞进组
       let anchorIdx = -1, anchorKind = null;
       for (let k = i + 1; k < blocks.length; k++) {
@@ -4191,6 +4199,33 @@ function ensureFoldEndAnchor(handle) {
   foldAnchorJustAdded = true;                                     // 闸 R2三审-①：异常回滚时据此撤掉本次新补的锚
   applyFolds();
   return anchorHost;
+}
+// ── v10.1.2（用户拍板）：建组那一刻按「空行切」定界，并立刻落一枚闭合锚把边界冻住 ──────
+// 用户口径：在标题行行首敲 [折叠] 时只吞紧邻的连续非空行——紧随的空行与其后的内容留在组外；
+// 但组内此后可以自由打空行（边界由锚冻结，不再重算）。
+//   甲 / 空 / A          → 空组，锚挂把手行尾（[折叠]甲[/折叠]），空行与 A 全在组外
+//   甲 / 乙 / 丙丁 / 空 / A → 组内＝乙、丙丁，锚挂「丙丁」行尾，空行与 A 在组外
+//   一路无空行到文末     → 全归组，锚挂末行行尾（与旧行为一致，用户拍板同样补锚）
+// 只在此刻跑一次，之后组内空行/插行都不再触发重算——锚之前的一切恒在组内。
+let foldSeedArmed = false;    // 本轮 applyFolds 是否允许建组定界（只有用户键入 [折叠] 才置位）
+function seedFoldGroup(handle) {
+  const blocks = Array.prototype.filter.call(editor.children, b => b.nodeType === 1);
+  const hi = blocks.indexOf(handle);
+  if (hi < 0) return null;
+  for (let k = hi + 1; k < blocks.length; k++) {          // 本组已有闭合锚 → 边界已定，不重复定界
+    if (isFoldHandleBlock(blocks[k])) break;
+    if (foldEndKind(blocks[k])) return blocks[k];
+  }
+  let host = handle;                                       // 默认空组：锚挂把手行尾
+  for (let k = hi + 1; k < blocks.length; k++) {
+    const b = blocks[k];
+    if (isFoldHandleBlock(b)) break;                       // 下一个把手 → 组到此为止
+    if (isBlankFoldLine(b)) break;                         // 第一个空行 → 组到此为止（空行不入组）
+    host = b;
+  }
+  host.appendChild(document.createTextNode(FOLD_END_MARK));
+  try { host.normalize(); } catch (e) {}
+  return host;
 }
 // 点行首三角开合（事件委托；三角是 .ns-fold-mark 的 ::before，点击 target 即该 span）
 editor.addEventListener('click', e => {
@@ -4814,6 +4849,9 @@ editor.addEventListener('input', (e) => {
   // v7.2.0 补丁：只认真实 InputEvent——程序化 new Event('input')（v5.45 面板回写、工具栏
   // 插入等 4 处）不是打字，若刷 lastTypeAt 会误触发打字守卫，面板回写的下划线推迟 ~1.6s（e2e 实锤）。
   const realType = (typeof InputEvent !== 'undefined') && (e instanceof InputEvent);
+  // v10.1.2：建组定界只对「用户逐字敲出 [折叠]」生效——粘贴（insertFromPaste）、撤销、程序化改动一律不切，
+  // 否则粘贴整段会被当场切开、跨端同步回来的笔记边界会乱跳。
+  if (realType && (it === 'insertText' || it.indexOf('insertComposition') === 0)) foldSeedArmed = true;
   if (realType && it !== 'historyUndo' && it !== 'historyRedo') lastTypeAt = Date.now();
   if (isComposing) {
     // v5.53：组字（拼音→候选→上屏）期间完全旁路 DOM 手术——cleanup/linkify/撤销记录
@@ -5007,6 +5045,42 @@ editor.addEventListener('keydown', e => {
             return;
           }
           if (foldHandled) return;
+        }
+      }
+    }
+  }
+  // v10.1.2：组内最后一行（挂尾锚那行）行尾回车 → 新空行仍留在组内，锚移到新行行尾。
+  // 不接管的话原生 split 会把锚甩成独立 0 高行＝看不见的幽灵行（光标能掉进去往黑洞里打字，见 4187 注释同款坑）。
+  {
+    const selT = window.getSelection();
+    if (selT && selT.rangeCount && selT.isCollapsed) {
+      const rT = selT.getRangeAt(0);
+      if (editor.contains(rT.startContainer)) {
+        const bT = currentBlock(rT.startContainer);
+        const esT = (bT && bT !== editor) ? hasTailEndMark(bT) : false;
+        if (esT) {
+          const afterR = document.createRange();
+          afterR.selectNodeContents(bT);
+          afterR.setStart(rT.startContainer, rT.startOffset);
+          const afterTxt = afterR.toString().replace(/[\u200B\u200C\uFEFF\u2060]/g, '');
+          if (afterTxt === '') {                       // 光标正落在锚之前、本行可见内容末尾
+            try {
+              e.preventDefault();
+              const anchorTxt = esT.textContent || FOLD_END_MARK;
+              esT.remove();
+              const nT = document.createElement('div');
+              nT.innerHTML = '<br>';
+              bT.after(nT);
+              nT.appendChild(document.createTextNode(anchorTxt));
+              try { bT.normalize(); } catch (eN) {}
+              try { applyFolds(); } catch (eF) {}
+              try { persistFoldStates(); } catch (eP) {}
+              placeCaretInBlock(nT);
+              editor.dispatchEvent(new Event('input'));
+              try { ensureCaret(); } catch (eC) {}
+              return;
+            } catch (errT) { /* 任何一步失手 → 掉到下面通用换行，绝不吞掉这记回车 */ }
+          }
         }
       }
     }

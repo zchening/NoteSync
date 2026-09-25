@@ -243,9 +243,9 @@ test('V1004-B9 源码锚：归一化含"光标落在隐藏正文块 → 弹回�
 
 /* ── 三 bump + 双壳 ── */
 test('V1004-C1 三 bump 10.0.4 + 双壳逐字节', () => {
-  assert.ok(SRC.includes("const APP_VERSION = '10.1.1';"), 'APP_VERSION 应 10.0.4');
-  assert.ok(GRADLE.includes('versionCode 1011') && GRADLE.includes('versionName "10.1.1"'), 'gradle 应 1004/10.0.4');
-  assert.ok(MCP.includes("version: '10.1.1'"), 'MCP serverInfo 应 10.0.4');
+  assert.ok(SRC.includes("const APP_VERSION = '10.1.2';"), 'APP_VERSION 应 10.0.4');
+  assert.ok(GRADLE.includes('versionCode 1012') && GRADLE.includes('versionName "10.1.2"'), 'gradle 应 1004/10.0.4');
+  assert.ok(MCP.includes("version: '10.1.2'"), 'MCP serverInfo 应 10.0.4');
   const a = fs.readFileSync(path.join(ROOT, 'www/index.html'));
   const b = fs.readFileSync(path.join(ROOT, 'android/app/src/main/assets/public/index.html'));
   const c = fs.readFileSync(path.join(ROOT, 'index.html'));

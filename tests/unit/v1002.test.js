@@ -101,9 +101,9 @@ test('V1002-D 提速三层结构：预取/预解码/快渲门控+回退', () => 
 });
 
 test('V1002-E 三 bump 10.0.2 + 双壳逐字节', () => {
-  assert.ok(SRC.includes("const APP_VERSION = '10.1.1';"), 'APP_VERSION 应 10.0.2');
-  assert.ok(GRADLE.includes('versionCode 1011') && GRADLE.includes('versionName "10.1.1"'), 'gradle 应 1002/10.0.2');
-  assert.ok(MCP.includes("version: '10.1.1'"), 'MCP serverInfo 应 10.0.2');
+  assert.ok(SRC.includes("const APP_VERSION = '10.1.2';"), 'APP_VERSION 应 10.0.2');
+  assert.ok(GRADLE.includes('versionCode 1012') && GRADLE.includes('versionName "10.1.2"'), 'gradle 应 1002/10.0.2');
+  assert.ok(MCP.includes("version: '10.1.2'"), 'MCP serverInfo 应 10.0.2');
   const a = fs.readFileSync(path.join(ROOT, 'www/index.html'));
   const b = fs.readFileSync(path.join(ROOT, 'android/app/src/main/assets/public/index.html'));
   const c = fs.readFileSync(path.join(ROOT, 'index.html'));
