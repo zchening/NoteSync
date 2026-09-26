@@ -53,7 +53,7 @@ test('V1011-T1e index.html parsePairLink 行为：扫码大写名归一为小写
     assert.equal(f('/normal'), '/normal', '小写名原样');
   } finally { dom.window.close(); }
 });
-test('V1012-T1f MCP assertName 行为：归一并返回小写名；非法名拒绝', () => {
+test('V1013-T1f MCP assertName 行为：归一并返回小写名；非法名拒绝', () => {
   process.env.NOTESYNC_PASSPHRASE = 'test-pass-v1011';
   process.env.NOTESYNC_CACHE_DIR = path.join(os.tmpdir(), 'ns-mcp-v1011-test');
   const mcp = require(MCP_PATH);
@@ -62,7 +62,7 @@ test('V1012-T1f MCP assertName 行为：归一并返回小写名；非法名拒�
   assert.throws(() => mcp.assertName('bad name'), /笔记名/, '空格非法名拒绝');
   assert.throws(() => mcp.assertName(''), /笔记名/, '空名拒绝');
 });
-test('V1012-T1g MCP 源码：resolveNames/工具调用点走 assertName 归一', () => {
+test('V1013-T1g MCP 源码：resolveNames/工具调用点走 assertName 归一', () => {
   const s = MCP_SRC();
   assert.ok(/function assertName\(name\) \{[^}]*toLowerCase\(\)/.test(s),
     'assertName 本体必须先归一再校验并返回归一结果');
@@ -138,9 +138,9 @@ test('V1011-F2 两态三角等大墨迹盒（收起 8×8 = 展开 8×8 旋转全
 // ── V 组：版本 pin ──
 test('V1011-V1 版本三源字面 pin', () => {
   const s = SRC();
-  assert.ok(s.includes("const APP_VERSION = '10.1.2';"), 'APP_VERSION');
+  assert.ok(s.includes("const APP_VERSION = '10.1.3';"), 'APP_VERSION');
   assert.ok(s.includes("const BUILD_DATE = '2026-09-26';"), 'BUILD_DATE');
-  assert.ok(/versionCode 1012\b/.test(GRADLE()), 'gradle versionCode');
-  assert.ok(/versionName "10\.1\.2"/.test(GRADLE()), 'gradle versionName');
-  assert.ok(/version: '10\.1\.2'/.test(MCP_SRC()), 'MCP serverInfo version');
+  assert.ok(/versionCode 1013\b/.test(GRADLE()), 'gradle versionCode');
+  assert.ok(/versionName "10\.1\.3"/.test(GRADLE()), 'gradle versionName');
+  assert.ok(/version: '10\.1\.3'/.test(MCP_SRC()), 'MCP serverInfo version');
 });

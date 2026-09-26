@@ -30,7 +30,7 @@ const wall = at => { const d = new Date(at); return [d.getFullYear(), d.getMonth
 
 // ── A：版本号 ──
 test('V71-A 版本号 9.3.3 / BUILD_DATE 2026-09-18', () => {
-  assert.ok(SRC.includes("const APP_VERSION = '10.1.2';"), 'APP_VERSION 应 9.3.0');
+  assert.ok(SRC.includes("const APP_VERSION = '10.1.3';"), 'APP_VERSION 应 9.3.0');
   assert.ok(SRC.includes("const BUILD_DATE = '2026-09-26';"), 'BUILD_DATE 应 2026-09-18');
 });
 
