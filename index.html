@@ -929,8 +929,8 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '10.1.7';
-const BUILD_DATE = '2026-10-04';
+const APP_VERSION = '10.1.8';
+const BUILD_DATE = '2026-10-05';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
 let nsSkin = 0;
@@ -1454,6 +1454,9 @@ function applyStrike() {
     } catch (e) {
       lastRange = null;
     }
+    // v10.1.8：当场重绘折叠，别等 input 链那条 500ms 延迟的 linkify——中间那半秒 [折叠] 会以裸字闪出来；
+    // 且先把 DOM 摆回正形再派发 input，撤销栈/保存记到的是修好的形状（它自管选区，放在选区恢复之后最稳）。
+    try { applyFolds(); } catch (eFold) {}
     editor.dispatchEvent(new Event('input'));
   }
 }
@@ -1468,6 +1471,14 @@ function rangeIntersectsNode(range, node) {
          range.compareBoundaryPoints(Range.END_TO_START, nodeRange) <= 0;
 }
 
+// v10.1.8：行首的 [折叠] / 行尾的 [/折叠] 是**控制标记**，不是正文——划线时一律绕开。
+// 旧写法把它们当普通文本包进 <s>，applyFolds 复位后行首成了 <s> 标签，foldLeadInfo 的首子节点
+// 文本判据当场失效：整组塌陷、后续把手序号集体前移，展开/收起状态跟着错位（用户实锤 "加了删除线折叠就没了"）。
+// 与 foldSplitPoint / linkify 的 straySpans 同口径，两处共用同一个判据，避免再分叉。
+function nsIsFoldMarkText(node) {
+  const p = node && node.parentElement;
+  return !!(p && p.closest && p.closest('span.ns-fold-mark, span.ns-fold-endmark'));
+}
 // 添加删除线：逐个文本节点包裹 <s>，保留 div/br 等块级结构不变
 function addStrikeToRange(range) {
   const textNodes = [];
@@ -1481,6 +1492,7 @@ function addStrikeToRange(range) {
       acceptNode: node => {
         if (!editor.contains(node)) return NodeFilter.FILTER_REJECT;
         if (node.parentElement && node.parentElement.closest('s')) return NodeFilter.FILTER_REJECT;
+        if (nsIsFoldMarkText(node)) return NodeFilter.FILTER_REJECT;   // v10.1.8：折叠/闭合锚标记不划线
         if (!rangeIntersectsNode(range, node)) return NodeFilter.FILTER_SKIP;
         if (node.length === 0) return NodeFilter.FILTER_SKIP;
         return NodeFilter.FILTER_ACCEPT;
@@ -4051,7 +4063,14 @@ function foldSplitPoint(block, visHead) {
 // 把手行判据（与扫描同口径）：首子节点是文本、去掉前导零宽后以 [折叠] 开头
 function foldLeadInfo(b) {
   if (!b || b.nodeType !== 1) return null;
-  const first = b.firstChild;
+  let first = b.firstChild;
+  if (!first) return null;
+  // v10.1.8 脏数据补救：早期版本的删除线会把 [折叠] 连同行首一起包进 <s>，于是 applyFolds 复位后
+  // 首子节点成了 <s> 标签、这里判不出来 —— 整组塌陷、其后把手序号全部前移、展开/收起状态集体错位，
+  // 且这份坏 HTML 已经同步到服务端，每台设备打开都是塌的。
+  // 这里只放宽到「首子节点是 <s>/<strike> 时往里取一层」，刻意不放宽成"块内任意第一个文本"——那会让
+  // 「<img>[折叠]标题」这类本来就不该折叠的行被误判成把手（既有 F2 行首语义不能动）。
+  if (first.nodeType === 1 && (first.tagName === 'S' || first.tagName === 'STRIKE')) first = first.firstChild;
   if (!first || first.nodeType !== 3) return null;
   const orig = first.nodeValue;
   const lead = orig.length - orig.replace(/^[\u200B\u200C\uFEFF\u2060]+/, '').length;
@@ -4249,6 +4268,15 @@ function applyFolds() {
       span.className = 'ns-fold-mark';
       span.textContent = FOLD_MARK;
       lead.node.nodeValue = lead.node.nodeValue.slice(lead.lead + FOLD_MARK.length);
+      // v10.1.8：上面那刀若把 <s>[折叠]</s> 里的四个字全切光，会剩一个空 <s> 空占行首（下一轮
+      // editor.normalize 也收不掉它，它会让后续 strike 的链路认为此处已有删除线）。就地拆干净。
+      try {
+        const pn = lead.node.parentNode;
+        if (pn && pn !== b && (pn.tagName === 'S' || pn.tagName === 'STRIKE') && !pn.textContent.replace(/[\u200B\u200C\uFEFF\u2060]/g, '')) {
+          const pp = pn.parentNode;
+          if (pp) { while (pn.firstChild) pp.insertBefore(pn.firstChild, pn); pp.removeChild(pn); }
+        }
+      } catch (eEmptyS) {}
       b.insertBefore(span, lead.node);
       b.classList.add('ns-fold');
       const isOpen = open.has(foldIdx);
@@ -8551,147 +8579,6 @@ function loadJsQR() {
     document.head.appendChild(s);
   });
 }
-// v10.1.6 层二：无谷歌服务的机型改用「原生预览 + bundled ML Kit」。
-// 这个引擎其实早就随 APK 打进包里了（@capacitor-mlkit/barcode-scanning 依赖 com.google.mlkit:barcode-scanning
-// 与 CameraX），我们只是从没调它——插件的 scan() 走谷歌 play-services 弹窗，无 GMS 机型探测失败，
-// 于是一路掉到页面里的 jsQR（每帧解几十万像素、实际 2~3 次/秒）。这就是「同一张码，那台秒开这台磨半天」的全部差别。
-// startScan 的预览面由原生挂在 WebView 背后（插件源码注释 "Add preview view behind the WebView"，并把 WebView
-// 背景设为透明），所以我们的取景框与按钮照常浮在画面上、照常可点。全程特性检测，任何一步失败都回落网页层。
-// 接力之前必须等原生相机真的交还：cleanup 里的 stopScan 是即发即忘，紧接着就 getUserMedia，在「startScan
-// 永不 resolve」那批机型上常撞 NotReadableError（同一个镜头还被 CameraX 占着）——恰好把本版主打的自救打断
-// 在接力这一步（闸 R2 末轮 P1-2）。最多等 900ms，再留 300ms 沉降，等不到也放行（下一级还有相册兜底）。
-async function nativeCameraReleased(bs) {
-  try {
-    if (bs && typeof bs.stopScan === 'function') {
-      await Promise.race([Promise.resolve(bs.stopScan()).catch(() => {}), new Promise(r => setTimeout(r, 900))]);
-    }
-  } catch (e) {}
-  await new Promise(r => setTimeout(r, 300));
-}
-async function scanWithNativePreview(bs) {  let styleTag = null, started = false, scanRequested = false, sub = null, hintTimer = null, torchOn = false, watchdog = null;
-  const cls = 'ns-native-scan';
-  const cleanup = () => {
-    try { document.documentElement.classList.remove(cls); } catch (e) {}
-    try { if (styleTag && styleTag.parentNode) styleTag.remove(); } catch (e) {}
-    try { if (sub && typeof sub.remove === 'function') sub.remove(); } catch (e) {}
-    try { const m = document.getElementById('scanNativeMask'); if (m) m.remove(); } catch (e) {} // 成功路径也要拆浮层（V10 实锤：漏这行＝一层隐形全屏 div 常驻挡点击）
-    if (hintTimer) { clearTimeout(hintTimer); hintTimer = null; }
-    if (watchdog) { clearTimeout(watchdog); watchdog = null; } // 改局部句柄：全局单槽时两层并发会互抢（后层覆盖前者 id 让前者 timer 成孤儿，前层收场又把后层的 watchdog 清掉＝后层丢自救）
-    // started 太窄：15 秒接力常常抢在 startScan 返回之前收场，那一刻 started 仍是 false，
-    // 于是原生相机被留给下一级（网页层 getUserMedia 抢不到同一个镜头）。只要**发起过**就得要回句柄。
-    if (started || scanRequested) { started = false; scanRequested = false; try { if (bs.stopScan) bs.stopScan().catch(() => {}); } catch (e) {} }
-    if (torchOn) { torchOn = false; try { if (bs.disableTorch) bs.disableTorch().catch(() => {}); } catch (e) {} } // 借完光要走得关灯（对屏幕拍开过手电的用户实锤过留在下一屏刺眼）
-  };
-  const mask = document.createElement('div');
-  mask.id = 'scanNativeMask';  mask.setAttribute('style', 'position:fixed;inset:0;z-index:42;display:flex;flex-direction:column;align-items:center;justify-content:center');
-  // 只画「框 + 底部小条」，中间整块留给原生预览透出：任何不透明的卡片底色都会把画面挡死（挡死＝看不见＝更扫不出）
-  mask.innerHTML =
-    '<div style="position:relative;width:min(72vw,340px);height:min(72vw,340px)">'
-    + '<span style="position:absolute;left:0;top:0;width:34px;height:34px;border:3px solid var(--accent);border-right:0;border-bottom:0;border-radius:10px 0 0 0"></span>'
-    + '<span style="position:absolute;right:0;top:0;width:34px;height:34px;border:3px solid var(--accent);border-left:0;border-bottom:0;border-radius:0 10px 0 0"></span>'
-    + '<span style="position:absolute;left:0;bottom:0;width:34px;height:34px;border:3px solid var(--accent);border-right:0;border-top:0;border-radius:0 0 0 10px"></span>'
-    + '<span style="position:absolute;right:0;bottom:0;width:34px;height:34px;border:3px solid var(--accent);border-left:0;border-top:0;border-radius:0 0 10px 0"></span>'
-    + '</div>'
-    + '<div style="margin-top:26px;display:flex;flex-direction:column;align-items:center;gap:12px">'
-    // 锁色成对铁律：动态主题板在 body 上写 `-webkit-text-fill-color:${p.fg}!important`，它会**继承**
-    // 压死后代裸写的 color——日间主题下这层深色胶囊的字会被染成深色（＝看不见）。浮层是"永远深底浅字"，
-    // 所以每个文字元素都要 color + -webkit-text-fill-color 成对钉死（v10.1.7 闸 R2 命中）。
-    + '<div id="scanNativeHint" style="padding:8px 16px;border-radius:999px;background:rgba(8,8,10,.62);color:#F2F1EC;-webkit-text-fill-color:#F2F1EC;font-size:13px;letter-spacing:.06em">正在开启相机…</div>'
-    + '<div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center">'
-    + '<button id="scanNativeCancel" style="padding:10px 18px;border-radius:999px;border:1px solid rgba(242,241,236,.34);background:rgba(8,8,10,.62);color:#F2F1EC;-webkit-text-fill-color:#F2F1EC;font-size:13px">取消</button>'
-    + '<button id="scanNativeTorch" hidden style="padding:10px 18px;border-radius:999px;border:1px solid rgba(242,241,236,.34);background:rgba(8,8,10,.62);color:#F2F1EC;-webkit-text-fill-color:#F2F1EC;font-size:13px">开灯</button>'
-    + '<button id="scanNativeWhy" style="padding:10px 18px;border-radius:999px;border:1px solid rgba(242,241,236,.34);background:rgba(8,8,10,.62);color:#F2F1EC;-webkit-text-fill-color:#F2F1EC;font-size:13px">复制原因</button>'
-    + '<button id="scanNativeAlbum" style="padding:10px 18px;border-radius:999px;border:1px solid rgba(242,241,236,.34);background:rgba(8,8,10,.62);color:#F2F1EC;-webkit-text-fill-color:#F2F1EC;font-size:13px">从相册选二维码</button>'
-    + '</div></div>';
-  document.body.appendChild(mask);
-  // 扫码期间把页面主体透明化：不写这条，页面自己的底色会把原生预览挡得严严实实
-  styleTag = document.createElement('style'); styleTag.id = 'nsNativeScanCss';
-  styleTag.textContent = 'html.' + cls + ',html.' + cls + ' body,html.' + cls + ' header,html.' + cls + ' footer,html.' + cls + ' #editor,html.' + cls + ' #landing{background:transparent !important}'
-    + 'html.' + cls + ' body>*:not(#scanNativeMask){display:none !important}';
-  document.head.appendChild(styleTag);
-  document.documentElement.classList.add(cls);
-  const hint = mask.querySelector('#scanNativeHint');
-  const setHint = t => { try { hint.textContent = t; } catch (e) {} };
-  return await new Promise(resolve => {
-    let settled = false;
-    const finishWith = v => { if (settled) return; settled = true; cleanup(); resolve(v); };
-    mask.querySelector('#scanNativeCancel').addEventListener('click', () => { scanDiag({ result: '用户取消' }); finishWith(''); });
-    mask.querySelector('#scanNativeAlbum').addEventListener('click', () => { finishWith(''); scanFromAlbum(); });
-    mask.querySelector('#scanNativeWhy').addEventListener('click', e => copyScanWhy(e.currentTarget));
-    if (typeof bs.isTorchAvailable === 'function') { // 手电筒：插件说支持才出现（对屏幕拍常因反光失败）
-      try { // 必须包住：isTorchAvailable 若**同步**抛（插件半残、返回非 thenable），抛出点在 Promise 执行器里
-        // ＝整个 scanWithNativePreview 直接 reject，浮层留在屏上、透明 class 不摘、下面那两个自救计时器一次都不跑
-        bs.isTorchAvailable().then(r => {
-          const b = mask.querySelector('#scanNativeTorch');
-          if (!b || !r || !r.available) return;
-          b.hidden = false;
-          b.addEventListener('click', () => {
-            torchOn = !torchOn; // 状态记在函数作用域：cleanup 要据此关灯，闭包里的局部变量它拿不到
-            try { (torchOn ? bs.enableTorch() : bs.disableTorch()).catch(() => {}); b.textContent = torchOn ? '关灯' : '开灯'; } catch (e) { b.hidden = true; }
-          });
-        }).catch(() => {});
-      } catch (e) { /* 探不到就当没有手电，扫码照走 */ }
-    }
-    (async () => {
-      try {
-        // 权限探测挪到浮层建好之后（旧写法在浮层之前先探测，一被拒就 cleanup 走人）：本版按用户要求删掉了
-        // 复制/粘贴的文字旁路，相机一不可用就连〔从相册选二维码〕都跟着浮层一起没了，用户只剩去系统设置
-        // 这一条路（闸 R2 末轮 P1-1）。现在拒绝态下浮层留着、文案指路，相册与取消仍可点，收场交给那两个按钮。
-        if (typeof bs.requestPermissions === 'function') {
-          try {
-            const p = await bs.requestPermissions();
-            if (p && p.camera === 'denied') {
-              scanDiag({ result: '权限拒绝' });
-              mask.style.background = 'rgba(6,6,8,.86)'; // 没有相机画面透出时必须自己有底，否则整屏像个坏掉的空框
-              setHint('相机权限被拒绝：可点〔从相册选二维码〕，或〔取消〕退出');
-              return;
-            }
-          } catch (e6) { /* 老插件没这方法：继续，startScan 自己会要权限 */ }
-        }
-        // 卡住不能无声等待：6 秒把「为什么」直接写屏，15 秒仍零命中自动接力下一级——不该由用户判断哪层挂了。
-        // 两个计时器必须排在 startScan **之前**武装：个别机型 startScan 永不 resolve，挂在 await 之后的
-        // 提示与接力一次都不会跑，那正是本版声称要治掉的「停着不动」（闸 R1 命中）。
-        hintTimer = setTimeout(() => { if (!settled) setHint('还没识别到 · ' + scanWhyShort() + '｜可点〔从相册选二维码〕'); }, 6000);
-        watchdog = setTimeout(() => { // 局部句柄（旧写法挂 window 上＝并发两层互踩的那扇门，见 cleanup）
-          if (settled) return;
-          scanDiag({ result: '原生 15 秒零命中→改用页面解码' });
-          settled = true; cleanup(); resolve(null);
-        }, 15000);
-        if (typeof bs.addListener === 'function') {
-          sub = await bs.addListener('barcodesReceived', ev => {
-            const b = ev && ev.barcodes && ev.barcodes[0];
-            if (!b) return;
-            let v = b.rawValue || '';
-            if (!v && b.bytes) { try { v = decodeURIComponent(escape(atob(b.bytes))); } catch (e0) {} } // ML Kit：非 UTF-8 编码时 rawValue 为空
-            if (!v) return;
-            scanDiag({ hits: (window.__scanDiag && window.__scanDiag.hits || 0) + 1 });
-            finishWith(v);
-          });
-        }
-        scanRequested = true; // 发起过就要负责要回句柄，哪怕它永远不返回（cleanup 判的是这个，不是 started）
-        await bs.startScan({ lensFacing: 'back', formats: ['qr_code'] });
-        // 计时器提前武装后新增的形状：15 秒接力已经收场，而 startScan 此刻才返回。不当场拆掉的话，
-        // 原生预览会留在 WebView 背后一直开着（网页解码层同时在跑＝两层抢一个镜头，且再也无人 stopScan）。
-        if (settled) {
-          try { if (sub && typeof sub.remove === 'function') sub.remove(); } catch (e4) {}
-          try { if (bs.stopScan) bs.stopScan().catch(() => {}); } catch (e5) {}
-          return;
-        }
-        started = true;
-        setHint('对准二维码');
-      } catch (e) {
-        const em = String((e && (e.message || e)) || '');
-        scanDiag({ result: 'startScan 失败', err0: em.slice(0, 90) });
-        settled = true; cleanup();
-        // 与 doScanAndOpen 里谷歌弹窗那一路同一套分流：主动取消与权限被拒都不该再叠下一级（旧写法一律
-        // resolve(null)，于是"刚拒绝权限就又弹一层系统框"从这里重开了一扇门）
-        if (/cancel/i.test(em)) return resolve('');
-        if (/denied|permission/i.test(em)) { scanFeedback('相机权限被拒绝'); return resolve(''); }
-        resolve(null); // null＝交回 doScanAndOpen 接力下一级（不再在这层里套一层）
-      }
-    })();
-  });
-}
 async function scanWithWebCamera() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     // v6.1：文案不再误导为「请用 APP」——PC 网页端本就支持扫码，此提示只可能因非安全上下文（HTTP）
@@ -8755,9 +8642,9 @@ async function scanWithWebCamera() {
   const tip = document.createElement('p'); tip.textContent = '对准另一台设备上的二维码';
   const cancel = document.createElement('button'); cancel.id = 'scanCancel'; cancel.textContent = '取 消';
   const snapBtn = document.createElement('button'); snapBtn.id = 'scanSnap'; snapBtn.className = 'ghost-btn'; snapBtn.textContent = '别动，抓拍识别';
-  const whyBtn = document.createElement('button'); whyBtn.id = 'scanWhy'; whyBtn.className = 'ghost-btn'; whyBtn.textContent = '复制原因';
-  const albumBtn = document.createElement('button'); albumBtn.id = 'scanAlbum'; albumBtn.className = 'ghost-btn'; albumBtn.textContent = '从相册选二维码';
-  box.appendChild(h); box.appendChild(stage); box.appendChild(tip); box.appendChild(cancel); box.appendChild(snapBtn); box.appendChild(albumBtn); box.appendChild(whyBtn);
+  // v10.1.8：〔从相册选二维码〕与〔复制原因〕两个按钮已按用户要求退役（连同 scanFromAlbum / copyScanWhy）。
+  // 剩〔取消〕〔抓拍识别〕两枚：抓拍是页面层唯一还能手动自救的手艺，留着。
+  box.appendChild(h); box.appendChild(stage); box.appendChild(tip); box.appendChild(cancel); box.appendChild(snapBtn);
   overlay.appendChild(box);
   document.body.appendChild(overlay);
   let stream = null, timer = null, done = false, scanRevealTimer = null, hintTimer = null, finish = null, aborted = false, mySnap = null;
@@ -8768,9 +8655,7 @@ async function scanWithWebCamera() {
   const abortScan = () => { cleanup(); if (finish) finish(''); };
   cancel.addEventListener('click', abortScan);
   overlay.addEventListener('click', e => { if (e.target === overlay) abortScan(); });
-  whyBtn.addEventListener('click', e => copyScanWhy(e.currentTarget));
   snapBtn.addEventListener('click', () => { if (typeof window.__nsSnap === 'function') window.__nsSnap(); else setScanHint('正在开启相机，出画面后再点〔抓拍识别〕'); }); // 句柄还没挂上时也得给一句反馈，静默＝用户以为按钮坏了
-  albumBtn.addEventListener('click', () => { abortScan(); scanFromAlbum(); });
   try {
     // v10.1.4：给相机一个 720p 的软目标（ideal 非 exact，拿不到自动回落默认档，不会抛 OverconstrainedError）。
     stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } });
@@ -8885,21 +8770,17 @@ async function scanWithWebCamera() {
       timer = setTimeout(tick, 0);
     });
   } catch (e) {
-    // 相机起不来时不再把浮层一起拆掉：文字旁路（复制/粘贴备份文本）按用户要求删除后，〔从相册选二维码〕
-    // 是这条路上唯一剩下的退路，跟着 cleanup 一起消失＝用户只能去系统设置（闸 R2 末轮 P1-1）。
-    // 浮层留着、状态行指路；〔取消〕〔相册〕点遮罩都经 abortScan→finish('') 正常收口，120 秒兜底不永久挂住。
+    // v10.1.8（用户拍板③）：相机起不来就**立即收口**——浮层当场拆、流当场放、Promise 当场 resolve('')。
+    // 旧写法是"浮层留着等用户选"，它的前提是本条路上还有〔从相册选二维码〕这条退路；现在这条路没了，
+    // 留着只是让用户对着一个永远扫不出的黑框枯等，且 nsScanBusyAt 的 90 秒重入锁会把下一次「扫一扫」
+    // 顶成一句"扫码已在进行中"（比报错更让人摸不着头脑）。原因给屏幕、手却不绑住，这才是对的。
     if (stream) { try { stream.getTracks().forEach(t => t.stop()); } catch (e0) {} stream = null; }
-    // 刻意不调 stopLoop()：它会把 aborted 立成 true，而下面的 Promise 一看到 aborted 就立即收口——
-    // 那样浮层还挂在屏上、页面主体仍被透明化规则藏着，等于把"留在屏上让用户选"做成了永久卡住。
     scanDiag({ result: '相机起不来', errs: 1, err0: String((e && (e.name || e.message)) || e).slice(0, 90) });
     const why = (e && e.name === 'NotAllowedError') ? '相机权限被拒绝' : (e && e.name === 'NotFoundError') ? '未检测到可用摄像头' : '扫码启动失败';
-    setScanHint(why + '：可点〔从相册选二维码〕，或取消');
-    scanFeedback(why + '：可改用〔从相册选二维码〕');
-    return await new Promise(resolve => {
-      finish = resolve;
-      if (aborted) { resolve(''); return; }
-      setTimeout(() => { if (!done) { done = true; cleanup(); resolve(''); } }, 120000);
-    });
+    const howto = (e && e.name === 'NotAllowedError') ? '：请到系统设置里允许相机后重试' : '：请检查摄像头是否被其他应用占用';
+    cleanup(); // done/aborted 一并立起、 overlay 拆除、抓拍句柄摘掉
+    scanFeedback(why + howto);
+    return '';
   }
 }
 // v7.7.0：扫码反馈统一口——笔记内走页脚 setStatus；首页 landing（z30）盖住页脚状态区，
@@ -8957,8 +8838,8 @@ function scanWhyText() {
   try { sd = JSON.parse(sessionStorage.getItem('ns_scan_diag') || 'null'); } catch (e) {}
   if (!sd && window.__scanDiag && typeof window.__scanDiag === 'object') sd = window.__scanDiag;
   if (!sd) return '还没开始解码';
-  const eng = sd.path === 'native-gms' ? '谷歌扫码' : sd.path === 'native-mlkit' ? '原生解码'
-    : sd.path === 'album' ? '相册识图' : sd.path ? '页面解码' : '未开始';
+  // v10.1.8：只剩两级——有谷歌服务走原生弹窗，其余全是页面解码（原生预览层与相册识码都已退役）
+  const eng = sd.path === 'native-gms' ? '谷歌扫码' : sd.path ? '页面解码' : '未开始';
   const bits = [eng];
   if (sd.frames) bits.push('已试 ' + sd.frames + ' 次');
   if (sd.cam && sd.cam !== '0x0') bits.push('画面 ' + sd.cam);
@@ -8967,16 +8848,9 @@ function scanWhyText() {
   if (sd.result) bits.push('结果 ' + sd.result);
   return bits.join(' · ');
 }
-// 上屏用的短版原因：诊断串可能拖到近百字（首错消息），取景那一行放不下；完整内容仍走〔复制原因〕。
+// 上屏用的短版原因：诊断串可能拖到近百字（首错消息），取景那一行放不下。
+// v10.1.8：〔复制原因〕按钮已退役，这一行就是「为什么」在屏幕上的唯一出口，所以要写得人看得懂。
 function scanWhyShort() { const t = scanWhyText(); return t.length > 46 ? t.slice(0, 46) + '…' : t; }
-function copyScanWhy(btn) {
-  const t = 'scan: ' + scanWhyText();
-  const say = ok => { try { btn.textContent = ok ? '已复制' : '复制失败'; setTimeout(() => { try { if (btn.textContent === '已复制' || btn.textContent === '复制失败') btn.textContent = '复制原因'; } catch (e) {} }, 2500); } catch (e) {} }; // 红线15：临时提示必自收口
-  let ok = false;
-  try { ok = !!(navigator.clipboard && navigator.clipboard.writeText); } catch (e) { ok = false; }
-  if (!ok) return say(false);
-  try { navigator.clipboard.writeText(t).then(() => say(true), () => say(false)); } catch (e) { say(false); }
-}
 // 结果只分类不回帖：配对链 / 备份文本 / 不是本系统的码
 function scanKindOf(s) {
   const t = typeof s === 'string' ? s.trim() : '';
@@ -9028,37 +8902,25 @@ async function nsScanOnce() {
       const msg = String((e && (e.message || e)) || '');
       if (/cancel/i.test(msg)) { scanDiag({ result: '用户取消', ms: Date.now() - tScan }); return; } // 用户主动取消取景框：静默
       if (/permission denied|denied access to camera/i.test(msg)) { scanDiag({ result: '权限拒绝', ms: Date.now() - tScan }); scanFeedback('相机权限被拒绝'); return; }
-      scanDiag({ result: '原生异常→回落', err0: msg.slice(0, 90) });
-      // v10.1.6：谷歌弹窗出异常时优先改走随包的 ML Kit 原生预览，而不是直接掉到页面 JS 解码。
-      // v10.1.7 修：这里必须像下面 native-mlkit 那一档一样判 `null`——旧写法 `|| ''` 把「原生预览起不来
-      // /15 秒零命中」的接力信号吞成空手而归，同一函数两处口径，改一处漏一处（闸 R2 命中）。
-      if (typeof bs.startScan === 'function') {
-        const nr = await scanWithNativePreview(bs);
-        if (nr === null) {
-          scanDiag({ path: 'web(原生接力)', engine: 'jsQR(接力)' });
-          await nativeCameraReleased(bs); // 先等镜头交还再开下一级：stopScan 即发即忘时下一枪常撞 NotReadableError
-          raw = (await scanWithWebCamera()) || '';
-        } else raw = nr || '';
-      } else raw = (await scanWithWebCamera()) || '';
-    }
-  } else if (bs && typeof bs.startScan === 'function') {
-    // v10.1.6 层二：无谷歌服务 ≠ 没有原生解码器。bundled ML Kit 本来就随插件打进 APK，优先用它；
-    // 页面里的 jsQR 退到最后一档（桌面浏览器、以及没装这个插件的老 APK）。
-    scanDiag({ path: 'native-mlkit', engine: 'ML Kit(bundled)' });
-    const nr = await scanWithNativePreview(bs);
-    if (nr === null) { // 原生这一级起不来或 15 秒零命中：自动接力下一级，不叫用户自己判断"是不是该换一种"
-      scanDiag({ path: 'web(原生接力)', engine: 'jsQR(接力)' });
-      await nativeCameraReleased(bs); // 同上：先等镜头交还（末轮 P1-2）
+      // v10.1.8：谷歌弹窗这条路出异常就直接落到页面解码层，不再接力「原生预览」——那一层已按用户要求整体
+      // 退役。旧写法在这里还要先尝试 startScan 再判 null 接力，同一函数两处口径，改一处漏一处（闸 R2 曾命中）。
+      scanDiag({ result: '原生异常→回落', err0: msg.slice(0, 90), path: 'web(原生异常回落)', engine: 'jsQR' });
       raw = (await scanWithWebCamera()) || '';
-    } else raw = nr || '';
+    }
   } else {
-    raw = (await scanWithWebCamera()) || ''; // 网页端 / 无插件：自写扫码层（v5.58）
+    // v10.1.8（用户拍板）：**无谷歌服务 = 直接页面扫码**，不再采用原生扫码。
+    // v10.1.6 加的「随包 ML Kit 原生预览」那一层已整体移除：它在有 GMS 的机器上确实快，但代价是一整套
+    // 附加零件（页面主体透明化、15 秒接力、相机句柄交接、手电所有权），任一片时序漂移都得靠用户当猎人。
+    // 现在的口径只有两级：有谷歌服务走原生弹窗，其余一律网页层。网页端的速度已经由取景裁剪、像素分级、
+    // 与〔抓拍识别〕三件事顶着，不再需要第三层。
+    scanDiag({ path: bs ? 'web(无GMS)' : 'web(无插件)', engine: 'jsQR' });
+    raw = (await scanWithWebCamera()) || '';      // 网页端 / 无插件 / 无 GMS：自写扫码层（v5.58）
   }
   scanDiag({ ms: Date.now() - tScan, len: raw ? raw.length : 0, kind: scanKindOf(raw), result: raw ? '命中' : '空手而归' });
   if (!raw) return;
   await handleScanResult(raw);
 }
-// v10.1.5：扫码结果的统一收口（摄像头与相册共用一条路，两处判定分叉迟早出一边认另一边不认）
+// v10.1.5：扫码结果的统一收口——不管哪一级扫出来的，都只走这一个入口判定（两处判定分叉迟早出一边认另一边不认）
 async function handleScanResult(raw) {
   if (typeof raw !== 'string') return;
   raw = raw.trim(); // 原生扫码器偶尔带尾部换行，旧写法 indexOf(前缀) 与正则都会因此判「不是配对二维码」
@@ -9070,53 +8932,6 @@ async function handleScanResult(raw) {
   const dest = parsePairLink(raw);
   if (dest) location.assign(dest);
   else scanFeedback('不是 NoteSync 配对二维码');
-}
-// v10.1.5 相册识码：截图是原始像素，没有反光/对焦/摩尔纹，比摄像头拍屏稳得多——
-// 给「摄像头那一下解不出」留一条永久能走通的路。纯网页实现（input type=file）：
-// 个别 App WebView 若拉不起系统选择器，这条在浏览器里仍可用，原生插件另计一版。
-function scanFromAlbum() {
-  (async () => {
-    let inp = null;
-    try {
-      inp = document.createElement('input');
-      inp.type = 'file'; inp.accept = 'image/*'; inp.setAttribute('style', 'position:fixed;left:-9999px;top:0;width:1px;height:1px');
-      document.body.appendChild(inp);
-      const picked = await new Promise(resolve => {
-        let settled = false;
-        const doneWith = v => { if (settled) return; settled = true; resolve(v); };
-        inp.addEventListener('change', () => doneWith(inp.files && inp.files[0] ? inp.files[0] : null));
-        inp.addEventListener('cancel', () => doneWith(null)); // 用户取消：静默收场，不弹错误
-        inp.click();
-        setTimeout(() => doneWith(null), 120000); // 极端 WebView 不派发任何事件：2 分钟后静默收场，不永久挂住
-      });
-      if (!picked) return;
-      const url = URL.createObjectURL(picked);
-      let img;
-      try {
-        img = new Image();
-        await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
-      } catch (e) { URL.revokeObjectURL(url); scanFeedback('这张图读不出来，换一张试试'); return; }
-      const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
-      if (!iw || !ih) { URL.revokeObjectURL(url); scanFeedback('这张图读不出来，换一张试试'); return; }
-      if (typeof window.jsQR !== 'function' && !(await loadJsQR())) { URL.revokeObjectURL(url); scanFeedback('识图组件加载失败，请稍后重试或换一张截图'); return; }
-      const w = Math.min(1600, iw), hh = Math.round(w * ih / iw); // 1600px 像素预算：截图里的码常占半屏，比摄像头帧更吃分辨率
-      const c = document.createElement('canvas'); c.width = w; c.height = hh;
-      const g = c.getContext('2d', { willReadFrequently: true });
-      g.drawImage(img, 0, 0, w, hh);
-      URL.revokeObjectURL(url);
-      const d = g.getImageData(0, 0, w, hh);
-      const hit = window.jsQR(d.data, w, hh, { inversionAttempts: 'attemptBoth' });
-      scanDiag({ path: 'album', engine: 'jsQR(相册)', cam: iw + 'x' + ih, dec: w + 'x' + hh,
-        hits: hit && hit.data ? 1 : 0, len: hit && hit.data ? hit.data.length : 0,
-        kind: hit && hit.data ? scanKindOf(hit.data) : '未识别', result: hit && hit.data ? '命中' : '未识别' });
-      if (!hit || !hit.data) { scanFeedback('这张图里没有识别到二维码'); return; }
-      await handleScanResult(hit.data);
-    } catch (e) {
-      scanFeedback('这台设备的相册打不开，请直接对准另一台屏幕上的二维码');
-    } finally {
-      try { if (inp && inp.parentNode) inp.remove(); } catch (e) {}
-    }
-  })().catch(() => {});
 }
 $('#scanBtn').addEventListener('click', () => { dismissKeyboardForTouch(); doScanAndOpen(); });
 $('#landingScan').addEventListener('click', () => { doScanAndOpen(); });
