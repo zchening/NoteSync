@@ -932,7 +932,7 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '10.1.5';
+const APP_VERSION = '10.1.6';
 const BUILD_DATE = '2026-10-04';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
@@ -2001,9 +2001,16 @@ function hideUploadStatus() { uploadStatus.classList.remove('show'); }
         // engine=用了哪条解码路（detector/jsqr/jsqr(降级)/album）、frames=抽了几帧、errs=抛了几次、
         // hits=中了几次、cam=相机给的分辨率、dec=实际喂给解码器的像素、err0=首条错误原文。
         try {
-          const sd = window.__scanDiag;
-          L.push(sd ? ('scan: engine=' + sd.engine + ' frames=' + sd.frames + ' hits=' + sd.hits +
-            ' errs=' + sd.errs + ' cam=' + sd.cam + ' dec=' + sd.dec + ' err0=' + (sd.err0 || '-'))
+          // 优先读会话副本：每打开一篇笔记都是整页重载，内存里的 __scanDiag 早被清掉，
+          // 上一版这里就因此报「本机尚未跑过扫码」——用户明明刚扫过（v10.1.6 修的正是这个仪表盲区）
+          let sd = null;
+          try { sd = JSON.parse(sessionStorage.getItem('ns_scan_diag') || 'null'); } catch (e0) {}
+          if (!sd && window.__scanDiag && typeof window.__scanDiag === 'object') sd = window.__scanDiag;
+          L.push(sd ? ('scan: ' + (sd.path || '?') + ' engine=' + (sd.engine || '?') + ' frames=' + (sd.frames || 0) +
+            ' hits=' + (sd.hits || 0) + ' miss=' + (sd.miss || 0) + ' errs=' + (sd.errs || 0) +
+            ' cam=' + (sd.cam || '?') + ' dec=' + (sd.dec || '?') + ' ms=' + (sd.ms || 0) +
+            ' result=' + (sd.result || '?') + (sd.kind ? (' kind=' + sd.kind) : '') + (sd.len ? (' len=' + sd.len) : '') +
+            ' err0=' + (sd.err0 || '-'))
             : 'scan: 本机尚未跑过扫码');
         } catch (e) {}
         L.push('mainDocCache=' + (ci ? (ci.exists ? ci.size + 'B' : 'none') : '?') +
@@ -3393,6 +3400,25 @@ function releaseQrWakeLock() { try { if (qrWakeLock) { qrWakeLock.release().catc
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') { if (!qrMask.classList.contains('hidden')) acquireQrWakeLock(); }
   else releaseQrWakeLock(); // 切后台：释放常亮（系统本也会回收）；不自动收码
+});
+// v10.1.6：换机备份码同款常亮。刻意不复用上面那条——它的"弹窗还开着吗"判据写死在 qrMask 上，
+// 备份弹窗开着时 qrMask 是隐藏的，共用会在申请到的下一秒就把句柄释放掉（配对码有常亮、备份码没有，
+// 就是这条判据分叉出来的）。两处判据不同、各自 10 行，比塞条件分支进被 qr_pairing Q11 钉住的旧函数稳。
+let bakWakeLock = null;
+async function acquireBakWakeLock() {
+  try {
+    if (!('wakeLock' in navigator) || !navigator.wakeLock || !navigator.wakeLock.request) return; // 特性检测：不支持即静默跳过
+    if (bakWakeLock && !bakWakeLock.__released) return;
+    const s = await navigator.wakeLock.request('screen');
+    if (document.hidden || !window.__bakQrOn) { try { s.release().catch(() => {}); } catch (e) {} return; } // 开→秒关/切后台竞态：不留悬空句柄
+    s.addEventListener('release', () => { s.__released = true; if (bakWakeLock === s) bakWakeLock = null; });
+    bakWakeLock = s;
+  } catch (e) {}
+}
+function releaseBakWakeLock() { try { if (bakWakeLock) { bakWakeLock.release().catch(() => {}); bakWakeLock = null; } } catch (e) {} }
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') { if (window.__bakQrOn) acquireBakWakeLock(); }
+  else releaseBakWakeLock();
 });
 
 // --- 解锁 ---
@@ -8528,6 +8554,91 @@ function loadJsQR() {
     document.head.appendChild(s);
   });
 }
+// v10.1.6 层二：无谷歌服务的机型改用「原生预览 + bundled ML Kit」。
+// 这个引擎其实早就随 APK 打进包里了（@capacitor-mlkit/barcode-scanning 依赖 com.google.mlkit:barcode-scanning
+// 与 CameraX），我们只是从没调它——插件的 scan() 走谷歌 play-services 弹窗，无 GMS 机型探测失败，
+// 于是一路掉到页面里的 jsQR（每帧解几十万像素、实际 2~3 次/秒）。这就是「同一张码，那台秒开这台磨半天」的全部差别。
+// startScan 的预览面由原生挂在 WebView 背后（插件源码注释 "Add preview view behind the WebView"，并把 WebView
+// 背景设为透明），所以我们的取景框与按钮照常浮在画面上、照常可点。全程特性检测，任何一步失败都回落网页层。
+async function scanWithNativePreview(bs) {
+  let styleTag = null, started = false, sub = null, hintTimer = null;
+  const cls = 'ns-native-scan';
+  const cleanup = () => {
+    try { document.documentElement.classList.remove(cls); } catch (e) {}
+    try { if (styleTag && styleTag.parentNode) styleTag.remove(); } catch (e) {}
+    try { if (sub && typeof sub.remove === 'function') sub.remove(); } catch (e) {}
+    try { const m = document.getElementById('scanNativeMask'); if (m) m.remove(); } catch (e) {} // 成功路径也要拆浮层（V10 实锤：漏这行＝一层隐形全屏 div 常驻挡点击）
+    if (hintTimer) { clearTimeout(hintTimer); hintTimer = null; }
+    if (started) { started = false; try { if (bs.stopScan) bs.stopScan().catch(() => {}); } catch (e) {} }
+  };
+  try {
+    if (typeof bs.requestPermissions === 'function') {
+      const p = await bs.requestPermissions();
+      if (p && p.camera === 'denied') { cleanup(); scanFeedback('相机权限被拒绝'); return null; }
+    }
+  } catch (e) { /* 老插件没这方法：继续，startScan 自己会要权限 */ }
+  const mask = document.createElement('div');
+  mask.id = 'scanNativeMask';
+  mask.setAttribute('style', 'position:fixed;inset:0;z-index:42;display:flex;flex-direction:column;align-items:center;justify-content:center');
+  // 只画「框 + 底部小条」，中间整块留给原生预览透出：任何不透明的卡片底色都会把画面挡死（挡死＝看不见＝更扫不出）
+  mask.innerHTML =
+    '<div style="position:relative;width:min(72vw,340px);height:min(72vw,340px)">'
+    + '<span style="position:absolute;left:0;top:0;width:34px;height:34px;border:3px solid var(--accent);border-right:0;border-bottom:0;border-radius:10px 0 0 0"></span>'
+    + '<span style="position:absolute;right:0;top:0;width:34px;height:34px;border:3px solid var(--accent);border-left:0;border-bottom:0;border-radius:0 10px 0 0"></span>'
+    + '<span style="position:absolute;left:0;bottom:0;width:34px;height:34px;border:3px solid var(--accent);border-right:0;border-top:0;border-radius:0 0 0 10px"></span>'
+    + '<span style="position:absolute;right:0;bottom:0;width:34px;height:34px;border:3px solid var(--accent);border-left:0;border-top:0;border-radius:0 0 10px 0"></span>'
+    + '</div>'
+    + '<div style="margin-top:26px;display:flex;flex-direction:column;align-items:center;gap:12px">'
+    + '<div id="scanNativeHint" style="padding:8px 16px;border-radius:999px;background:rgba(8,8,10,.62);color:#F2F1EC;font-size:13px;letter-spacing:.06em">正在开启相机…</div>'
+    + '<div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center">'
+    + '<button id="scanNativeCancel" style="padding:10px 18px;border-radius:999px;border:1px solid rgba(242,241,236,.34);background:rgba(8,8,10,.62);color:#F2F1EC;font-size:13px">取消</button>'
+    + '<button id="scanNativeAlbum" style="padding:10px 18px;border-radius:999px;border:1px solid rgba(242,241,236,.34);background:rgba(8,8,10,.62);color:#F2F1EC;font-size:13px">从相册选二维码</button>'
+    + '<button id="scanNativePaste" style="padding:10px 18px;border-radius:999px;border:1px solid rgba(242,241,236,.34);background:rgba(8,8,10,.62);color:#F2F1EC;font-size:13px">粘贴备份文本</button>'
+    + '</div></div>';
+  document.body.appendChild(mask);
+  // 扫码期间把页面主体透明化：不写这条，页面自己的底色会把原生预览挡得严严实实
+  styleTag = document.createElement('style'); styleTag.id = 'nsNativeScanCss';
+  styleTag.textContent = 'html.' + cls + ',html.' + cls + ' body,html.' + cls + ' header,html.' + cls + ' footer,html.' + cls + ' #editor,html.' + cls + ' #landing{background:transparent !important}'
+    + 'html.' + cls + ' body>*:not(#scanNativeMask){display:none !important}';
+  document.head.appendChild(styleTag);
+  document.documentElement.classList.add(cls);
+  const hint = mask.querySelector('#scanNativeHint');
+  const setHint = t => { try { hint.textContent = t; } catch (e) {} };
+  return await new Promise(resolve => {
+    let settled = false;
+    const finishWith = v => { if (settled) return; settled = true; cleanup(); resolve(v); };
+    mask.querySelector('#scanNativeCancel').addEventListener('click', () => { scanDiag({ result: '用户取消' }); finishWith(''); });
+    mask.querySelector('#scanNativePaste').addEventListener('click', () => { finishWith(''); pasteBackupTextUI(); });
+    mask.querySelector('#scanNativeAlbum').addEventListener('click', () => { finishWith(''); scanFromAlbum(); });
+    (async () => {
+      try {
+        if (typeof bs.addListener === 'function') {
+          sub = await bs.addListener('barcodesReceived', ev => {
+            const b = ev && ev.barcodes && ev.barcodes[0];
+            if (!b) return;
+            let v = b.rawValue || '';
+            if (!v && b.bytes) { try { v = decodeURIComponent(escape(atob(b.bytes))); } catch (e0) {} } // ML Kit：非 UTF-8 编码时 rawValue 为空
+            if (!v) return;
+            scanDiag({ hits: (window.__scanDiag && window.__scanDiag.hits || 0) + 1 });
+            finishWith(v);
+          });
+        }
+        await bs.startScan({ lensFacing: 'back', formats: ['qr_code'] });
+        started = true;
+        setHint('对准二维码');
+        hintTimer = setTimeout(() => { if (!settled) setHint('还没识别到，可点「从相册选二维码」'); }, 9000);
+      } catch (e) {
+        scanDiag({ result: 'startScan 失败→回落网页层', err0: String((e && e.message) || e).slice(0, 90) });
+        cleanup();
+        try { if (mask.parentNode) mask.remove(); } catch (e2) {}
+        settled = true;
+        let fb = null;
+        try { fb = await scanWithWebCamera(); } catch (e3) { fb = null; } // 回落：绝不把人晾在透明屏上
+        resolve(fb);
+      }
+    })();
+  });
+}
 async function scanWithWebCamera() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     // v6.1：文案不再误导为「请用 APP」——PC 网页端本就支持扫码，此提示只可能因非安全上下文（HTTP）
@@ -8612,7 +8723,12 @@ async function scanWithWebCamera() {
     // 部分 WebView 里 window.BarcodeDetector 构造函数存在、detect() 却每帧抛错（缺谷歌 ML 组件），
     // 旧写法 catch 里静默忽略＝画面在跑、结果永不出、也不告诉任何人为什么——正是「扫半天没反应」的形状。
     let engine = useDetector ? 'detector' : 'jsqr';
-    const diag = window.__scanDiag = { engine: engine, frames: 0, hits: 0, errs: 0, cam: '0x0', dec: '0x0', err0: '' };
+    let misses = 0; // 连续未命中帧数：驱动像素分级（先快后清）
+    // v10.1.6：合并而非覆盖——doScanAndOpen 已经写了「走的哪条路/有没有插件/谷歌模块探测结果」，
+    // 整块替换会把它们抹掉（原生路→回落网页路时尤其需要两段的记录都在）。
+    const diag = (window.__scanDiag && typeof window.__scanDiag === 'object') ? window.__scanDiag : {};
+    Object.assign(diag, { engine: engine, frames: 0, hits: 0, miss: 0, errs: 0, cam: '0x0', dec: '0x0', ms: 0, err0: '' });
+    window.__scanDiag = diag;
     let detector = null;
     try { detector = useDetector ? new window.BarcodeDetector() : null; }
     catch (e) { detector = null; diag.err0 = 'ctor:' + String((e && e.message) || e); }
@@ -8643,14 +8759,27 @@ async function scanWithWebCamera() {
             const codes = await detector.detect(video);
             if (codes && codes[0] && codes[0].rawValue) { diag.hits++; hitVal = codes[0].rawValue; }
           } else if (video.videoWidth && ctx) { // jsQR 兜底：逐帧落 canvas 再解像素
-            diag.cam = video.videoWidth + 'x' + video.videoHeight;
-            const w = Math.min(1280, video.videoWidth); // v10.1.4：解码像素预算 640→1280（微信扫得出、我们扫不出，一半差在这）
-            const hh = Math.round(w * video.videoHeight / video.videoWidth);
+            const vw = video.videoWidth, vh = video.videoHeight;
+            diag.cam = vw + 'x' + vh;
+            // v10.1.6：只解「取景框里真正看得见的那一块」。video 用 object-fit:cover 铺满 stage，
+            // 可见内容等于按 stage 宽高比对视频做的中心裁剪——整帧解是在白烧像素：1280×720 一帧
+            // 在中端机上要 150~300ms，实际只有 2~3 次/秒，这是「对准后还要磨好几秒」的另一半根因。
+            const sr = stage.getBoundingClientRect();
+            const aspect = sr.width / Math.max(1, sr.height);
+            let cw = vw, ch = Math.round(vw / aspect);
+            if (ch > vh) { ch = vh; cw = Math.round(vh * aspect); }
+            const sx = Math.round((vw - cw) / 2), sy = Math.round((vh - ch) / 2);
+            // 分级像素：先用小预算快试（帧率优先），连续 8 帧没中再升到大预算（分辨率优先）。
+            // 出码端已默认全屏大码，取景里的码本来就够大，小预算足够解出，帧率才是决定手感的那一项。
+            const tier = misses >= 8 ? 1120 : 560;
+            const w = Math.min(tier, cw);
+            const hh = Math.round(w * ch / cw);
             cvs.width = w; cvs.height = hh;
-            ctx.drawImage(video, 0, 0, w, hh);
+            ctx.drawImage(video, sx, sy, cw, ch, 0, 0, w, hh);
             const img = ctx.getImageData(0, 0, w, hh);
             const hit = window.jsQR(img.data, w, hh, { inversionAttempts: 'attemptBoth' });
-            if (hit && hit.data) { diag.hits++; diag.dec = w + 'x' + hh; hitVal = hit.data; }
+            diag.dec = w + 'x' + hh + (tier === 560 ? '快' : '清');
+            if (hit && hit.data) { diag.hits++; hitVal = hit.data; } else { misses++; diag.miss = misses; }
           }
         } catch (e) {
           diag.errs++; if (!diag.err0) diag.err0 = String((e && e.message) || e);
@@ -8658,7 +8787,9 @@ async function scanWithWebCamera() {
           if (detector && diag.errs >= 3) await switchToJsQR('detect 连错 3 帧');
         }
         if (done) return; // 帧内 await 期间用户已取消：不再排下一枪
+        if (diag.frames % 20 === 0) scanDiag({}); // 每 20 帧落一次会话：中途关页/崩溃也留得下证据
         if (hitVal) {
+          scanDiag({});
           stopLoop(); setScanHint('已识别');
           timer = setTimeout(() => { cleanup(); resolve(hitVal); }, 160); // 让人看见「已识别」再收场，别凭空一闪就没了
           return;
@@ -8709,40 +8840,76 @@ function consumeBackupImportMsg() {
 // v7.7.0：入口由 ☰ 菜单迁至顶栏 scanBtn 与首页 landingScan，流程抽成公共函数复用；
 // 同轮接入「备份换机码」——扫到 notesync-backup:v1: 前缀直接批量恢复密钥与收藏。
 const BACKUP_PREFIX = 'notesync-backup:v1:';
+// v10.1.6：扫码自检统一落笔。此前只有网页解码那条路有记录，原生路（有谷歌服务的机器）完全没埋——
+// 用户按我上一轮的要求去诊断页看，看到的是「本机尚未跑过扫码」，等于我把最主流的一条路漏在仪表外。
+// 另外每打开一篇笔记都是整页重载，内存对象会被清掉，所以同时落一份 sessionStorage：跨页还在，
+// 但只存元信息（走了哪条路/耗时/帧数/结果类型/长度），绝不存扫码内容——码里带着全库密钥。
+function scanDiag(patch) {
+  try {
+    const cur = (window.__scanDiag && typeof window.__scanDiag === 'object') ? window.__scanDiag : {};
+    const next = Object.assign(cur, patch);
+    window.__scanDiag = next;
+    sessionStorage.setItem('ns_scan_diag', JSON.stringify({
+      path: next.path || '', engine: next.engine || '', frames: next.frames || 0, hits: next.hits || 0,
+      miss: next.miss || 0, errs: next.errs || 0, cam: next.cam || '', dec: next.dec || '',
+      ms: next.ms || 0, len: next.len || 0, kind: next.kind || '', result: next.result || '',
+      err0: String(next.err0 || '').slice(0, 90),
+    }));
+  } catch (e) {}
+}
+// 结果只分类不回帖：配对链 / 备份文本 / 不是本系统的码
+function scanKindOf(s) {
+  const t = typeof s === 'string' ? s.trim() : '';
+  if (!t) return '空';
+  if (t.indexOf(BACKUP_PREFIX) === 0 || t.indexOf(BAK_PREFIX) === 0) return '备份文本';
+  return parsePairLink(t) ? '配对链' : '非本系统码';
+}
 async function doScanAndOpen() {
   const cap = window.Capacitor;
   const bs = (cap && cap.Plugins && cap.Plugins.BarcodeScanner) || null;
   let raw = '';
+  const tScan = Date.now();
   // v8.1.3：原生 bs.scan() 走谷歌 play-services-code-scanner，无 GMS 机型（如未装谷歌服务的小米）
   // 拉不起取景框 → 旧代码在 catch 里直接 return 静默失败＝「点了没反应」。改为：先探谷歌扫码
   // 模块可用性，不可用/原生异常统一回落自写网页扫码层（scanWithWebCamera，不依赖谷歌）；
   // 仅「用户主动取消取景框」保持静默（同旧行为），相机权限拒绝单独提示。
   let useNative = bs && typeof bs.scan === 'function';
+  let gmsAvail = '?';
   if (useNative && typeof bs.isGoogleBarcodeScannerModuleAvailable === 'function') {
     try {
       const av = await bs.isGoogleBarcodeScannerModuleAvailable();
+      gmsAvail = (av && av.available) ? 'yes' : 'no';
       if (!(av && av.available)) useNative = false; // 无 GMS / 模块不可用 → 走网页扫码层
-    } catch (e) { useNative = false; } // 探测本身失败（无 GMS 时常见）→ 走网页扫码层
+    } catch (e) { gmsAvail = 'probe-err'; useNative = false; } // 探测本身失败（无 GMS 时常见）→ 走网页扫码层
   }
+  scanDiag({ path: useNative ? 'native-gms' : (bs ? 'web(无GMS回落)' : 'web(无插件)'), gms: gmsAvail, result: '' });
   if (useNative) {
     try {
       if (typeof bs.requestPermissions === 'function') {
         try {
           const p = await bs.requestPermissions();
-          if (p && p.camera === 'denied') { scanFeedback('相机权限被拒绝'); return; }
+          if (p && p.camera === 'denied') { scanDiag({ result: '权限拒绝', ms: Date.now() - tScan }); scanFeedback('相机权限被拒绝'); return; }
         } catch (e) {}
       }
       const ret = await bs.scan();
       raw = (ret && ret.barcodes && ret.barcodes[0] && (ret.barcodes[0].rawValue || ret.barcodes[0].displayValue)) || '';
     } catch (e) {
       const msg = String((e && (e.message || e)) || '');
-      if (/cancel/i.test(msg)) return; // 用户主动取消取景框：静默
-      if (/permission denied|denied access to camera/i.test(msg)) { scanFeedback('相机权限被拒绝'); return; }
-      raw = (await scanWithWebCamera()) || ''; // 其他原生异常：回落自写网页扫码层，不再静默
+      if (/cancel/i.test(msg)) { scanDiag({ result: '用户取消', ms: Date.now() - tScan }); return; } // 用户主动取消取景框：静默
+      if (/permission denied|denied access to camera/i.test(msg)) { scanDiag({ result: '权限拒绝', ms: Date.now() - tScan }); scanFeedback('相机权限被拒绝'); return; }
+      scanDiag({ result: '原生异常→回落', err0: msg.slice(0, 90) });
+      // v10.1.6：谷歌弹窗出异常时优先改走随包的 ML Kit 原生预览，而不是直接掉到页面 JS 解码
+      raw = ((typeof bs.startScan === 'function' ? await scanWithNativePreview(bs) : await scanWithWebCamera())) || '';
     }
+  } else if (bs && typeof bs.startScan === 'function') {
+    // v10.1.6 层二：无谷歌服务 ≠ 没有原生解码器。bundled ML Kit 本来就随插件打进 APK，优先用它；
+    // 页面里的 jsQR 退到最后一档（桌面浏览器、以及没装这个插件的老 APK）。
+    scanDiag({ path: 'native-mlkit', engine: 'ML Kit(bundled)' });
+    raw = (await scanWithNativePreview(bs)) || '';
   } else {
-    raw = (await scanWithWebCamera()) || ''; // v5.58：网页端 / 无 GMS 走自写扫码层
+    raw = (await scanWithWebCamera()) || ''; // 网页端 / 无插件：自写扫码层（v5.58）
   }
+  scanDiag({ ms: Date.now() - tScan, len: raw ? raw.length : 0, kind: scanKindOf(raw), result: raw ? '命中' : '空手而归' });
   if (!raw) return;
   await handleScanResult(raw);
 }
@@ -8794,7 +8961,9 @@ function scanFromAlbum() {
       URL.revokeObjectURL(url);
       const d = g.getImageData(0, 0, w, hh);
       const hit = window.jsQR(d.data, w, hh, { inversionAttempts: 'attemptBoth' });
-      window.__scanDiag = Object.assign(window.__scanDiag || {}, { engine: 'album', cam: iw + 'x' + ih, dec: w + 'x' + hh, hits: hit && hit.data ? 1 : 0 });
+      scanDiag({ path: 'album', engine: 'jsQR(相册)', cam: iw + 'x' + ih, dec: w + 'x' + hh,
+        hits: hit && hit.data ? 1 : 0, len: hit && hit.data ? hit.data.length : 0,
+        kind: hit && hit.data ? scanKindOf(hit.data) : '未识别', result: hit && hit.data ? '命中' : '未识别' });
       if (!hit || !hit.data) { scanFeedback('这张图里没有识别到二维码'); return; }
       await handleScanResult(hit.data);
     } catch (e) {
@@ -8983,6 +9152,7 @@ function bakShowStage(stage) {
 function bakClose() {
   bakMask.classList.add('hidden');
   hideQrLarge();
+  window.__bakQrOn = false; releaseBakWakeLock(); // v10.1.6：关弹窗即交还常亮句柄，不留后台锁
   try { bakPass.value = ''; } catch (e) {} // 口令绝不残留在 DOM 里
   bakQrUrl = ''; bakQrText = '';
   if (CHIP_HOVER_OK) { try { editor.focus(); ensureCaret(); } catch (e) {} } // 红线10：关闭回编辑器必须归还焦点
@@ -9046,6 +9216,12 @@ async function doBakGenerate() {
       + (col.capped ? '（超 ' + BAK_MAX + ' 篇未含 ' + col.capped + ' 篇）' : '');
     try { bakPass.value = ''; } catch (e) {} // 出码成功即抹掉口令
     bakShowStage(2);
+    // v10.1.6：默认就把码铺满屏幕（旧写法要用户再点一下〔放大〕，而 260px 弹窗码只有约 24mm，
+    // 手机对着它必须凑很近、对焦吃力——「扫半天」里相当一部分是这个物理尺寸问题，不是解码器）。
+    // 同时申请屏幕常亮：出码期间屏幕变暗/息屏 = 白扫。收回全屏后弹窗仍在，可再点〔放大〕。
+    window.__bakQrOn = true;
+    try { showQrLarge(bakQrUrl); } catch (e) {}
+    acquireBakWakeLock();
   } catch (e) {
     bakErr.textContent = (e && e.msg) || '生成失败，请稍后再试';
   } finally {

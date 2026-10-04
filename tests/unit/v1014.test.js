@@ -175,7 +175,7 @@ test('V7 v10.1.5 真机报障三件的守卫：解码静默失效自动降级 / 
   const src = readSrc();
   // ① 解码端：detect() 静默失效（构造函数在、每帧抛错或永远返回空）必须能中途换引擎，且留下可复制证据
   assert.ok(src.includes('window.__scanDiag'), '扫码自检对象在位（诊断页要能读出 engine/frames/errs/hits）');
-  assert.ok(/L\.push\(sd \? \('scan: engine='/.test(src), '诊断页必须输出扫码自检行（用户手机上一次复现即可定位，不再靠猜）');
+  assert.ok(/L\.push\(sd \? \('scan: ' \+ \(sd\.path \|\| '\?'\)/.test(src), '诊断页必须输出扫码自检行（含走了哪条路；v10.1.6 起优先读会话副本，跨页不丢）');
   assert.ok(!/catch \(e\) \{ \/\* 单帧失败忽略，继续下一帧 \*\/ \}/.test(src), '禁回潮：每帧异常静默吞掉＝「画面在跑、永远扫不出」的元凶形状');
   assert.ok(src.includes("engine = 'jsqr'; diag.engine = 'jsqr(降级)'"), '中途降级到 jsQR 的实现要在位');
   // 降级函数的声明与两处调用必须引用同一个标识符（变异反证 N1b 实锤：只改函数名、调用点悬空时，
@@ -200,7 +200,9 @@ test('V7 v10.1.5 真机报障三件的守卫：解码静默失效自动降级 / 
 test('V8 解码端加强：640px 预算禁回潮、取景面积、自排队抽帧、状态反馈', () => {
   const src = readSrc();
   assert.ok(!/Math\.min\(640, video\.videoWidth\)/.test(src), '禁回潮：解码帧 640px 上限（微信扫得出、我们扫不出的一半根因）');
-  assert.ok(src.includes('Math.min(1280, video.videoWidth)'), '解码像素预算提到 1280');
+  // v10.1.6 随版：像素预算不再是"一刀 1280"，改成取景裁剪 + 分级（先 560 快试、连续 8 帧不中升 1120）
+  assert.ok(!/Math\.min\(1280, video\.videoWidth\)/.test(src), '禁回潮：整帧 1280 宽直解（92 万像素一帧 150~300ms，手感就是"磨好几秒"）');
+  assert.ok(src.includes('const tier = misses >= 8 ? 1120 : 560;'), '分级像素策略在位：先小预算抢帧率，连续失败再上分辨率');
   assert.ok(src.includes('height:56vh;min-height:200px;max-height:420px'), '取景面积加大（旧 44vh/340px 两头堵）');
   assert.ok(src.includes('width: { ideal: 1280 }, height: { ideal: 720 }'), '相机给 720p 软目标（ideal 非 exact，不抛 OverconstrainedError）');
   assert.ok(!/timer = setInterval\(async/.test(src), '禁回潮：setInterval 抽帧（一帧超时会互相排队，慢机型越扫越卡）');
@@ -208,4 +210,83 @@ test('V8 解码端加强：640px 预算禁回潮、取景面积、自排队抽�
   assert.ok(src.includes("setScanHint('识别中") && src.includes("setScanHint('已识别')"), '扫码过程必须有实时状态（旧版只有解出来才动＝「扫半天没反应」观感）');
   assert.ok(src.includes("if (finish) finish('')"), '取消/点遮罩要把在途 Promise 收口（旧版悬挂＝再点一次叠第二层取景框）');
   assert.ok(src.includes("pasteBtn.id = 'scanPaste'"), '取景框内直接给粘贴恢复入口');
+});
+
+test('V9 v10.1.6 手感三件：默认全屏大码 + 常亮句柄 + 取景裁剪与分级 + 自检覆盖原生路且不落扫码内容', async () => {
+  const src = readSrc();
+  // ① 出码默认全屏（用户实测「扫半天」里有一半是 24mm 小码对焦吃力）
+  assert.ok(src.includes('window.__bakQrOn = true;'), '出码成功即置全屏态旗标');
+  assert.ok(/window\.__bakQrOn = true;\r?\n\s*try \{ showQrLarge\(bakQrUrl\); \} catch \(e\) \{\}/.test(src), '默认直接全屏出码（旧写法要用户再点一下〔放大〕）');
+  assert.ok(src.includes('window.__bakQrOn = false; releaseBakWakeLock();'), '关闭备份弹窗必须交还常亮句柄（不留后台锁）');
+  assert.ok(src.includes("if (document.hidden || !window.__bakQrOn)"), '备份码常亮判据必须独立于 qrMask（共用会被下一秒释放：配对码有常亮、备份码没有就是这么分叉的）');
+  // ② 只解取景框可见区域 + 分级像素
+  assert.ok(src.includes('ctx.drawImage(video, sx, sy, cw, ch, 0, 0, w, hh)'), '只解取景框那块（中心裁剪，与 object-fit:cover 的可见窗口同形）');
+  assert.ok(src.includes('const aspect = sr.width / Math.max(1, sr.height);'), '裁剪比例取自取景框实测尺寸');
+  // ③ 自检覆盖原生路（上一版只埋网页路，用户按指引去看诊断，得到的是「本机尚未跑过扫码」）
+  assert.ok(src.includes("scanDiag({ path: useNative ? 'native-gms'"), '原生路必须也埋点');
+  assert.ok(src.includes("result: raw ? '命中' : '空手而归'"), '空手而归要与「没扫过」可分辨');
+  assert.ok(src.includes("try { sd = JSON.parse(sessionStorage.getItem('ns_scan_diag') || 'null'); }"), '诊断页优先读会话副本（每开一篇笔记都是整页重载，内存态必丢）');
+  // ④ 行为：落会话、只落白名单——扫码原文带着全库密钥，任何 storage 都不能碰
+  const app = freshApp();
+  const { window } = app;
+  const secret = 'https://xuyinji.com.cn/note/nsbak-abc123#k=AAAABBBBCCCCDDDDEEEEFFFFGGGGHHHHIIIIJJJJKLLL';
+  window.scanDiag({ path: 'native-gms', engine: 'jsqr', frames: 7, hits: 1, len: secret.length, kind: '配对链', result: '命中', 内容: secret });
+  const persisted = window.sessionStorage.getItem('ns_scan_diag');
+  assert.ok(persisted, '自检要落会话副本');
+  assert.ok(persisted.indexOf('AAAABBBB') < 0 && persisted.indexOf('#k=') < 0, '落盘副本绝不含扫码原文或其片段');
+  assert.ok(Object.keys(JSON.parse(persisted)).indexOf('内容') < 0, '只允许白名单字段，任意传入键不得透传落盘');
+  assert.strictEqual(JSON.parse(persisted).frames, 7, '元信息正常写入');
+  app.dom.window.close();
+});
+
+test('V10 v10.1.6 层二：无谷歌服务改走随包 bundled ML Kit（jsdom 假插件真跑一遍，句柄必须关）', async () => {
+  const src = readSrc();
+  assert.ok(src.includes('async function scanWithNativePreview(bs) {'), '原生预览扫码函数在位');
+  assert.ok(src.includes("await bs.startScan({ lensFacing: 'back', formats: ['qr_code'] });"), '只解 QR、后置摄像头');
+  assert.ok(src.includes("} else if (bs && typeof bs.startScan === 'function') {"), '优先级：谷歌弹窗 → 随包 ML Kit → 页面 jsQR（不是直接掉到 jsQR）');
+  assert.ok(src.includes("typeof bs.startScan === 'function' ? await scanWithNativePreview(bs)"), '谷歌弹窗异常也先改走 ML Kit，再落网页层');
+  assert.ok(src.includes("if (started) { started = false; try { if (bs.stopScan) bs.stopScan().catch(() => {}); }"), 'stopScan 只在真 start 过之后调，且失败静默');
+  assert.ok(src.includes("html.' + cls + ' body>*:not(#scanNativeMask){display:none !important}"), '扫码期间页面主体必须透明化（页面底色会把原生预览挡死）');
+  assert.ok(src.includes("if (!v && b.bytes)"), 'ML Kit 非 UTF-8 时 rawValue 为空，要有 bytes 兜底');
+
+  // 行为：假插件跑真链路——探测不可用 → 走 startScan → 收到码 → 必须 stopScan 收口（句柄不泄漏）
+  const app = freshApp();
+  const { window } = app;
+  const calls = { start: 0, stop: 0, remove: 0 };
+  window.Capacitor = {
+    isNativePlatform: () => true,
+    Plugins: {
+      BarcodeScanner: {
+        isGoogleBarcodeScannerModuleAvailable: async () => ({ available: false }), // 无谷歌服务
+        requestPermissions: async () => ({ camera: 'granted' }),
+        addListener: async (ev, cb) => { setTimeout(() => cb({ barcodes: [{ rawValue: 'https://xuyinji.com.cn/note/nsbak-abc123#k=AAA' }] }), 12); return { remove: () => { calls.remove++; } }; },
+        startScan: async () => {
+          calls.start++;
+          // 中段断言（变异反证 Q4 实锤：只查"最后摘掉了"，那"从没加过"也照样绿——透明化整段删掉测不出）
+          window.__mid = {
+            cls: window.document.documentElement.classList.contains('ns-native-scan'),
+            css: !!window.document.getElementById('nsNativeScanCss'),
+            mask: !!window.document.getElementById('scanNativeMask'),
+            rules: (() => { const st = window.document.getElementById('nsNativeScanCss'); return !!st && /background:transparent !important/.test(st.textContent) && /display:none !important/.test(st.textContent); })(),
+          };
+        },
+        stopScan: async () => { calls.stop++; },
+      },
+    },
+  };
+  window.__gumCalled = false;
+  window.navigator.mediaDevices = { getUserMedia: async () => { window.__gumCalled = true; throw new Error('不该走网页层'); } };
+  await window.doScanAndOpen();
+  assert.strictEqual(calls.start, 1, '无谷歌服务时必须调 startScan（随包 ML Kit），而不是掉到页面 jsQR');
+  assert.ok(window.__mid && window.__mid.cls && window.__mid.css && window.__mid.mask && window.__mid.rules,
+    '扫码期间必须真的挂上透明化 class + 临时样式 + 浮层（原生预览挂在 WebView 背后，页面底色不透明就等于什么都看不见）');
+  assert.strictEqual(window.__gumCalled, false, '绝不该再走 getUserMedia 网页扫码层');
+  assert.strictEqual(calls.stop, 1, '拿到码后必须 stopScan（相机句柄泄漏=发热、耗电、下次开不了）');
+  assert.strictEqual(calls.remove, 1, '事件监听必须摘掉');
+  const diag = JSON.parse(window.sessionStorage.getItem('ns_scan_diag') || 'null');
+  assert.ok(diag && diag.path === 'native-mlkit', '诊断要如实记下走的是哪条路：' + JSON.stringify(diag));
+  assert.ok(diag && diag.hits >= 1, '命中数要记上');
+  assert.strictEqual(window.document.documentElement.classList.contains('ns-native-scan'), false, '收场必须摘掉透明化 class（否则正常页面变全透明）');
+  assert.strictEqual(window.document.getElementById('scanNativeMask'), null, '浮层必须移除');
+  app.dom.window.close();
 });

@@ -343,7 +343,7 @@ test('v5.55：时/分滚轮组件形态（自建文本框退役），聚焦守�
   assert.ok(!/inp\.focus\(\)/.test(SRC), '不得出现无参数裸调用（必须 preventScroll 且受桌面守卫包住）');
   // v10.1.4 随版计数：+2 = 扫码换机口令框 + 粘贴恢复输入框（两处均在 CHIP_HOVER_OK 桌面守卫内且带
   // preventScroll，触屏绝不自动聚焦弹键盘——沿用 v5.43 教训口径，不是新增无守卫调用）
-  assert.ok((SRC.match(/\.focus\(\{/g) || []).length === 4, '带选项的聚焦调用只能出现在守卫块内（v5.55 滚轮 + v7.1.0 focusRemItemInput + v10.1.5 换机口令框/粘贴框），防止新增无守卫调用');
+  assert.ok((SRC.match(/\.focus\(\{/g) || []).length === 4, '带选项的聚焦调用只能出现在守卫块内（v5.55 滚轮 + v7.1.0 focusRemItemInput + v10.1.6 换机口令框/粘贴框），防止新增无守卫调用');
 });
 
 test('v5.44：到点卡片必须居中且文字居中（remRise 专用入场），placeholder 精简，音频全局解锁', () => {

@@ -117,6 +117,13 @@ test('① 出码密度与篇数解耦：1 篇与 100 篇同为一张配对链，
     await page.waitForFunction(() => !document.getElementById('bakStage2').classList.contains('hidden'), { timeout: 25000 });
     const err = await page.evaluate(() => document.getElementById('bakErr').textContent);
     assert.strictEqual(err, '', '出码阶段不应有报错：' + err);
+    // v10.1.6：出码即默认全屏（旧写法要用户再点一下〔放大〕；24mm 的小码手机对焦吃力，是"扫半天"的一半根因）
+    await page.waitForFunction(() => { const e = document.getElementById('qrLarge'); return e && e.classList.contains('show') && e.querySelector('canvas'); }, { timeout: 5000 });
+    const bigW = await page.evaluate(() => Math.round(document.querySelector('#qrLarge canvas').getBoundingClientRect().width));
+    assert.ok(bigW >= 300, '全屏层里的码应铺到视口短边八成以上（390 宽视口实得 ' + bigW + 'px）');
+    await page.click('#qrLarge'); // 点任意处收回，弹窗仍在（可再点〔放大〕回去）
+    await page.waitForFunction(() => !document.getElementById('qrLarge').classList.contains('show'), { timeout: 5000 });
+    assert.strictEqual(await page.evaluate(() => !!document.getElementById('bakQrHolder').querySelector('canvas')), true, '收回全屏后弹窗里的码仍在');
     assert.ok(/恢复 2 篇/.test(await page.evaluate(() => document.getElementById('bakTip').textContent)), '不勾时提示的篇数必须等于收藏数');
     let shot = await scanCanvas(page, '#bakQrHolder canvas');
     assert.ok(/^https?:\/\/127\.0\.0\.1:\d+\/nsbak-[a-z0-9]{6}#k=[A-Za-z0-9_-]+$/.test(shot.data), '扫出来的必须是一条备份笔记配对链（随机档名 + #k= 密钥）：' + shot.data);
