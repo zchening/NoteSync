@@ -13,7 +13,8 @@
  *   3. e2e 目录不参与 pin 替换（那里有 v1004e4 这类与版本数字同形的夹具名）。
  *
  * 用法：
- *   node tools/release.js status            # 看三源版本、双壳字节、pin 是否对齐
+ *   node tools/release.js status            # 看三源版本、双壳字节、手机上查得到的版本
+ *   node tools/release.js ota    10.1.8     # 推 App 在线升级元数据（发版五件套第⑤步，别漏）
  *   node tools/release.js bump  10.1.8      # 三源版本号 + BUILD_DATE + 同步双壳（默认预演）
  *   node tools/release.js pins  10.1.8      # unit 里的版本字面随版
  *   node tools/release.js fast              # 受影响子集（秒级，改完马上能知道有没有岔子）
@@ -41,7 +42,7 @@ function readVersion(file, re) {
 }
 
 /* ── status：一眼看清现在处于什么状态 ─────────────────────────────── */
-function status() {
+function statusBase() {
   const v = {
     index: readVersion(P.index, /const APP_VERSION = '([\d.]+)'/),
     gradle: readVersion(P.gradle, /versionName "([\d.]+)"/),
@@ -53,7 +54,38 @@ function status() {
   console.log('三源版本  index=' + v.index + '  gradle=' + v.gradle + '  mcp=' + v.mcp + (verOk ? '   ✅ 一致' : '   ❌ 不一致'));
   console.log('三壳字节  index=' + h.index.slice(0, 8) + '  www=' + h.www.slice(0, 8) + '  assets=' + h.assets.slice(0, 8) + (shellOk ? '   ✅ 一致' : '   ❌ 不同步（双壳测试必红）'));
   console.log('BUILD_DATE=' + readVersion(P.index, /const BUILD_DATE = '([^']+)'/));
-  return verOk && shellOk;
+  return { ok: verOk && shellOk, ver: v.index };
+}
+
+/* ── 第四源：手机上「检查更新」能查到的版本 ───────────────────────── */
+// v10.1.8 补进来的一条。上面三源说的是「网页与壳」，但 App 只看 /api/latest —— 它由服务器上的
+// latest_app.json 当场产出，而这文件要靠发版五件套第⑤步 push_latest_apk.py 生成并上传。
+// 漏做第⑤步的现场特征就是：双域已经是新版、装上 App 点「检查更新」永远回「已是最新」。
+// 把它并进 status，就能在下次发版当天发现，而不是等用户来问。（本版就是这样漏了一整晚。）
+function probeOta() {
+  const https = require('https');
+  return new Promise(resolve => {
+    const req = https.get('https://note.xuyinji.com.cn/api/latest?ts=' + Date.now(), { timeout: 8000 }, res => {
+      let s = '';
+      res.on('data', d => { s += d; });
+      res.on('end', () => { try { resolve(JSON.parse(s).tag_name || null); } catch (e) { resolve(null); } });
+    });
+    req.on('error', () => resolve(null));
+    req.on('timeout', () => { req.destroy(); resolve(null); });
+  });
+}
+
+async function status() {
+  const base = statusBase();
+  const ota = await probeOta();
+  if (ota) {
+    const ok = ota.replace(/^v/, '') === base.ver;
+    console.log('手机可读  /api/latest -> ' + ota +
+      (ok ? '   ✅ App 查得到本版' : '   ⚠ App 查不到本版：跑一遍 node tools/release.js ota ' + base.ver));
+  } else {
+    console.log('手机可读  /api/latest 探测失败（网络不可达或接口异常），本次未校验');
+  }
+  return base.ok && !!ota && ota.replace(/^v/, '') === base.ver;
 }
 
 // 本地日历日，不用 toISOString（那是 UTC，GMT+8 的凌晨会被算成前一天）
@@ -215,8 +247,19 @@ function run(cmd, args, envLocked) {
 /* ── 入口 ────────────────────────────────────────────────────────── */
 const cmd = process.argv[2];
 const arg = process.argv[3];
-if (cmd === 'status') process.exit(status() ? 0 : 1);
-if (cmd === 'bump') { if (!arg) { console.error('需要版本号，如 10.1.8'); process.exit(1); } bump(arg); }
+if (cmd === 'status') status().then(ok => process.exit(ok ? 0 : 1));
+else if (cmd === 'ota') {
+  // 发版五件套第⑤步：App 的在线升级元数据。push tag → CI 出 APK → 这一步把它挂到服务器上，
+  // 手机「检查更新」才看得到。与部署 index.html 互不隶属，容易漏（v10.1.8 就漏过，靠用户发现）。
+  const ver = arg || readVersion(P.index, /const APP_VERSION = '([\d.]+)'/);
+  if (!ver) { console.error('读不到版本号，请显式给出，如 node tools/release.js ota 10.1.8'); process.exit(1); }
+  const py = process.env.NS_PYTHON || 'python';
+  const { spawnSync } = require('child_process');
+  const r = spawnSync(py, [path.join(REPO, 'tools', 'push_latest_apk.py'), 'v' + ver.replace(/^v/, '')],
+    { stdio: 'inherit', windowsHide: true });
+  process.exit(r.status === 0 ? 0 : 1);
+}
+else if (cmd === 'bump') { if (!arg) { console.error('需要版本号，如 10.1.8'); process.exit(1); } bump(arg); }
 else if (cmd === 'pins') {
   if (!arg) { console.error('需要版本号，如 10.1.8'); process.exit(1); }
   const pick = flag => (process.argv.indexOf(flag) >= 0) ? process.argv[process.argv.indexOf(flag) + 1] : null;
@@ -266,5 +309,5 @@ else if (cmd === 'safe') {
   process.exit(okU && okE ? 0 : 1);
 }
 else {
-  console.log('用法：node tools/release.js status|bump|pins|fast|safe|full [版本号] [--apply]');
+  console.log('用法：node tools/release.js status|bump|pins|ota|fast|safe|full [版本号] [--apply]');
 }
