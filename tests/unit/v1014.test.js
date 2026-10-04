@@ -165,7 +165,7 @@ test('V6 甲案三闸与双渲染路径收口：静态锚在位', () => {
   assert.ok(src.includes('if (auBak) { enterBackupMode(auBak, note); return; }'), '路径②自动解锁 init 必须真收口');
   assert.ok(src.includes('if (bak) { enterBackupMode(bak, { salt: c.salt || null }); return true; }'), '路径③离线缓存 loadCachedBody 必须真收口');
   assert.ok((src.match(/enterBackupMode\(/g) || []).length >= 4, '收口点下界 4（定义 + 三路径）；将来新增第四条解密上屏路径必须一并补口');
-  assert.ok(src.includes('function pasteBackupTextUI'), '粘贴恢复兜底在位（不依赖摄像头）');
+  assert.ok(src.includes('window.__nsSnap = async () => {'), '〔抓拍识别〕兜底在位（不依赖连续帧，专治拍屏幕反光/对焦不实）');
   assert.ok(!/window\.prompt\(/.test(src), '禁回潮 window.prompt：Android WebView 不支持，返回 null＝「点了没反应」');
   assert.ok(src.includes('id="bakRestMask"') && src.includes('id="bakMask"'), '出码弹窗与恢复卡 DOM 在位');
   assert.ok(src.includes('const BAK_MAX = 100') && src.includes('FAVS_MAX = 100'), '容量：备份 100 篇 + 收藏夹上限随动抬到 100');
@@ -187,11 +187,12 @@ test('V7 v10.1.5 真机报障三件的守卫：解码静默失效自动降级 / 
   assert.ok(src.includes('function handleScanResult(raw)'), '摄像头与相册共用同一结果收口（两处判定迟早分叉）');
   assert.ok(src.includes('raw = raw.trim();'), '扫码原文先去尾部空白（原生扫码器偶尔带换行，前缀判定与正则都会因此误判）');
   // ③ 备份范围回退：默认只收藏，扩范围要显式同意
-  assert.ok(src.includes('async function collectBackupEntries(includeOther) {'), '范围参数化在位');
-  assert.ok(src.includes('if (includeOther) {'), '枚举本机其他密钥必须受开关控制（v10.1.4 无条件枚举＝收藏 6 篇报 61 篇）');
-  assert.ok(src.includes('function countOtherUnlocked()'), '勾选框上的数字有独立算法（与清单口径同源）');
-  assert.ok(src.includes('if (bakWide) bakWide.checked = false;'), '每次打开出码框都回到未勾（不替用户记住上次的扩大选择）');
-  assert.ok(src.includes('const col = await collectBackupEntries(wide);'), '生成时按勾选传参');
+  // v10.1.7 用户定稿：只备份收藏夹，参数与开关一并删除（沿革见 index.html 内注释）。
+  // 这里全部改成「禁回潮」负向锚——将来谁再把范围扩出去或加回开关，必须显式改这条断言并说明理由。
+  assert.ok(src.includes('async function collectBackupEntries() {'), '备份范围函数无参数（只有收藏夹一个口径）');
+  assert.ok(!/collectBackupEntries\(\s*(?:true|wide|includeOther)\s*\)/.test(src), '禁回潮：不得再出现"带上其他笔记"的调用形态');
+  assert.ok(!src.includes('function countOtherUnlocked()'), '禁回潮：其他笔记报数函数已随开关删除');
+  assert.ok(!src.includes('bakWide'), '禁回潮：勾选框 DOM/变量不得回来');
   // ④ 文案精简：不再自证、不再两行长句
   assert.ok(!src.includes('永远扫得动'), '禁回潮：自证式长句（对用户没用，评审也判它是噪声）');
   assert.ok(src.includes("bakIdLine.textContent = '备份笔记：' + res.id;"), '档名行压成一行小字');
@@ -209,14 +210,21 @@ test('V8 解码端加强：640px 预算禁回潮、取景面积、自排队抽�
   assert.ok(src.includes('timer = setTimeout(tick, Math.min(400, Math.max(120, Date.now() - t0 + 120)))'), '自适应抽帧：按上一帧耗时排下一枪');
   assert.ok(src.includes("setScanHint('识别中") && src.includes("setScanHint('已识别')"), '扫码过程必须有实时状态（旧版只有解出来才动＝「扫半天没反应」观感）');
   assert.ok(src.includes("if (finish) finish('')"), '取消/点遮罩要把在途 Promise 收口（旧版悬挂＝再点一次叠第二层取景框）');
-  assert.ok(src.includes("pasteBtn.id = 'scanPaste'"), '取景框内直接给粘贴恢复入口');
+  assert.ok(src.includes("snapBtn.id = 'scanSnap'") && src.includes("whyBtn.id = 'scanWhy'"), '取景框内给〔抓拍识别〕与〔复制原因〕');
+  assert.ok(src.includes('if (nr === null) {'), '原生这一级失败/超时必须自动接力下一级（旧写法停着不动）');
+  assert.ok(src.includes("if (typeof bs.isTorchAvailable === 'function') {") && src.includes('bs.enableTorch()'), '原生预览接上手电筒，且必须包在可用性判断里（对屏幕拍常因反光失败）');
+  assert.ok(!src.includes("pasteBtn.id = 'scanPaste'"), '禁回潮：粘贴入口随「复制备份文本」一起撤掉（用户只要扫码路径）');
 });
 
 test('V9 v10.1.6 手感三件：默认全屏大码 + 常亮句柄 + 取景裁剪与分级 + 自检覆盖原生路且不落扫码内容', async () => {
   const src = readSrc();
   // ① 出码默认全屏（用户实测「扫半天」里有一半是 24mm 小码对焦吃力）
   assert.ok(src.includes('window.__bakQrOn = true;'), '出码成功即置全屏态旗标');
-  assert.ok(/window\.__bakQrOn = true;\r?\n\s*try \{ showQrLarge\(bakQrUrl\); \} catch \(e\) \{\}/.test(src), '默认直接全屏出码（旧写法要用户再点一下〔放大〕）');
+  // v10.1.7 用户拍板推翻 10.1.6 的"默认全屏"：出码后保持弹窗原样，想看大的点码本身，点放大层任意处还原
+  //（与配对码同一交互）。自动全屏＝每次都被迫看一个占满屏幕的东西，比小码更烦。
+  assert.ok(!/window\.__bakQrOn = true;\r?\n\s*try \{ showQrLarge/.test(src), '禁回潮：出码后不得自动全屏铺满');
+  assert.ok(src.includes("$('#bakQrHolder').addEventListener('click'"), '点码放大在位（手动，与配对码同一交互）');
+  assert.ok(!src.includes("id=\"bakEnlarge\"") && !src.includes("id=\"bakCopy\""), '禁回潮：〔放大〕〔复制备份文本〕按钮已按用户要求撤掉');
   assert.ok(src.includes('window.__bakQrOn = false; releaseBakWakeLock();'), '关闭备份弹窗必须交还常亮句柄（不留后台锁）');
   assert.ok(src.includes("if (document.hidden || !window.__bakQrOn)"), '备份码常亮判据必须独立于 qrMask（共用会被下一秒释放：配对码有常亮、备份码没有就是这么分叉的）');
   // ② 只解取景框可见区域 + 分级像素
@@ -244,8 +252,13 @@ test('V10 v10.1.6 层二：无谷歌服务改走随包 bundled ML Kit（jsdom �
   assert.ok(src.includes('async function scanWithNativePreview(bs) {'), '原生预览扫码函数在位');
   assert.ok(src.includes("await bs.startScan({ lensFacing: 'back', formats: ['qr_code'] });"), '只解 QR、后置摄像头');
   assert.ok(src.includes("} else if (bs && typeof bs.startScan === 'function') {"), '优先级：谷歌弹窗 → 随包 ML Kit → 页面 jsQR（不是直接掉到 jsQR）');
-  assert.ok(src.includes("typeof bs.startScan === 'function' ? await scanWithNativePreview(bs)"), '谷歌弹窗异常也先改走 ML Kit，再落网页层');
-  assert.ok(src.includes("if (started) { started = false; try { if (bs.stopScan) bs.stopScan().catch(() => {}); }"), 'stopScan 只在真 start 过之后调，且失败静默');
+  // v10.1.7 随版：谷歌弹窗异常那一档原先写成三元 `... : await scanWithWebCamera()) || ''`，
+  // `|| ''` 把原生预览 resolve(null) 的接力信号吞成空手而归——同一函数两处口径，改一处漏一处。
+  assert.ok(/typeof bs\.startScan === 'function'\) \{\r?\n\s*const nr = await scanWithNativePreview\(bs\);/.test(src), '谷歌弹窗异常也先改走 ML Kit，再落网页层');
+  assert.strictEqual((src.match(/if \(nr === null\) \{/g) || []).length, 2, '两处原生入口都必须判 null 接力下一级（缺一档＝那台机器停着不动）');
+  // v10.1.7 二轮随版：判据从 started 放宽到「发起过」——15 秒接力常抢在 startScan 返回之前收场，
+  // 那一刻 started 仍是 false，旧判据等于把相机留给下一级（网页层 getUserMedia 抢不到同一个镜头）。
+  assert.ok(src.includes("if (started || scanRequested) { started = false; scanRequested = false; try { if (bs.stopScan) bs.stopScan().catch(() => {}); }"), '只要发起过 startScan 就必须要回相机句柄');
   assert.ok(src.includes("html.' + cls + ' body>*:not(#scanNativeMask){display:none !important}"), '扫码期间页面主体必须透明化（页面底色会把原生预览挡死）');
   assert.ok(src.includes("if (!v && b.bytes)"), 'ML Kit 非 UTF-8 时 rawValue 为空，要有 bytes 兜底');
 
@@ -289,4 +302,142 @@ test('V10 v10.1.6 层二：无谷歌服务改走随包 bundled ML Kit（jsdom �
   assert.strictEqual(window.document.documentElement.classList.contains('ns-native-scan'), false, '收场必须摘掉透明化 class（否则正常页面变全透明）');
   assert.strictEqual(window.document.getElementById('scanNativeMask'), null, '浮层必须移除');
   app.dom.window.close();
+});
+
+test('V11 v10.1.7 免口令出码：本机已有备份笔记密钥就直接生成，不再读口令框；没有才要口令', async () => {
+  const app = freshApp('http://localhost/mynote');
+  const { window: w, localStorage: ls } = app;
+  const raw = webcrypto.getRandomValues(new Uint8Array(32));
+  let bin = ''; for (const b of raw) bin += String.fromCharCode(b);
+  const stdKeyB64 = btoa(bin);
+  ls.setItem('notesync_bak_slot', JSON.stringify({ id: 'nsbak-abc123', salt: 'c2FsdA==' }));
+  ls.setItem('notesync_key_nsbak-abc123', stdKeyB64);
+  ls.setItem('notesync_key_mynote', stdKeyB64); // 收藏那篇也得有密钥，否则清单为空、走不到写备份那一步
+  ls.setItem('notesync_favs', JSON.stringify(['mynote']));
+  const calls = [];
+  w.writeBackupNote = async (entries, pass, presetKey) => { calls.push({ pass: pass, hasKey: !!presetKey }); return { id: 'nsbak-abc123', url: 'http://localhost/nsbak-abc123#k=AAA', doc: '<div></div>' }; };
+  w.drawQrTo = () => {};
+  // 弹窗必须像真机那样是开着的：不开就会撞进 doBakGenerate 的取消早退门，那这半段只测到"早退"，
+  // 出码与常亮那半段零行为覆盖（闸 R2 末轮点名的 V11 盲区）
+  w.document.getElementById('bakMask').classList.remove('hidden');
+  await w.doBakGenerate(await w.getBakKey());
+  assert.strictEqual(calls.length, 1, '免口令路径应直达写备份（不必先填口令框）');
+  assert.strictEqual(calls[0].hasKey, true, '必须把本机已存的密钥传下去');
+  assert.strictEqual(calls[0].pass, '', '免口令时口令必须是空串（证明没读输入框）');
+  assert.ok(!w.document.getElementById('bakStage2').classList.contains('hidden'), '写完后必须停在出码态（看得见二维码）');
+  assert.strictEqual(w.__bakQrOn, true, '出码成功必须置常亮旗标——早退门若把它挡掉，这里就是零覆盖');
+  assert.strictEqual(w.document.getElementById('bakErr').textContent, '', '正常出码不该带报错');
+  // 反证：本机没有密钥时仍然要口令——不能拿空密钥去写。先显示弹窗：不显示就必须走取消早退门，
+  // 那样这半段其实只测了"早退"，出码那半段零覆盖（闸 R2 末轮点名的 V11 盲区）
+  const calls2 = [];
+  w.writeBackupNote = async (entries, pass, presetKey) => { calls2.push({ pass: pass, hasKey: !!presetKey }); return { id: 'x', url: 'y', doc: 'z' }; };
+  w.document.getElementById('bakMask').classList.remove('hidden');
+  ls.removeItem('notesync_key_nsbak-abc123');
+  w.document.getElementById('bakPass').value = '';
+  await w.doBakGenerate(await w.getBakKey());
+  assert.strictEqual(calls2.length, 0, '没有本机密钥且口令为空时不得写备份');
+  assert.strictEqual(w.document.getElementById('bakErr').textContent, '请输入口令', '要口令时必须在界面上说清楚');
+  const src = readSrc();
+  assert.ok(src.includes('const preKey = await getBakKey();'), '菜单入口的免口令分支在位');
+  assert.ok(src.includes('async function getBakKey()'), 'getBakKey 在位');
+  // 本机密钥失效时必须"清掉坏钥 + 回退要口令 + 界面上说清楚"，否则会陷入"拿着坏钥反复失败且不知为何"
+  assert.ok(/if \(presetKey\) \{[^\n]*readBakSlot\(\)[^\n]*removeItem\(KEY_PREFIX/.test(readSrc()), '验钥失败要清掉本机坏密钥');
+  assert.ok(src.includes("bakErr.textContent = '本机存的备份密钥已失效，请输入口令'"), '失效原因必须上界面');
+  app.dom.window.close();
+});
+
+// V12 v10.1.7 发版闸回修守卫。来源：第一轮 R1/R2/R3 三路独立命中同一 P0（免口令那条路根本不显示弹窗），
+// 加上评审点名的六处 P1。每条断言都锚在本轮真正改过的那一行形态上，逐条做过变异反证（把修复反撤 → 必红）。
+test('V12 v10.1.7 闸修：弹窗显示早于免口令分支 / 403 作废本机钥 / 计时器早于 startScan / 浮层锁色成对 / 抓拍不再卡 ctx', () => {
+  const src = readSrc();
+  // ① 免口令入口必须先把弹窗本体显示出来（V11 直调 doBakGenerate 绕过本入口，正是它的盲区）
+  const h = src.slice(src.indexOf("$('#menuBackup').addEventListener"), src.indexOf("bakPass.addEventListener('input'"));
+  assert.strictEqual((h.match(/bakMask\.classList\.remove\('hidden'\)/g) || []).length, 1,
+    '「开弹窗」在整个入口里只准写一处：分叉里各抄一遍必漏一半（v10.1.7 那个三路独立命中的 P0 就是这么来的）');
+  assert.ok(h.indexOf("bakMask.classList.remove('hidden');") < h.indexOf('await doBakGenerate(preKey)'),
+    '免口令出码之前弹窗必须已经显示（否则二维码画进隐形弹窗：备份真写进服务器、屏幕上啥也没有、还关不掉）');
+  assert.ok(h.indexOf("bakMask.classList.remove('hidden');") > h.indexOf('const preKey = await getBakKey();'),
+    '先取密钥定好态、再一次性开弹窗：不得先闪一框空口令给人看（与"不再要口令"的口径自相矛盾）');
+  assert.ok(!/if \(preKey\) \{[^\n]*bakShowStage/.test(h), '禁回潮：免口令分支里自己抄一遍开弹窗（分叉必漏另一半）');
+  // ② 403 死循环：本机有钥→免口令→又 403，且这条路永远读不到口令框。硬抛不降级是红线，但本机那把钥要当场作废
+  const wf = src.slice(src.indexOf('async function writeBackupNote'), src.indexOf('// ── 出码弹窗'));
+  assert.ok(/status === 403/.test(wf), '凭据不符仍然硬抛 403（绝不自动降级）');
+  assert.ok(/status === 403[\s\S]{0,420}removeItem\(KEY_PREFIX/.test(wf), '403 时必须作废本机那把钥，否则免口令→403 死循环、用户没有重来的一步');
+  assert.ok(/presetKey \? '本机存的备份密钥已失效，请输入口令' : '口令不对/.test(wf),
+    '打错口令与本机密钥失效不能共用一句报错（共用的话会把用户推向错误的自救）');
+  // ③ 原生预览：计时器必须早于 startScan，且接力已收场而 startScan 才返回时当场拆相机
+  const np = src.slice(src.indexOf('async function scanWithNativePreview'), src.indexOf('async function scanWithWebCamera'));
+  assert.ok(np.indexOf('hintTimer = setTimeout') < np.indexOf('await bs.startScan'), '6 秒自救提示必须排在 startScan 之前武装');
+  assert.ok(np.indexOf('watchdog = setTimeout') < np.indexOf('await bs.startScan'),
+    '15 秒接力必须排在 startScan 之前武装（startScan 永不 resolve 的机型上，挂在 await 之后的计时器一次都不跑＝停着不动，正是本版要治的病）');
+  assert.ok(/if \(settled\) \{[\s\S]{0,220}bs\.stopScan\(\)\.catch/.test(np), '计时器提前后新增形状：接力已收场而 startScan 才返回，必须当场 stopScan（否则原生预览留在 WebView 背后一直开着）');
+  // ④ 原生浮层锁色成对（动态主题板 body 的 !important -webkit-text-fill-color 会继承压死裸 color）
+  const nmask = np.slice(np.indexOf('mask.innerHTML ='), np.indexOf('document.body.appendChild(mask)')); // 从 innerHTML 起点切：在提示行**之前**新增文字元素也要被数到（只防尾不防头＝半个守卫，闸 R2 三轮点名）
+  const cPlain = (nmask.match(/[^-]color:#F2F1EC/g) || []).length;
+  const cFill = (nmask.match(/-webkit-text-fill-color:#F2F1EC/g) || []).length;
+  // 数量必须钉死成 5：只判"两串相等"的话，将来加两个按钮（一对一漏）仍然绿（闸 R2 二轮点名的伪绿形状）
+  assert.ok(cPlain === 5 && cFill === 5, '浮层正好五个文字元素、每个都成对钉死锁色（提示行 + 取消/开灯/复制原因/从相册选），实得 ' + cPlain + '/' + cFill);
+  assert.ok(src.includes('color:rgba(233,232,227,.62);-webkit-text-fill-color:rgba(233,232,227,.62)'),
+    '网页取景框那条状态行（现在是"卡住原因"的落点）同样必须成对，否则日间主题下深底深字看不见');
+  // ⑤ 指路文案只能指本层真有的东西
+  assert.ok(!np.includes('点〔抓拍〕'), '禁回潮：原生预览那一层没有〔抓拍〕按钮，提示不能指它');
+  assert.ok(np.includes('从相册选二维码'), '原生提示应指该层真有的〔从相册选二维码〕');
+  assert.ok(/setHint\('还没识别到 · ' \+ scanWhyShort\(\)/.test(np), '原生层卡住原因必须写屏（旧写法 scanWhyText 唯一消费者是剪贴板）');
+  assert.ok(src.includes("setScanHint('让码完整落在框里 · ' + scanWhyShort())"), '网页层卡住原因同样必须写屏');
+  // ⑥ 抓拍不再被 detector 卡死
+  assert.ok(!src.includes('if (done || !video.videoWidth || !ctx)'), '禁回潮：抓拍用 ctx 判空——detector 在位时 ctx 是 null，第一下必报「画面还没准备好」');
+  assert.ok(!src.includes('let cvs = detector ? null :'), '禁回潮：canvas/ctx 只在无 detector 时才建');
+  assert.ok(/window\.__nsSnap = async \(\) => \{[\s\S]{0,700}typeof window\.jsQR !== 'function' && !\(await loadJsQR\(\)\)/.test(src),
+    'detector 那条路上 jsQR 从没加载过，抓拍必须自己把它拉进来');
+  // ⑦ 已删功能的死路指引
+  assert.ok(!src.includes('请换用「复制备份文本」'), '禁回潮：报错指向本版已删的〔复制备份文本〕');
+  assert.ok(!src.includes('请用「粘贴备份文本」'), '禁回潮：报错指向本版已撤的粘贴入口');
+    assert.ok(!src.includes('收藏与已解锁笔记'), '弹窗文案不得再承诺"带未收藏的已解锁笔记"（本版定稿只备份收藏夹）');
+  // ⑧ 二轮评审补的五条：取消门 / 相机交还 / 借光要关 / 句柄归属 / 未挂载时的反馈 / 死代码不得留
+  assert.ok(/if \(bakMask\.classList\.contains\('hidden'\)\) \{ setStatus\(false, '已取消换机备份'\); return; \}\r?\n\s*bakShowStage\(2\);/.test(src),
+    '写入那几秒里用户取消后，不得把二维码和常亮句柄塞回已经关掉的弹窗（隐形 stage2 没有「关闭」＝P0 从另一扇门回来）');
+  assert.ok(np.includes('scanRequested = true;'), '必须记下 startScan 已发起，cleanup 才要得回相机');
+  assert.ok(np.includes('if (started || scanRequested) {'), '接力抢跑（started 还没置上）时也必须 stopScan');
+  assert.ok(np.includes('if (torchOn) { torchOn = false; try { if (bs.disableTorch)'), '开过手电必须随收场关掉（借完光要走得关灯，否则下一屏刺眼）');
+  assert.ok(!src.includes('window.__nsWatchdog'), '15 秒 watchdog 不得挂 window：全局单槽时并发两层互踩（后层覆盖 id＝前层 timer 成孤儿，前层收场又清掉后层的 watchdog＝后层丢自救）');
+  assert.ok(/try \{ if \(window\.__nsSnap === mySnap\) window\.__nsSnap = null/.test(src), '抓拍句柄只摘自己那一层挂上的那把（旧层迟到收场不得摘掉新层句柄）');
+  assert.ok(/snapBtn\.addEventListener\('click', \(\) => \{ if \(typeof window\.__nsSnap === 'function'\) window\.__nsSnap\(\); else setScanHint/.test(src),
+    '句柄还没挂上时点〔抓拍识别〕也要给一句反馈（静默＝用户以为按钮坏了）');
+  assert.ok(!/try \{ bakGo\.disabled = !bakPass\.value; \} catch \(e2\)/.test(src), '禁回潮：失效回退分支里改 bakGo.disabled（同一函数 finally 无条件置 false，那是死代码）');
+  // ⑨ 第三轮（R2 终态审）命中"修复自己带进来的形状"五条
+  assert.ok(np.includes("if (p && p.camera === 'denied') {") && np.includes('相机权限被拒绝：可点〔从相册选二维码〕')
+    && np.includes("mask.style.background = 'rgba(6,6,8,.86)'"),
+    '权限被拒必须把浮层留下并指路到〔从相册选二维码〕：文字旁路已按用户要求删掉，相机一不可用就没第二条路＝用户只能去系统设置（末轮 P1-1）');
+  assert.ok(!/camera === 'denied'\) \{ cleanup\(\)/.test(np), '禁回潮：探测一被拒就 cleanup 走人（旧写法把相册出口连同浮层一起拆掉）');
+  // 网页层同一形状：相机起不来时浮层必须留着，〔从相册选二维码〕才是唯一剩下的退路
+  assert.ok(src.includes("setScanHint(why + '：可点〔从相册选二维码〕，或取消')")
+    && /相机起不来[\s\S]{0,700}return await new Promise\(resolve => \{\r?\n\s*finish = resolve;/.test(src),
+    '网页层 getUserMedia 失败不得拆浮层：只给一句 3 秒 toast＝用户此后彻底没有第二条路');
+  const gumCatch = src.slice(Math.max(0, src.indexOf("scanDiag({ result: '相机起不来'") - 900), src.indexOf("scanDiag({ result: '相机起不来'"));
+  assert.ok(gumCatch.includes('} catch (e) {'), '锚定区间必须真落在那条 catch 里（区间漂走会让下面这条变恒真）');
+  assert.ok(!/^\s*stopLoop\(\);/m.test(gumCatch),
+    '禁回潮：那条 catch 里调 stopLoop 会把 aborted 立成 true，紧接着的 Promise 立即收口＝浮层挂在屏上而页面主体还被透明化规则藏着');
+  assert.strictEqual((src.match(/await nativeCameraReleased\(bs\);/g) || []).length, 2,
+    '两处接力都要先等相机交还：stopScan 即发即忘时下一枪常撞 NotReadableError，恰好打断本版主打的自救');
+  assert.ok(/async function nativeCameraReleased\(bs\) \{[\s\S]{0,460}Promise\.race\(\[Promise\.resolve\(bs\.stopScan\(\)\)\.catch\(\(\) => \{\}\), new Promise\(r => setTimeout\(r, 900\)\)\]/.test(src),
+    '等句柄必须带上限并等不到也放行，否则自救又被 stopScan 自己挂死');
+  assert.ok(src.includes("if (nsScanBusyAt && now - nsScanBusyAt < NS_SCAN_BUSY_MS) { scanFeedback('扫码已在进行中'); return; }")
+    && src.includes('finally { nsScanBusyAt = 0; }') && !/let nsScanBusy = false;/.test(src),
+    '重入锁必须用带过期的时间戳并可提示：布尔锁遇到永不 resolve 的 await（谷歌取景框/系统权限框/getUserMedia 冷启动）会把「扫一扫」永久锁死、第二下毫无提示——比它要防的叠层更糟');
+  assert.ok(src.includes('async function nsScanOnce() {'), '重入锁包在外层，真链路抽成 nsScanOnce（两者必须同时在位）');
+  assert.ok(/if \(typeof bs\.isTorchAvailable === 'function'\) \{[\s\S]{0,120}?try \{[\s\S]{0,320}?bs\.isTorchAvailable\(\)/.test(np), '手电探针必须包在 try 里：它在 Promise 执行器内同步抛会让整层 reject（浮层留屏、透明 class 不摘、自救计时器一次都不跑）');
+  assert.ok(/gms: gmsAvail, result: '',[\s\S]{0,40}frames: 0, hits: 0, miss: 0, errs: 0, err0: '', cam: '0x0', dec: '', ms: 0, len: 0, kind: ''/.test(src),
+    '每场扫码开场必须把**整场账**归零：原生层不重置这些，6 秒上屏的"原因"会把上一场的「画面 1280x720/首错」当实况播报');
+  assert.ok(src.includes("'服务器拒绝了写入（备份笔记已被别的口令认领）' + (presetKey ?"),
+    '403 的"本机密钥已作废"只能在真用了本机密钥时说（口令打错那一路说它是假话）');
+  assert.ok(/if \(preKey\) \{\r?\n\s*bakShowStage\(2\); bakTip\.textContent = '正在写入备份…';/.test(h),    '免口令时不得闪那个带空口令框的态（口径是"不再要口令"，摆一框口令给人看＝自相矛盾）：直接进 stage2 报进度');
+  assert.ok(/if \(!col\.f\.length\) \{ bakShowStage\(1\); bakErr/.test(src) && /catch \(e\) \{ bakShowStage\(1\); bakErr\.textContent = '二维码生成失败/.test(src)
+    && /catch \(e\) \{\r?\n\s*bakShowStage\(1\);[^\n]*\r?\n\s*bakErr\.textContent = \(e && e\.msg\)/.test(src),
+    '三处报错前都必须先把能看见的态切回来：免口令时我们停在 stage2，而报错的 .err 画在 stage1 里＝静默失败');
+  assert.ok(src.includes("'。看不清就点一下码'"), '放大改手动后必须给屏上指引：cursor 只在桌面生效，手机上没有任何线索');
+  assert.ok(/em = String\(\(e && \(e\.message \|\| e\)\) \|\| ''\);[\s\S]{0,300}if \(\/cancel\/i\.test\(em\)\) return resolve\(''\);[\s\S]{0,220}if \(\/denied\|permission\/i\.test\(em\)\) \{ scanFeedback\('相机权限被拒绝'\); return resolve\(''\);/.test(np),
+    'startScan 抛错也必须分流：主动取消与权限被拒不得再叠下一级（否则"刚拒绝权限又弹一层系统框"从这扇门回来，与 8578 那一路同一口径）');
+  assert.ok(src.includes("bakGo.disabled = !bakPass.value; bakGo.textContent = oldLabel;"),
+    '出码收场的按钮判据必须与口令框对齐（旧写法一律 enabled：空口令时手快一下撞出「请输入口令」假报错，密钥失效回退到口令态后同样错）');
+  assert.ok(h.includes("try { bakQrHolder.innerHTML = ''; }"), '进度态必须先清掉上一张码：关窗只清了 bakQrUrl 没清画布，不清会在"正在写入备份…"下面闪一张旧码');
 });

@@ -91,13 +91,12 @@ async function scanCanvas(page, sel) {
   }, sel);
 }
 
-test('① 出码密度与篇数解耦：1 篇与 100 篇同为一张配对链，画布像素可被 jsQR 反解', guard(async () => {
+test('① 出码：只带收藏夹、点码才放大、像素可反解且格子数与篇数无关', guard(async () => {
   const { ctx, page, errs } = await newPage(true);
   try {
     await unlockNote(page, SRC);
     await injectJsqr(page); // 导航之后再注，否则被 goto 抹掉
-    // 造 100 篇「本机有密钥」的笔记，但收藏夹只放 2 篇：默认必须只备份这 2 篇，
-    // 勾上「带上其他笔记」才变 102 篇（v10.1.5 用户口径：备份=收藏夹，扩范围要显式同意）
+    // 本机存着 100 篇的密钥，但收藏夹只有 2 篇：v10.1.7 用户定稿「只备份收藏夹」，其余一律不带
     await page.evaluate(() => {
       const std = () => { const a = crypto.getRandomValues(new Uint8Array(32)); let s = ''; for (const x of a) s += String.fromCharCode(x); return btoa(s); };
       for (let i = 0; i < 100; i++) localStorage.setItem('notesync_key_' + ('ns' + String(i).padStart(3, '0')), std());
@@ -108,51 +107,65 @@ test('① 出码密度与篇数解耦：1 篇与 100 篇同为一张配对链，
     await page.waitForFunction(() => !document.getElementById('menuMask').classList.contains('hidden'), { timeout: 5000 });
     await page.click('#menuBackup');
     await page.waitForFunction(() => !document.getElementById('bakMask').classList.contains('hidden'), { timeout: 5000 });
-    // 勾选框必须出现（本机有 100 篇未收藏的密钥）、默认不勾、且文案里报出篇数
-    await page.waitForFunction(() => !document.getElementById('bakWideRow').classList.contains('hidden'), { timeout: 5000 });
-    assert.strictEqual(await page.evaluate(() => document.getElementById('bakWide').checked), false, '默认必须不勾（不替用户悄悄扩范围）');
-    assert.ok(/100 篇/.test(await page.evaluate(() => document.getElementById('bakWideTxt').textContent)), '勾选框要报出「其他笔记」的真实篇数');
+    assert.strictEqual(await page.evaluate(() => !!document.getElementById('bakWide')), false, '「带上其他笔记」勾选框必须已删除');
     await page.fill('#bakPass', PASS);
     await page.click('#bakGo');
     await page.waitForFunction(() => !document.getElementById('bakStage2').classList.contains('hidden'), { timeout: 25000 });
     const err = await page.evaluate(() => document.getElementById('bakErr').textContent);
     assert.strictEqual(err, '', '出码阶段不应有报错：' + err);
-    // v10.1.6：出码即默认全屏（旧写法要用户再点一下〔放大〕；24mm 的小码手机对焦吃力，是"扫半天"的一半根因）
+    const tip = await page.evaluate(() => document.getElementById('bakTip').textContent);
+    assert.ok(/恢复 2 篇/.test(tip), '提示篇数必须等于收藏数（本机另有 98 把密钥也不许多带）：' + tip);
+    assert.strictEqual(await page.evaluate(() => { const e = document.getElementById('bakEnlarge'); const c = document.getElementById('bakCopy'); return !!e || !!c; }), false, '〔放大〕〔复制备份文本〕按钮应已按用户要求撤掉');
+    // 出码后不得自动全屏（用户拍板）；想看大的点码本身，点放大层任意处还原
+    assert.strictEqual(await page.evaluate(() => { const e = document.getElementById('qrLarge'); return !!e && e.classList.contains('show'); }), false, '出码后不应自动铺满全屏');
+    await page.click('#bakQrHolder canvas');
     await page.waitForFunction(() => { const e = document.getElementById('qrLarge'); return e && e.classList.contains('show') && e.querySelector('canvas'); }, { timeout: 5000 });
     const bigW = await page.evaluate(() => Math.round(document.querySelector('#qrLarge canvas').getBoundingClientRect().width));
-    assert.ok(bigW >= 300, '全屏层里的码应铺到视口短边八成以上（390 宽视口实得 ' + bigW + 'px）');
-    await page.click('#qrLarge'); // 点任意处收回，弹窗仍在（可再点〔放大〕回去）
-    await page.waitForFunction(() => !document.getElementById('qrLarge').classList.contains('show'), { timeout: 5000 });
-    assert.strictEqual(await page.evaluate(() => !!document.getElementById('bakQrHolder').querySelector('canvas')), true, '收回全屏后弹窗里的码仍在');
-    assert.ok(/恢复 2 篇/.test(await page.evaluate(() => document.getElementById('bakTip').textContent)), '不勾时提示的篇数必须等于收藏数');
-    let shot = await scanCanvas(page, '#bakQrHolder canvas');
-    assert.ok(/^https?:\/\/127\.0\.0\.1:\d+\/nsbak-[a-z0-9]{6}#k=[A-Za-z0-9_-]+$/.test(shot.data), '扫出来的必须是一条备份笔记配对链（随机档名 + #k= 密钥）：' + shot.data);
-    const n2 = shot.modules;
-    // 关掉重开、勾上再出一张：格子数必须一模一样（与篇数解耦），而服务器上的密文必须真的装下 102 篇
-    await page.click('#bakClose2');
-    await page.click('#menuBtn');
-    await page.click('#menuBackup');
-    await page.waitForFunction(() => !document.getElementById('bakMask').classList.contains('hidden'), { timeout: 5000 });
-    assert.strictEqual(await page.evaluate(() => document.getElementById('bakWide').checked), false, '重开出码框必须回到未勾（不记忆上次的扩大选择）');
-    await page.click('#bakWide');
-    await page.fill('#bakPass', PASS);
-    await page.click('#bakGo');
-    await page.waitForFunction(() => !document.getElementById('bakStage2').classList.contains('hidden'), { timeout: 25000 });
-    // 102 篇候选超上限：必须裁到 BAK_MAX=100 并如实报「未含 2 篇」（透明化，不静默丢）
-    const tip2 = await page.evaluate(() => document.getElementById('bakTip').textContent);
-    assert.ok(/恢复 100 篇/.test(tip2) && /未含 2 篇/.test(tip2), '勾上后应带上其他笔记、裁到 100 篇上限并如实报未含数：' + tip2);
-    shot = await scanCanvas(page, '#bakQrHolder canvas');
-    assert.strictEqual(shot.modules, n2, '2 篇与 102 篇出的码格子数必须完全相同（这就是本次重立的目标）');
+    assert.ok(bigW >= 300, '点码后放大层应铺到视口短边八成以上（实得 ' + bigW + 'px）');
+    await page.click('#qrLarge');
+    await page.waitForFunction(() => { const e = document.getElementById('qrLarge'); return !e || !e.classList.contains('show'); }, { timeout: 5000 });
+    assert.strictEqual(await page.evaluate(() => !!document.querySelector('#bakQrHolder canvas')), true, '收回放大后弹窗里的码仍在');
+    const shot = await scanCanvas(page, '#bakQrHolder canvas');
+    assert.ok(/^https?:\/\/127\.0\.0\.1:\d+\/nsbak-[a-z0-9]{6}#k=[A-Za-z0-9_-]+$/.test(shot.data), '扫出来必须是备份笔记配对链（随机档名 + #k= 密钥）：' + shot.data);
     assert.ok(shot.modules > 0 && shot.modules <= 45, '格子数必须 ≤45（实测 ' + shot.modules + '）');
     const pitch = shot.rectW / (shot.modules + 8);
-    assert.ok(pitch >= 4, '手机上每格必须 ≥4 CSS px 才谈得上屏对屏扫，实测 ' + pitch.toFixed(2) + '（宽 ' + shot.rectW + 'px / ' + shot.modules + ' 格）');
-    // 备份笔记必须真的落在服务器上、且服务器只见密文（零知识不破）
+    assert.ok(pitch >= 4, '手机上每格必须 ≥4 CSS px，实测 ' + pitch.toFixed(2) + '（宽 ' + shot.rectW + 'px / ' + shot.modules + ' 格）');
     const bakId = shot.data.match(/\/(nsbak-[a-z0-9]{6})#k=/)[1];
     const raw = JSON.parse(fs.readFileSync(path.join(dataDir, 'notes', bakId + '.json'), 'utf8'));
-    assert.ok(typeof raw.ct === 'string' && raw.ct.length > 4000, '102 篇清单应真写进服务器（密文长度 ' + raw.ct.length + '）');
-    assert.ok(!JSON.stringify(raw).includes('ns001'), '服务器上绝不该看得见笔记名明文（零知识）');
+    assert.ok(typeof raw.ct === 'string' && raw.ct.length > 200, '2 篇清单应真写进服务器（密文长度 ' + raw.ct.length + '）');
+    assert.ok(raw.ct.length < 1200, '只带 2 篇时密文应当很小（实得 ' + raw.ct.length + '，变大说明范围又扩出去了）');
+    assert.ok(!JSON.stringify(raw).includes('ns002'), '服务器上不该出现未收藏的笔记名（范围与零知识一起验）');
     assert.ok(raw.salt && raw.wkHash, '备份笔记应已落盐并完成凭据认领');
-    assert.ok(raw.v >= 3, '同一篇备份笔记被更新过（不勾→勾两次写入），版本应递增，实得 v=' + raw.v);
+    // ── 免口令二次入口（v10.1.7 闸 P0 守卫）──
+    // 第一次出码后本机已存下那把钥，再点「扫码换机」必须直接把弹窗显示出来并出码。旧写法只在口令那一路
+    // `bakMask.classList.remove('hidden')`，免口令那条路把二维码画进隐形弹窗：备份真写进了服务器、常亮句柄
+    // 也拿到了，屏幕上什么都没有，而且隐形 stage2 里没有「关闭」——关不掉。unit V11 直调 doBakGenerate
+    // 绕过本入口，所以它绿着放过了这个 P0（闸 R1/R2/R3 三路独立命中）。
+    await page.click('#bakClose2');
+    await page.waitForFunction(() => document.getElementById('bakMask').classList.contains('hidden'), { timeout: 5000 });
+    assert.ok(await page.evaluate(() => {
+      const s = JSON.parse(localStorage.getItem('notesync_bak_slot') || 'null');
+      return !!(s && s.id && localStorage.getItem('notesync_key_' + s.id));
+    }), '第一次出码后本机必须存下备份笔记的密钥（免口令的前提）');
+    await page.evaluate(() => { const e = document.getElementById('bakPass'); if (e) e.value = 'SENTINEL-绝不该被读'; }); // 哨兵：若哪天免口令又退回读口令框，这串会被当口令去派生密钥→写前验钥当场失败→本段必红（旧断言只查"框是空的"，出码时本来就会被清空＝恒真）
+    await page.click('#menuBtn');
+    await page.waitForFunction(() => !document.getElementById('menuMask').classList.contains('hidden'), { timeout: 5000 });
+    await page.click('#menuBackup'); // 真点，不 fill 口令：这就是用户第二次的那一下
+    await page.waitForFunction(() => !document.getElementById('bakMask').classList.contains('hidden'), { timeout: 8000 });
+    // 等的必须是"真出码"这个终态：免口令时 stage2 会先以「正在写入备份…」显示（不闪空口令框），
+    // 只等 stage2 不 hidden 会瞬间返回、把还在途的进度文案当成结果读（本文件第一版就是这么假红过一次）
+    await page.waitForFunction(() => {
+      const s2 = document.getElementById('bakStage2');
+      return !!document.querySelector('#bakQrHolder canvas') && s2 && !s2.classList.contains('hidden');
+    }, { timeout: 25000 });
+    assert.strictEqual(await page.evaluate(() => document.getElementById('bakErr').textContent), '', '二次出码不应报错');
+    assert.strictEqual(await page.evaluate(() => document.getElementById('bakPass').value), '',
+      '哨兵口令必须已被作废且从未被当口令用（旧断言只查"框是空的"＝恒真：出码成功本来就会清空，撤掉免口令改读框也照样绿——末轮 R2 点名）');
+    assert.ok(/恢复 2 篇/.test(await page.evaluate(() => document.getElementById('bakTip').textContent)), '二次出码篇数仍等于收藏数');
+    assert.ok(await page.evaluate(() => !!document.querySelector('#bakQrHolder canvas')), '二次出码必须真画出看得见二维码');
+    assert.strictEqual(await page.evaluate(() => { const e = document.getElementById('qrLarge'); return !!e && e.classList.contains('show'); }), false, '二次出码同样不自动全屏');
+    await page.click('#bakClose2'); // 关得掉：隐形弹窗时代这条永远点不到，常亮锁就一直悬着
+    await page.waitForFunction(() => document.getElementById('bakMask').classList.contains('hidden') && window.__bakQrOn === false, { timeout: 5000 });
     assert.deepStrictEqual(errs, [], '全程不应有页面 JS 错误：' + JSON.stringify(errs));
   } finally { try { await ctx.close(); } catch (e) {} }
 }));
@@ -249,33 +262,6 @@ test('③ 旧 v7.7.0 整包码文本仍可恢复（读侧兼容，禁"新手机�
     assert.ok(JSON.parse(r.favs).indexOf('legacy1014') >= 0, '旧格式也应合并进收藏夹');
   } finally { try { await ctx.close(); } catch (e) {} }
 }));
-
-test('④ 粘贴恢复兜底：不依赖摄像头，粘文本→真点〔恢复〕→密钥与收藏落地', guard(async () => {
-  const { ctx, page, errs } = await newPage(false);
-  try {
-    await page.goto(baseURL + SRC);
-    await page.waitForFunction(() => typeof window.pasteBackupTextUI === 'function', { timeout: 20000 });
-    // 打开这层浮窗的正规入口是取景框里的「粘贴备份文本恢复」，而取景框要真摄像头（headless 无设备）；
-    // 故只直调 UI 构造函数，后续输入与点击全部走真交互（红线：落点/选区/焦点断言不许用 element.click 假绿）
-    await page.evaluate(() => window.pasteBackupTextUI());
-    await page.waitForSelector('#bakPasteMask input', { timeout: 5000 });
-    const k = stdKeyLocal();
-    const text = await page.evaluate((kk) => 'notesync-bak:1:' + btoa(JSON.stringify({ v: 1, ts: Date.now(), f: [['paste1014', kk]] })).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''), k);
-    // 先喂一段非法文本，验「报错不写库」这条守卫真的在门口拦
-    await page.fill('#bakPasteMask input', 'notesync-bak:1:@@不合法@@');
-    await page.click('#bakPasteGo');
-    await page.waitForFunction(() => document.querySelector('#bakPasteMask .err').textContent !== '', { timeout: 5000 });
-    assert.strictEqual(await page.evaluate(() => localStorage.getItem('notesync_key_paste1014')), null, '非法文本必须先被挡在门口，绝不写库');
-    await page.fill('#bakPasteMask input', text);
-    await page.click('#bakPasteGo');
-    await page.waitForFunction(() => !document.getElementById('bakPasteMask'), { timeout: 10000 });
-    const got = await page.evaluate(() => ({ k: localStorage.getItem('notesync_key_paste1014'), favs: localStorage.getItem('notesync_favs') }));
-    assert.strictEqual(got.k, k, '粘贴恢复应把密钥逐字写回');
-    assert.ok(JSON.parse(got.favs).indexOf('paste1014') >= 0, '粘贴恢复应合并收藏夹');
-    assert.deepStrictEqual(errs, [], '全程不应有页面 JS 错误：' + JSON.stringify(errs));
-  } finally { try { await ctx.close(); } catch (e) {} }
-}));
-
 
 test('⑤ 首页扫/粘旧整包码：恢复后必须整页跳进第一篇（闸 R3-K：只 setStatus 会被 landing 盖住＝「粘完没反应」）', guard(async () => {
   const { ctx, page, errs } = await newPage(false);

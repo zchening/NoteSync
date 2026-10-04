@@ -341,9 +341,10 @@ test('v5.55：时/分滚轮组件形态（自建文本框退役），聚焦守�
   assert.ok(/hh\.focus\(\{\s*preventScroll:\s*true\s*\}\)/.test(SRC), '聚焦小时滚轮必须带 preventScroll，不得滚动页面');
   assert.ok(/\(hover:hover\) and \(pointer:fine\)/.test(SRC), '自动聚焦必须限定桌面环境（v5.43 教训：移动端聚焦弹软键盘压缩视口，面板偏离正中心）');
   assert.ok(!/inp\.focus\(\)/.test(SRC), '不得出现无参数裸调用（必须 preventScroll 且受桌面守卫包住）');
-  // v10.1.4 随版计数：+2 = 扫码换机口令框 + 粘贴恢复输入框（两处均在 CHIP_HOVER_OK 桌面守卫内且带
-  // preventScroll，触屏绝不自动聚焦弹键盘——沿用 v5.43 教训口径，不是新增无守卫调用）
-  assert.ok((SRC.match(/\.focus\(\{/g) || []).length === 4, '带选项的聚焦调用只能出现在守卫块内（v5.55 滚轮 + v7.1.0 focusRemItemInput + v10.1.6 换机口令框/粘贴框），防止新增无守卫调用');
+  // v10.1.7 随版组成变更（总数仍 4）：粘贴恢复输入框随「粘贴备份文本」一起撤掉，现在这 4 处 =
+  // v5.55 滚轮 + v7.1.0 focusRemItemInput + 换机口令框（菜单首次）+ 换机口令框（本机密钥失效回退）。
+  // 四处均在 CHIP_HOVER_OK 桌面守卫内且带 preventScroll，触屏绝不自动聚焦弹键盘（沿用 v5.43 教训口径）。
+  assert.ok((SRC.match(/\.focus\(\{/g) || []).length === 4, '带选项的聚焦调用只能出现在守卫块内（v5.55 滚轮 + v7.1.0 focusRemItemInput + v10.1.7 换机口令框两处），防止新增无守卫调用');
 });
 
 test('v5.44：到点卡片必须居中且文字居中（remRise 专用入场），placeholder 精简，音频全局解锁', () => {

@@ -24,7 +24,11 @@ test('H2 刷新：按下同帧 location.reload()，守卫先行（锚定 v8.0.8 
   assert.ok(SRC.includes("refreshBtnEl.addEventListener('click', () => {"), '点击处理器为同步函数——不再有 poll 竞速/计时器编排');
   assert.ok(/location\.reload\(\);[\s\S]{0,8}?\}\);/.test(SRC), 'reload 是守卫通过后的唯一动作（紧随其后即 handler 收尾，锚定补丁行防恒真）');
   assert.ok(!SRC.includes("setStatus(false, '同步中…')"), 'v8.0.8：按钮绝不强写页脚——状态由 boot→poll 原生落位（推翻 v8.0.7 两段式）');
-  assert.ok(!SRC.includes('}, 2500);'), '2.5s 封顶随状态机退役（断网反馈归 boot/poll 原生路径）');
+  // v10.1.7 随版收窄：原来是全文件级负向锚 `!SRC.includes('}, 2500);')`——任何无关代码里出现 2500ms
+  // 定时器都会误伤（本版给扫码「复制原因」按钮加的自收口正好撞枪口）。这类锚的意图是"刷新按钮里
+  // 不再有计时器编排"，就该只在那段里查，别拿全文件当范围。
+  const _rb = SRC.indexOf("refreshBtnEl.addEventListener('click'");
+  assert.ok(_rb > -1 && !/2500\)/.test(SRC.slice(_rb, _rb + 700)), '2.5s 封顶随状态机退役（断网反馈归 boot/poll 原生路径）');
   assert.ok(!SRC.includes('poll().then('), '按钮不再手动拉 poll——重载即整页重建');
 });
 

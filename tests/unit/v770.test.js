@@ -170,30 +170,26 @@ test('W11 applyBackupBundle 行为：合法恢复/非法拒绝/收藏合并（�
   assert.ok(true, '畸形载荷静默拒绝不抛');
   app.dom.window.close();
 });
-// v10.1.5 再随版：备份范围**回退为默认只收藏**（v10.1.4 一度悄悄扩成「收藏 ∪ 本机解锁过的全部笔记」，
-// 用户实测收藏 6 篇却报 61 篇，判为意外行为）。带上其他笔记必须显式传 includeOther=true（界面上是那个
-// 默认不勾的勾选框）。ghost 同时被两条枚举路径撞见 → 只许计一次 skipped。
-test('W12 collectBackupEntries 行为：默认只收收藏夹，includeOther 才带上其他已解锁笔记', async () => {
+// v10.1.7 用户定稿：只备份收藏夹，includeOther 参数与勾选框一并删除。沿革：v10.1.4 我擅自扩成
+// 「收藏 ∪ 本机解锁过的全部笔记」（6 篇收藏报出 61 篇）→ v10.1.5 回退成默认只收藏 + 加勾选框 →
+// v10.1.7 用户「我只需要备份收藏夹的笔记」，开关删掉——少一个开关就是少一条状态。ghost 被两条枚举
+// 路径撞见时只许计一次 skipped。
+test('W12 collectBackupEntries 行为：只收收藏夹，本机其他密钥一律不带', async () => {
   const app = freshApp('http://localhost/mynote');
   const { window, localStorage } = app;
   const k = Buffer.from(webcrypto.getRandomValues(new Uint8Array(32))).toString('base64');
   const k2 = Buffer.from(webcrypto.getRandomValues(new Uint8Array(32))).toString('base64');
   localStorage.setItem('notesync_key_alpha', k);
-  localStorage.setItem('notesync_key_unlisted', k2);           // 未收藏但有密钥 → 只在 includeOther 时进清单
+  localStorage.setItem('notesync_key_unlisted', k2);           // 未收藏但有密钥 → 一律不带
   localStorage.setItem('notesync_key_badkey', 'not-a-key');    // 密钥非法 → 计入 skipped
   localStorage.setItem('notesync_key_ghost', 'too-short');     // 同名被两条枚举路径撞见 → 只许计一次
   localStorage.setItem('notesync_favs', JSON.stringify(['alpha', 'ghost']));
-  const def = await window.collectBackupEntries();
-  const defIds = def.f.map(it => it[0]);
-  assert.ok(defIds.indexOf('alpha') > -1, '默认必须收收藏里有密钥的笔记');
-  assert.ok(defIds.indexOf('unlisted') < 0, '默认绝不带上未收藏的笔记（用户口径：备份=收藏夹）');
-  assert.strictEqual(def.skipped, 1, '默认只统计收藏内的 ghost 一次');
-  const wide = await window.collectBackupEntries(true);
-  const wideIds = wide.f.map(it => it[0]);
-  assert.ok(wideIds.indexOf('alpha') > -1 && wideIds.indexOf('unlisted') > -1, '显式勾上才带上本机解锁过的其他笔记');
-  assert.strictEqual(wide.f.length, 2, '只收合法 AES-256 密钥的条目');
-  assert.strictEqual(wide.skipped, 2, '无密钥/密钥非法各计一次（同名被两条枚举路径撞见不得重复计数）');
-  assert.strictEqual(window.countOtherUnlocked(), 1, '勾选框上的数字=未收藏但有合法密钥的篇数（这里只有 unlisted）');
+  const col = await window.collectBackupEntries();
+  const ids = col.f.map(it => it[0]);
+  assert.ok(ids.indexOf('alpha') > -1, '收藏夹里有密钥的必须带走');
+  assert.ok(ids.indexOf('unlisted') < 0, '本机存过但没收藏的密钥一律不带（用户口径：备份=收藏夹）');
+  assert.strictEqual(col.f.length, 1, '清单只有一篇收藏——多一把本机密钥也不许多带');
+  assert.strictEqual(col.skipped, 1, '收藏里没密钥的 ghost 计一次（同名被两条枚举路径撞见不得重复计数）');
   app.dom.window.close();
 });
 
