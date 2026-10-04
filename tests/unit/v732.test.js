@@ -117,7 +117,9 @@ test('V732-S9 修复c：全部模态/浮层关闭路径 PC 端焦点归还（CHI
     assert.ok(!m.test(SRC), '#' + id + ' 是跳转/接力路径，不应误补 editor.focus()');
   }
   // openChangePass 是命名函数引用：焦点应交给 cpOld 输入框而非编辑器
-  assert.ok(/function openChangePass\(\) \{[\s\S]{0,200}?cpOld\.focus\(\)/.test(SRC), 'openChangePass 应把焦点交给 cpOld 输入框');
+  // v10.1.4 随版扩窗 200→560：openChangePass 开头新增「备份笔记禁止改口令」守卫（含 2 行根因注释），
+  // 焦点行被推到 200 之外——这是锚窗口太窄，不是焦点归还丢了（负向锚 121 行原样保留，仍不许误补 editor.focus）
+  assert.ok(/function openChangePass\(\) \{[\s\S]{0,560}?cpOld\.focus\(\)/.test(SRC), 'openChangePass 应把焦点交给 cpOld 输入框');
   assert.ok(!/function openChangePass\(\) \{[\s\S]{0,300}?editor\.focus\(\)/.test(SRC), 'openChangePass 不应误补 editor.focus()');
 });
 

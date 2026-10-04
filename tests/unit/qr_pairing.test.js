@@ -90,7 +90,7 @@ test('内联 qrcode 库可为真实配对 URL 生成模块矩阵', () => {
 test('APP_VERSION 为 9.3.0', () => {
   const fs = require('fs');
   const src = fs.readFileSync(require('../helpers').INDEX_PATH, 'utf8');
-  assert.ok(src.includes("const APP_VERSION = '10.1.3';"), 'index.html 应声明 APP_VERSION = 9.3.0');
+  assert.ok(src.includes("const APP_VERSION = '10.1.4';"), 'index.html 应声明 APP_VERSION = 9.3.0');
 });
 
 // ── Q5c：v8.1.4 无 GMS 机型扫码回退链守护（锚补丁行，防回潮）──
@@ -123,8 +123,11 @@ test('v8.1.4 scanWithWebCamera：video 出帧前隐藏 + 常驻取景框 + 占�
   assert.ok(src.includes("video.addEventListener('playing', revealScan)"), 'playing 应触发显形');
   assert.ok(src.includes('if (scanRevealed) return'), 'revealScan 应幂等');
   assert.ok(src.includes('setTimeout(revealScan, 2500)'), '应有 2.5s 定时兜底强制显形');
-  // 取景框常驻（reveal 只移除 loading，不移除 reticle）
-  assert.ok(src.includes('if (loading.parentNode) loading.remove()') && !src.includes('reticle.remove()'), '出帧后取景框应常驻，仅移除占位文案');
+  // 取景框常驻（reveal 只换掉占位文案，不移除 reticle）
+  // v10.1.4 随版翻转：占位行改为常驻状态行——旧版只在解出码时才动，用户分不清"没对准"还是"解不出"，
+  // 观感就是「扫半天没反应」。占位「正在开启相机…」出帧后被替换为「识别中…」，效果等价于原来的移除，
+  // 且取景框常驻这条不变量不变（reticle 依旧不得被移除）。
+  assert.ok(src.includes("setScanHint('识别中") && !src.includes('reticle.remove()'), '出帧后取景框应常驻，占位文案必须被换掉（不得残留「正在开启相机…」）');
   // 防回潮：旧的裸 video 内联样式（会闪默认播放三角）必须消失
   assert.ok(!src.includes('width:100%;max-height:46vh;background:#000;border-radius:12px;object-fit:cover'), '旧裸 video 样式应已退役');
 });
@@ -146,7 +149,9 @@ test('v5.27 生产分支走主站短链，且不再硬编码 bridge 中转 URL',
   assert.ok(src.includes("'https://xuyinji.com.cn/note/'"), '生产配对链接应以主站 /note/ 短链为基底');
   assert.ok(src.includes("location.hostname === 'note.xuyinji.com.cn'"), '短链分支应仅在生产域名启用（本地/自建直连，不影响探针与自部署）');
   // 密钥仍以 #k= 片段传递（片段不发往服务器，302 后由浏览器拼回）
-  assert.ok(/'https:\/\/xuyinji\.com\.cn\/note\/' \+ encodeURIComponent\(noteId\) \+ '#k=' \+ b64ToUrlSafe\(b64\)/.test(src), '短链分支应以 #k= 片段携带密钥');
+  // v10.1.4：三域名分支抽成 pairingUrlFor(id, b64)——换机备份码要用同一个出链函数（分支一分叉，
+  // 小米风控就会只认其中一张码），故锚点从 noteId 改成参数 id，其余字面量逐字保留。
+  assert.ok(/'https:\/\/xuyinji\.com\.cn\/note\/' \+ encodeURIComponent\(id\) \+ frag/.test(src), '短链分支应以 #k= 片段携带密钥');
   // v5.23 的 bridge 中转常量应从配对链接构造中移除（bridge.html 文件与路由保留，兼容旧码）
   assert.ok(!src.includes("'https://note.xuyinji.com.cn/bridge.html'"), 'buildPairingUrl 不应再指向 bridge.html 中转页');
 });
@@ -165,7 +170,8 @@ test('v5.27 biji 域直出自身域名（无中转），与 note 分支并列', 
   const fs = require('fs');
   const src = fs.readFileSync(require('../helpers').INDEX_PATH, 'utf8');
   assert.ok(src.includes("location.hostname === 'biji.xuyinji.com.cn'"), 'biji 分支应在 buildPairingUrl 中显式声明');
-  assert.ok(/'https:\/\/biji\.xuyinji\.com\.cn\/' \+ encodeURIComponent\(noteId\) \+ '#k=' \+ b64ToUrlSafe\(b64\)/.test(src), 'biji 分支应直出 biji.xuyinji.com.cn/<id>#k=...（无中转）');
+  assert.ok(/'https:\/\/biji\.xuyinji\.com\.cn\/' \+ encodeURIComponent\(id\) \+ frag/.test(src), 'biji 分支应直出 biji.xuyinji.com.cn/<id>#k=...（无中转）');
+  assert.ok(src.includes("const frag = '#k=' + b64ToUrlSafe(b64);"), '片段密钥拼接必须只有一处实现（三域名共用，防分叉出两种码）');
 });
 
 // ── Q9：v7.5.1 去掉二维码 60 秒自动隐藏 ──────────────────

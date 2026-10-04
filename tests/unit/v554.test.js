@@ -100,7 +100,7 @@ test('E4 RemReceiver 迟到闹钟容差：超过 60 秒或 at 非法直接丢弃
 });
 
 // ── E5：jsdom 行为——收藏读写/截断/过滤 + 首页隐藏收藏按钮 ──
-test('E5 jsdom：收藏 writeFavs/readFavs 读写与 20 条截断；首页 renderMenu 隐藏收藏按钮', () => {
+test('E5 jsdom：收藏 writeFavs/readFavs 读写与 100 条截断（v10.1.4 随版）；首页 renderMenu 隐藏收藏按钮', () => {
   const dom = loadApp(); // http://localhost/ → landing 分支，noteId 为空
   const w = dom.window;
 
@@ -112,11 +112,13 @@ test('E5 jsdom：收藏 writeFavs/readFavs 读写与 20 条截断；首页 rende
   w.writeFavs(['alpha', 'beta']);
   assert.equal(JSON.stringify(w.readFavs()), JSON.stringify(['alpha', 'beta']), '写入后应原序读出');
 
-  // 超上限截断到 20，保留最前（最新收藏 unshift 在前）
-  const big = Array.from({ length: 25 }, (_, i) => 'note-' + i);
+  // 超上限截断到 FAVS_MAX，保留最前（最新收藏 unshift 在前）
+  // v10.1.4 随版翻转：上限 20→100——换机备份改走「一篇备份笔记带走全部」，收藏列表再卡 20 篇
+  // 等于换机只搬得走 20 篇（旧断言写死 20/25，是当时的容量口径，非 bug 护栏）。
+  const big = Array.from({ length: 105 }, (_, i) => 'note-' + i);
   w.writeFavs(big);
   const got = w.readFavs();
-  assert.equal(got.length, 20, '写入 25 条应截断到 FAVS_MAX=20');
+  assert.equal(got.length, 100, '写入 105 条应截断到 FAVS_MAX=100');
   assert.equal(got[0], 'note-0', '截断应保留队首（最新收藏）');
 
   // 非字符串项过滤（readFavs 防御：污染数据不致崩）

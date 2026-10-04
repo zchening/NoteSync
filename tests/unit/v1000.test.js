@@ -95,7 +95,15 @@ test('S9 所有解密上屏点都挂了消毒（精确计数 + 负向），且�
   const src = fs.readFileSync(path.resolve(__dirname, '..', '..', 'index.html'), 'utf8');
   assert.ok(src.includes('function nsSanitizeHtml('), '消毒函数本体应在');
   const n = (src.match(/nsSanitizeHtml\(await decryptText\(/g) || []).length;
-  assert.strictEqual(n, 13, '解密结果过消毒的点数应恰好为 13（9 个渲染口 + 4 个比较器入口），实测 ' + n);
+  // v10.1.4 形态随版：两条解锁路径的解密要先分给「换机备份清单」判定用，故拆成
+  // `const plain = await decryptText(...)` + `nsSanitizeHtml(plain)` 两段——消毒覆盖的**上屏点数**
+  // 一个不多一个不少，只是字面形态变了。计数改为「直调形态 + 变量形态」合计仍须恰好 13。
+  const nVar = (src.match(/nsSanitizeHtml\((?:plain|auPlain)\);/g) || []).length;
+  assert.strictEqual(n, 10, '解密结果过消毒的直调点数应为 10，实测 ' + n);
+  assert.strictEqual(nVar, 3, '拆成变量再消毒的形态应恰好 3 处（applyUnlocked + 自动解锁路径 + 离线缓存 loadCachedBody），实测 ' + nVar);
+  assert.strictEqual(n + nVar, 13, '解密结果过消毒的点数应恰好为 13（9 个渲染口 + 4 个比较器入口），实测 ' + (n + nVar));
+  // 备份笔记的清单明文只进解析函数、绝不上屏（v10.1.4 甲案闸1 的消毒侧对偶断言）
+  assert.ok(!/editor\.innerHTML\s*=\s*(?:plain|auPlain)\b/.test(src), '换机备份清单明文严禁直接上屏');
   // 第三轮复核抓出的"看起来实现了、实际没生效"形态：真主创建序列里落盐那一枪是**最早**的认领时机
   // （此刻 cryptoKey 尚未赋值，不显式传 key 就发不出凭据），错过它就要等到首次打开才补认，
   // 窗口白送一段时间——所以这一枪必须带凭据。

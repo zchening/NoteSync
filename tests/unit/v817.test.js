@@ -93,7 +93,10 @@ test('B1 打字热态（末次击键 2.2s 内）跳过删除 → 停手后延迟
 
   // 用户停手（grace 窗口过后）→ 重试轮用编辑器当前正文补对账；等真条件而非定值 sleep
   window.eval('lastTypeAt = Date.now() - 9000;');
-  await waitUntil('热态跳过后延迟重试应完成联动删除', () => remList(window).length === 0);
+  // 闸 T1 实锤的间歇真红（单跑 8 次仍 2 红，与并发无关）：旧条件只等内存列表清空，而下一行断言的是
+  // 「已捕获的 PUT」——重试轮先 splice 再异步发 PUT，100ms 轮询恰好落在两者之间时 puts 还是空的，
+  // puts[-1] 即 undefined。等待条件必须把落库这一侧一起纳进来（等的那个就是你接下来断言的那个）。
+  await waitUntil('热态跳过后延迟重试应完成联动删除并把 rem 推服', () => remList(window).length === 0 && puts.length > putsBefore);
   assert.strictEqual(remList(window).length, 0, '停手后重试轮应完成联动删除');
   assert.strictEqual(puts[puts.length - 1].rem, null, 'rem 应显式置 null');
   assert.strictEqual(window.eval('remReconcileRetryTimer'), null, '重试句柄应自清（单发不叠加）');

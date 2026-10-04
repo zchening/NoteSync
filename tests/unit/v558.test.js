@@ -68,7 +68,10 @@ test('H4 native-only 退役 + 顶栏两枚全平台隐藏 + scanWithWebCamera', 
   assert.ok(src.includes('扫码组件加载失败，请稍后重试'), 'jsQR 加载失败应有独立提示');
   assert.ok(src.includes('未检测到可用摄像头'), '无摄像头设备应有独立提示');
   assert.ok(src.includes('await scanWithWebCamera()'), 'menuScan 应有网页端分支（无插件时走自写扫码层）');
-  assert.ok(src.includes('getUserMedia({ video: { facingMode: \'environment\' } })'), '网页扫码应走后置摄像头');
+  // v10.1.4：约束里追加了 720p 软目标（ideal 非 exact，拿不到自动回落默认档、不抛 OverconstrainedError），
+  // 后置摄像头这条不变量原样保留，锚点随形态更新
+  assert.ok(src.includes('facingMode: \'environment\''), '网页扫码应走后置摄像头');
+  assert.ok(src.includes('width: { ideal: 1280 }, height: { ideal: 720 }'), '解码像素预算要够（旧默认档是「微信扫得出、我们扫不出」的根因之一）');
 });
 
 // ── H5：盐根治——服务端空盐保护 + 前端兜底/自愈/诊断 ──

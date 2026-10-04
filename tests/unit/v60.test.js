@@ -170,11 +170,17 @@ test('T7 扫码兜底：jsQR 动态加载 + 逐帧 canvas 解码 + 服务端静�
   assert.ok(src.includes("if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {"), '摄像头 API 缺失仍应直接退出');
   // jsQR 帧循环
   assert.ok(src.includes("const detector = useDetector ? new window.BarcodeDetector() : null;"), 'detector 与 jsQR 应二选一');
-  assert.ok(src.includes("window.jsQR(img.data, w, h, { inversionAttempts: 'attemptBoth' })"), 'jsQR 逐帧解码应就位（attemptBoth 提升屏幕反光场景识别率）');
+  // v10.1.4 随版：帧高变量避开与 h1 元素同名（hh），解码像素预算同时 640→1280
+  assert.ok(src.includes("window.jsQR(img.data, w, hh, { inversionAttempts: 'attemptBoth' })"), 'jsQR 逐帧解码应就位（attemptBoth 提升屏幕反光场景识别率）');
   assert.ok(src.includes("cvs.getContext('2d', { willReadFrequently: true })"), 'canvas 应声明 willReadFrequently（getImageData 每帧调用）');
-  assert.ok(/if \(hit && hit\.data\) \{ cleanup\(\); resolve\(hit\.data\); \}/.test(src), '解码命中应 cleanup 并返回');
-  // 350ms 节流保持
-  assert.ok(/}, 350\);/.test(src), '帧循环 350ms 节流不变');
+  // v10.1.4 随版：命中后先显示「已识别」再收场（旧版当场 close＝一闪就没，用户不知道扫到了没有）；
+  // cleanup+resolve 的语义没变，只是改走 hitVal 单出口，防自排队链里重复 resolve。
+  assert.ok(/if \(hit && hit\.data\) hitVal = hit\.data;/.test(src), '解码命中应取到原文');
+  assert.ok(/stopLoop\(\); setScanHint\('已识别'\)/.test(src) && src.includes('cleanup(); resolve(hitVal)'), '命中应收口循环、给出反馈、cleanup 并 resolve');
+  // v10.1.4 随版翻转（闸 R2-P2 指出旧锚恒真）：`/}, 350\);/` 在源码里另有命中（菜单合成点击），
+  // 撤掉扫码节流也照样绿，不算守卫。新形态是「按上一帧耗时自排队」，故改为钉住新不变量 + 禁回潮旧写法。
+  assert.ok(!/timer = setInterval\(async/.test(src), '禁回潮：setInterval 定值 350ms 抽帧（一帧超时就互相排队，慢机型越扫越卡）');
+  assert.ok(src.includes('timer = setTimeout(tick, Math.min(400, Math.max(120, Date.now() - t0 + 120)))'), '帧循环改自排队自适应节流（120~400ms 夹取）');
 
   // 服务端路由 + 库文件
   assert.ok(sv.includes("if (url === '/jsQR.js') {"), 'server.js 应有 /jsQR.js 静态路由');

@@ -791,6 +791,42 @@
   </div>
 </div>
 
+<!-- v10.1.4 扫码换机（备份笔记本体路线）：口令 → 写备份笔记 → 出一张恒定密度的码。
+     刻意只用 .box/.qr-box/.qr-title/.qr-warn 这些既有主题承重类，新增元素零自定义配色——
+     日间借壳板与夜间覆盖板都不认新色值（历史实锤：动态板 !important 会压死裸 color 令文字隐身）。 -->
+<div class="mask hidden" id="bakMask">
+  <div class="box qr-box">
+    <h1 class="qr-title">扫码换机</h1>
+    <div id="bakStage1">
+      <p>换机备份要用口令为专用的<b>备份笔记</b>派生密钥：<br>收藏与已解锁笔记的密钥都写进它，扫一扫整体带走。</p>
+      <input id="bakPass" type="password" placeholder="你的口令" autocomplete="off">
+      <div class="err" id="bakErr"></div>
+      <button id="bakGo" disabled>生成备份码</button>
+      <button id="bakCancel" class="ghost-btn">取消</button>
+    </div>
+    <div id="bakStage2" class="hidden">
+      <div id="bakQrHolder"></div>
+      <p class="qr-warn" id="bakBakId"></p>
+      <p class="qr-warn" id="bakTip"></p>
+      <button id="bakEnlarge">放 大</button>
+      <button id="bakCopy" class="ghost-btn">复制备份文本</button>
+      <button id="bakClose2" class="ghost-btn">关 闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- v10.1.4 备份笔记只读恢复卡（甲案闸1：清单绝不进 contenteditable，只能从这张卡读出并恢复） -->
+<div class="mask hidden" id="bakRestMask">
+  <div class="box qr-box">
+    <h1 class="qr-title">换机备份</h1>
+    <p id="bakRestSummary"></p>
+    <p id="bakRestList" style="max-height:28vh;overflow:auto;text-align:left;font-size:12.5px;line-height:1.9;white-space:pre-wrap;word-break:break-all"></p>
+    <p class="qr-warn">这里只能读取，不能编辑。<br>要更新备份，回到旧设备上点「扫码换机」。</p>
+    <button id="bakRestGo">恢复</button>
+    <button id="bakRestCancel" class="ghost-btn">先看看</button>
+  </div>
+</div>
+
 <div class="mask hidden" id="aboutMask">
   <div class="box qr-box">
     <h1 class="qr-title" id="aboutTitle">关于NoteSync</h1>
@@ -895,8 +931,8 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '10.1.3';
-const BUILD_DATE = '2026-09-26';
+const APP_VERSION = '10.1.4';
+const BUILD_DATE = '2026-10-04';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
 let nsSkin = 0;
@@ -2168,6 +2204,20 @@ async function deriveWriteKey(key) {
     return null;
   }
 }
+// v10.1.4：目标参数版——「扫码换机」要把清单写进另一篇笔记（备份笔记），而上面的函数硬绑全局 noteId。
+// 刻意不共用一份实现：原函数有一条必须可见的失败提示（v10.0.0 止血），给别的笔记报错会污染当前页脚，
+// 且 noteId 为空串的老语义（O1 离线用例实测依赖）一旦加 id 判空就会变味。
+// 两份实现必须逐字同口径，由 v1014.test.js V4 用「同钥同名派生结果相等」的行为断言钉住（防分叉）。
+async function deriveWriteKeyFor(id, key) {
+  if (!key || !id) return null;
+  try {
+    const raw = await crypto.subtle.exportKey('raw', key);
+    const hk = await crypto.subtle.importKey('raw', raw, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    const sig = await crypto.subtle.sign('HMAC', hk, new TextEncoder().encode('notesync-write-v1:' + id));
+    return b64ToUrlSafe(bufToB64(new Uint8Array(sig)));
+  } catch (e) { return null; }
+}
+function noteApiFor(id) { return NOTESYNC_API_BASE + '/api/note/' + encodeURIComponent(id); }
 function getWriteKey() { return deriveWriteKey(cryptoKey); }
 // v10.0.0 B1：首次解锁即向服务端登记本机凭据（纯登记，不改正文、不动版本，失败不影响任何读写）。
 // 存量笔记只有被真主认领过才真正进入保护圈；认领窗口越短越好，所以挂在解锁而不是等到第一次保存。
@@ -2204,6 +2254,35 @@ async function apiPut(obj, opts) {
   } finally {
     if (inflightWrites > 0) inflightWrites--;
   }
+}
+// ── v10.1.4 跨笔记读写（供「扫码换机」写备份笔记）──
+// 与上面 apiGet/apiPut 逐字同构，只是把笔记名与密钥参数化；刻意不复用 apiPut：
+// apiPut 的凭据派生要走「失败必可见」的 setStatus 口径（红线：v10.0.0 关键路径止血），
+// 而给另一篇笔记报错会污染当前笔记页脚。两套形状各自 6 行，比塞条件分支进共用函数更难写错。
+// inflightWrites 共用同一计数：备份写入也是在途写入，必须同样压住 SSE poll 的「远端有更新」误判。
+async function apiGetTo(id) {
+  const r = await fetchRetry(noteApiFor(id), { cache: 'no-store' }, 2);
+  return r.json();
+}
+async function apiPutTo(id, obj, key) {
+  inflightWrites++;
+  try {
+    const wk = await deriveWriteKeyFor(id, key);
+    const headers = { 'Content-Type': 'application/json' };
+    if (wk) headers['x-note-key'] = wk;
+    const r = await fetchRetry(noteApiFor(id), { method: 'PUT', headers: headers, body: JSON.stringify(obj) }, 2);
+    return r.json();
+  } finally {
+    if (inflightWrites > 0) inflightWrites--;
+  }
+}
+async function claimNoteFor(id, key) {
+  const wk = await deriveWriteKeyFor(id, key);
+  if (!wk) return false;
+  try {
+    const r = await fetch(noteApiFor(id) + '/claim', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-note-key': wk }, body: '{}' });
+    return r.ok;
+  } catch (e) { return false; }
 }
 async function reportFail() {
   try {
@@ -3182,19 +3261,25 @@ const qrBtn = $('#qrBtn'), qrMask = $('#qrMask'), qrHolder = $('#qrHolder');
 let qrHideTimer = null;
 // v5.27：提示文案中的域名自适应当前访问域（biji/note/apex 各显示各的）
 (function(){ const ds=document.querySelectorAll('.dyn-domain'); for(let i=0;i<ds.length;i++) ds[i].textContent=location.hostname; })();
-function buildPairingUrl() {
-  const b64 = localStorage.getItem(KEY_STORE); // 解锁时已写入的 AES 密钥（raw base64）
-  if (!b64) return null;
+// v10.1.4：出码地址三域名分支抽成公共函数——单张笔记配对码与「扫码换机」备份码共用同一份中转逻辑
+// （小米扫码风控只认主站干净短链，两处若分叉必有一处扫不出），只把笔记名与密钥参数化。
+function pairingUrlFor(id, b64) {
+  const frag = '#k=' + b64ToUrlSafe(b64);
   if (location.hostname === 'note.xuyinji.com.cn') {
     // 生产：主站短链（Caddy handle_path /note/* → 302 note.xuyinji.com.cn/*，目标写死，非开放重定向）
-    return 'https://xuyinji.com.cn/note/' + encodeURIComponent(noteId) + '#k=' + b64ToUrlSafe(b64);
+    return 'https://xuyinji.com.cn/note/' + encodeURIComponent(id) + frag;
   }
   if (location.hostname === 'biji.xuyinji.com.cn') {
     // v5.27：biji 为并行可信域，直出自身域名（无中转），与 note 分支并列
-    return 'https://biji.xuyinji.com.cn/' + encodeURIComponent(noteId) + '#k=' + b64ToUrlSafe(b64);
+    return 'https://biji.xuyinji.com.cn/' + encodeURIComponent(id) + frag;
   }
   // 本地/自建部署：直连当前源，无中转环节
-  return location.origin + '/' + encodeURIComponent(noteId) + '#k=' + b64ToUrlSafe(b64);
+  return location.origin + '/' + encodeURIComponent(id) + frag;
+}
+function buildPairingUrl() {
+  const b64 = localStorage.getItem(KEY_STORE); // 解锁时已写入的 AES 密钥（raw base64）
+  if (!b64) return null;
+  return pairingUrlFor(noteId, b64);
 }
 function drawQrTo(canvas, text, wantPx) {
   const qr = qrcode(0, 'M'); // typeNumber=0 自动选版本；纠错级别 M
@@ -3312,8 +3397,13 @@ async function applyUnlocked(key, note) {
   localVer = note.v || 0;
   mask.classList.add('hidden');
   editor.contentEditable = true;
+  let bakBundle = null;
   if (note.ct) {
-    try { lastHtml = nsSanitizeHtml(await decryptText(note.ct, note.iv, key)); editor.innerHTML = lastHtml; }
+    try {
+      const plain = await decryptText(note.ct, note.iv, key);
+      bakBundle = parseBakDoc(plain); // v10.1.4：换机备份笔记——清单绝不进可编辑区（甲案闸1）
+      if (!bakBundle) { lastHtml = nsSanitizeHtml(plain); editor.innerHTML = lastHtml; }
+    }
     catch (e) {
       // v6.0：记住的密钥解不开服务端密文 = 口令已在他端变更（Y 简单式的配套检测）。
       // 旧密钥/旧缓存/旧草稿全部作废，必须清掉——否则显示空或旧内容，用户一保存
@@ -3326,6 +3416,7 @@ async function applyUnlocked(key, note) {
       return;
     }
   }
+  if (bakBundle) { enterBackupMode(bakBundle, note); return; } // 备份笔记：只读卡、不跑草稿/提醒/SSE/认领
   if (note.ct) cachePut({ ct: note.ct, iv: note.iv, v: note.v, salt: note.salt, savedAt: Date.now() }); // v5.49：成功解密即缓存正文密文，供离线阅读；v5.54 附盐
   lastSyncAt = Date.now(); // v5.50：解锁拿到服务端数据=通信成功
   await restoreDraftIfNeeded(key); // v5.35：解锁后检查离线草稿（静默恢复或提示冲突）
@@ -5629,7 +5720,12 @@ async function loadCachedBody(key) {
   const c = cacheGet();
   if (!c || !c.ct) return false;
   try {
-    const html = nsSanitizeHtml(await decryptText(c.ct, c.iv, key)); // v10.0.0：缓存密文同样是外部来源
+    const plain = await decryptText(c.ct, c.iv, key); // v10.0.0：缓存密文同样是外部来源
+    // v10.1.4 甲案闸1 第三处收口（闸 R1-P1-2/R2-P0-2）：loadCachedBody 也是「解密上屏」路径，
+    // 漏它＝断网打开备份笔记会把全库密钥清单摊进可编辑区，且调用点随后 contentEditable=true + startSync，闸2 一并失效。
+    const bak = parseBakDoc(plain);
+    if (bak) { enterBackupMode(bak, { salt: c.salt || null }); return true; }
+    const html = nsSanitizeHtml(plain);
     lastHtml = html; localVer = c.v || 0;
     editor.innerHTML = html;
     ensureBlockWrapped();
@@ -7672,6 +7768,7 @@ function focusRemItemInput() {
 // v5.45：打开面板前保存编辑器选区（块内偏移），插入提醒行时恢复到"光标所在处"
 let panelSavedSel = null;
 function toggleRemPanel(force) {
+  if (bakMode) { setStatus(false, '换机备份笔记不支持提醒'); return; } // v10.1.4（闸 R2/T3-P2）：提醒走 persistReminders 独立 PUT rem 字段，只读态开面板=往备份档写无关数据
   remPanelOpen = (force !== undefined) ? force : !remPanelOpen;
   if (remPanelOpen) {
     try {
@@ -7785,7 +7882,7 @@ const menuMask = $('#menuMask');
     }, 350);
   }, true);
 })();
-const FAVS_KEY = 'notesync_favs', FAVS_MAX = 20;
+const FAVS_KEY = 'notesync_favs', FAVS_MAX = 100; // v10.1.4：20→100——换机备份按「一篇码带走全部」设计，收藏列表卡 20 篇等于换机只搬得走 20 篇（纯本机键，零协议影响）
 function readFavs() {
   try { const a = JSON.parse(localStorage.getItem(FAVS_KEY) || '[]'); return Array.isArray(a) ? a.filter(n => typeof n === 'string') : []; } catch (e) { return []; }
 }
@@ -8113,6 +8210,9 @@ function cpReset() {
 }
 function openChangePass() {
   if (!cryptoKey) return;
+  // v10.1.4 闸2 补口（闸 R1/R2/R3 三路独立命中=P0）：cpRotate 拿 editor.innerHTML 重新加密落库，只读备份态下那是空串
+  // ——一键「修改口令」就把备份清成空正文，而自救的 saveLocal(true) 又被闸2 挡死，且旧版无快照可回滚。
+  if (bakMode) { setStatus(false, '这是换机备份笔记，不能在这里改口令'); return; }
   menuMask.classList.add('hidden');
   cpReset(); cpMask.classList.remove('hidden');
   try { cpOld.focus(); } catch (e) {}
@@ -8178,7 +8278,9 @@ async function cpRotate() {
         syncRemindersToNative();
         cpMask.classList.add('hidden'); cpReset();
         if (CHIP_HOVER_OK) { try { editor.focus(); ensureCaret(); } catch (e) {} }
-        showUploadStatus('口令已修改');
+        // v10.1.4：改口令 = 每一篇的密钥都换了，备份笔记里存的那批旧钥全部作废。不提醒就是「明明备份过，
+        // 换机时扫出一堆解不开」，而且没人知道原因。守卫同款（红线15）：文案仍以「口令已修改」开头才自收口。
+        showUploadStatus('口令已修改' + (readBakSlot() ? '，请到「扫码换机」重新生成一次备份' : ''));
         migrateHistoryKeys(keyOld, keyNew); // v6.3：历史快照全部换新钥（fire-and-forget，失败条目预览时置灰）
         setTimeout(() => { if (uploadStatus.textContent.indexOf('口令已修改') === 0) hideUploadStatus(); }, 2600);
         return;
@@ -8374,6 +8476,7 @@ async function loadHistList() {
   });
 }
 $('#menuHistEntry').addEventListener('click', async () => {
+  if (bakMode) { setStatus(false, '换机备份由「扫码换机」整体覆盖，不提供逐版恢复'); return; } // v10.1.4（闸 R2-P1-3）：历史恢复直写 editor.innerHTML 再 force 落库，只读态下会谎报成功
   renderMenu(); // 会重置视图，下面再切到历史二级
   document.getElementById('menuMainView').classList.add('hidden');
   menuHistView.classList.remove('hidden');
@@ -8432,12 +8535,14 @@ async function scanWithWebCamera() {
   overlay.style.zIndex = '40'; // v7.7.0：首页扫码——landing 覆盖层 z30，.mask 默认 z10 会被压住
   const box = document.createElement('div');
   box.className = 'box';
-  box.setAttribute('style', 'text-align:center');
+  box.setAttribute('style', 'text-align:center;max-height:calc(100vh - 48px);overflow:auto'); // v10.1.4：取景窗加大后横屏矮视口下按钮不被顶出屏
   const h = document.createElement('h1'); h.className = 'qr-title'; h.textContent = '扫一扫';
   // v8.1.4：video 出帧前先藏，用深色圆角 stage + 金色取景框/扫描线/「正在开启相机…」占位顶位，
   // 避免国产 WebView 在 getUserMedia 冷启动空窗期画默认播放三角（旧版观感差）。出帧即无缝显形。
+  // v10.1.4：取景面积 44vh/340px → 56vh/420px。密集码要对得更远才装得下，而窗口一小就变成
+  // 「太远解不出、太近被裁掉」两头堵；.box 同步给 max-height+overflow，横屏矮视口下按钮不被顶出屏。
   const stage = document.createElement('div');
-  stage.setAttribute('style', 'position:relative;width:100%;height:44vh;min-height:150px;max-height:340px;background:radial-gradient(120% 90% at 50% 40%,#1a1a1d 0%,#0b0b0c 78%);border-radius:12px;overflow:hidden;box-shadow:inset 0 0 0 1px rgba(255,255,255,.04)');
+  stage.setAttribute('style', 'position:relative;width:100%;height:56vh;min-height:200px;max-height:420px;background:radial-gradient(120% 90% at 50% 40%,#1a1a1d 0%,#0b0b0c 78%);border-radius:12px;overflow:hidden;box-shadow:inset 0 0 0 1px rgba(255,255,255,.04)');
   const video = document.createElement('video');
   video.setAttribute('playsinline', ''); video.muted = true; video.autoplay = true;
   video.setAttribute('style', 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;visibility:hidden');
@@ -8464,46 +8569,69 @@ async function scanWithWebCamera() {
     document.head.appendChild(css);
   }
   let scanRevealed = false;
-  const revealScan = () => { if (scanRevealed) return; scanRevealed = true; video.style.visibility = 'visible'; if (loading.parentNode) loading.remove(); };
+  const setScanHint = txt => { if (loading.parentNode) loading.textContent = txt; }; // v10.1.4：占位行改常驻状态行
+  const revealScan = () => { if (scanRevealed) return; scanRevealed = true; video.style.visibility = 'visible'; setScanHint('识别中…'); };
   video.addEventListener('loadedmetadata', revealScan);
   video.addEventListener('loadeddata', revealScan);
   video.addEventListener('canplay', revealScan);
   video.addEventListener('playing', revealScan);
-  const tip = document.createElement('p'); tip.textContent = '对准 PC 端「二维码配对」弹窗里的二维码';
+  const tip = document.createElement('p'); tip.textContent = '对准另一台设备上的二维码即可（配对码、换机码都一样）';
   const cancel = document.createElement('button'); cancel.id = 'scanCancel'; cancel.textContent = '取 消';
-  box.appendChild(h); box.appendChild(stage); box.appendChild(tip); box.appendChild(cancel);
+  const pasteBtn = document.createElement('button'); pasteBtn.id = 'scanPaste'; pasteBtn.className = 'ghost-btn'; pasteBtn.textContent = '粘贴备份文本恢复';
+  box.appendChild(h); box.appendChild(stage); box.appendChild(tip); box.appendChild(cancel); box.appendChild(pasteBtn);
   overlay.appendChild(box);
   document.body.appendChild(overlay);
-  let stream = null, timer = null, done = false, scanRevealTimer = null;
-  const cleanup = () => { done = true; if (timer) clearInterval(timer); if (scanRevealTimer) clearTimeout(scanRevealTimer); if (stream) stream.getTracks().forEach(t => t.stop()); overlay.remove(); };
-  cancel.addEventListener('click', cleanup);
-  overlay.addEventListener('click', e => { if (e.target === overlay) cleanup(); });
+  let stream = null, timer = null, done = false, scanRevealTimer = null, hintTimer = null, finish = null, aborted = false;
+  const stopLoop = () => { done = true; aborted = true; if (timer) { clearTimeout(timer); timer = null; } if (hintTimer) { clearTimeout(hintTimer); hintTimer = null; } if (scanRevealTimer) { clearTimeout(scanRevealTimer); scanRevealTimer = null; } };
+  const cleanup = () => { stopLoop(); if (stream) stream.getTracks().forEach(t => t.stop()); overlay.remove(); };
+  // v10.1.4：取消/点遮罩必须把在途 Promise 收口——旧版只 cleanup 不 resolve，上层 await 永久悬挂，
+  // 再点一次「扫一扫」就叠出第二层取景框（同一份 stream 句柄还漏在闭包里）。
+  const abortScan = () => { cleanup(); if (finish) finish(''); };
+  cancel.addEventListener('click', abortScan);
+  overlay.addEventListener('click', e => { if (e.target === overlay) abortScan(); });
+  pasteBtn.addEventListener('click', () => { abortScan(); pasteBackupTextUI(); });
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    // v10.1.4：给相机一个 720p 的软目标（ideal 非 exact，拿不到自动回落默认档，不会抛 OverconstrainedError）。
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } });
     video.srcObject = stream;
     scanRevealTimer = setTimeout(revealScan, 2500); // 兜底：某些 WebView 媒体事件不发→2.5s 强制显形（流已 attach，解码不受影响）
     try { await video.play(); } catch (e) {}
     const detector = useDetector ? new window.BarcodeDetector() : null;
     const cvs = useDetector ? null : document.createElement('canvas');
     const ctx = cvs ? cvs.getContext('2d', { willReadFrequently: true }) : null;
+    hintTimer = setTimeout(() => { if (!done) setScanHint('让二维码完整落在框里，别贴太近'); }, 6000); // 只说「识别中」＝和没反应一个观感（用户实锤）
     return await new Promise(resolve => {
-      timer = setInterval(async () => {
+      finish = resolve; // 权限弹窗/出帧前就被取消时，Promise 一建好就立即收口（旧写法这条路径永久悬挂、摄像头流也不释放）
+      if (aborted) { resolve(''); return; }
+      // v10.1.4：setInterval → 自排队 setTimeout 链。旧写法一帧解到 400ms 时下一枪照发，
+      // 帧与帧互相排队（getImageData 堆积=更卡），且节流间隔是死的：慢机型饿死、快机型白刷。
+      const tick = async () => {
         if (done) return;
+        const t0 = Date.now();
+        let hitVal = '';
         try {
           if (detector) {
             const codes = await detector.detect(video);
-            if (codes && codes[0] && codes[0].rawValue) { cleanup(); resolve(codes[0].rawValue); }
+            if (codes && codes[0] && codes[0].rawValue) hitVal = codes[0].rawValue;
           } else if (video.videoWidth && ctx) { // jsQR 兜底：逐帧落 canvas 再解像素
-            const w = Math.min(640, video.videoWidth);
-            const h = Math.round(w * video.videoHeight / video.videoWidth);
-            cvs.width = w; cvs.height = h;
-            ctx.drawImage(video, 0, 0, w, h);
-            const img = ctx.getImageData(0, 0, w, h);
-            const hit = window.jsQR(img.data, w, h, { inversionAttempts: 'attemptBoth' });
-            if (hit && hit.data) { cleanup(); resolve(hit.data); }
+            const w = Math.min(1280, video.videoWidth); // v10.1.4：解码像素预算 640→1280（微信扫得出、我们扫不出，一半差在这）
+            const hh = Math.round(w * video.videoHeight / video.videoWidth);
+            cvs.width = w; cvs.height = hh;
+            ctx.drawImage(video, 0, 0, w, hh);
+            const img = ctx.getImageData(0, 0, w, hh);
+            const hit = window.jsQR(img.data, w, hh, { inversionAttempts: 'attemptBoth' });
+            if (hit && hit.data) hitVal = hit.data;
           }
         } catch (e) { /* 单帧失败忽略，继续下一帧 */ }
-      }, 350);
+        if (done) return; // 帧内 await 期间用户已取消：不再排下一枪
+        if (hitVal) {
+          stopLoop(); setScanHint('已识别');
+          timer = setTimeout(() => { cleanup(); resolve(hitVal); }, 160); // 让人看见「已识别」再收场，别凭空一闪就没了
+          return;
+        }
+        timer = setTimeout(tick, Math.min(400, Math.max(120, Date.now() - t0 + 120)));
+      };
+      timer = setTimeout(tick, 0);
     });
   } catch (e) {
     cleanup();
@@ -8527,7 +8655,16 @@ function scanFeedback(msg) {
 function consumeBackupImportMsg() {
   try {
     const n = sessionStorage.getItem('ns_backup_import');
-    if (n) { sessionStorage.removeItem('ns_backup_import'); setStatus(true, '已从备份码恢复 ' + n + ' 篇收藏'); }
+    if (!n) return;
+    sessionStorage.removeItem('ns_backup_import');
+    const txt = '已从备份码恢复 ' + n + ' 篇收藏';
+    setStatus(true, txt);
+    // v10.1.4（e2e ② 实锤）：自动解锁路径里紧随其后的 startSync 首 poll 会把页脚刷成「已同步」，
+    // 只写 setStatus 等于没写——恢复成功这件事必须用 toast 说一遍才看得见。红线15：带「文案仍是它才清」守卫。
+    try {
+      showUploadStatus(txt);
+      setTimeout(() => { try { if (uploadStatus.textContent.indexOf('已从备份码恢复') === 0) hideUploadStatus(); } catch (e) {} }, 3200);
+    } catch (e) {}
   } catch (e) {}
 }
 // v5.57：APP「扫一扫」——ML Kit 插件（@capacitor-mlkit/barcode-scanning）原生侧挂
@@ -8571,7 +8708,10 @@ async function doScanAndOpen() {
     raw = (await scanWithWebCamera()) || ''; // v5.58：网页端 / 无 GMS 走自写扫码层
   }
   if (!raw) return;
-  if (raw.indexOf(BACKUP_PREFIX) === 0) { await applyBackupBundle(raw); return; } // v7.7.0 换机备份码
+  // v10.1.4：换机码不再是「整包数据码」——新格式是一张备份笔记的配对链，天然走下面的 parsePairLink；
+  // 这里只保留两种文本前缀的读取兼容（v7.7.0 notesync-backup:v1: 与备份文本 notesync-bak:1:），
+  // 绝不让旧手机出的码在新手机上变成一句「不是 NoteSync 配对二维码」。
+  if (raw.indexOf(BACKUP_PREFIX) === 0 || raw.indexOf(BAK_PREFIX) === 0) { await applyBackupBundle(raw); return; }
   const dest = parsePairLink(raw);
   if (dest) location.assign(dest);
   else scanFeedback('不是 NoteSync 配对二维码');
@@ -8579,60 +8719,266 @@ async function doScanAndOpen() {
 $('#scanBtn').addEventListener('click', () => { dismissKeyboardForTouch(); doScanAndOpen(); });
 $('#landingScan').addEventListener('click', () => { doScanAndOpen(); });
 $('#landingScan').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ' || e.code === 'Space') { e.preventDefault(); doScanAndOpen(); } });
-// ── v7.7.0 备份换机码（用户拍板：收藏夹一键导出成一张二维码，重装/换机后首页扫一扫一键恢复）──
-// 载荷 = BACKUP_PREFIX + base64(JSON{v,f:[[noteId, 密钥raw-b64], ...]})；密钥经二维码传递与
-// 配对弹窗 #k= 同一安全模型（局域网/拍照场景下自持）。仅收录本机有密钥的收藏笔记。
-async function buildBackupPayload() {
-  const favs = readFavs();
-  if (!favs.length) return null;
+// ── v10.1.4 扫码换机：改走「备份笔记本体」路线（用户拍板甲案）─────────────────────────
+// 旧路线把「收藏 + 全部密钥」整包塞进一张二维码：每篇固定约 80 字节（32 字节 AES 钥的 base64
+// 不可压缩），篇数一多格子数线性涨，而 drawQrTo 弹窗态把显示宽锁在 260px——第 3~4 篇起每格已掉到
+// 0.6mm 以下，手机屏对手机屏物理上解不出（用户实锤：收藏 6 篇，微信能扫、app 扫半天没反应）。
+// 新路线：二维码退回它一直好扫的那张形态（笔记名 + #k= 密钥，恒定约 86 字节 / 41 格，与单篇配对码同档），清单本体
+// 写进一篇专用「备份笔记」——随机档名不可猜、密钥由口令派生（口令随时能重开这篇）、服务器只见密文
+// （零知识不变）。篇数与码密度彻底解耦：100 篇也还是一张码。
+// 误编辑三闸（甲案）：①解密后直接进只读恢复卡，清单绝不进 contenteditable；②saveLocal 硬拒写；
+// ③服务端没有删除接口，且每次覆盖都有历史版本快照可回滚。
+const BAK_SLOT_KEY = 'notesync_bak_slot';   // 本机备份槽 {id, salt}：salt 非机密（与离线缓存同口径）
+const BAK_PREFIX = 'notesync-bak:1:';       // 备份文档正文与可粘贴文本的共同前缀
+const BAK_ID_PREFIX = 'nsbak-';
+const BAK_ID_RE = /^nsbak-[a-z0-9]{6}$/;
+const BAK_MAX = 100;                        // 清单容量上限（100 篇 ≈ 8KB 明文；服务端 PUT 上限 1MB）
+const BAK_DOC_RE = /^<div data-ns-bak="1">(notesync-bak:1:[A-Za-z0-9_-]{8,})<\/div>(<br>)?$/;
+let bakMode = false;                        // 当前打开的就是备份笔记：只读、拒写、不跑草稿/提醒/同步
+const KEY_PREFIX = 'notesync_key_';
+function keyIsAes256(k) { return /^[A-Za-z0-9+/_-]{43,44}={0,2}$/.test(k || '') && b64ToBuf(k).byteLength === 32; } // KEY_STORE 存标准 base64（含 +/）
+function readBakSlot() {
+  try {
+    const s = JSON.parse(localStorage.getItem(BAK_SLOT_KEY) || 'null');
+    return (s && typeof s.id === 'string' && BAK_ID_RE.test(s.id)) ? s : null;
+  } catch (e) { return null; }
+}
+function writeBakSlot(id, salt) {
+  try { localStorage.setItem(BAK_SLOT_KEY, JSON.stringify({ id: id, salt: salt || null })); }
+  catch (e) { nsStoreFail('换机备份的位置未能记在本机，下次生成会另开一篇新的备份笔记', 'bakSlot'); }
+}
+function newBakId() {
+  const A = 'abcdefghijkmnpqrstuvwxyz23456789'; // 去掉 l/o/1/0：手输档名兜底时不歧义
+  const r = crypto.getRandomValues(new Uint8Array(6));
+  let s = '';
+  for (let i = 0; i < 6; i++) s += A[r[i] % A.length];
+  return BAK_ID_PREFIX + s;
+}
+// 备份文档：清单 base64url 后包进一个带 data-ns-bak 的 div——整段正则严格匹配才算备份笔记，
+// 用户手打不出这个形状，也不会与任何真实正文相撞（宁可漏判走正常编辑，绝不误判把普通笔记锁成只读）。
+function encodeBakDoc(entries, ts) {
+  try { return '<div data-ns-bak="1">' + BAK_PREFIX + b64ToUrlSafe(btoa(JSON.stringify({ v: 1, ts: ts || Date.now(), f: entries }))) + '</div>'; }
+  catch (e) { return null; } // btoa 只吃 Latin-1：走到这里说明清单里混进了非 ASCII（档名规则本不允许）
+}
+function parseBakPayload(body) { // 新格式 base64url(BAK_PREFIX) 与 v7.7.0 旧格式 base64(BACKUP_PREFIX) 都认
+  try {
+    let json = null;
+    if (body.indexOf(BAK_PREFIX) === 0) json = atob(urlSafeToB64(body.slice(BAK_PREFIX.length)));
+    else if (body.indexOf(BACKUP_PREFIX) === 0) json = atob(body.slice(BACKUP_PREFIX.length));
+    if (!json) return null;
+    const d = JSON.parse(json);
+    if (!d || d.v !== 1 || !Array.isArray(d.f) || !d.f.length) return null;
+    return { f: d.f, ts: typeof d.ts === 'number' ? d.ts : 0 };
+  } catch (e) { return null; }
+}
+function parseBakText(raw) {
+  return (typeof raw === 'string' && (raw.indexOf(BAK_PREFIX) === 0 || raw.indexOf(BACKUP_PREFIX) === 0)) ? parseBakPayload(raw) : null;
+}
+function parseBakDoc(html) {
+  const m = BAK_DOC_RE.exec(String(html || '').trim());
+  return m ? parseBakPayload(m[1]) : null;
+}
+// 备份范围 = 收藏夹 ∪ 本机存过密钥的全部笔记（换机不该漏掉「打开过但没收藏」的那几篇）
+async function collectBackupEntries() {
   if (cryptoKey && !localStorage.getItem(KEY_STORE)) { // 当前笔记内存有密钥但 KEY_STORE 缺失（v5.21 revealQr 同款补写）
     try { localStorage.setItem(KEY_STORE, bufToB64(await crypto.subtle.exportKey('raw', cryptoKey))); } catch (e) { nsStoreFail('本机密钥未能保存，下次打开可能需重新输入口令', 'favs'); }
   }
-  const entries = []; let skipped = 0;
-  for (const id of favs) {
-    const k = localStorage.getItem('notesync_key_' + id) || '';
-    if (/^[A-Za-z0-9+/_-]{43,44}={0,2}$/.test(k)) entries.push([id, k]); else skipped++; // KEY_STORE 为标准 base64（含 +/）
-  }
-  if (!entries.length) return null;
-  let b64 = '';
-  try { b64 = btoa(JSON.stringify({ v: 1, f: entries })); } catch (e) { return null; }
-  return { payload: BACKUP_PREFIX + b64, count: entries.length, skipped };
+  const slot = readBakSlot();
+  const seen = {}; const out = []; let skipped = 0;
+  const push = id => {
+    if (!id || seen[id]) return;
+    if (slot && slot.id === id) return;                     // 备份笔记不自我引用（否则密钥套密钥死循环）
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) { skipped++; return; } // 与服务端 ID_RE 同规则；不合法也计一笔（闸 R1-P2：静默丢弃＝提示里的数字说谎）
+    seen[id] = 1; // 先记账再验钥：收藏夹与本机密钥库两条枚举路径会撞同一个名字，不先记账同一篇坏钥
+                  // 会被计两次 skipped，提示里的「N 篇本机无密钥」就说谎了（透明化是 v7.7.0 对抗审定的）
+    const k = localStorage.getItem(KEY_PREFIX + id) || '';
+    if (keyIsAes256(k)) out.push([id, k]); else skipped++;
+  };
+  readFavs().forEach(push);
+  try {
+    const extra = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const kk = localStorage.key(i);
+      if (kk && kk.indexOf(KEY_PREFIX) === 0) extra.push(kk.slice(KEY_PREFIX.length));
+    }
+    extra.forEach(push);
+  } catch (e) {}
+  const capped = out.length > BAK_MAX ? out.length - BAK_MAX : 0;
+  return { f: out.slice(0, BAK_MAX), skipped: skipped, capped: capped };
 }
-$('#menuBackup').addEventListener('click', () => {
+// 口令 → 备份笔记密钥 → 建档落盐（显式带凭据认领）→ 写清单。逐字照抄普通笔记的解锁建档顺序：
+// 盐取自服务端（有则必用，绝不用本机猜的盐冲掉服务端盐），新建那一枪必须带 wkKey（v10.0.0 三轮复核实锤：
+// 漏带则整套认领保护空转）。口令只在函数栈里活着，不落任何 storage、DOM 输入框出栈前清空。
+async function writeBackupNote(entries, pass) {
+  const slot = readBakSlot();
+  const id = (slot && slot.id) ? slot.id : newBakId();
+  let note = null;
+  try { note = await withTimeout(apiGetTo(id), 8000); }
+  catch (e) {
+    if (e && e.locked) throw { msg: '尝试过多，稍后再试' };
+    throw { msg: navigator.onLine ? '连不上服务器，换个网络再试' : '当前离线，换机备份要联网' };
+  }
+  const saltB64 = (note && note.salt) ? note.salt : bufToB64(crypto.getRandomValues(new Uint8Array(16)));
+  let key = null;
+  try { key = await deriveKey(pass, b64ToBuf(saltB64)); } catch (e) { throw { msg: '口令派生密钥失败' }; }
+  if (note && note.ct) { // 已有正文却解不开 = 口令不对（或这篇已被别台设备用别的口令重建）
+    try { await decryptText(note.ct, note.iv, key); } catch (e) { throw { msg: '口令与这台设备的换机备份不一致，用当初生成备份的那个口令' }; }
+  }
+  const doc = encodeBakDoc(entries);
+  if (!doc) throw { msg: '备份清单打包失败' };
+  let ver = (note && typeof note.v === 'number') ? note.v : 0;
+  if (!note || !note.salt) { // 建档：落盐那一枪带内容以外的空正文，随后再写真身（与 unlock() 同序）
+    try { const rr = await apiPutTo(id, { ct: (note && note.ct) || '', iv: (note && note.iv) || '', salt: saltB64, baseV: ver }, key); if (rr && typeof rr.v === 'number') ver = rr.v; } catch (e) {}
+  }
+  const enc = await encryptText(doc, key);
+  // v10.1.4（闸 R3-F③：我原先写「每次覆盖都有历史快照」是夸大）——备份笔记从不走编辑器，
+  // 既有 snapshotHistory 一条也不会触发；这里显式把「被覆盖的上一版密文」追加进该档历史环，
+  // 让误生成/误覆盖真的可回滚（历史侧门与正文同判据，凭据用目标名的）。
+  if (note && note.ct) {
+    try {
+      const wkH = await deriveWriteKeyFor(id, key);
+      const hHdr = { 'Content-Type': 'application/json' };
+      if (wkH) hHdr['x-note-key'] = wkH;
+      await fetch(noteApiFor(id) + '/history', { method: 'PUT', headers: hHdr, body: JSON.stringify({ ct: note.ct, iv: note.iv, manual: false }) }).catch(() => {});
+    } catch (e) {}
+  }
+  let r = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try { r = await apiPutTo(id, { ct: enc.ct, iv: enc.iv, salt: saltB64, baseV: ver }, key); break; }
+    catch (e) {
+      if (e && e.status === 409) { // 他机刚刚也更新了备份：重读版本再写一次，绝不盲盖
+        try { const fresh = await apiGetTo(id); ver = (fresh && typeof fresh.v === 'number') ? fresh.v : ver; continue; } catch (e2) {}
+      }
+      if (e && e.status === 403) throw { msg: '服务器拒绝了写入（备份笔记已被别的口令认领），请到电脑上重新生成' };
+      throw { msg: '备份写入服务器失败，请检查网络后重试' };
+    }
+  }
+  if (!r || typeof r.v !== 'number') throw { msg: '备份写入未被服务器确认，请稍后重试' };
+  try { localStorage.setItem(KEY_PREFIX + id, bufToB64(await crypto.subtle.exportKey('raw', key))); } catch (e) { nsStoreFail('备份笔记的密钥未能存在本机，下次可能需重输口令', 'bakWrite'); }
+  writeBakSlot(id, saltB64);
+  claimNoteFor(id, key).catch(() => {}); // 存量未认领时补一次登记（幂等；已认领则服务端原样接受）
+  const keyB64 = bufToB64(await crypto.subtle.exportKey('raw', key));
+  // doc 原样回吐：「复制备份文本」必须与刚落到服务器的那一份逐字同一（含同一个时间戳），
+  // 不能在这儿重新序列化——否则文本与笔记两份，用户以为带走的和他扫走的不是一回事。
+  return { id: id, keyB64: keyB64, url: pairingUrlFor(id, keyB64), doc: doc, text: doc.replace(/^<div data-ns-bak="1">/, '').replace(/<\/div>$/, '') };
+}
+// ── 出码弹窗（#bakMask 两态：要口令 → 出码）──
+const bakMask = $('#bakMask'), bakStage1 = $('#bakStage1'), bakStage2 = $('#bakStage2'), bakPass = $('#bakPass'),
+  bakErr = $('#bakErr'), bakGo = $('#bakGo'), bakQrHolder = $('#bakQrHolder'), bakTip = $('#bakTip');
+let bakQrUrl = '', bakQrText = '';
+const bakIdLine = $('#bakBakId');
+function bakShowStage(stage) {
+  bakStage1.classList.toggle('hidden', stage !== 1);
+  bakStage2.classList.toggle('hidden', stage !== 2);
+}
+function bakClose() {
+  bakMask.classList.add('hidden');
+  hideQrLarge();
+  try { bakPass.value = ''; } catch (e) {} // 口令绝不残留在 DOM 里
+  bakQrUrl = ''; bakQrText = '';
+  if (CHIP_HOVER_OK) { try { editor.focus(); ensureCaret(); } catch (e) {} } // 红线10：关闭回编辑器必须归还焦点
+}
+$('#menuBackup').addEventListener('click', async () => {
   dismissKeyboardForTouch();
-  (async () => {
-    menuMask.classList.add('hidden');
-    if (!cryptoKey) { setStatus(false, '解锁后才可生成备份码'); return; }
-    const bk = await buildBackupPayload();
-    if (!bk) { setStatus(false, '收藏夹里还没有本机可备份的笔记'); return; }
-    const overlay = document.createElement('div'); overlay.className = 'mask'; overlay.id = 'backupMask';
-    const box = document.createElement('div'); box.className = 'box'; box.setAttribute('style', 'text-align:center');
-    const h = document.createElement('h1'); h.className = 'qr-title'; h.textContent = '扫码换机';
-    const cv = document.createElement('canvas');
-    try { drawQrTo(cv, bk.payload); } catch (e) { setStatus(false, '备份内容过大，二维码生成失败'); return; }
-    const tip = document.createElement('p');
-    tip.textContent = '截图或拍照保存这张码；换机/重装后在首页「扫码打开笔记」对准它，' + bk.count + ' 篇收藏一键恢复' + (bk.skipped ? '（' + bk.skipped + ' 篇本机无密钥未包含）' : '');
-    tip.setAttribute('style', 'font-size:12px;color:var(--muted);line-height:1.7;margin:14px 0 0');
-    const cancel = document.createElement('button'); cancel.id = 'backupClose'; cancel.textContent = '关 闭';
-    cancel.setAttribute('style', 'margin-top:16px');
-    box.appendChild(h); box.appendChild(cv); box.appendChild(tip); box.appendChild(cancel);
-    overlay.appendChild(box); document.body.appendChild(overlay);
-    const close = () => {
-      overlay.remove();
-      // 红线10：关闭回编辑器的模态必须归还焦点（桌面）；触屏不动（v7.5.1 收键盘路径无 blur 需求，菜单本就浮层）
-      if (CHIP_HOVER_OK) { try { editor.focus(); ensureCaret(); } catch (e) {} }
-    };
-    cancel.addEventListener('click', close);
-    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
-  })().catch(() => {});
+  menuMask.classList.add('hidden');
+  if (!cryptoKey) { setStatus(false, '解锁后才可生成备份码'); return; }
+  if (bakMode) { // 备份笔记上再点「扫码换机」＝重新打开恢复卡（闸 R3-G：旧版「先看看」关掉后本页再无入口）
+    if (bakPending) {
+      const m = document.getElementById('bakRestMask'); if (m) m.classList.remove('hidden');
+      const g = document.getElementById('bakRestGo'); if (g) { g.disabled = false; g.textContent = '恢复这 ' + bakPending.f.length + ' 篇'; }
+    }
+    else setStatus(false, '这篇备份笔记的清单没能解开，请回旧设备重新生成');
+    return; }
+  bakErr.textContent = ''; bakShowStage(1);
+  try { bakGo.disabled = !bakPass.value; } catch (e) {}
+  bakMask.classList.remove('hidden');
+  // v5.55 聚焦纪律：触屏自动聚焦会弹软键盘把视口压扁、居中弹窗偏位（v5.43 教训），
+  // 且裸 focus() 会被 theme v5.55 的「无参数裸调用」红线抓——只桌面限定 + preventScroll。
+  try { if (CHIP_HOVER_OK) bakPass.focus({ preventScroll: true }); } catch (e) {}
 });
-// 扫到备份码 → 校验并批量写回密钥 + 合并收藏。首页场景恢复后直跳第一篇（KEY_STORE 已在，
-// init 走 loadStoredKey 自动解锁）；跨页成功提示经 sessionStorage 单程携带。
-async function applyBackupBundle(raw) {
-  let data = null;
-  try { data = JSON.parse(atob(raw.slice(BACKUP_PREFIX.length))); } catch (e) {}
-  const list = data && data.v === 1 && Array.isArray(data.f) ? data.f : null;
-  if (!list) { scanFeedback('备份码格式不正确'); return; }
+bakPass.addEventListener('input', () => { if (!bakMask.classList.contains('hidden')) bakGo.disabled = !bakPass.value; });
+bakGo.addEventListener('click', () => { doBakGenerate(); });
+bakPass.addEventListener('keydown', e => { if (e.key === 'Enter' && bakPass.value) { e.preventDefault(); doBakGenerate(); } });
+$('#bakCancel').addEventListener('click', bakClose);
+$('#bakClose2').addEventListener('click', bakClose);
+async function doBakGenerate() {
+  const pass = bakPass.value;
+  if (!pass) { bakErr.textContent = '请输入口令'; return; }
+  bakGo.disabled = true; bakErr.textContent = '';
+  const oldLabel = bakGo.textContent;
+  bakGo.textContent = '正在写入备份…';
+  try {
+    const col = await collectBackupEntries();
+    if (!col.f.length) { bakErr.textContent = '本机还没有可备份的笔记——先在要备份的笔记里用口令打开一次'; return; }
+    const res = await writeBackupNote(col.f, pass);
+    bakQrUrl = res.url;
+    bakQrText = res.text; // 与服务器那一份逐字同源（含同一时间戳）
+    bakQrHolder.innerHTML = '';
+    const cv = document.createElement('canvas');
+    // 弹窗态不传 wantPx：drawQrTo 只有在带 wantPx 时才「不设 CSS 宽」，那套尺寸是靠 #qrLarge 的
+    // canvas{width:88vmin} 兜住的——放在 .box 里就会按位图原始宽铺开，直接撑出弹窗被裁（实拍实锤）。
+    // 载荷恒定约 86 字节 / 41 格，260px 弹窗态每格约 5.3px，与一直好扫的单篇配对码同一档；要更大就点〔放大〕。
+    try { drawQrTo(cv, bakQrUrl); }
+    catch (e) { bakErr.textContent = '二维码生成失败，请换用「复制备份文本」'; return; }
+    bakQrHolder.appendChild(cv);
+    if (bakIdLine) bakIdLine.textContent = '这篇笔记的档名是 ' + res.id + '，手输它也能打开恢复。';
+    bakTip.textContent = '新设备打开 NoteSync → 首页「扫码打开笔记」对准这张码：'
+      + col.f.length + ' 篇一键恢复'
+      + (col.skipped ? '（' + col.skipped + ' 篇本机无密钥未包含）' : '')
+      + (col.capped ? '（本机可备份 ' + (col.f.length + col.capped) + ' 篇，超出 ' + BAK_MAX + ' 篇上限未含 ' + col.capped + ' 篇）' : '')
+      + '。这张码的大小与篇数无关，永远扫得动。';
+    try { bakPass.value = ''; } catch (e) {} // 出码成功即抹掉口令
+    bakShowStage(2);
+  } catch (e) {
+    bakErr.textContent = (e && e.msg) || '生成失败，请稍后再试';
+  } finally {
+    bakGo.disabled = false; bakGo.textContent = oldLabel;
+  }
+}
+$('#bakEnlarge').addEventListener('click', () => { if (bakQrUrl) showQrLarge(bakQrUrl); }); // 全屏纯白层，反光/夜里更好扫
+$('#bakCopy').addEventListener('click', async () => {
+  const b = $('#bakCopy');
+  let ok = false;
+  try { await navigator.clipboard.writeText(bakQrText); ok = true; } catch (e) {}
+  if (!ok) { // WebView/非安全上下文无剪贴板 API：落回隐式选中 + execCommand
+    try {
+      const ta = document.createElement('textarea'); ta.value = bakQrText; ta.setAttribute('readonly', '');
+      ta.setAttribute('style', 'position:fixed;left:-9999px;top:0'); document.body.appendChild(ta);
+      ta.select(); ok = document.execCommand('copy'); document.body.removeChild(ta);
+    } catch (e2) {}
+  }
+  b.textContent = ok ? '已复制，去新设备粘贴' : '复制失败，请用「放大」后截图';
+  setTimeout(() => { if (b.textContent.indexOf('已复制') === 0 || b.textContent.indexOf('复制失败') === 0) b.textContent = '复制备份文本'; }, 3000); // 红线15：临时提示必带自收口
+});
+// ── 收码端：备份笔记只读恢复卡（甲案闸1）＋ 批量写回 ──
+let bakPending = null;
+function enterBackupMode(bundle, note) {
+  bakMode = true;
+  editor.contentEditable = false;   // 甲案闸1+2：清单绝不进可编辑区，且 saveLocal 入口硬拒写
+  editor.innerHTML = '';
+  undoStack = []; redoStack = []; lastState = null; // 与「退出锁定」清栈口径一致（全库 lastState 用 null 表示无基线，闸 R2-P2）
+  writeBakSlot(noteId, note.salt);  // 记下这一篇就是本机的换机备份（恢复/以后更新都靠它）
+  const n = bundle.f.length;
+  const names = bundle.f.map(it => (it && typeof it[0] === 'string') ? it[0] : '?');
+  $('#bakRestSummary').textContent = (bundle.ts ? '生成于 ' + fmtSyncTime(bundle.ts) + '，' : '') + '含 ' + n + ' 篇笔记的解锁密钥。';
+  $('#bakRestList').textContent = names.join('\n');
+  const go = $('#bakRestGo'); go.textContent = '恢复这 ' + n + ' 篇';
+  go.disabled = false;
+  $('#bakRestMask').classList.remove('hidden');
+  bakPending = bundle;
+}
+$('#bakRestCancel').addEventListener('click', () => {
+  $('#bakRestMask').classList.add('hidden');
+  setStatus(true, '这是换机备份笔记，只能读；要更新请回旧设备点「扫码换机」');
+  // 只读态不归还编辑器焦点（本篇根本不该编辑）——红线10 的「关闭回编辑器」在这里不适用，故刻意不补
+});
+$('#bakRestGo').addEventListener('click', async () => {
+  if (!bakPending) { $('#bakRestMask').classList.add('hidden'); return; }
+  const go = $('#bakRestGo'); go.disabled = true; go.textContent = '正在恢复…';
+  await applyBackupEntries(bakPending.f, bakPending.ts);
+});
+// 批量写回密钥 + 合并收藏（v7.7.0 原逻辑随版搬来，只把「解析」剥给 parseBakPayload）
+async function applyBackupEntries(list, ts) {
   const ok = [];
   const hadBefore = {};
   for (const it of list) {
@@ -8640,29 +8986,72 @@ async function applyBackupBundle(raw) {
       const id = it && it[0], k = it && it[1];
       if (typeof id !== 'string' || typeof k !== 'string') continue;
       if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) continue;
-      if (!/^[A-Za-z0-9+/_-]{43,44}={0,2}$/.test(k)) continue;
-      if (b64ToBuf(k).byteLength !== 32) continue; // 仅收合法 AES-256 raw 密钥
-      hadBefore[id] = !!localStorage.getItem('notesync_key_' + id); // v7.7.0（对抗审）：覆盖统计必须在写入前取
-      localStorage.setItem('notesync_key_' + id, k);
+      if (id === noteId) continue; // 绝不把备份笔记自己塞回收藏夹
+      if (!keyIsAes256(k)) continue; // 仅收合法 AES-256 raw 密钥
+      hadBefore[id] = !!localStorage.getItem(KEY_PREFIX + id); // v7.7.0（对抗审）：覆盖统计必须在写入前取
+      localStorage.setItem(KEY_PREFIX + id, k);
       ok.push(id);
     } catch (e) {}
   }
-  if (!ok.length) { scanFeedback('备份码里没有可恢复的笔记'); return; }
+  if (!ok.length) { setStatus(false, '这份备份里没有可恢复的笔记'); return; } // 闸 R2-P2：不再顺手删本机当前笔记的密钥——静默删让用户下次打开白输一遍口令，收益却是零
   // v7.7.0（对抗审）：透明化——覆盖过既有同名密钥、合并超 FAVS_MAX 截断，都要如实进提示，不静默
   let renewed = 0;
   for (const id of ok) if (hadBefore[id]) renewed++;
   const favs = readFavs();
   for (const f of favs) if (ok.indexOf(f) < 0) ok.push(f); // 备份优先序在前，本机已有收藏并入尾部
   writeFavs(ok);
-  const capped = ok.length > 20 ? ok.length - 20 : 0;
-  const msg = '已恢复 ' + Math.min(ok.length, 20) + ' 篇收藏' +
+  const capped = ok.length > FAVS_MAX ? ok.length - FAVS_MAX : 0;
+  const msg = '已恢复 ' + Math.min(ok.length, FAVS_MAX) + ' 篇收藏' +
     (renewed ? '（覆盖 ' + renewed + ' 篇旧密钥）' : '') +
-    (capped ? '，收藏夹满 20 篇已丢弃最旧 ' + capped + ' 项' : '');
-  if (noteId) { setStatus(true, msg); renderMenu(); }
-  else {
-    try { sessionStorage.setItem('ns_backup_import', String(ok.length)); } catch (e) {}
+    (capped ? '，收藏夹满 ' + FAVS_MAX + ' 篇已丢弃最旧 ' + capped + ' 项' : '');
+  if (bakMode || !noteId) { // 从备份笔记里恢复，或在首页扫/粘：都先落一次性提示再整页跳第一篇
+    // （闸 R2-P1-2/R3-K：旧版首页分支被我这版改成只 setStatus，首页页脚被 landing 盖住＝「粘完没反应」事故形状回潮）
+    try { sessionStorage.setItem('ns_backup_import', String(Math.min(ok.length, FAVS_MAX))); } catch (e) {}
     location.href = '/' + encodeURIComponent(ok[0]);
+    return;
   }
+  setStatus(true, msg);
+  renderMenu();
+}
+// 兼容旧入口名（v770.test.js 与扫码路径都在调）：吃原始码文本，解析后走同一条恢复链路
+async function applyBackupBundle(raw) {
+  const bk = parseBakText(raw);
+  if (!bk) { scanFeedback('备份码格式不正确'); return; }
+  await applyBackupEntries(bk.f, bk.ts);
+}
+// 粘贴恢复（兜底旁路）：截图/聊天记录里捞出来的备份文本，不经过摄像头也能整体带走。
+// 绝不用 window.prompt——Android WebView 不支持 prompt()，返回 null 就是「点了没反应」事故本体。
+function pasteBackupTextUI() {
+  dismissKeyboardForTouch();
+  const overlay = document.createElement('div'); overlay.className = 'mask'; overlay.id = 'bakPasteMask';
+  overlay.style.zIndex = '45'; // 首页扫码层 z40，粘贴框要盖在它上面
+  const box = document.createElement('div'); box.className = 'box'; box.setAttribute('style', 'text-align:center');
+  const h = document.createElement('h1'); h.className = 'qr-title'; h.textContent = '粘贴备份文本';
+  const p = document.createElement('p'); p.textContent = '把「复制备份文本」得到的整段内容粘贴到下面，一次恢复全部笔记。';
+  const inp = document.createElement('input'); inp.type = 'text'; inp.autocomplete = 'off'; inp.placeholder = 'notesync-bak:1:…';
+  const er = document.createElement('div'); er.className = 'err';
+  const go = document.createElement('button'); go.id = 'bakPasteGo'; go.textContent = '恢 复';
+  const cancel = document.createElement('button'); cancel.className = 'ghost-btn'; cancel.textContent = '取消';
+  box.appendChild(h); box.appendChild(p); box.appendChild(inp); box.appendChild(er); box.appendChild(go); box.appendChild(cancel);
+  overlay.appendChild(box); document.body.appendChild(overlay);
+  const close = () => {
+    overlay.remove();
+    if (CHIP_HOVER_OK) { try { editor.focus(); ensureCaret(); } catch (e) {} } // 红线10
+  };
+  const submit = async () => {
+    const bk = parseBakText((inp.value || '').trim());
+    if (!bk) { er.textContent = '这不是 NoteSync 的备份文本'; return; } // 认新格式也认 v7.7.0 旧格式
+    er.textContent = '';
+    go.disabled = true; go.textContent = '正在恢复…';
+    try { inp.value = ''; } catch (e) {}
+    close();
+    await applyBackupEntries(bk.f, bk.ts);
+  };
+  go.addEventListener('click', submit);
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
+  cancel.addEventListener('click', close);
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  try { if (CHIP_HOVER_OK) inp.focus({ preventScroll: true }); } catch (e) {} // 触屏不自动聚焦（v5.43 教训：弹软键盘压扁视口、弹窗偏位）
 }
 $('#menuFav').addEventListener('click', () => {
   if (!noteId) return;
@@ -8684,6 +9073,10 @@ window.addEventListener('rem-notify-click', (ev) => {
 async function saveLocal(force) {
   clearTimeout(saveRetryTimer); saveRetryTimer = null;
   if (busy) { if (force) pendingForceResave = true; pendingResave = true; return; } // P2-4：保存互斥——persistReminders/saveLocal 在途时排队补挂，杜绝单设备并发 PUT 互 409；P0-5（对抗审 v7.3.3）：force 随补挂保留，防 busy 时恢复内容不落库
+  // v10.1.4 甲案闸2：备份笔记硬拒写（刻意排在 busy 排队守卫之后——V73-S2 钉着「saveLocal 入口第一件事是排队」这条不变量）。
+  // 空壳或半截 JSON，而用户不会知道——他只知道「换机码坏了」。编辑器已设只读，这里再堵功能入口：
+  // 即便哪天有代码路径绕过只读把 saveLocal 叫起来，服务器上那份备份也不会被写坏。
+  if (bakMode) { setStatus(false, '换机备份只能在「扫码换机」里更新'); return; }
   const html = editor.innerHTML;
   if (!force && html === lastHtml) return; // P0-5：历史恢复传 force=true——恢复后 editor==lastHtml，普通守卫会早退导致恢复内容永不落库，force 强制把恢复内容作为新版本推服（仍走 baseV 乐观并发，他端刚改则 409 弹拍板）
   busy = true; setStatus(false, '保存中…');
@@ -9304,6 +9697,8 @@ async function poll() {
   if (busy) return;
   if (inflightWrites > 0) return; // v6.0：本机写入在途——本轮跳过，别把自增的 v 当成别人的更新
   if (!cryptoKey) return; // 已锁定：无密钥无须轮询，避免“同步中断”噪声
+  if (bakMode) return; // v10.1.4（闸 R2-P1-1）：visibilitychange/online 是全局常驻裸调 poll——他端重建备份后本机一切前台，
+                       // poll 级2 会把新清单明文灌进只读编辑器（显示层谎报 + 恢复卡与清单变陈旧）。备份笔记不参与同步。
   try {
     const note = await withTimeout(apiGet(), 12000); // v9.5.5：poll 加 12s 超时——半死 socket 下 fetch 不再无限挂冻结状态条（「同步中断/连接中…」卡死根因）；不加在途重入闸（会误伤 startSync 首 poll 与紧随的合法 poll，破坏冲突检测）
     lastSyncAt = Date.now(); // v5.50：轮询成功=与服务端通信成功
@@ -9673,7 +10068,17 @@ if (noteId && (isNativeApp() || !CHIP_HOVER_OK)) {
     loadingEl.classList.add('hidden');
     editor.contentEditable = true;
     let auKeyGood = true; // v10.0.0（复核①P0）：解密失败=本机密钥已作废（口令在别处改过），绝不能再拿它去认领
-    if (note.ct) { try { lastHtml = nsSanitizeHtml(await decryptText(note.ct, note.iv, cryptoKey)); editor.innerHTML = lastHtml; } catch (e) { auKeyGood = false; } } // v10.0.0 补回被批量脚本误删的渲染行
+    // v10.1.4：自动解锁路径（记住密钥/扫码配对进来的设备）与 applyUnlocked 是两套并行渲染实现，
+    // 备份笔记的只读收口必须两边都落——只补一处＝口令设备安全、配对设备直接把全库密钥清单摊进可编辑区，
+    // 手一抖就写坏自己的备份（红线：多路径赋值/多路径渲染正是本项目最容易长脏 bug 的形状）。
+    if (note.ct) {
+      try {
+        const auPlain = await decryptText(note.ct, note.iv, cryptoKey);
+        const auBak = parseBakDoc(auPlain);
+        if (auBak) { enterBackupMode(auBak, note); return; }
+        lastHtml = nsSanitizeHtml(auPlain); editor.innerHTML = lastHtml;
+      } catch (e) { auKeyGood = false; } // v10.0.0 补回被批量脚本误删的渲染行
+    }
     if (note.ct) cachePut({ ct: note.ct, iv: note.iv, v: note.v, salt: note.salt, savedAt: Date.now() }); // v5.49：成功加载即缓存正文密文，供离线阅读；v5.54 附盐
     lastSyncAt = Date.now(); // v5.50：在线加载成功=与服务端通信成功
     startSync(); // v9.5.5：同步先启动——loadReminder 尾段 persistReminders 的 apiGet 若半死挂起，不再连带把同步启动一起挡死（状态条冻结「连接中…」）

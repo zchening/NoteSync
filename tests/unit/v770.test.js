@@ -136,14 +136,22 @@ test('W9 扫码拓扑与 landing 反馈守卫', () => {
 });
 
 // ── W10-W12：换机备份码 ──
-test('W10 备份载荷：出码形态与前缀', () => {
+// v10.1.4 随版翻转：换机码不再把整包清单塞进二维码（每篇固定约 80 字节，第 3~4 篇起格子密度
+// 已低于手机屏对屏可扫下限＝用户实锤「微信能扫、app 扫半天没反应」）。新形态=一张恒定密度的
+// 配对链（指向专用备份笔记），清单写进那篇笔记的密文正文。旧 v1 载荷的**读取**兼容由 W11 继续钉，
+// 禁回潮的是「整包塞 QR」这一出码侧形态，不是读侧兼容。
+test('W10 备份出码形态：一张恒定密度的配对链（整包塞 QR 已退役）', () => {
   const src = readSrc();
-  assert.ok(src.includes("const BACKUP_PREFIX = 'notesync-backup:v1:'"), 'BACKUP_PREFIX 常量在位');
-  assert.ok(src.includes('btoa(JSON.stringify({ v: 1, f: entries }))'), '载荷=base64(JSON{v,f:[[id,k]…]})');
-  assert.ok(src.includes('drawQrTo(cv, bk.payload)'), '备份码复用 drawQrTo 出图');
+  assert.ok(src.includes("const BACKUP_PREFIX = 'notesync-backup:v1:'"), 'BACKUP_PREFIX 常量在位（旧码读取兼容）');
+  assert.ok(src.includes("const BAK_PREFIX = 'notesync-bak:1:'"), 'BAK_PREFIX 新前缀在位');
+  assert.ok(src.includes('function pairingUrlFor(id, b64)'), '换机码复用配对码同一出链函数（三域名分支单一真相）');
+  assert.ok(src.includes('bakQrUrl = res.url'), '出码载荷=备份笔记配对链，与篇数无关');
+  assert.ok(!src.includes('drawQrTo(cv, bk.payload)'), '禁回潮：整包载荷直接出 QR');
+  assert.ok(!src.includes('async function buildBackupPayload'), '禁回潮：旧整包载荷构造函数已退役');
   assert.ok(src.includes('篇本机无密钥未包含'), '无密钥条目数需在提示中透明');
+  assert.ok(src.includes('id="bakMask"') && src.includes('id="bakRestMask"'), '出码弹窗与只读恢复卡 DOM 在位');
 });
-test('W11 applyBackupBundle 行为：合法恢复/非法拒绝/收藏合并', async () => {
+test('W11 applyBackupBundle 行为：合法恢复/非法拒绝/收藏合并（旧 v1 载荷读取兼容）', async () => {
   const app = freshApp('http://localhost/mynote'); // 笔记内路径：setStatus 分支，不触发整页导航
   app.dom.window.close.bind(app.dom.window);
   const { window, localStorage } = app;
@@ -162,17 +170,24 @@ test('W11 applyBackupBundle 行为：合法恢复/非法拒绝/收藏合并', as
   assert.ok(true, '畸形载荷静默拒绝不抛');
   app.dom.window.close();
 });
-test('W12 buildBackupPayload 行为：仅收本机有密钥的收藏', async () => {
+// v10.1.4 随版重写：原 W12 测 buildBackupPayload（整包载荷），现由 collectBackupEntries 承担——
+// 备份范围同时放宽为「收藏夹 ∪ 本机存过密钥的全部笔记」，故 ghost（收藏但无密钥）仍计 skipped，
+// 而 unlisted（未收藏但有密钥）必须进清单（旧断言 bk.count===1 承载的是当时的容量口径）。
+test('W12 collectBackupEntries 行为：仅收本机有密钥的笔记，无密钥收藏计 skipped', async () => {
   const app = freshApp('http://localhost/mynote');
   const { window, localStorage } = app;
   const k = Buffer.from(webcrypto.getRandomValues(new Uint8Array(32))).toString('base64');
+  const k2 = Buffer.from(webcrypto.getRandomValues(new Uint8Array(32))).toString('base64');
   localStorage.setItem('notesync_key_alpha', k);
+  localStorage.setItem('notesync_key_unlisted', k2);           // 未收藏但本机有密钥 → 应进清单
+  localStorage.setItem('notesync_key_badkey', 'not-a-key');    // 密钥非法 → 计入 skipped
+  localStorage.setItem('notesync_key_ghost', 'too-short');     // 同名同时被两条枚举路径撞见 → 只许计一次
   localStorage.setItem('notesync_favs', JSON.stringify(['alpha', 'ghost']));
-  localStorage.removeItem('notesync_key_ghost'); // 无密钥收藏 → skipped
-  const bk = await window.buildBackupPayload();
-  assert.ok(bk && bk.payload.startsWith('notesync-backup:v1:'), 'payload 前缀正确');
-  assert.strictEqual(bk.count, 1);
-  assert.strictEqual(bk.skipped, 1, '无密钥收藏计入 skipped 提示');
+  const col = await window.collectBackupEntries();
+  const ids = col.f.map(it => it[0]);
+  assert.ok(ids.indexOf('alpha') > -1 && ids.indexOf('unlisted') > -1, '收藏与本机已解锁笔记都要带走');
+  assert.strictEqual(col.f.length, 2, '只收合法 AES-256 密钥的条目');
+  assert.strictEqual(col.skipped, 2, '无密钥/密钥非法各计一次 skipped（同名被两条枚举路径撞见不得重复计数，提示里的数字不许说谎）');
   app.dom.window.close();
 });
 

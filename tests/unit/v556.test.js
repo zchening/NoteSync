@@ -38,7 +38,9 @@ test('F1 loadStoredKey 自动解锁分支必须调 loadReminder，且先于 link
   const src = readSrc();
   const idx = src.indexOf('if (await loadStoredKey()) {');
   assert.ok(idx > -1, '应存在自动解锁分支');
-  const seg = src.slice(idx, idx + 2600);
+  // v10.1.4：窗口 2600→3400——该分支前新增了「换机备份笔记只读收口」一段（含注释）。
+  // 顺序断言语义不变：备份笔记在 loadReminder 之前就 return，普通笔记路径的先后次序一字未动。
+  const seg = src.slice(idx, idx + 3400);
   assert.ok(seg.includes('loadReminder(note, cryptoKey)'), '自动解锁路径必须调 loadReminder（此前仅 applyUnlocked 恢复）');
   assert.ok(seg.indexOf('loadReminder(note, cryptoKey)') < seg.indexOf('linkifyEditor()'), 'loadReminder 必须先于 linkify，下划线才画得出');
 });
@@ -58,7 +60,9 @@ test('F3 saveLocal：pendingRemoteNote 闸门必须先于 apiPut，且草稿已�
   const src = readSrc();
   const idx = src.search(/async function saveLocal\([^)]*\)/); // v7.3.3：恢复场景新增 force 参数
   assert.ok(idx > -1, '应存在 saveLocal');
-  const seg = src.slice(idx, idx + 1800); // v7.5.0：A1' 早退分支补 clearDraft/探针注释，窗口随之扩宽（顺序断言语义不变）
+  const seg = src.slice(idx, idx + 2200); // v7.5.0：A1' 早退分支补 clearDraft/探针注释，窗口随之扩宽（顺序断言语义不变）
+  // v10.1.4 再扩：saveLocal 首行新增「备份笔记硬拒写」闸门（甲案闸2，含 3 行根因注释）。
+  // 闸门在最前＝备份笔记连草稿都不落，普通笔记的 落草稿 → 冲突闸门 → apiPut 次序一字未动。
   const draftIdx = seg.indexOf('writeDraft(');
   const gateIdx = seg.indexOf('if (pendingRemoteNote) {');
   const putIdx = seg.indexOf('apiPut({');
@@ -195,8 +199,8 @@ test('F8 MainActivity assets 兜底 + RemPlugin.cacheInfo + build.gradle/CI 版�
   assert.ok(plugin.includes('MainActivity.interceptCount'), 'cacheInfo 应读 MainActivity 计数');
 
   const gradle = fs.readFileSync(path.join(__dirname, '..', '..', 'android', 'app', 'build.gradle'), 'utf8');
-  assert.ok(gradle.includes('versionCode 1013'), 'build.gradle versionCode 应随 APP_VERSION bump（标签不带版本注，v8.0.3 起根治第三连同族漂移）');
-  assert.ok(gradle.includes('versionName "10.1.3"'), 'build.gradle versionName 应 bump 为 9.3.0');
+  assert.ok(gradle.includes('versionCode 1014'), 'build.gradle versionCode 应随 APP_VERSION bump（标签不带版本注，v8.0.3 起根治第三连同族漂移）');
+  assert.ok(gradle.includes('versionName "10.1.4"'), 'build.gradle versionName 应 bump 为 9.3.0');
 
   const wf = fs.readFileSync(path.join(__dirname, '..', '..', '.github', 'workflows', 'build-apk.yml'), 'utf8');
   assert.ok(wf.includes('GITHUB_REF_NAME#v'), 'CI 应从 tag 注入 versionName（v5.55 APK 自报 5.54 的治本）');

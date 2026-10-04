@@ -71,7 +71,9 @@ async function clickLink(app, href) {
 // ── A：静态锚点（锚补丁行，禁裸匹配恒真）────────────────────
 test('A1 改名「扫码换机」两处用户可见串落位', () => {
   assert.ok(SRC.includes('<span class="mi-l">扫码换机</span>'), '菜单行文案已改');
-  assert.ok(SRC.includes("h.textContent = '扫码换机'"), '弹窗标题已改');
+  // v10.1.4 形态随版：标题从「JS 建 h1.textContent」改成 #bakMask 里的静态 h1（两态弹窗共用同一标题，
+  // 不再每次动态搭 DOM）。用户可见串仍是两处：菜单行 + 出码弹窗标题，旧文案禁残留的判据不变。
+  assert.ok(/id="bakMask"[\s\S]{0,160}<h1 class="qr-title">扫码换机<\/h1>/.test(SRC), '弹窗标题已改（静态 DOM 形态）');
   assert.ok(!SRC.includes('<span class="mi-l">备份换机码</span>'), '旧菜单文案不得残留用户可见位');
 });
 test('A2 「打开链接」行 DOM（v8.1.1 方案二：无箭头语言，尖角/linkrow 禁现）+ mousedown 走 openNoteLink', () => {
