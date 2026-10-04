@@ -171,7 +171,33 @@ test('V6 甲案三闸与双渲染路径收口：静态锚在位', () => {
   assert.ok(src.includes('const BAK_MAX = 100') && src.includes('FAVS_MAX = 100'), '容量：备份 100 篇 + 收藏夹上限随动抬到 100');
 });
 
-test('V7 解码端加强：640px 预算禁回潮、取景面积、自排队抽帧、状态反馈', () => {
+test('V7 v10.1.5 真机报障三件的守卫：解码静默失效自动降级 / 相册识码 / 备份范围回退默认只收藏', () => {
+  const src = readSrc();
+  // ① 解码端：detect() 静默失效（构造函数在、每帧抛错或永远返回空）必须能中途换引擎，且留下可复制证据
+  assert.ok(src.includes('window.__scanDiag'), '扫码自检对象在位（诊断页要能读出 engine/frames/errs/hits）');
+  assert.ok(/L\.push\(sd \? \('scan: engine='/.test(src), '诊断页必须输出扫码自检行（用户手机上一次复现即可定位，不再靠猜）');
+  assert.ok(!/catch \(e\) \{ \/\* 单帧失败忽略，继续下一帧 \*\/ \}/.test(src), '禁回潮：每帧异常静默吞掉＝「画面在跑、永远扫不出」的元凶形状');
+  assert.ok(src.includes("engine = 'jsqr'; diag.engine = 'jsqr(降级)'"), '中途降级到 jsQR 的实现要在位');
+  // 降级函数的声明与两处调用必须引用同一个标识符（变异反证 N1b 实锤：只改函数名、调用点悬空时，
+  // 上面那些「字面串还在」的锚全部照绿，而真机降级那一刻会 ReferenceError——静默失效换个形状复活）
+  assert.strictEqual((src.match(/switchToJsQR\b/g) || []).length, 3, 'switchToJsQR 必须恰好 1 处声明 + 2 处调用（连错3帧 / 40帧零命中）；必须词边界——子串计数会把 switchToJsQRoff 这类改名也算作命中（变异反证 N1b 二次实锤）');
+  // ② 不依赖摄像头的两条出口
+  assert.ok(src.includes("albumBtn.id = 'scanAlbum'"), '取景框内「从相册选二维码」入口在位');
+  assert.ok(src.includes('function scanFromAlbum()'), '相册识码实现在位（截图原始像素，比拍屏稳）');
+  assert.ok(src.includes('function handleScanResult(raw)'), '摄像头与相册共用同一结果收口（两处判定迟早分叉）');
+  assert.ok(src.includes('raw = raw.trim();'), '扫码原文先去尾部空白（原生扫码器偶尔带换行，前缀判定与正则都会因此误判）');
+  // ③ 备份范围回退：默认只收藏，扩范围要显式同意
+  assert.ok(src.includes('async function collectBackupEntries(includeOther) {'), '范围参数化在位');
+  assert.ok(src.includes('if (includeOther) {'), '枚举本机其他密钥必须受开关控制（v10.1.4 无条件枚举＝收藏 6 篇报 61 篇）');
+  assert.ok(src.includes('function countOtherUnlocked()'), '勾选框上的数字有独立算法（与清单口径同源）');
+  assert.ok(src.includes('if (bakWide) bakWide.checked = false;'), '每次打开出码框都回到未勾（不替用户记住上次的扩大选择）');
+  assert.ok(src.includes('const col = await collectBackupEntries(wide);'), '生成时按勾选传参');
+  // ④ 文案精简：不再自证、不再两行长句
+  assert.ok(!src.includes('永远扫得动'), '禁回潮：自证式长句（对用户没用，评审也判它是噪声）');
+  assert.ok(src.includes("bakIdLine.textContent = '备份笔记：' + res.id;"), '档名行压成一行小字');
+});
+
+test('V8 解码端加强：640px 预算禁回潮、取景面积、自排队抽帧、状态反馈', () => {
   const src = readSrc();
   assert.ok(!/Math\.min\(640, video\.videoWidth\)/.test(src), '禁回潮：解码帧 640px 上限（微信扫得出、我们扫不出的一半根因）');
   assert.ok(src.includes('Math.min(1280, video.videoWidth)'), '解码像素预算提到 1280');

@@ -800,6 +800,7 @@
     <div id="bakStage1">
       <p>换机备份要用口令为专用的<b>备份笔记</b>派生密钥：<br>收藏与已解锁笔记的密钥都写进它，扫一扫整体带走。</p>
       <input id="bakPass" type="password" placeholder="你的口令" autocomplete="off">
+      <label id="bakWideRow" class="hidden" style="display:flex;align-items:center;gap:9px;margin-top:12px;text-align:left;font-size:12.5px;line-height:1.6;cursor:pointer"><input id="bakWide" type="checkbox" style="width:auto;height:auto;padding:0;border:0;background:none;flex:none;margin:0;box-shadow:none"><span id="bakWideTxt"></span></label>
       <div class="err" id="bakErr"></div>
       <button id="bakGo" disabled>生成备份码</button>
       <button id="bakCancel" class="ghost-btn">取消</button>
@@ -931,7 +932,7 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '10.1.4';
+const APP_VERSION = '10.1.5';
 const BUILD_DATE = '2026-10-04';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
@@ -1996,6 +1997,15 @@ function hideUploadStatus() { uploadStatus.classList.remove('show'); }
         try { const cc = cacheGet(); cacheSaltOk = !!(cc && cc.salt); } catch (e) {}
         L.push('salt=' + (typeof serverSalt !== 'undefined' && serverSalt ? 'ok' : 'NONE') +
           '  cacheSalt=' + (cacheSaltOk ? 'ok' : 'none'));
+        // v10.1.5：扫码自检一行——「有实时画面却永远扫不出」这类问题在屏幕上零信息，靠猜只能一轮轮试。
+        // engine=用了哪条解码路（detector/jsqr/jsqr(降级)/album）、frames=抽了几帧、errs=抛了几次、
+        // hits=中了几次、cam=相机给的分辨率、dec=实际喂给解码器的像素、err0=首条错误原文。
+        try {
+          const sd = window.__scanDiag;
+          L.push(sd ? ('scan: engine=' + sd.engine + ' frames=' + sd.frames + ' hits=' + sd.hits +
+            ' errs=' + sd.errs + ' cam=' + sd.cam + ' dec=' + sd.dec + ' err0=' + (sd.err0 || '-'))
+            : 'scan: 本机尚未跑过扫码');
+        } catch (e) {}
         L.push('mainDocCache=' + (ci ? (ci.exists ? ci.size + 'B' : 'none') : '?') +
           '  intercept=' + (ci ? ci.intercept : '?') + '  fetchFail=' + (ci ? ci.fetchFail : '?') +
           '  cacheHit=' + (ci ? ci.cacheHit : '?') + '  assetHit=' + (ci ? ci.assetHit : '?') +
@@ -8575,10 +8585,11 @@ async function scanWithWebCamera() {
   video.addEventListener('loadeddata', revealScan);
   video.addEventListener('canplay', revealScan);
   video.addEventListener('playing', revealScan);
-  const tip = document.createElement('p'); tip.textContent = '对准另一台设备上的二维码即可（配对码、换机码都一样）';
+  const tip = document.createElement('p'); tip.textContent = '对准另一台设备上的二维码';
   const cancel = document.createElement('button'); cancel.id = 'scanCancel'; cancel.textContent = '取 消';
   const pasteBtn = document.createElement('button'); pasteBtn.id = 'scanPaste'; pasteBtn.className = 'ghost-btn'; pasteBtn.textContent = '粘贴备份文本恢复';
-  box.appendChild(h); box.appendChild(stage); box.appendChild(tip); box.appendChild(cancel); box.appendChild(pasteBtn);
+  const albumBtn = document.createElement('button'); albumBtn.id = 'scanAlbum'; albumBtn.className = 'ghost-btn'; albumBtn.textContent = '从相册选二维码';
+  box.appendChild(h); box.appendChild(stage); box.appendChild(tip); box.appendChild(cancel); box.appendChild(albumBtn); box.appendChild(pasteBtn);
   overlay.appendChild(box);
   document.body.appendChild(overlay);
   let stream = null, timer = null, done = false, scanRevealTimer = null, hintTimer = null, finish = null, aborted = false;
@@ -8590,15 +8601,32 @@ async function scanWithWebCamera() {
   cancel.addEventListener('click', abortScan);
   overlay.addEventListener('click', e => { if (e.target === overlay) abortScan(); });
   pasteBtn.addEventListener('click', () => { abortScan(); pasteBackupTextUI(); });
+  albumBtn.addEventListener('click', () => { abortScan(); scanFromAlbum(); });
   try {
     // v10.1.4：给相机一个 720p 的软目标（ideal 非 exact，拿不到自动回落默认档，不会抛 OverconstrainedError）。
     stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } });
     video.srcObject = stream;
     scanRevealTimer = setTimeout(revealScan, 2500); // 兜底：某些 WebView 媒体事件不发→2.5s 强制显形（流已 attach，解码不受影响）
     try { await video.play(); } catch (e) {}
-    const detector = useDetector ? new window.BarcodeDetector() : null;
-    const cvs = useDetector ? null : document.createElement('canvas');
-    const ctx = cvs ? cvs.getContext('2d', { willReadFrequently: true }) : null;
+    // v10.1.5 扫码引擎自检 + 静默失败自动降级（用户实锤：手机有实时画面、版本已是最新，却永远扫不出）。
+    // 部分 WebView 里 window.BarcodeDetector 构造函数存在、detect() 却每帧抛错（缺谷歌 ML 组件），
+    // 旧写法 catch 里静默忽略＝画面在跑、结果永不出、也不告诉任何人为什么——正是「扫半天没反应」的形状。
+    let engine = useDetector ? 'detector' : 'jsqr';
+    const diag = window.__scanDiag = { engine: engine, frames: 0, hits: 0, errs: 0, cam: '0x0', dec: '0x0', err0: '' };
+    let detector = null;
+    try { detector = useDetector ? new window.BarcodeDetector() : null; }
+    catch (e) { detector = null; diag.err0 = 'ctor:' + String((e && e.message) || e); }
+    if (!detector) { engine = 'jsqr'; diag.engine = engine; }
+    let cvs = detector ? null : document.createElement('canvas');
+    let ctx = cvs ? cvs.getContext('2d', { willReadFrequently: true }) : null;
+    const switchToJsQR = async why => { // 降级到不依赖谷歌的纯 JS 解码（懒加载，只在真要用的时候拉）
+      if (!diag.err0) diag.err0 = why;
+      if (!(await loadJsQR())) return false;
+      detector = null;
+      if (!cvs) { cvs = document.createElement('canvas'); ctx = cvs.getContext('2d', { willReadFrequently: true }); }
+      engine = 'jsqr'; diag.engine = 'jsqr(降级)';
+      return true;
+    };
     hintTimer = setTimeout(() => { if (!done) setScanHint('让二维码完整落在框里，别贴太近'); }, 6000); // 只说「识别中」＝和没反应一个观感（用户实锤）
     return await new Promise(resolve => {
       finish = resolve; // 权限弹窗/出帧前就被取消时，Promise 一建好就立即收口（旧写法这条路径永久悬挂、摄像头流也不释放）
@@ -8609,26 +8637,34 @@ async function scanWithWebCamera() {
         if (done) return;
         const t0 = Date.now();
         let hitVal = '';
+        diag.frames++;
         try {
           if (detector) {
             const codes = await detector.detect(video);
-            if (codes && codes[0] && codes[0].rawValue) hitVal = codes[0].rawValue;
+            if (codes && codes[0] && codes[0].rawValue) { diag.hits++; hitVal = codes[0].rawValue; }
           } else if (video.videoWidth && ctx) { // jsQR 兜底：逐帧落 canvas 再解像素
+            diag.cam = video.videoWidth + 'x' + video.videoHeight;
             const w = Math.min(1280, video.videoWidth); // v10.1.4：解码像素预算 640→1280（微信扫得出、我们扫不出，一半差在这）
             const hh = Math.round(w * video.videoHeight / video.videoWidth);
             cvs.width = w; cvs.height = hh;
             ctx.drawImage(video, 0, 0, w, hh);
             const img = ctx.getImageData(0, 0, w, hh);
             const hit = window.jsQR(img.data, w, hh, { inversionAttempts: 'attemptBoth' });
-            if (hit && hit.data) hitVal = hit.data;
+            if (hit && hit.data) { diag.hits++; diag.dec = w + 'x' + hh; hitVal = hit.data; }
           }
-        } catch (e) { /* 单帧失败忽略，继续下一帧 */ }
+        } catch (e) {
+          diag.errs++; if (!diag.err0) diag.err0 = String((e && e.message) || e);
+          // 连错 3 帧＝这个引擎在这台机器上根本不出活，立刻换 jsQR，不再对着黑框空等
+          if (detector && diag.errs >= 3) await switchToJsQR('detect 连错 3 帧');
+        }
         if (done) return; // 帧内 await 期间用户已取消：不再排下一枪
         if (hitVal) {
           stopLoop(); setScanHint('已识别');
           timer = setTimeout(() => { cleanup(); resolve(hitVal); }, 160); // 让人看见「已识别」再收场，别凭空一闪就没了
           return;
         }
+        // 另一种更阴的失效：detect() 不抛错但永远返回空数组（组件缺失时确实这样）——40 帧零命中也降级。
+        if (detector && diag.frames >= 40 && diag.hits === 0) await switchToJsQR('detect 40 帧零命中');
         timer = setTimeout(tick, Math.min(400, Math.max(120, Date.now() - t0 + 120)));
       };
       timer = setTimeout(tick, 0);
@@ -8708,13 +8744,65 @@ async function doScanAndOpen() {
     raw = (await scanWithWebCamera()) || ''; // v5.58：网页端 / 无 GMS 走自写扫码层
   }
   if (!raw) return;
-  // v10.1.4：换机码不再是「整包数据码」——新格式是一张备份笔记的配对链，天然走下面的 parsePairLink；
+  await handleScanResult(raw);
+}
+// v10.1.5：扫码结果的统一收口（摄像头与相册共用一条路，两处判定分叉迟早出一边认另一边不认）
+async function handleScanResult(raw) {
+  if (typeof raw !== 'string') return;
+  raw = raw.trim(); // 原生扫码器偶尔带尾部换行，旧写法 indexOf(前缀) 与正则都会因此判「不是配对二维码」
+  if (!raw) return;
+  // 换机码不再是「整包数据码」——新格式是一张备份笔记的配对链，天然走下面的 parsePairLink；
   // 这里只保留两种文本前缀的读取兼容（v7.7.0 notesync-backup:v1: 与备份文本 notesync-bak:1:），
   // 绝不让旧手机出的码在新手机上变成一句「不是 NoteSync 配对二维码」。
   if (raw.indexOf(BACKUP_PREFIX) === 0 || raw.indexOf(BAK_PREFIX) === 0) { await applyBackupBundle(raw); return; }
   const dest = parsePairLink(raw);
   if (dest) location.assign(dest);
   else scanFeedback('不是 NoteSync 配对二维码');
+}
+// v10.1.5 相册识码：截图是原始像素，没有反光/对焦/摩尔纹，比摄像头拍屏稳得多——
+// 给「摄像头那一下解不出」留一条永久能走通的路。纯网页实现（input type=file）：
+// 个别 App WebView 若拉不起系统选择器，这条在浏览器里仍可用，原生插件另计一版。
+function scanFromAlbum() {
+  (async () => {
+    let inp = null;
+    try {
+      inp = document.createElement('input');
+      inp.type = 'file'; inp.accept = 'image/*'; inp.setAttribute('style', 'position:fixed;left:-9999px;top:0;width:1px;height:1px');
+      document.body.appendChild(inp);
+      const picked = await new Promise(resolve => {
+        let settled = false;
+        const doneWith = v => { if (settled) return; settled = true; resolve(v); };
+        inp.addEventListener('change', () => doneWith(inp.files && inp.files[0] ? inp.files[0] : null));
+        inp.addEventListener('cancel', () => doneWith(null)); // 用户取消：静默收场，不弹错误
+        inp.click();
+        setTimeout(() => doneWith(null), 120000); // 极端 WebView 不派发任何事件：2 分钟后静默收场，不永久挂住
+      });
+      if (!picked) return;
+      const url = URL.createObjectURL(picked);
+      let img;
+      try {
+        img = new Image();
+        await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
+      } catch (e) { URL.revokeObjectURL(url); scanFeedback('这张图读不出来，换一张试试'); return; }
+      const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+      if (!iw || !ih) { URL.revokeObjectURL(url); scanFeedback('这张图读不出来，换一张试试'); return; }
+      if (typeof window.jsQR !== 'function' && !(await loadJsQR())) { URL.revokeObjectURL(url); scanFeedback('识图组件加载失败，请用「粘贴备份文本」'); return; }
+      const w = Math.min(1600, iw), hh = Math.round(w * ih / iw); // 1600px 像素预算：截图里的码常占半屏，比摄像头帧更吃分辨率
+      const c = document.createElement('canvas'); c.width = w; c.height = hh;
+      const g = c.getContext('2d', { willReadFrequently: true });
+      g.drawImage(img, 0, 0, w, hh);
+      URL.revokeObjectURL(url);
+      const d = g.getImageData(0, 0, w, hh);
+      const hit = window.jsQR(d.data, w, hh, { inversionAttempts: 'attemptBoth' });
+      window.__scanDiag = Object.assign(window.__scanDiag || {}, { engine: 'album', cam: iw + 'x' + ih, dec: w + 'x' + hh, hits: hit && hit.data ? 1 : 0 });
+      if (!hit || !hit.data) { scanFeedback('这张图里没有识别到二维码'); return; }
+      await handleScanResult(hit.data);
+    } catch (e) {
+      scanFeedback('这台设备的相册打不开，请用「粘贴备份文本」');
+    } finally {
+      try { if (inp && inp.parentNode) inp.remove(); } catch (e) {}
+    }
+  })().catch(() => {});
 }
 $('#scanBtn').addEventListener('click', () => { dismissKeyboardForTouch(); doScanAndOpen(); });
 $('#landingScan').addEventListener('click', () => { doScanAndOpen(); });
@@ -8778,8 +8866,10 @@ function parseBakDoc(html) {
   const m = BAK_DOC_RE.exec(String(html || '').trim());
   return m ? parseBakPayload(m[1]) : null;
 }
-// 备份范围 = 收藏夹 ∪ 本机存过密钥的全部笔记（换机不该漏掉「打开过但没收藏」的那几篇）
-async function collectBackupEntries() {
+// 备份范围（v10.1.5 回退用户原口径）：**默认只备份收藏夹**——「换机带走哪些」必须与你在界面上看到的
+// 收藏数一致，不能悄悄把本机历年解锁过的其他笔记一起带走（v10.1.4 那么做过一次，用户实测 6 篇收藏
+// 却报 61 篇，直接判定为意外行为）。要带上其他笔记，只能由出码框里那个默认不勾的勾选框显式同意。
+async function collectBackupEntries(includeOther) {
   if (cryptoKey && !localStorage.getItem(KEY_STORE)) { // 当前笔记内存有密钥但 KEY_STORE 缺失（v5.21 revealQr 同款补写）
     try { localStorage.setItem(KEY_STORE, bufToB64(await crypto.subtle.exportKey('raw', cryptoKey))); } catch (e) { nsStoreFail('本机密钥未能保存，下次打开可能需重新输入口令', 'favs'); }
   }
@@ -8789,22 +8879,41 @@ async function collectBackupEntries() {
     if (!id || seen[id]) return;
     if (slot && slot.id === id) return;                     // 备份笔记不自我引用（否则密钥套密钥死循环）
     if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) { skipped++; return; } // 与服务端 ID_RE 同规则；不合法也计一笔（闸 R1-P2：静默丢弃＝提示里的数字说谎）
-    seen[id] = 1; // 先记账再验钥：收藏夹与本机密钥库两条枚举路径会撞同一个名字，不先记账同一篇坏钥
-                  // 会被计两次 skipped，提示里的「N 篇本机无密钥」就说谎了（透明化是 v7.7.0 对抗审定的）
+    seen[id] = 1; // 先记账再验钥：两条枚举路径会撞同一个名字，不先记账同一篇坏钥会被计两次 skipped
     const k = localStorage.getItem(KEY_PREFIX + id) || '';
     if (keyIsAes256(k)) out.push([id, k]); else skipped++;
   };
   readFavs().forEach(push);
-  try {
-    const extra = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const kk = localStorage.key(i);
-      if (kk && kk.indexOf(KEY_PREFIX) === 0) extra.push(kk.slice(KEY_PREFIX.length));
-    }
-    extra.forEach(push);
-  } catch (e) {}
+  if (includeOther) {
+    try {
+      const extra = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const kk = localStorage.key(i);
+        if (kk && kk.indexOf(KEY_PREFIX) === 0) extra.push(kk.slice(KEY_PREFIX.length));
+      }
+      extra.forEach(push);
+    } catch (e) {}
+  }
   const capped = out.length > BAK_MAX ? out.length - BAK_MAX : 0;
   return { f: out.slice(0, BAK_MAX), skipped: skipped, capped: capped };
+}
+// 勾选框上的数字：本机解锁过、但不在收藏夹里的笔记有几篇（不含备份笔记自己与非法档名）
+function countOtherUnlocked() {
+  const slot = readBakSlot();
+  const favs = readFavs();
+  let n = 0;
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const kk = localStorage.key(i);
+      if (!kk || kk.indexOf(KEY_PREFIX) !== 0) continue;
+      const id = kk.slice(KEY_PREFIX.length);
+      if (slot && slot.id === id) continue;
+      if (favs.indexOf(id) >= 0) continue;
+      if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) continue;
+      if (keyIsAes256(localStorage.getItem(kk) || '')) n++;
+    }
+  } catch (e) { return 0; }
+  return n;
 }
 // 口令 → 备份笔记密钥 → 建档落盐（显式带凭据认领）→ 写清单。逐字照抄普通笔记的解锁建档顺序：
 // 盐取自服务端（有则必用，绝不用本机猜的盐冲掉服务端盐），新建那一枪必须带 wkKey（v10.0.0 三轮复核实锤：
@@ -8864,7 +8973,7 @@ async function writeBackupNote(entries, pass) {
 }
 // ── 出码弹窗（#bakMask 两态：要口令 → 出码）──
 const bakMask = $('#bakMask'), bakStage1 = $('#bakStage1'), bakStage2 = $('#bakStage2'), bakPass = $('#bakPass'),
-  bakErr = $('#bakErr'), bakGo = $('#bakGo'), bakQrHolder = $('#bakQrHolder'), bakTip = $('#bakTip');
+  bakErr = $('#bakErr'), bakGo = $('#bakGo'), bakQrHolder = $('#bakQrHolder'), bakTip = $('#bakTip'), bakWide = $('#bakWide');
 let bakQrUrl = '', bakQrText = '';
 const bakIdLine = $('#bakBakId');
 function bakShowStage(stage) {
@@ -8890,6 +8999,15 @@ $('#menuBackup').addEventListener('click', async () => {
     else setStatus(false, '这篇备份笔记的清单没能解开，请回旧设备重新生成');
     return; }
   bakErr.textContent = ''; bakShowStage(1);
+  // v10.1.5：默认只备份收藏夹；带上其他已解锁笔记要显式勾选（每次打开都回到未勾，不记忆用户上次的选择）
+  try {
+    if (bakWide) bakWide.checked = false;
+    const other = countOtherUnlocked();
+    const row = document.getElementById('bakWideRow');
+    if (row) row.classList.toggle('hidden', other <= 0);
+    const txt = document.getElementById('bakWideTxt');
+    if (txt) txt.textContent = '同时带上本机解锁过的其他笔记（' + other + ' 篇）';
+  } catch (e) {}
   try { bakGo.disabled = !bakPass.value; } catch (e) {}
   bakMask.classList.remove('hidden');
   // v5.55 聚焦纪律：触屏自动聚焦会弹软键盘把视口压扁、居中弹窗偏位（v5.43 教训），
@@ -8908,8 +9026,9 @@ async function doBakGenerate() {
   const oldLabel = bakGo.textContent;
   bakGo.textContent = '正在写入备份…';
   try {
-    const col = await collectBackupEntries();
-    if (!col.f.length) { bakErr.textContent = '本机还没有可备份的笔记——先在要备份的笔记里用口令打开一次'; return; }
+    const wide = !!(bakWide && bakWide.checked);
+    const col = await collectBackupEntries(wide);
+    if (!col.f.length) { bakErr.textContent = wide ? '本机还没有可备份的笔记——先在要备份的笔记里用口令打开一次' : '收藏夹是空的——先在笔记里点「收藏笔记」，或勾上「带上其他笔记」'; return; }
     const res = await writeBackupNote(col.f, pass);
     bakQrUrl = res.url;
     bakQrText = res.text; // 与服务器那一份逐字同源（含同一时间戳）
@@ -8921,12 +9040,10 @@ async function doBakGenerate() {
     try { drawQrTo(cv, bakQrUrl); }
     catch (e) { bakErr.textContent = '二维码生成失败，请换用「复制备份文本」'; return; }
     bakQrHolder.appendChild(cv);
-    if (bakIdLine) bakIdLine.textContent = '这篇笔记的档名是 ' + res.id + '，手输它也能打开恢复。';
-    bakTip.textContent = '新设备打开 NoteSync → 首页「扫码打开笔记」对准这张码：'
-      + col.f.length + ' 篇一键恢复'
-      + (col.skipped ? '（' + col.skipped + ' 篇本机无密钥未包含）' : '')
-      + (col.capped ? '（本机可备份 ' + (col.f.length + col.capped) + ' 篇，超出 ' + BAK_MAX + ' 篇上限未含 ' + col.capped + ' 篇）' : '')
-      + '。这张码的大小与篇数无关，永远扫得动。';
+    if (bakIdLine) bakIdLine.textContent = '备份笔记：' + res.id;
+    bakTip.textContent = '新设备首页「扫码打开笔记」对准它，一键恢复 ' + col.f.length + ' 篇'
+      + (col.skipped ? '（' + col.skipped + ' 篇无密钥未含）' : '')
+      + (col.capped ? '（超 ' + BAK_MAX + ' 篇未含 ' + col.capped + ' 篇）' : '');
     try { bakPass.value = ''; } catch (e) {} // 出码成功即抹掉口令
     bakShowStage(2);
   } catch (e) {

@@ -96,7 +96,8 @@ test('① 出码密度与篇数解耦：1 篇与 100 篇同为一张配对链，
   try {
     await unlockNote(page, SRC);
     await injectJsqr(page); // 导航之后再注，否则被 goto 抹掉
-    // 造 100 篇「本机有密钥」的笔记（收藏夹里只放 2 篇，验证未收藏也一并带走）
+    // 造 100 篇「本机有密钥」的笔记，但收藏夹只放 2 篇：默认必须只备份这 2 篇，
+    // 勾上「带上其他笔记」才变 102 篇（v10.1.5 用户口径：备份=收藏夹，扩范围要显式同意）
     await page.evaluate(() => {
       const std = () => { const a = crypto.getRandomValues(new Uint8Array(32)); let s = ''; for (const x of a) s += String.fromCharCode(x); return btoa(s); };
       for (let i = 0; i < 100; i++) localStorage.setItem('notesync_key_' + ('ns' + String(i).padStart(3, '0')), std());
@@ -107,22 +108,44 @@ test('① 出码密度与篇数解耦：1 篇与 100 篇同为一张配对链，
     await page.waitForFunction(() => !document.getElementById('menuMask').classList.contains('hidden'), { timeout: 5000 });
     await page.click('#menuBackup');
     await page.waitForFunction(() => !document.getElementById('bakMask').classList.contains('hidden'), { timeout: 5000 });
+    // 勾选框必须出现（本机有 100 篇未收藏的密钥）、默认不勾、且文案里报出篇数
+    await page.waitForFunction(() => !document.getElementById('bakWideRow').classList.contains('hidden'), { timeout: 5000 });
+    assert.strictEqual(await page.evaluate(() => document.getElementById('bakWide').checked), false, '默认必须不勾（不替用户悄悄扩范围）');
+    assert.ok(/100 篇/.test(await page.evaluate(() => document.getElementById('bakWideTxt').textContent)), '勾选框要报出「其他笔记」的真实篇数');
     await page.fill('#bakPass', PASS);
     await page.click('#bakGo');
     await page.waitForFunction(() => !document.getElementById('bakStage2').classList.contains('hidden'), { timeout: 25000 });
     const err = await page.evaluate(() => document.getElementById('bakErr').textContent);
     assert.strictEqual(err, '', '出码阶段不应有报错：' + err);
-    const shot = await scanCanvas(page, '#bakQrHolder canvas');
+    assert.ok(/恢复 2 篇/.test(await page.evaluate(() => document.getElementById('bakTip').textContent)), '不勾时提示的篇数必须等于收藏数');
+    let shot = await scanCanvas(page, '#bakQrHolder canvas');
     assert.ok(/^https?:\/\/127\.0\.0\.1:\d+\/nsbak-[a-z0-9]{6}#k=[A-Za-z0-9_-]+$/.test(shot.data), '扫出来的必须是一条备份笔记配对链（随机档名 + #k= 密钥）：' + shot.data);
-    assert.ok(shot.modules > 0 && shot.modules <= 45, '格子数必须与篇数无关且 ≤45（100 篇时实测 ' + shot.modules + '）');
+    const n2 = shot.modules;
+    // 关掉重开、勾上再出一张：格子数必须一模一样（与篇数解耦），而服务器上的密文必须真的装下 102 篇
+    await page.click('#bakClose2');
+    await page.click('#menuBtn');
+    await page.click('#menuBackup');
+    await page.waitForFunction(() => !document.getElementById('bakMask').classList.contains('hidden'), { timeout: 5000 });
+    assert.strictEqual(await page.evaluate(() => document.getElementById('bakWide').checked), false, '重开出码框必须回到未勾（不记忆上次的扩大选择）');
+    await page.click('#bakWide');
+    await page.fill('#bakPass', PASS);
+    await page.click('#bakGo');
+    await page.waitForFunction(() => !document.getElementById('bakStage2').classList.contains('hidden'), { timeout: 25000 });
+    // 102 篇候选超上限：必须裁到 BAK_MAX=100 并如实报「未含 2 篇」（透明化，不静默丢）
+    const tip2 = await page.evaluate(() => document.getElementById('bakTip').textContent);
+    assert.ok(/恢复 100 篇/.test(tip2) && /未含 2 篇/.test(tip2), '勾上后应带上其他笔记、裁到 100 篇上限并如实报未含数：' + tip2);
+    shot = await scanCanvas(page, '#bakQrHolder canvas');
+    assert.strictEqual(shot.modules, n2, '2 篇与 102 篇出的码格子数必须完全相同（这就是本次重立的目标）');
+    assert.ok(shot.modules > 0 && shot.modules <= 45, '格子数必须 ≤45（实测 ' + shot.modules + '）');
     const pitch = shot.rectW / (shot.modules + 8);
     assert.ok(pitch >= 4, '手机上每格必须 ≥4 CSS px 才谈得上屏对屏扫，实测 ' + pitch.toFixed(2) + '（宽 ' + shot.rectW + 'px / ' + shot.modules + ' 格）');
     // 备份笔记必须真的落在服务器上、且服务器只见密文（零知识不破）
     const bakId = shot.data.match(/\/(nsbak-[a-z0-9]{6})#k=/)[1];
     const raw = JSON.parse(fs.readFileSync(path.join(dataDir, 'notes', bakId + '.json'), 'utf8'));
-    assert.ok(typeof raw.ct === 'string' && raw.ct.length > 200, '100 篇清单应真写进服务器（密文长度 ' + raw.ct.length + '）');
+    assert.ok(typeof raw.ct === 'string' && raw.ct.length > 4000, '102 篇清单应真写进服务器（密文长度 ' + raw.ct.length + '）');
     assert.ok(!JSON.stringify(raw).includes('ns001'), '服务器上绝不该看得见笔记名明文（零知识）');
     assert.ok(raw.salt && raw.wkHash, '备份笔记应已落盐并完成凭据认领');
+    assert.ok(raw.v >= 3, '同一篇备份笔记被更新过（不勾→勾两次写入），版本应递增，实得 v=' + raw.v);
     assert.deepStrictEqual(errs, [], '全程不应有页面 JS 错误：' + JSON.stringify(errs));
   } finally { try { await ctx.close(); } catch (e) {} }
 }));

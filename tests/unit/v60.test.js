@@ -169,13 +169,16 @@ test('T7 扫码兜底：jsQR 动态加载 + 逐帧 canvas 解码 + 服务端静�
   // getUserMedia 检查必须独立保留（连摄像头 API 都没有才直接退出）
   assert.ok(src.includes("if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {"), '摄像头 API 缺失仍应直接退出');
   // jsQR 帧循环
-  assert.ok(src.includes("const detector = useDetector ? new window.BarcodeDetector() : null;"), 'detector 与 jsQR 应二选一');
+  // v10.1.5 形态随版：detector 与 jsQR 不再是「一次性二选一」——detect() 静默失效时必须能中途降级到 jsQR
+  assert.ok(src.includes("const useDetector = typeof window.BarcodeDetector !== 'undefined';"), '应先探系统识别 API 可用性');
+  assert.ok(src.includes('let detector = null;') && src.includes('engine = \'jsqr\'; diag.engine = engine;'), '构造失败要落到 jsQR');
+  assert.ok(/if \(detector && diag\.errs >= 3\) await switchToJsQR/.test(src) && /diag\.frames >= 40 && diag\.hits === 0/.test(src), '连错 3 帧或 40 帧零命中必须自动降级（用户实锤「有实时画面却永远扫不出」=detect 静默失效）');
   // v10.1.4 随版：帧高变量避开与 h1 元素同名（hh），解码像素预算同时 640→1280
   assert.ok(src.includes("window.jsQR(img.data, w, hh, { inversionAttempts: 'attemptBoth' })"), 'jsQR 逐帧解码应就位（attemptBoth 提升屏幕反光场景识别率）');
   assert.ok(src.includes("cvs.getContext('2d', { willReadFrequently: true })"), 'canvas 应声明 willReadFrequently（getImageData 每帧调用）');
   // v10.1.4 随版：命中后先显示「已识别」再收场（旧版当场 close＝一闪就没，用户不知道扫到了没有）；
   // cleanup+resolve 的语义没变，只是改走 hitVal 单出口，防自排队链里重复 resolve。
-  assert.ok(/if \(hit && hit\.data\) hitVal = hit\.data;/.test(src), '解码命中应取到原文');
+  assert.ok(/if \(hit && hit\.data\) \{ diag\.hits\+\+;[\s\S]{0,60}hitVal = hit\.data; \}/.test(src), '解码命中应取到原文并计入自检命中数');
   assert.ok(/stopLoop\(\); setScanHint\('已识别'\)/.test(src) && src.includes('cleanup(); resolve(hitVal)'), '命中应收口循环、给出反馈、cleanup 并 resolve');
   // v10.1.4 随版翻转（闸 R2-P2 指出旧锚恒真）：`/}, 350\);/` 在源码里另有命中（菜单合成点击），
   // 撤掉扫码节流也照样绿，不算守卫。新形态是「按上一帧耗时自排队」，故改为钉住新不变量 + 禁回潮旧写法。
