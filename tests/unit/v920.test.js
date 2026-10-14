@@ -226,9 +226,11 @@ test('V7d 让位守卫：节日雨/问候/冲突条/局内 一律不弹（坏消
 /* ══ V8 正文图片：放大 / 菜单 / 保存阶梯（v9.3.0 翻转）══════════════ */
 test('V8 单击放大接管；v9.3.0 桌面右键交还系统菜单、自建只留触屏长按', () => {
   assert.ok(SRC.includes("editor.addEventListener('mousedown'"), '必须拦 mousedown 默认（否则点图会挪光标、清选区）');
-  const ci = SRC.indexOf("editor.addEventListener('contextmenu'");
-  assert.ok(ci > 0, 'contextmenu 监听必须在（触屏拦截走它）');
-  const cbody = SRC.slice(ci, ci + 260);
+  // v10.2.0 起编辑器有第二个 contextmenu 监听（折叠长按吞系统选择菜单）——图片这条按
+  // 「nsHoverPointer 提前 return」特征定位，不许用首个 indexOf 锚（会被折叠那条抢匹配）
+  const imgMenu = /editor\.addEventListener\('contextmenu', function \(e\) \{\r?\n\s*if \(nsHoverPointer\(\)\) return;/.exec(SRC);
+  assert.ok(imgMenu, 'contextmenu 监听必须在（触屏拦截走它）');
+  const cbody = SRC.slice(imgMenu.index, imgMenu.index + 260);
   assert.ok(cbody.includes('if (nsHoverPointer()) return;'), 'v9.3.0：桌面必须提前 return 不拦不 preventDefault——交还系统原生菜单（防回潮钉）');
   assert.ok(SRC.includes("editor.addEventListener('click'"), '单击必须开放大层');
   assert.ok(SRC.includes("editor.addEventListener('touchstart'"), '移动长按必须有计时器');

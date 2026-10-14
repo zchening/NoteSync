@@ -8,7 +8,6 @@
     "cap:open": "cap open android"
   },
   "dependencies": {
-    "@capacitor-mlkit/barcode-scanning": "^7.5.0",
     "@capacitor/core": "^7.0.0"
   },
   "devDependencies": {

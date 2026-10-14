@@ -130,13 +130,16 @@ test('G9 MainActivity 冷启接管首载（防循环）+ diag future/lastNativeS
   assert.ok(src.includes("window.__lastNativeSync = 'no-bridge'"), '无桥时 lastNativeSync 应落 no-bridge');
 });
 
-// ── G10：扫码依赖进 package.json（CI npm ci 安装链路与 cap sync 拾取）──
-test('G10 @capacitor-mlkit/barcode-scanning 依赖声明 + JS 走 Capacitor.Plugins 挂点', () => {
+// ── G10：扫码零原生依赖（v10.2.0 诉求②：APK 26MB→3MB，随包 ML Kit 的 4-ABI 原生库+tflite 模型是 20MB 大头）──
+test('G10 package.json/package-lock 不得声明原生扫码插件 + JS 走 Capacitor.Plugins 挂点（有则用、无则网页层）', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8'));
-  assert.ok(pkg.dependencies && pkg.dependencies['@capacitor-mlkit/barcode-scanning'], 'package.json 应声明扫码插件依赖');
+  assert.ok(!(pkg.dependencies && pkg.dependencies['@capacitor-mlkit/barcode-scanning']),
+    'package.json 不得再声明 @capacitor-mlkit/barcode-scanning（20MB 原生库+tflite 模型；jsQR 纯 JS 解码已顶上，NoteSyncX 同款打包）');
   const lock = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package-lock.json'), 'utf8'));
-  assert.ok(lock.packages && lock.packages['node_modules/@capacitor-mlkit/barcode-scanning'], 'package-lock 应锁定扫码插件（CI npm ci 依赖）');
+  assert.ok(!(lock.packages && lock.packages['node_modules/@capacitor-mlkit/barcode-scanning']),
+    'package-lock 不得再锁定扫码插件（CI npm ci 依赖链）');
   const src = readSrc();
-  assert.ok(src.includes('cap.Plugins && cap.Plugins.BarcodeScanner'), 'JS 应走 Capacitor.Plugins.BarcodeScanner 挂点（v5.55 window.RemBridge 教训：必须按 Capacitor 真实形态）');
+  assert.ok(src.includes('cap.Plugins && cap.Plugins.BarcodeScanner'), 'JS 应保留 Capacitor.Plugins.BarcodeScanner 挂点（有插件可用原生、无插件走网页层，零 APK 成本的兼容；v5.55 window.RemBridge 教训：必须按 Capacitor 真实形态）');
+  assert.ok(src.includes("'web(无插件)'"), '无插件时必须落 web(无插件) 网页解码路径（jsQR），不许留只能原生的分叉');
   assert.ok(!src.includes("import { BarcodeScanner }"), '单文件无打包器，不得 import npm 包');
 });

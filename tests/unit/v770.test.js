@@ -208,13 +208,20 @@ test('W13 导出图片：手势保活+原生桥+分享+预览阶梯在位', () =
 });
 
 // ── W14：安卓侧接线 ──
-test('W14 ImgClip 桥注册 + CAMERA 权限 + ML Kit 进 gradle', () => {
+test('W14 ImgClip 桥注册 + CAMERA 权限 + 零原生扫码依赖（v10.2.0 起 gradle 三件套全脱 ML Kit）', () => {
   const main = fs.readFileSync(path.join(ROOT, 'android/app/src/main/java/cn/xuyinji/notesync/MainActivity.java'), 'utf8');
   assert.ok(main.includes('registerPlugin(ImgClipPlugin.class)'), 'MainActivity 显式注册 ImgClipPlugin');
   const plugin = fs.readFileSync(path.join(ROOT, 'android/app/src/main/java/cn/xuyinji/notesync/img/ImgClipPlugin.kt'), 'utf8');
   assert.ok(plugin.includes('fun copyImage(') && plugin.includes('FileProvider.getUriForFile') && plugin.includes('setPrimaryClip'), '原生桥：base64→FileProvider→ClipboardManager');
   const mani = fs.readFileSync(path.join(ROOT, 'android/app/src/main/AndroidManifest.xml'), 'utf8');
-  assert.ok(mani.includes('android.permission.CAMERA'), 'CAMERA 权限声明（ML Kit 插件 manifest 为空，app 必须自declare）');
+  assert.ok(mani.includes('android.permission.CAMERA'), 'CAMERA 权限声明（扫码插件 manifest 为空，app 必须自declare；WebView 扫码层 getUserMedia 同依赖它）');
+  // v10.2.0 诉求②：随包 ML Kit 整体移除（4-ABI libbarhopper/image_processing + tflite 模型 ≈ 20MB），
+  // 扫码全靠同源 /jsQR.js 纯 JS 解码（NoteSyncX 同款）。cap sync 三件套生成物必须同步脱干净——
+  // 漏任何一处，CI 的 npx cap sync 会把它重新拾回来（package.json 已无依赖时不会，但本地构建会）。
   const settings = fs.readFileSync(path.join(ROOT, 'android/capacitor.settings.gradle'), 'utf8');
-  assert.ok(settings.includes('capacitor-mlkit-barcode-scanning'), 'ML Kit 扫码插件已 cap sync 进 gradle（原生扫码路径真正生效）');
+  assert.ok(!settings.includes('capacitor-mlkit-barcode-scanning'), 'capacitor.settings.gradle 不得再 include 扫码插件');
+  const capBuild = fs.readFileSync(path.join(ROOT, 'android/app/capacitor.build.gradle'), 'utf8');
+  assert.ok(!capBuild.includes('capacitor-mlkit-barcode-scanning'), 'capacitor.build.gradle 不得再 implementation 扫码插件');
+  const pluginsJson = fs.readFileSync(path.join(ROOT, 'android/app/src/main/assets/capacitor.plugins.json'), 'utf8');
+  assert.ok(!pluginsJson.includes('barcode'), 'capacitor.plugins.json 不得再登记扫码插件');
 });

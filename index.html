@@ -929,8 +929,8 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '10.1.8';
-const BUILD_DATE = '2026-10-05';
+const APP_VERSION = '10.2.0';
+const BUILD_DATE = '2026-10-14';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
 let nsSkin = 0;
@@ -4429,6 +4429,148 @@ editor.addEventListener('click', e => {
   try { dismissKeyboardForTouch(); } catch (err) {} // 触屏兜底：个别内核 touchstart 早于 mousedown 已聚焦，开合后收一次键盘（桌面/组字期为 no-op）
   try { backfillLastHtmlIfDecorativelyEqual(); } catch (err) {} // 开合只改折叠装饰（与正文装饰等价），回填 lastHtml 防后续「改回原文+残留标记」误判成真实改动多存一版
 });
+// ── v10.2.0（仿 NoteSyncX v3.2.5 报障⑤）：长按折叠标题文字 ≥600ms → 确认框 → 整组删除 ──
+// 此前折叠组没有任何"删掉整组"的路：正文是普通文本不错，但收起态整段隐身选不中、展开态全选再删
+// 只会掏空正文留下标题壳、[/折叠] 锚还得另找——用户原话「好像没办法把这个列表删掉」。
+// 手势与 NoteSyncX（bj behaviors.ts registerFoldLongPress）逐条对齐：
+//   ① 只认触屏/笔（桌面鼠标按住＝拖选，与长按无关，右键零影响）；
+//   ② 标题文字才算，行首三角（.ns-fold-mark）不参与——慢按三角不会误触删除确认（与点按开合互补分工）；
+//   ③ 位移 >10px 视为滚动意图，取消；抬起/系统打断（pointercancel）取消；
+//   ④ 触屏长按会带出系统选择菜单：指针仍按在标题上（或确认框刚拉起 800ms 内）时 contextmenu 吞掉；
+//   ⑤ 确认框自建 .mask/.box（全项目零 confirm），外围点击不关——误触长按也只多点一下「取消」；
+//   ⑥ 删除=把手块+组内正文/空隙块+闭合锚（挂尾 span 随正文行走、独立行锚块整块走）一起没；
+//   ⑦ 术后 applyFolds→persistFoldStates（删组后其后把手序号整体前移，展开态按序号存必须重落库，
+//      与退格整删 [折叠] 同口径）→落光标到看得见的邻块→recordIfChanged 进自建撤销栈（Ctrl+Z 整组找回）
+//      →saveLocal 去抖落库。组字期（isComposing）两处门控：按下时+确认时（红线9）。
+const FOLD_LP_MS = 600;   // 与 NoteSyncX 同阈值
+const FOLD_LP_SLOP = 10;  // 与 NoteSyncX 同滚动取消阈值
+let foldLpTimer = 0, foldLpDown = false, foldLpHead = null, foldLpX = 0, foldLpY = 0, foldLpFiredAt = 0;
+function foldLpTarget(el) { // 命中判据：把手块内的标题文字；三角 span 留给点按开合（CLICK 同款分工）
+  if (!el || typeof el.closest !== 'function' || !editor.contains(el)) return null;
+  if (el.closest('span.ns-fold-mark')) return null;
+  return el.closest('.ns-fold') || null;
+}
+function foldLpCancel() {
+  if (foldLpTimer) { clearTimeout(foldLpTimer); foldLpTimer = 0; }
+  foldLpDown = false; foldLpHead = null;
+}
+editor.addEventListener('pointerdown', function (e) {
+  if (e.pointerType === 'mouse') return; // ① 桌面鼠标按住是拖选
+  if (typeof isComposing !== 'undefined' && isComposing) return; // ⑦ 组字期不动刀（红线9）
+  const head = foldLpTarget(e.target);
+  if (!head) return;
+  foldLpCancel();
+  foldLpDown = true; foldLpHead = head; foldLpX = e.clientX; foldLpY = e.clientY;
+  foldLpTimer = setTimeout(function () {
+    foldLpTimer = 0; foldLpDown = false; foldLpFiredAt = Date.now();
+    const h = foldLpHead; foldLpHead = null;
+    if (h && editor.contains(h)) foldDeleteConfirm(h); // 到点只认 DOM：本编辑器原生 contenteditable 直读块数组即可，无 Lexical #337 那层坑
+  }, FOLD_LP_MS);
+});
+editor.addEventListener('pointermove', function (e) {
+  if (!foldLpTimer) return;
+  const dx = e.clientX - foldLpX, dy = e.clientY - foldLpY;
+  if (dx * dx + dy * dy > FOLD_LP_SLOP * FOLD_LP_SLOP) foldLpCancel(); // ③ 滚动意图
+});
+editor.addEventListener('pointerup', foldLpCancel);
+editor.addEventListener('pointercancel', foldLpCancel);
+editor.addEventListener('contextmenu', function (e) { // ④ 吞触屏长按的系统选择菜单；桌面右键没设 foldLpDown，原生菜单不受影响
+  if ((foldLpDown || (foldLpFiredAt && Date.now() - foldLpFiredAt < 800)) && foldLpTarget(e.target)) e.preventDefault();
+});
+// 组范围：把手块起，组内正文/空隙块全收，到下一个把手或独立行锚（含）为止；空组只删把手自己
+function foldGroupBlocksOf(head) {
+  if (!head || !editor.contains(head)) return [];
+  const blocks = Array.prototype.filter.call(editor.children, b => b.nodeType === 1);
+  const i = blocks.indexOf(head);
+  if (i < 0) return [];
+  const out = [head];
+  for (let k = i + 1; k < blocks.length; k++) {
+    const b = blocks[k];
+    if (b.classList.contains('ns-fold')) break;                               // 下一个把手：组界
+    if (b.classList.contains('ns-fold-endline')) { out.push(b); break; }      // 独立行锚随组走（0 高隐形，留下就是无主裸字）
+    if (b.classList.contains('ns-fold-body') || b.classList.contains('ns-fold-gap')) { out.push(b); continue; } // 正文与组内空行
+    break;                                                                     // 组外行：保险停（applyFolds 后不会出现）
+  }
+  return out;
+}
+// 展开态按「第几处折叠」序号存（见 foldOpenSet）：删掉第 delIdx 处后，其后把手的序号整体前移一格。
+// 必须在 applyFolds 之前把存储表按新序号重映射——applyFolds 读的就是这张表；先跑 applyFolds 再落库，
+// 其后把手的展开态会整体错位一格（展开变收起/收起变展开），persistFoldStates 只是把错位后的结果
+// 记下来，救不回来。v9.x 退格整删 [折叠] 路径同款隐患，v10.2.0 起两条删除路一并修（F3/F6 判据钉着）。
+function foldRemapOpenAfterDelete(delIdx) {
+  try {
+    if (typeof delIdx !== 'number' || delIdx < 0) return;
+    const all = JSON.parse(localStorage.getItem(NS_FOLD_KEY) || '{}') || {};
+    const arr = Array.isArray(all[noteId]) ? all[noteId].map(Number).filter(n => Number.isFinite(n)) : [];
+    const had = new Set(arr);
+    const next = [];
+    let j = 0;
+    Array.prototype.forEach.call(editor.children, b => {
+      if (b.nodeType === 1 && b.classList.contains('ns-fold')) {
+        // 删除后第 j 处把手 ＝ 删除前的第 (j < delIdx ? j : j + 1) 处（delIdx 处本身已删）
+        if (had.has(j < delIdx ? j : j + 1)) next.push(j);
+        j++;
+      }
+    });
+    all[noteId] = next;
+    localStorage.setItem(NS_FOLD_KEY, JSON.stringify(all));
+  } catch (e) {}
+}
+// 确认框（自建 .mask/.box 同扫码配对/插图片模态；外围点击不关）
+function foldDeleteConfirm(head) {
+  try { dismissKeyboardForTouch(); } catch (e0) {} // 手机上长按多半发生在软键盘弹起时，不收会盖住弹窗下半
+  try { window.getSelection().removeAllRanges(); } catch (e1) {} // 长按可能已带出系统选区：清掉，别让删除后选区还挂在已删块上
+  const mask = document.createElement('div'); mask.className = 'mask'; mask.id = 'nsFoldDelModal';
+  mask.style.zIndex = '60'; // 盖过图片预览（40）与首页扫码层（40）：确认框是当下唯一要紧的事
+  const box = document.createElement('div'); box.className = 'box'; box.style.textAlign = 'center';
+  const h1 = document.createElement('h1'); h1.textContent = '删除这个折叠列表？';
+  const p = document.createElement('p');
+  p.textContent = '标题和折叠起来的正文会一起删掉。删掉后可按撤销（Ctrl+Z）找回。';
+  p.style.cssText = 'font-size:12.5px;line-height:1.7;color:var(--muted);margin:10px 4px 18px';
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;gap:12px;margin-top:16px';
+  // 🔴 两枚按钮一律内联等分收缩：.box button:not(.box-x){width:100%} 是通栏规则，直接并排必横向溢出
+  //    （NoteSyncX v3.2.4 真机实锤同款事故：flex:none + width:100% 两枚 297px 挤爆 340px 盒）
+  const btnStyle = 'flex:1 1 0;min-width:0;width:auto;height:auto;padding:10px 0;font-size:15px';
+  const close = function () { if (mask.parentNode) mask.parentNode.removeChild(mask); };
+  const cancelBtn = document.createElement('button'); cancelBtn.type = 'button'; cancelBtn.id = 'foldDeleteCancel';
+  cancelBtn.setAttribute('style', btnStyle); cancelBtn.textContent = '取 消';
+  cancelBtn.addEventListener('click', close); // 取消不还焦：触屏还焦＝弹键盘（NoteSyncX 同款）
+  const okBtn = document.createElement('button'); okBtn.type = 'button'; okBtn.id = 'foldDeleteOk';
+  okBtn.setAttribute('style', btnStyle + ';background:var(--danger);color:#fff');
+  okBtn.textContent = '删 除';
+  okBtn.addEventListener('click', function () { close(); foldDeleteDo(head); });
+  row.appendChild(cancelBtn); row.appendChild(okBtn);
+  box.appendChild(h1); box.appendChild(p); box.appendChild(row);
+  mask.appendChild(box); document.body.appendChild(mask);
+}
+// 执行删除：整组摘除 + 折叠重绘 + 展开态重落库 + 光标落可见邻块 + 进撤销栈 + 落库
+function foldDeleteDo(head) {
+  if (typeof isComposing !== 'undefined' && isComposing) return false; // ⑦ 确认期间进了组字窗：放弃（红线9）
+  const group = foldGroupBlocksOf(head);
+  if (!group.length) return false;
+  const delIdx = foldIndexOfHandle(head); // 删组前先记序号：其后把手序号前移，展开态要按新序号重映射
+  const after = group[group.length - 1].nextElementSibling;
+  const before = head.previousElementSibling;
+  for (let i = 0; i < group.length; i++) { const b = group[i]; if (b.parentNode) b.parentNode.removeChild(b); }
+  try { foldRemapOpenAfterDelete(delIdx); } catch (e1b) {} // 先重映射再 applyFolds（它读这张表）
+  try { applyFolds(); } catch (e2) {}
+  try { persistFoldStates(); } catch (e3) {} // 删组后其后把手序号整体前移，展开态按序号存——不重落库状态会错位
+  // 光标落位：优先组后第一块行首（可见才行——隐藏正文/独立行锚不是停靠点），否则组前一块行尾
+  let placed = false;
+  try {
+    if (after && after.nodeType === 1 && !after.classList.contains('ns-fold-hide') && !after.classList.contains('ns-fold-endline')) { setCaret(after, 0); placed = true; }
+    else if (before && before.nodeType === 1) { const pe = foldEndPosOfBlock(before); setCaret(pe.node, pe.off); placed = true; }
+  } catch (e4) {}
+  try { if (!placed) ensureCaret(); } catch (e5) {}
+  try { foldCaretNormalize(); } catch (e5b) {} // 双保险：光标绝不落在隐形标记/隐藏块里（selectionchange 也会跑，这里是确定性收尾）
+  try { recordIfChanged('deleteContentBackward'); } catch (e6) {} // 用户发起的一次删除：压上一步快照，Ctrl+Z 整组找回
+  clearTimeout(saveTimer); saveTimer = setTimeout(saveLocal, 800); // 删整组是真内容改动，照常落库
+  return true;
+}
+window.__foldGroupBlocksOf = foldGroupBlocksOf; // 测试钩子（仅供自动化探针读取，无业务副作用）
+window.__foldDeleteConfirm = foldDeleteConfirm;
+window.__foldDeleteDo = foldDeleteDo;
 // ── v9.3.0：编辑器内选择复制/剪切跨折叠列表不再丢正文 ─────────────────────
 // 根因：收起的折叠正文块挂 .ns-fold-hide（display:none），浏览器序列化剪贴板（text/plain 与
 // text/html）都跳过隐藏文字，选中折叠列表复制或剪切后粘到别处只剩标题行（用户报丢内容）。
@@ -4623,11 +4765,14 @@ editor.addEventListener('keydown', e => {
   e.preventDefault();
   const handle = mark.closest('.ns-fold');
   mark.remove();
+  let delIdx = -1;
   if (handle) {
+    delIdx = foldIndexOfHandle(handle); // 摘类前先记序号：其后把手序号前移，展开态要按新序号重映射（v10.2.0，F3/F6 判据钉着）
     handle.classList.remove('ns-fold', 'ns-fold-open', 'ns-fold-collapsed');
     try { removeFoldAnchorAfter(handle); } catch (err) {} // v10.0.3：把手没了，本组的 [/折叠] 锚跟着清，别留无主文本
     try { const t = handle.firstChild; if (t) setCaret(t.nodeType === 3 ? t : handle, 0); } catch (err) {}
   }
+  try { foldRemapOpenAfterDelete(delIdx); } catch (eRemap) {} // 先重映射再 applyFolds（v10.2.0：修删组后展开态错位一格）
   try { applyFolds(); } catch (err) {}
   try { persistFoldStates(); } catch (err) {} // 删了一处折叠，其后把手序号整体前移，落库当前展开集防错位
   try { recordIfChanged('deleteContentBackward'); } catch (err) {}
