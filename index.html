@@ -929,7 +929,7 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '10.2.1';
+const APP_VERSION = '10.2.2';
 const BUILD_DATE = '2026-10-14';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
@@ -8186,28 +8186,38 @@ $('#menuHome').addEventListener('click', () => {
 // v6.1：菜单「诊断」一级项退役（用户拍板）——诊断入口收进「关于 Note Sync」弹窗彩蛋（标题连点 4 次）
 // 与 ?diag URL 通道；v5.56 的免 URL 开关浮层逻辑（__toggleDiag/localStorage 标记）保留供 ?diag 使用。
 const aboutMask = $('#aboutMask'), diagMask = $('#diagMask');
-$('#menuAbout').addEventListener('click', async () => {
+$('#menuAbout').addEventListener('click', () => {
   menuMask.classList.add('hidden');
   // v7.0：版本值统一三段式「Version X.Y.Z」（用户拍板文案）；网页/App 两行同层级对齐不变
   $('#aboutVer').textContent = 'Version ' + APP_VERSION;
   const av = $('#aboutAppVer'), avRow = $('#aboutAppRow');
-  avRow.classList.add('hidden'); av.textContent = '';
+  const upRow = $('#aboutUpdRow'), upBtn = $('#aboutUpd');
+  upBtn.textContent = '检查更新';
   if (isNativeApp()) {
-    // APP 端补 APP 版本号——RemPlugin.getVersion 现成桥方法；旧 APK 无此方法则静默跳过
-    try {
-      const cap = window.Capacitor;
-      const rb = (cap && cap.Plugins && cap.Plugins.RemBridge) || (typeof window !== 'undefined' && window.RemBridge) || null;
-      if (rb && typeof rb.getVersion === 'function') {
-        const ret = await rb.getVersion();
-        const nv = ret && ret.nativeVersion;
-        if (nv) { av.textContent = 'Version ' + nv; avRow.classList.remove('hidden'); __updNative = String(nv); }
-      }
-    } catch (e) {}
-    // v9.3.0：App 壳内才显示「检查更新」行（网页版 F5 即最新，给按钮只会引困惑）
-    const upRow = $('#aboutUpdRow'), upBtn = $('#aboutUpd');
-    upBtn.textContent = '检查更新';
+    // v10.2.2（用户报障）：两行同步渲染，弹窗不再等桥——旧写法 await getVersion() 挂在弹窗打开之前，
+    // 慢机型 1~2 秒里用户先看到一个没有版本号、没有更新按钮的空弹窗，两行再"闪"出来（布局跳一下）。
+    // App 版本号走冷启动预热（见 setTimeout(nsPrefetchUpdate, 6000) 旁的 warm-up）；预热未回时行暂隐、
+    // 桥回**就地补**（查询绝不挡弹窗打开）。旧 APK 无 getVersion 静默跳过。
     upRow.classList.remove('hidden');
-  } else $('#aboutUpdRow').classList.add('hidden');
+    if (__updNative) {
+      av.textContent = 'Version ' + __updNative; avRow.classList.remove('hidden');
+    } else {
+      avRow.classList.add('hidden'); av.textContent = '';
+      try {
+        const cap = window.Capacitor;
+        const rb = (cap && cap.Plugins && cap.Plugins.RemBridge) || (typeof window !== 'undefined' && window.RemBridge) || null;
+        if (rb && typeof rb.getVersion === 'function') {
+          rb.getVersion().then(ret => {
+            const nv = ret && ret.nativeVersion;
+            if (nv) { av.textContent = 'Version ' + nv; avRow.classList.remove('hidden'); __updNative = String(nv); }
+          }).catch(() => {});
+        }
+      } catch (e) {}
+    }
+  } else {
+    upRow.classList.add('hidden');
+    avRow.classList.add('hidden'); av.textContent = '';
+  }
   aboutMask.classList.remove('hidden');
 });
 // ── v9.3.0 App 在线升级（用户拍板）：每次点「检查更新」实时拉 GitHub releases/latest（仓库公开、免鉴权、零缓存）
@@ -8295,6 +8305,18 @@ async function nsPrefetchUpdate() {
   } catch (e) {}
 }
 setTimeout(nsPrefetchUpdate, 6000);
+// v10.2.2（用户报障）：冷启动即预热原生版本号——旧路径只挂在 6 秒后的预下载里且仅 Wi-Fi，
+// 用户头几秒点开「关于」必然现查 getVersion（慢机型 1~2 秒），App 版本行/更新行姗姗来迟＝弹窗闪一下。
+// 桥调用本身零成本零权限，App 壳内无条件预热一次；失败静默（关于弹窗里还有就地处补的兜底）。
+if (isNativeApp()) {
+  try {
+    const cap = window.Capacitor;
+    const rb = (cap && cap.Plugins && cap.Plugins.RemBridge) || window.RemBridge || null;
+    if (rb && typeof rb.getVersion === 'function') {
+      rb.getVersion().then(ret => { const nv = ret && ret.nativeVersion; if (nv) __updNative = String(nv); }).catch(() => {});
+    }
+  } catch (e) {}
+}
 let updTimer = null;
 async function nsUpdDownload(url, tag, size) {
   const cap = window.Capacitor;

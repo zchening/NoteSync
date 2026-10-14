@@ -177,7 +177,7 @@ test('G9 升级 UI 与代理拉取钉（v9.3.1 改同源代理）：/api/latest�
   assert.ok(SRC.includes("sz.className = 'sz'"), '大小要弱成 .sz 小字跟在版本后');
   assert.ok(!SRC.includes('GitHub Releases 官方安装包') && !SRC.includes("$('#updMeta')"), 'meta 行（GitHub/官方安装包）必须删净，禁回潮');
   assert.ok(SRC.includes(".box .upd-btns button.ghost-btn{margin-top:0}"), '两按钮错位修复：清零选择器必须提到 .box .upd-btns 权重（压过 .box button.ghost-btn 的 margin-top:10px）');
-  assert.ok(SRC.includes("} else $('#aboutUpdRow').classList.add('hidden');"), '网页版必须隐藏升级行');
+  assert.ok(SRC.includes("upRow.classList.add('hidden');"), '网页版必须隐藏升级行（v10.2.2 起关于弹窗改同步渲染块，网页分支仍隐藏）');
   assert.ok(SRC.includes("id=\"aboutUpdRow\"") && SRC.includes('id="updMask"'), '缺关于行/确认弹窗骨架');
 });
 /* ── G9e v9.3.2 交互 / v9.4.1 PC 摘悬停：彩蛋词光标落位才弹、恐龙点跳按住低头、桌宠天数按 born 现算 ── */

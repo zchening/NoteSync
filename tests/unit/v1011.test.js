@@ -138,9 +138,9 @@ test('V1011-F2 两态三角等大墨迹盒（收起 8×8 = 展开 8×8 旋转全
 // ── V 组：版本 pin ──
 test('V1011-V1 版本三源字面 pin', () => {
   const s = SRC();
-  assert.ok(s.includes("const APP_VERSION = '10.2.1';"), 'APP_VERSION');
+  assert.ok(s.includes("const APP_VERSION = '10.2.2';"), 'APP_VERSION');
   assert.ok(s.includes("const BUILD_DATE = '2026-10-14';"), 'BUILD_DATE');
-  assert.ok(/versionCode 1021\b/.test(GRADLE()), 'gradle versionCode');
-  assert.ok(/versionName "10\.2\.1"/.test(GRADLE()), 'gradle versionName');
-  assert.ok(/version: '10\.2\.1'/.test(MCP_SRC()), 'MCP serverInfo version');
+  assert.ok(/versionCode 1022\b/.test(GRADLE()), 'gradle versionCode');
+  assert.ok(/versionName "10\.2\.2"/.test(GRADLE()), 'gradle versionName');
+  assert.ok(/version: '10\.2\.2'/.test(MCP_SRC()), 'MCP serverInfo version');
 });
