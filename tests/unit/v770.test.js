@@ -222,6 +222,11 @@ test('W14 ImgClip 桥注册 + CAMERA 权限 + 零原生扫码依赖（v10.2.0 �
   assert.ok(!settings.includes('capacitor-mlkit-barcode-scanning'), 'capacitor.settings.gradle 不得再 include 扫码插件');
   const capBuild = fs.readFileSync(path.join(ROOT, 'android/app/capacitor.build.gradle'), 'utf8');
   assert.ok(!capBuild.includes('capacitor-mlkit-barcode-scanning'), 'capacitor.build.gradle 不得再 implementation 扫码插件');
-  const pluginsJson = fs.readFileSync(path.join(ROOT, 'android/app/src/main/assets/capacitor.plugins.json'), 'utf8');
-  assert.ok(!pluginsJson.includes('barcode'), 'capacitor.plugins.json 不得再登记扫码插件');
+  // capacitor.plugins.json 在 android/app/src/main/assets/（.gitignore 内的 cap sync 生成物）：
+  // CI 全新检出没有它（build 作业跑 cap sync 才生成），本地有——存在才验，缺席不算红。
+  const pluginsJsonPath = path.join(ROOT, 'android/app/src/main/assets/capacitor.plugins.json');
+  if (fs.existsSync(pluginsJsonPath)) {
+    const pluginsJson = fs.readFileSync(pluginsJsonPath, 'utf8');
+    assert.ok(!pluginsJson.includes('barcode'), 'capacitor.plugins.json 不得再登记扫码插件');
+  }
 });
