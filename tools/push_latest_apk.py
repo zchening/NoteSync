@@ -183,14 +183,23 @@ def ssh_run(cmd, tries=3):
 
 
 def scp_put(local, remote, tries=3):
+    local = local.replace("\\", "/")  # -O legacy 协议吃反斜杠绝对路径会报 unexpected filename，统一正斜杠
     last = ""
     for i in range(tries):
-        r = _run(["scp", "-q"] + SSH_OPTS + [local, "%s@%s:%s" % (USER, HOST, remote)])
+        # -O：本机 scp 9.x 默认 SFTP 协议在该 Windows 服务器上 dest open Failure，legacy 协议实测通
+        r = _run(["scp", "-O", "-q"] + SSH_OPTS + [local, "%s@%s:%s" % (USER, HOST, remote)])
         if r.returncode == 0:
             return
         last = (r.stderr or "").strip()
         time.sleep(3 * (i + 1))
     sys.exit("[scp] 上传失败 %s → %s：%s" % (local, remote, last))
+
+
+def ps_run(cmd, tries=3):
+    # v10.2.0 实栽：本地 ssh 链路有 反斜杠→正斜杠 归一器，远端 cmd 收到的全是正斜杠——
+    # cmd 的 move/copy/ren 把 /xxx 当开关直接报错。PowerShell 原生吃正斜杠，
+    # 凡"写路径"的远端操作一律走它；远端路径统一正斜杠形态。
+    return ssh_run('powershell -NoProfile -Command "%s"' % cmd, tries=tries)
 
 
 def remote_size(path):
@@ -211,32 +220,50 @@ def deploy_to_server(latest_json_local, apk_local, tag=None):
     # 旧序（json→apk）在两次 put 之间，/api/latest 已指向还不存在的 /dl/vX.Y.Z.apk，全网手机点更新必 404。
     ra = REMOTE_DIR + "/apk/latest.apk"
     remote_mkdir(ra)
-    scp_put(apk_local, ra)
+    # 🔴 v10.2.0 实栽：服务器上 latest.apk 被某进程以不共享写的方式打开（SFTP 报 dest open Failure、
+    #    scp -O 报 Broken pipe，同目录 v10.2.0.apk 却能覆盖）——直接覆盖写不进去。改走 bj
+    #    push_bj_apk.py 同款「临时名上传 + move /y 原子替换」：move 是 rename，不要求目标文件
+    #    的写句柄，被锁的文件也能换；换入瞬间完成，/dl/latest.apk 无半截文件窗口。
+    scp_put(apk_local, ra + ".new")
+    latest_ok = True
+    try:
+        ps_run("Move-Item -Force '%s.new' '%s'" % (ra, ra))
+    except SystemExit:
+        # v10.2.0 实栽：latest.apk 被服务器进程以不共享写/删方式长期锁死（SFTP dest open
+        # Failure / scp -O Broken pipe / PS Move-Item 全被拒）。/api/latest 指向版本副本
+        # vX.Y.Z.apk（必传项），App 更新链路不受影响——latest.apk 是旧壳/手输链接的兼容
+        # 别名，锁释放后重跑本命令自动补上（.new 已就位）。
+        latest_ok = False
+        print("[srv] WARN latest.apk 被服务器进程锁死，本次跳过覆盖（App 更新走版本副本，不受影响）")
     rs = remote_size(ra)
-    print("[srv] apk/latest.apk local=%d remote=%d %s" % (local_size, rs, "OK" if rs == local_size else "MISMATCH!!"))
-    assert rs == local_size, "APK 上传尺寸不符"
+    if latest_ok:
+        print("[srv] apk/latest.apk local=%d remote=%d %s" % (local_size, rs, "OK" if rs == local_size else "MISMATCH!!"))
+        assert rs == local_size, "APK 上传尺寸不符"
+    else:
+        print("[srv] apk/latest.apk remote=%d(旧版保留) local=%d" % (rs, local_size))
 
     # v9.5.4：不可变版本副本——latest_app.json 的下载 URL 指它，杜绝「下载中途 latest.apk 被覆盖」混装。
     if tag and _re.match(r"^v\d+(?:\.\d+)*$", tag):
         rv = REMOTE_DIR + "/apk/%s.apk" % tag
-        scp_put(apk_local, rv)
+        scp_put(apk_local, rv + ".new")   # 同 latest.apk：临时名 + move /y，防目标被锁（v10.2.0 实栽同款）
+        ps_run("Move-Item -Force '%s.new' '%s'" % (rv, rv))
         assert remote_size(rv) == local_size, "版本副本 %s 上传尺寸不符" % rv
         print("[srv] apk/%s.apk 已上传（不可变副本）" % tag)
         try:
             names = ssh_run("powershell -NoProfile -Command \"(Get-ChildItem '%s/apk' -Filter 'v*.apk' | Sort-Object LastWriteTime -Descending | Select-Object -Skip 2 -ExpandProperty Name) -join ','\"" % REMOTE_DIR)
             for old in [n for n in names.split(",") if n]:
-                ssh_run("del /q \"%s\\apk\\%s\" & echo ok" % (REMOTE_DIR.replace("/", "\\"), old))
+                ps_run("Remove-Item -Force '%s/apk/%s'" % (REMOTE_DIR, old))
                 print("[srv] 清理旧副本 %s" % old)
         except Exception as e:
             print("[srv] 旧副本清理跳过（非致命）：%s" % e)
 
     # latest_app.json 最后落（备份再覆盖）：此刻 latest.apk 与版本副本都已在位，URL 切换零 404 窗口。
     rj = REMOTE_DIR + "/latest_app.json"
-    if ssh_run("if exist \"%s\" (echo yes) else (echo no)" % rj.replace("/", "\\")) == "yes":
-        ssh_run("ren \"%s\" \"latest_app.json.bak_%s\" & echo ok" % (rj.replace("/", "\\"), ts))
+    try:
+        ps_run("Move-Item -Force '%s' '%s.bak_%s'" % (rj, rj, ts))
         print("[srv] latest_app.json 已备份 -> .bak_%s" % ts)
-    else:
-        print("[srv] latest_app.json 无旧文件")
+    except SystemExit:
+        print("[srv] latest_app.json 无旧文件（跳过备份）")
     scp_put(latest_json_local, rj)
     assert remote_size(rj) == os.path.getsize(latest_json_local), "latest_app.json 上传尺寸不符"
 
@@ -254,7 +281,7 @@ def deploy_to_server(latest_json_local, apk_local, tag=None):
     # ②更严重的是这一步过去只 print、从不 assert，「服务器 sha256==本地」从来是靠人肉眼看的闸。
     # 现在真比对并判红，且把覆盖式 latest.apk 一并验，杜绝两个文件不同步。
     local_sha = sha256(apk_local)
-    for f in filter(None, {chk_file, "latest.apk"}):
+    for f in filter(None, {chk_file} | ({"latest.apk"} if latest_ok else set())):
         raw = ssh_run('certutil -hashfile C:\\Services\\NoteSync\\apk\\' + f + ' SHA256')
         cand = _re.findall(r"[0-9a-fA-F]{64}", raw)
         assert cand, "无法从 certutil 输出解析出 sha256（%s）：%s" % (f, raw[:160])
