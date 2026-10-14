@@ -263,7 +263,7 @@
   #updMask .box{text-align:center}
   #updVer{font:600 22px/1.25 var(--serif);color:var(--accent);letter-spacing:.04em}
   #updVer .sz{font:400 12px/1 var(--mono);color:var(--muted);letter-spacing:0;margin-left:5px}
-  #updNotes{font-size:13.5px;line-height:1.95;color:var(--fg);font-weight:500;text-align:left;margin:14px 22px 2px} /* v9.3.4 方案B：去顶部「发现新版本」小标题，正文保持 --fg 仅加字重 500（零新色，观感更实） */
+  #updNotes{font-size:13.5px;line-height:1.95;color:var(--fg);font-weight:500;text-align:left;margin:14px 22px 2px;max-height:38vh;overflow-y:auto} /* v9.3.4 方案B：去顶部「发现新版本」小标题，正文保持 --fg 仅加字重 500（零新色，观感更实）；v10.2.1（用户报障）：正文加高度上限+滚动——v10.2.0 的长 body 把按钮顶出屏（真机实锤），按钮必须恒可见 */
   #updNotes i{font-style:normal;color:var(--accent);margin-right:5px;font-weight:400} /* 金色「·」前缀维持常规字重，只让说明文字本身加粗 */
   #updProg{height:6px;border-radius:3px;background:var(--line);overflow:hidden;margin:12px 0 2px}
   #updProg.hidden{display:none}
@@ -929,7 +929,7 @@ function markJumped() {
 }
 
 // --- 版本号（关于 NoteSync 页可查；v8.2.0 起连点 logo 7 次改为复古皮肤三态环）---
-const APP_VERSION = '10.2.0';
+const APP_VERSION = '10.2.1';
 const BUILD_DATE = '2026-10-14';
 // ── v8.2.0 复古皮肤状态：0 默认 / 1 终端绿 / 2 打字机纸。会话级纯内存，刷新即回默认，
 //    与主题选择一样绝不写 storage。皮肤调色板日夜双套，跟随底层日/夜语义（nsSkinOverrideCss）。
@@ -8242,6 +8242,9 @@ async function nsCheckUpdate() {
     var sum = Array.isArray(o.summary) ? o.summary : (typeof o.summary === 'string' ? o.summary.split(/\r?\n/) : null);
     var lines = (sum || []).map(s => String(s).replace(/^\s*(?:[-*>#\s]+|\d+\.\s*)/, '').trim()).filter(Boolean).slice(0, 4);
     if (!lines.length) lines = String(o.body || '').split(/\r?\n/).map(s => s.replace(/^\s*(?:[-*>#]+\s*|\d+\.\s+)/, '').trim()).filter(s => s && !/^(?:v\d|.*完整更新详情|https?:|full changelog|.*\[.*\]\(.*\).*$|compare)/i.test(s)).slice(0, 4);
+    // v10.2.1（用户报障）：body 是仓库记录不是给弹窗看的——兜底行一律掐到 60 字（v10.2.0 真机实锤：
+    // 单行 ~950 字的长段落整段塞进弹窗，把按钮顶出屏）。人工浓缩的 summary 走上面分支，不受此掐。
+    lines = lines.map(s => s.length > 60 ? s.slice(0, 60) + '…' : s);
     // 顶部「新版本：vX」+ 大小弱成等宽小字；全部 DOM 拼装不拼 innerHTML（防注入）
     var ve = $('#updVer'); ve.textContent = ''; ve.appendChild(document.createTextNode('新版本：v' + tag));
     if (apk.size) { var sz = document.createElement('span'); sz.className = 'sz'; sz.textContent = '（' + (apk.size / 1048576).toFixed(1) + 'M）'; ve.appendChild(sz); }
